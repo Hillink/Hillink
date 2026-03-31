@@ -2,6 +2,7 @@
 
 import { Suspense, useMemo, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
+import { createClient } from "@/lib/supabase/client";
 
 function SignupForm() {
   const searchParams = useSearchParams();
@@ -13,22 +14,68 @@ function SignupForm() {
     return "business";
   }, [searchParams]);
 
-  const [role, setRole] = useState<"business" | "athlete">(presetRole as "business" | "athlete");
+  const [role, setRole] = useState<"business" | "athlete">(
+    presetRole as "business" | "athlete"
+  );
   const [form, setForm] = useState({
     firstName: "",
     lastName: "",
     email: "",
     password: "",
   });
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
 
-  function handleSubmit(e: React.FormEvent) {
+  function isStudentEmail(email: string) {
+    return email.trim().toLowerCase().endsWith(".edu");
+  }
+
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    setError("");
+    setSuccess("");
 
-    if (role === "business") {
-      router.push("/business");
-    } else {
-      router.push("/athlete");
+    if (role === "athlete" && !isStudentEmail(form.email)) {
+      setError("Athlete accounts require a valid student email ending in .edu");
+      return;
     }
+
+    setLoading(true);
+
+    const supabase = createClient();
+
+    const { data, error: signUpError } = await supabase.auth.signUp({
+      email: form.email,
+      password: form.password,
+      options: {
+        data: {
+          intended_role: role,
+        },
+      },
+    });
+
+    setLoading(false);
+
+    if (signUpError) {
+      setError(signUpError.message);
+      return;
+    }
+
+    if (process.env.NODE_ENV === "development") {
+      console.log("Signup response:", data);
+    }
+
+    // Ensure the user goes through explicit login after signup.
+    await supabase.auth.signOut();
+
+    setSuccess(
+      "Signup successful. A confirmation email has been sent. Please verify your email before logging in."
+    );
+
+    setTimeout(() => {
+      router.push("/login");
+    }, 1200);
   }
 
   return (
@@ -90,6 +137,12 @@ function SignupForm() {
             />
           </label>
 
+          {role === "athlete" && (
+            <div className="prototype-note" style={{ marginTop: -6 }}>
+              Athlete accounts must use a student email ending in .edu.
+            </div>
+          )}
+
           <label>
             Password
             <input
@@ -104,8 +157,11 @@ function SignupForm() {
             based on your selected role.
           </div>
 
-          <button className="cta-button full" type="submit">
-            Continue as {role === "business" ? "Business" : "Athlete"}
+          {error && <div className="error-message">Error: {error}</div>}
+          {success && <div className="success-message">{success}</div>}
+
+          <button className="cta-button full" type="submit" disabled={loading}>
+            {loading ? "Signing up..." : `Continue as ${role === "business" ? "Business" : "Athlete"}`}
           </button>
         </form>
       </div>

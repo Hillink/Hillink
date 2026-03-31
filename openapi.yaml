@@ -1,0 +1,1127 @@
+openapi: 3.0.3
+info:
+  title: HILLink API
+  version: 1.0.0
+  description: |
+    Production-ready OpenAPI starter generated from current Next.js route handlers.
+    Authentication is session/cookie-based (Supabase). Admin routes require admin role.
+servers:
+  - url: http://localhost:3000
+    description: Local dev
+  - url: http://localhost:3001
+    description: Local test
+
+security:
+  - cookieAuth: []
+
+tags:
+  - name: Admin
+  - name: Athlete
+  - name: Business
+  - name: Notifications
+  - name: Instagram
+  - name: Stripe
+  - name: Campaigns
+  - name: Utility
+
+paths:
+  /api/admin/users:
+    get:
+      tags: [Admin]
+      summary: List users (admin)
+      responses:
+        '200':
+          description: User list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminUsersResponse'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /api/admin/finance-events:
+    get:
+      tags: [Admin]
+      summary: List finance events (admin)
+      responses:
+        '200':
+          description: Finance events list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminFinanceEventsResponse'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /api/admin/invite-user:
+    post:
+      tags: [Admin]
+      summary: Invite a user by email
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InviteUserRequest'
+      responses:
+        '200':
+          description: Invite sent
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InviteUserResponse'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /api/admin/suspend-user:
+    post:
+      tags: [Admin]
+      summary: Suspend or unsuspend user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SuspendUserRequest'
+      responses:
+        '200':
+          description: Suspension updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /api/admin/delete-user:
+    post:
+      tags: [Admin]
+      summary: Delete user account
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeleteUserRequest'
+      responses:
+        '200':
+          description: User deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /api/admin/athlete-verification:
+    post:
+      tags: [Admin]
+      summary: Set athlete verification status
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AthleteVerificationRequest'
+      responses:
+        '200':
+          description: Verification updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AthleteVerificationResponse'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /api/admin/athlete-xp-grant:
+    post:
+      tags: [Admin]
+      summary: Grant or deduct athlete XP
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AthleteXpGrantRequest'
+      responses:
+        '200':
+          description: XP updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AthleteXpGrantResponse'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /api/admin/athlete-tier-set:
+    post:
+      tags: [Admin]
+      summary: Set athlete tier via XP adjustment
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AthleteTierSetRequest'
+      responses:
+        '200':
+          description: Tier updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AthleteTierSetResponse'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /api/admin/business-access-tier:
+    post:
+      tags: [Admin]
+      summary: Set business access tier override
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BusinessAccessTierRequest'
+      responses:
+        '200':
+          description: Access tier updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BusinessAccessTierResponse'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /api/admin/reset-user-data:
+    post:
+      tags: [Admin]
+      summary: Reset one user's activity data
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResetUserDataRequest'
+      responses:
+        '200':
+          description: Reset complete
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResetUserDataResponse'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /api/athlete/submit-proof:
+    post:
+      tags: [Athlete]
+      summary: Submit campaign proof
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SubmitProofRequest'
+      responses:
+        '200':
+          description: Proof submitted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubmitProofResponse'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /api/athlete/withdraw-application:
+    post:
+      tags: [Athlete]
+      summary: Drop campaign/application
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WithdrawApplicationRequest'
+      responses:
+        '200':
+          description: Application withdrawn/dropped
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /api/athlete/leaderboard:
+    get:
+      tags: [Athlete]
+      summary: Get athlete leaderboard
+      responses:
+        '200':
+          description: Leaderboard data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LeaderboardResponse'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /api/athlete/sync-xp-challenges:
+    post:
+      tags: [Athlete]
+      summary: Sync challenge XP events
+      responses:
+        '200':
+          description: Sync complete
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SyncXpChallengesResponse'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /api/business/update-application-status:
+    post:
+      tags: [Business]
+      summary: Accept/decline/review athlete application
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateApplicationStatusRequest'
+      responses:
+        '200':
+          description: Application updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /api/business/cancel-campaign:
+    post:
+      tags: [Business]
+      summary: Cancel campaign
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CancelCampaignRequest'
+      responses:
+        '200':
+          description: Campaign cancelled
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /api/business/remove-athlete:
+    post:
+      tags: [Business]
+      summary: Remove athlete from campaign
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RemoveAthleteRequest'
+      responses:
+        '200':
+          description: Athlete removed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /api/notifications:
+    get:
+      tags: [Notifications]
+      summary: List notifications
+      responses:
+        '200':
+          description: Notifications list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationsResponse'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /api/notifications/mark-read:
+    post:
+      tags: [Notifications]
+      summary: Mark notifications as read
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MarkReadRequest'
+      responses:
+        '200':
+          description: Notifications updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /api/instagram/sync-diagnostics:
+    post:
+      tags: [Instagram]
+      summary: Sync Instagram diagnostics
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SyncDiagnosticsRequest'
+      responses:
+        '200':
+          description: Diagnostics synced
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SyncDiagnosticsResponse'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /api/instagram/oauth/start:
+    get:
+      tags: [Instagram]
+      summary: Start Instagram OAuth
+      responses:
+        '302':
+          description: Redirect to Instagram authorization
+
+  /api/instagram/oauth/callback:
+    get:
+      tags: [Instagram]
+      summary: Instagram OAuth callback
+      security: []
+      responses:
+        '200':
+          description: OAuth handled
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OAuthCallbackResponse'
+
+  /api/instagram/connect-manual:
+    post:
+      tags: [Instagram]
+      summary: Manual Instagram connect
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConnectManualRequest'
+      responses:
+        '200':
+          description: Connected
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /api/stripe/create-subscription-checkout:
+    post:
+      tags: [Stripe]
+      summary: Create Stripe subscription checkout session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateSubscriptionCheckoutRequest'
+      responses:
+        '200':
+          description: Checkout session created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StripeUrlResponse'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /api/stripe/create-connect-onboarding:
+    post:
+      tags: [Stripe]
+      summary: Create Stripe Connect onboarding link (no body required)
+      responses:
+        '200':
+          description: Onboarding link created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StripeUrlResponse'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /api/stripe/trigger-payout:
+    post:
+      tags: [Stripe]
+      summary: Trigger payout
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TriggerPayoutRequest'
+      responses:
+        '200':
+          description: Payout triggered
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /api/stripe/webhook:
+    post:
+      tags: [Stripe]
+      summary: Stripe webhook receiver
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        '200':
+          description: Webhook accepted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+
+  /api/location/geocode:
+    post:
+      tags: [Utility]
+      summary: Geocode a city and state to lat/lon
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GeocodeRequest'
+      responses:
+        '200':
+          description: Geocode result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GeocodeResponse'
+        '400': { $ref: '#/components/responses/BadRequest' }
+
+  /api/campaigns/{id}/co-athletes:
+    get:
+      tags: [Campaigns]
+      summary: List co-athletes for campaign
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            $ref: '#/components/schemas/Uuid'
+      responses:
+        '200':
+          description: Co-athletes list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CoAthlete'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /api/campaigns/auto-accept-started:
+    post:
+      tags: [Campaigns]
+      summary: Auto-accept started campaigns
+      responses:
+        '200':
+          description: Auto-accept completed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AutoAcceptResponse'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+components:
+  securitySchemes:
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: sb-access-token
+
+  schemas:
+    Uuid:
+      type: string
+      format: uuid
+      example: 7658ce51-2694-425b-8cfb-8f5cc93cc6cb
+
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+
+    SuccessResponse:
+      type: object
+      required: [success]
+      properties:
+        success:
+          type: boolean
+          example: true
+
+    AdminUser:
+      type: object
+      properties:
+        id:
+          $ref: '#/components/schemas/Uuid'
+        email:
+          type: string
+        confirmed_at:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+        banned:
+          type: boolean
+
+    AdminUsersResponse:
+      type: object
+      required: [users]
+      properties:
+        users:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminUser'
+
+    FinanceEvent:
+      type: object
+      properties:
+        id:
+          $ref: '#/components/schemas/Uuid'
+        source:
+          type: string
+        event_type:
+          type: string
+        event_id:
+          type: string
+          nullable: true
+        business_id:
+          $ref: '#/components/schemas/Uuid'
+        athlete_id:
+          $ref: '#/components/schemas/Uuid'
+        campaign_id:
+          $ref: '#/components/schemas/Uuid'
+        application_id:
+          $ref: '#/components/schemas/Uuid'
+        transfer_id:
+          type: string
+          nullable: true
+        amount_cents:
+          type: integer
+          nullable: true
+        currency:
+          type: string
+          nullable: true
+        status:
+          type: string
+          nullable: true
+        details_json:
+          type: object
+          nullable: true
+          additionalProperties: true
+        created_at:
+          type: string
+
+    AdminFinanceEventsResponse:
+      type: object
+      required: [events]
+      properties:
+        events:
+          type: array
+          items:
+            $ref: '#/components/schemas/FinanceEvent'
+
+    InviteUserRequest:
+      type: object
+      required: [email]
+      properties:
+        email:
+          type: string
+          format: email
+
+    InviteUserResponse:
+      type: object
+      required: [success, userId]
+      properties:
+        success:
+          type: boolean
+        userId:
+          $ref: '#/components/schemas/Uuid'
+
+    SuspendUserRequest:
+      type: object
+      required: [userId, suspend]
+      properties:
+        userId:
+          $ref: '#/components/schemas/Uuid'
+        suspend:
+          type: boolean
+
+    DeleteUserRequest:
+      type: object
+      required: [userId]
+      properties:
+        userId:
+          $ref: '#/components/schemas/Uuid'
+
+    AthleteVerificationRequest:
+      type: object
+      required: [userId, status]
+      properties:
+        userId:
+          $ref: '#/components/schemas/Uuid'
+        status:
+          type: string
+          enum: [pending, approved, rejected]
+        reason:
+          type: string
+
+    AthleteVerificationResponse:
+      type: object
+      required: [success]
+      properties:
+        success:
+          type: boolean
+        emailWarning:
+          type: string
+          nullable: true
+
+    AthleteXpGrantRequest:
+      type: object
+      required: [userId]
+      properties:
+        userId:
+          $ref: '#/components/schemas/Uuid'
+        action:
+          type: string
+        xpDelta:
+          type: number
+        note:
+          type: string
+
+    AthleteXpGrantResponse:
+      type: object
+      required: [success, userId, action, xpDelta]
+      properties:
+        success:
+          type: boolean
+        userId:
+          $ref: '#/components/schemas/Uuid'
+        action:
+          type: string
+        xpDelta:
+          type: number
+
+    AthleteTierSetRequest:
+      type: object
+      required: [userId, targetTier]
+      properties:
+        userId:
+          $ref: '#/components/schemas/Uuid'
+        targetTier:
+          type: string
+          enum: [Bronze, Silver, Gold, Platinum, Diamond]
+
+    AthleteTierSetResponse:
+      type: object
+      required: [success, userId, currentXp, targetXp, xpDelta, targetTier]
+      properties:
+        success:
+          type: boolean
+        userId:
+          $ref: '#/components/schemas/Uuid'
+        currentXp:
+          type: number
+        targetXp:
+          type: number
+        xpDelta:
+          type: number
+        targetTier:
+          type: string
+
+    BusinessAccessTierRequest:
+      type: object
+      required: [userId]
+      properties:
+        userId:
+          $ref: '#/components/schemas/Uuid'
+        accessTier:
+          type: string
+          nullable: true
+          enum: [starter, growth, scale, domination]
+
+    BusinessAccessTierResponse:
+      type: object
+      required: [success, userId, paidTier, effectiveTier]
+      properties:
+        success:
+          type: boolean
+        userId:
+          $ref: '#/components/schemas/Uuid'
+        paidTier:
+          type: string
+        accessTierOverride:
+          type: string
+          nullable: true
+        effectiveTier:
+          type: string
+        warning:
+          type: string
+          nullable: true
+
+    ResetUserDataRequest:
+      type: object
+      required: [userId]
+      properties:
+        userId:
+          $ref: '#/components/schemas/Uuid'
+
+    ResetUserDataResponse:
+      type: object
+      required: [success, userId, deleted, recomputedAthletes, skipped]
+      properties:
+        success:
+          type: boolean
+        userId:
+          $ref: '#/components/schemas/Uuid'
+        deleted:
+          type: object
+          additionalProperties:
+            type: integer
+        recomputedAthletes:
+          type: integer
+        skipped:
+          type: array
+          items:
+            type: string
+
+    SubmitProofRequest:
+      type: object
+      required: [applicationId, proofUrl]
+      properties:
+        applicationId:
+          $ref: '#/components/schemas/Uuid'
+        proofUrl:
+          type: string
+          format: uri
+        proofNotes:
+          type: string
+          nullable: true
+
+    SubmitProofResponse:
+      type: object
+      required: [success]
+      properties:
+        success:
+          type: boolean
+        warning:
+          type: string
+          nullable: true
+        diagnostics:
+          type: object
+          nullable: true
+          additionalProperties: true
+
+    WithdrawApplicationRequest:
+      type: object
+      required: [applicationId]
+      properties:
+        applicationId:
+          $ref: '#/components/schemas/Uuid'
+
+    LeaderboardEntry:
+      type: object
+      properties:
+        athlete_id:
+          $ref: '#/components/schemas/Uuid'
+        name:
+          type: string
+        xp:
+          type: number
+        tier:
+          type: string
+        rank:
+          type: integer
+
+    LeaderboardResponse:
+      type: object
+      required: [leaderboard]
+      properties:
+        leaderboard:
+          type: array
+          items:
+            $ref: '#/components/schemas/LeaderboardEntry'
+
+    SyncXpChallengesResponse:
+      type: object
+      required: [success]
+      properties:
+        success:
+          type: boolean
+        granted:
+          type: integer
+        grantedTitles:
+          type: array
+          items:
+            type: string
+
+    UpdateApplicationStatusRequest:
+      type: object
+      required: [applicationId, status]
+      properties:
+        applicationId:
+          $ref: '#/components/schemas/Uuid'
+        status:
+          type: string
+          enum: [accepted, declined, approved, rejected]
+        note:
+          type: string
+          nullable: true
+
+    CancelCampaignRequest:
+      type: object
+      required: [campaignId]
+      properties:
+        campaignId:
+          $ref: '#/components/schemas/Uuid'
+
+    RemoveAthleteRequest:
+      type: object
+      required: [applicationId]
+      properties:
+        applicationId:
+          $ref: '#/components/schemas/Uuid'
+
+    Notification:
+      type: object
+      properties:
+        id:
+          $ref: '#/components/schemas/Uuid'
+        user_id:
+          $ref: '#/components/schemas/Uuid'
+        title:
+          type: string
+        body:
+          type: string
+        read:
+          type: boolean
+        created_at:
+          type: string
+
+    NotificationsResponse:
+      type: object
+      required: [notifications]
+      properties:
+        notifications:
+          type: array
+          items:
+            $ref: '#/components/schemas/Notification'
+
+    MarkReadRequest:
+      type: object
+      description: Pass ids to mark specific notifications; omit or pass empty to mark all as read.
+      properties:
+        ids:
+          type: array
+          items:
+            $ref: '#/components/schemas/Uuid'
+
+    SyncDiagnosticsRequest:
+      type: object
+      required: [applicationId]
+      properties:
+        applicationId:
+          $ref: '#/components/schemas/Uuid'
+
+    SyncDiagnosticsResponse:
+      type: object
+      required: [success]
+      properties:
+        success:
+          type: boolean
+        diagnostics:
+          type: object
+          nullable: true
+          additionalProperties: true
+        warning:
+          type: string
+          nullable: true
+
+    OAuthCallbackResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        message:
+          type: string
+
+    ConnectManualRequest:
+      type: object
+      required: [accessToken]
+      properties:
+        igUserId:
+          type: string
+          nullable: true
+        igUsername:
+          type: string
+          nullable: true
+        accessToken:
+          type: string
+        expiresAt:
+          type: string
+          format: date-time
+          nullable: true
+
+    CreateSubscriptionCheckoutRequest:
+      type: object
+      properties:
+        tier:
+          type: string
+          enum: [starter, growth, scale, domination]
+        successUrl:
+          type: string
+          format: uri
+        cancelUrl:
+          type: string
+          format: uri
+
+    StripeUrlResponse:
+      type: object
+      properties:
+        url:
+          type: string
+          format: uri
+        sessionId:
+          type: string
+
+    TriggerPayoutRequest:
+      type: object
+      required: [applicationId]
+      properties:
+        applicationId:
+          $ref: '#/components/schemas/Uuid'
+
+    GeocodeRequest:
+      type: object
+      required: [city, state]
+      properties:
+        city:
+          type: string
+          maxLength: 120
+        state:
+          type: string
+          maxLength: 120
+
+    GeocodeResponse:
+      type: object
+      properties:
+        lat:
+          type: number
+          nullable: true
+        lon:
+          type: number
+          nullable: true
+
+    CoAthlete:
+      type: object
+      properties:
+        id:
+          $ref: '#/components/schemas/Uuid'
+        first_name:
+          type: string
+          nullable: true
+        last_name:
+          type: string
+          nullable: true
+        school:
+          type: string
+          nullable: true
+        sport:
+          type: string
+          nullable: true
+        city:
+          type: string
+          nullable: true
+        state:
+          type: string
+          nullable: true
+        profile_photo_url:
+          type: string
+          nullable: true
+        tier:
+          type: string
+
+    AutoAcceptResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        processed:
+          type: integer
+        updated:
+          type: integer
+
+  responses:
+    BadRequest:
+      description: Invalid request
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Unauthorized:
+      description: Not signed in
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Forbidden:
+      description: Insufficient privileges
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'

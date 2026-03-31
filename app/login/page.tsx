@@ -2,24 +2,37 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { createClient } from "@/lib/supabase/client";
 
 export default function LoginPage() {
   const router = useRouter();
 
-  const [role, setRole] = useState<"business" | "athlete">("business");
   const [form, setForm] = useState({
     email: "",
     password: "",
   });
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    setError("");
+    setLoading(true);
 
-    if (role === "business") {
-      router.push("/business");
-    } else {
-      router.push("/athlete");
+    const supabase = createClient();
+    const { error: loginError } = await supabase.auth.signInWithPassword({
+      email: form.email,
+      password: form.password,
+    });
+
+    setLoading(false);
+
+    if (loginError) {
+      setError(loginError.message);
+      return;
     }
+
+    router.push("/role-redirect");
   }
 
   return (
@@ -31,26 +44,7 @@ export default function LoginPage() {
           </div>
 
           <h1>Log in</h1>
-          <p>Select a role and enter the platform prototype.</p>
-        </div>
-
-        <div className="auth-controls">
-          <div className="role-switch">
-            <button
-              type="button"
-              className={role === "business" ? "active" : ""}
-              onClick={() => setRole("business")}
-            >
-              Business
-            </button>
-            <button
-              type="button"
-              className={role === "athlete" ? "active" : ""}
-              onClick={() => setRole("athlete")}
-            >
-              Athlete
-            </button>
-          </div>
+          <p>Log in to continue to your assigned portal.</p>
         </div>
 
         <form className="auth-form" onSubmit={handleSubmit}>
@@ -73,12 +67,13 @@ export default function LoginPage() {
           </label>
 
           <div className="prototype-note">
-            This is a prototype login screen. It routes you to the selected role's
-            dashboard.
+            After login, you are redirected automatically based on your profile role.
           </div>
 
-          <button className="cta-button full" type="submit">
-            Log in as {role === "business" ? "Business" : "Athlete"}
+          {error && <div className="error-message">Error: {error}</div>}
+
+          <button className="cta-button full" type="submit" disabled={loading}>
+            {loading ? "Logging in..." : "Log in"}
           </button>
         </form>
       </div>

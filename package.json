@@ -1,17 +1,42 @@
 {
-  "name": "hillink-v2",
+  "name": "hillink-v3",
   "private": true,
   "scripts": {
-    "dev": "next dev"
+    "dev": "next dev",
+    "build": "next build",
+    "vercel-build": "next build",
+    "clean:next": "node -e \"try { require('fs').rmSync('.next', { recursive: true, force: true }); } catch (e) { if (!e || e.code !== 'EPERM') throw e; console.warn('Skipping .next cleanup due to EPERM lock'); }\"",
+    "dev:test": "npm run clean:next && next dev -H 127.0.0.1 -p 3001",
+    "start:test": "next build && next start -H 127.0.0.1 -p 3001",
+    "backfill:coordinates": "node scripts/backfill-location-coordinates.mjs",
+    "auto-accept:verify": "node scripts/verify-auto-accept-checklist.mjs",
+    "campaign-lifecycle:verify": "node scripts/verify-campaign-lifecycle.mjs",
+    "test:lifecycle": "playwright test tests/e2e/campaign-lifecycle.spec.ts",
+    "test:slots": "playwright test tests/e2e/campaign-slots.spec.ts",
+    "test:deliverables": "playwright test tests/e2e/deliverables.spec.ts",
+    "test:payouts": "playwright test tests/e2e/payouts.spec.ts",
+    "test:disputes": "playwright test tests/e2e/disputes.spec.ts",
+    "test:seed": "node scripts/seed-test-users.mjs",
+    "test:e2e": "playwright test",
+    "test:e2e:headed": "playwright test --headed",
+    "test:e2e:ui": "playwright test --ui",
+    "test:all": "npm run security:api-auth ; npm run test:seed ; npm run test:e2e",
+    "security:api-auth": "node scripts/assert-api-auth-guards.mjs"
   },
   "dependencies": {
-    "next": "^15.2.8",
-    "react": "latest",
-    "react-dom": "latest"
+    "@supabase/ssr": "^0.9.0",
+    "@supabase/supabase-js": "^2.100.1",
+    "next": "15.2.4",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "stripe": "^21.0.1"
   },
   "devDependencies": {
-    "@types/node": "25.5.0",
-    "@types/react": "19.2.14",
-    "typescript": "6.0.2"
+    "@playwright/test": "^1.58.2",
+    "@types/node": "^25.5.0",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "dotenv": "^17.3.1",
+    "typescript": "^6.0.2"
   }
 }
