@@ -3,6 +3,16 @@ import { createServerClient } from "@supabase/ssr";
 
 type Role = "business" | "athlete" | "admin";
 
+function isPrelaunchMode(): boolean {
+  const rawValue = process.env.PRELAUNCH_MODE?.trim().toLowerCase();
+
+  if (!rawValue) {
+    return process.env.NODE_ENV === "production";
+  }
+
+  return !["0", "false", "off", "no"].includes(rawValue);
+}
+
 function isLocalDevRequest(req: NextRequest): boolean {
   if (process.env.NODE_ENV === "production") {
     return false;
@@ -12,16 +22,16 @@ function isLocalDevRequest(req: NextRequest): boolean {
   return host.startsWith("localhost:") || host.startsWith("127.0.0.1:");
 }
 
-function isPublicPath(pathname: string): boolean {
+function isPublicPath(pathname: string, prelaunchMode: boolean): boolean {
   return (
     pathname === "/" ||
     pathname === "/waitlist" ||
     pathname.startsWith("/waitlist/") ||
     pathname === "/preview" ||
     pathname.startsWith("/preview/") ||
-    pathname === "/admin/login"
-    // NOTE: /login and /signup are intentionally NOT public at prelaunch.
-    // Remove this note and add them here when you're ready to open signups.
+    pathname === "/admin/login" ||
+    (!prelaunchMode &&
+      (pathname === "/login" || pathname === "/signup" || pathname.startsWith("/signup/")))
   );
 }
 
@@ -34,20 +44,22 @@ function expectedRoleForPath(pathname: string): Role | null {
 
 export async function middleware(req: NextRequest) {
   const pathname = req.nextUrl.pathname;
+  const prelaunchMode = isPrelaunchMode();
+  const unauthenticatedRedirectPath = prelaunchMode ? "/waitlist" : "/login";
 
   // Keep local development unblocked while production remains locked down.
   if (isLocalDevRequest(req)) {
     return NextResponse.next();
   }
 
-  if (isPublicPath(pathname)) {
+  if (isPublicPath(pathname, prelaunchMode)) {
     return NextResponse.next();
   }
 
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   if (!url || !anonKey) {
-    return NextResponse.redirect(new URL("/waitlist", req.url));
+    return NextResponse.redirect(new URL(unauthenticatedRedirectPath, req.url));
   }
 
   const response = NextResponse.next();
@@ -67,7 +79,7 @@ export async function middleware(req: NextRequest) {
 
   const { data: auth, error: authError } = await supabase.auth.getUser();
   if (authError || !auth.user) {
-    return NextResponse.redirect(new URL("/waitlist", req.url));
+    return NextResponse.redirect(new URL(unauthenticatedRedirectPath, req.url));
   }
 
   const expectedRole = expectedRoleForPath(pathname);
