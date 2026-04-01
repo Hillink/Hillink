@@ -2,22 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireRole } from "@/lib/rbac";
 import { createServerClient } from "@/lib/supabase-server";
 import { createNotification } from "@/lib/notifications";
-
-export const REASON_MESSAGES: Record<string, string> = {
-  campaign_not_found: "Campaign not found",
-  campaign_not_active: "This campaign is not accepting applications",
-  auto_accept_disabled: "Auto-accept is not enabled for this campaign",
-  no_slots: "This campaign is full",
-  auto_accept_locked: "Applications are closed within 12 hours of campaign start",
-  athlete_profile_not_found: "Athlete profile not found",
-  not_verified: "Your account must be verified to apply",
-  flagged: "Your account is not eligible to apply",
-  tier_insufficient: "You do not meet the minimum tier for this campaign",
-  outside_radius: "You are outside the campaign's acceptance radius",
-  already_applied: "You have already applied to this campaign",
-  location_missing: "Your profile is missing location data",
-  campaign_location_missing: "This campaign has no location set",
-};
+import { REASON_MESSAGES } from "./constants";
 
 type AttemptAutoAcceptResult = {
   success?: boolean;
