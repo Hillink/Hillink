@@ -26,19 +26,32 @@ export function isValidResendKey(value?: string) {
 function getMetaEnvIssues() {
   const issues: string[] = [];
 
-  if (isPlaceholder(process.env.META_APP_ID)) {
-    issues.push("META_APP_ID is missing or still set to a placeholder value");
+  const appId = process.env.INSTAGRAM_APP_ID || process.env.META_APP_ID;
+  const appSecret = process.env.INSTAGRAM_APP_SECRET || process.env.META_APP_SECRET;
+  const redirectUri = process.env.INSTAGRAM_REDIRECT_URI || process.env.META_REDIRECT_URI;
+
+  // Keep OAuth optional in prelaunch: only enforce if any related env is configured.
+  const hasAnyOAuthConfig = Boolean(appId || appSecret || redirectUri);
+  if (!hasAnyOAuthConfig) {
+    return issues;
   }
 
-  if (isPlaceholder(process.env.META_APP_SECRET)) {
-    issues.push("META_APP_SECRET is missing or still set to a placeholder value");
+  if (isPlaceholder(appId)) {
+    issues.push(
+      "INSTAGRAM_APP_ID is missing or still set to a placeholder value (legacy META_APP_ID also supported)"
+    );
+  }
+
+  if (isPlaceholder(appSecret)) {
+    issues.push(
+      "INSTAGRAM_APP_SECRET is missing or still set to a placeholder value (legacy META_APP_SECRET also supported)"
+    );
   }
 
   const appUrl = process.env.NEXT_PUBLIC_APP_URL;
-  const redirectUri = process.env.META_REDIRECT_URI;
   if (appUrl && redirectUri && !redirectUri.startsWith(appUrl)) {
     issues.push(
-      `META_REDIRECT_URI (${redirectUri}) does not match NEXT_PUBLIC_APP_URL (${appUrl}) and may break local OAuth redirects`
+      `Instagram redirect URI (${redirectUri}) does not match NEXT_PUBLIC_APP_URL (${appUrl}) and may break OAuth redirects`
     );
   }
 

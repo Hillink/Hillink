@@ -5,17 +5,20 @@ export type MetaOAuthConfig = {
 };
 
 export function getMetaOAuthConfig(): MetaOAuthConfig {
-  const appId = process.env.META_APP_ID;
-  const appSecret = process.env.META_APP_SECRET;
+  const appId = process.env.INSTAGRAM_APP_ID || process.env.META_APP_ID;
+  const appSecret = process.env.INSTAGRAM_APP_SECRET || process.env.META_APP_SECRET;
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
-  const redirectUri = process.env.META_REDIRECT_URI || `${appUrl}/api/instagram/oauth/callback`;
+  const redirectUri =
+    process.env.INSTAGRAM_REDIRECT_URI ||
+    process.env.META_REDIRECT_URI ||
+    `${appUrl}/api/instagram/oauth/callback`;
 
   if (!appId || appId.includes("PASTE")) {
-    throw new Error("META_APP_ID is missing or placeholder");
+    throw new Error("INSTAGRAM_APP_ID is missing or placeholder");
   }
 
   if (!appSecret || appSecret.includes("PASTE")) {
-    throw new Error("META_APP_SECRET is missing or placeholder");
+    throw new Error("INSTAGRAM_APP_SECRET is missing or placeholder");
   }
 
   return {
