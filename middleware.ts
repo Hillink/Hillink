@@ -7,7 +7,7 @@ function isPrelaunchMode(): boolean {
   const rawValue = process.env.PRELAUNCH_MODE?.trim().toLowerCase();
 
   if (!rawValue) {
-    return process.env.NODE_ENV === "production";
+    return process.env.VERCEL_ENV === "production";
   }
 
   return !["0", "false", "off", "no"].includes(rawValue);
