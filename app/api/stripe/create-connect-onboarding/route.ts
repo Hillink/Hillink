@@ -20,8 +20,11 @@ export async function POST() {
   const recipientEmail = authUser.email || null;
 
   const hasValidSecret = isValidStripeSecretKey(process.env.STRIPE_SECRET_KEY);
+  const fallbackFlag = (process.env.STRIPE_DEV_FALLBACK || "").trim().toLowerCase();
+  const fallbackEnabledByFlag =
+    fallbackFlag === "" || fallbackFlag === "true" || fallbackFlag === "1" || fallbackFlag === "yes";
   const allowDevFallback =
-    process.env.STRIPE_DEV_FALLBACK === "true" ||
+    fallbackEnabledByFlag ||
     process.env.NODE_ENV !== "production" ||
     process.env.VERCEL_ENV === "preview";
 

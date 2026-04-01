@@ -234,7 +234,6 @@ export default function BusinessDashboard() {
   const [diagnosticsByApplicationId, setDiagnosticsByApplicationId] = useState<Record<string, InstagramDiagnostics>>({});
   const [statusUpdatingId, setStatusUpdatingId] = useState<string | null>(null);
   const [syncingDiagnosticsId, setSyncingDiagnosticsId] = useState<string | null>(null);
-  const [syncingCampaignDiagnosticsId, setSyncingCampaignDiagnosticsId] = useState<string | null>(null);
   const [removingAthleteId, setRemovingAthleteId] = useState<string | null>(null);
   const [cancellingCampaignId, setCancellingCampaignId] = useState<string | null>(null);
   const [showModal, setShowModal] = useState(false);
@@ -294,7 +293,7 @@ export default function BusinessDashboard() {
     additionalCompensation: "",
     tier: "Silver" as Campaign["preferred_tier"],
     slots: 2,
-    payoutCents: 6500,
+    payoutCents: 0,
     locationText: "",
     directions: "",
     claimWindowDays: 5 as 3 | 5 | 7,
@@ -718,7 +717,7 @@ export default function BusinessDashboard() {
       additionalCompensation: "",
       tier: "Silver",
       slots: 2,
-      payoutCents: 6500,
+      payoutCents: 0,
       locationText: "",
       directions: "",
       claimWindowDays: 5,
@@ -816,7 +815,7 @@ export default function BusinessDashboard() {
       additionalCompensation: template.config.additionalCompensation || "",
       tier: template.config.tier || "Silver",
       slots: template.config.slots || 2,
-      payoutCents: template.config.payoutCents || 6500,
+      payoutCents: template.config.payoutCents || 0,
       locationText: template.config.locationText || "",
       directions: template.config.directions || "",
       claimWindowDays: (template.config.claimWindowDays || 5) as 3 | 5 | 7,
@@ -886,38 +885,6 @@ export default function BusinessDashboard() {
     if (!res.ok) {
       setError(data.error || "Failed to sync Instagram diagnostics.");
       return;
-    }
-
-    await loadData();
-  };
-
-  const syncCampaignDiagnostics = async (campaignId: string) => {
-    setError("");
-    setSyncingCampaignDiagnosticsId(campaignId);
-
-    const targetApplications = applications.filter((a) => a.campaign_id === campaignId && !!a.proof_url);
-    if (!targetApplications.length) {
-      setSyncingCampaignDiagnosticsId(null);
-      setError("No proof URLs found in this campaign yet.");
-      return;
-    }
-
-    const failedIds: string[] = [];
-    for (const app of targetApplications) {
-      const res = await fetch("/api/instagram/sync-diagnostics", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ applicationId: app.id }),
-      });
-
-      if (!res.ok) {
-        failedIds.push(app.id);
-      }
-    }
-
-    setSyncingCampaignDiagnosticsId(null);
-    if (failedIds.length > 0) {
-      setError(`Some diagnostics could not sync (${failedIds.length}/${targetApplications.length}).`);
     }
 
     await loadData();
@@ -1141,29 +1108,6 @@ export default function BusinessDashboard() {
     summary.avgReach = values.length ? Math.round(reachTotal / values.length) : 0;
     return summary;
   }, [diagnosticsByApplicationId]);
-
-  const campaignDiagnosticsStats = useMemo(() => {
-    return campaigns.map((campaign) => {
-      const campaignApps = applications.filter((a) => a.campaign_id === campaign.id);
-      const diagnostics = campaignApps
-        .map((a) => diagnosticsByApplicationId[a.id])
-        .filter((d): d is InstagramDiagnostics => Boolean(d));
-
-      const syncedCount = diagnostics.length;
-      const verifiedCount = diagnostics.filter((d) => d.diagnostics_status === "verified").length;
-      const avgReach = syncedCount ? Math.round(diagnostics.reduce((sum, d) => sum + (d.reach || 0), 0) / syncedCount) : 0;
-      const totalEngagement = diagnostics.reduce((sum, d) => sum + (d.likes || 0) + (d.comments || 0) + (d.saves || 0), 0);
-
-      return {
-        campaignId: campaign.id,
-        campaignTitle: campaign.title,
-        syncedCount,
-        verifiedCount,
-        avgReach,
-        totalEngagement,
-      };
-    });
-  }, [campaigns, applications, diagnosticsByApplicationId]);
 
   useEffect(() => {
     const city = afCenterCity.trim();
@@ -1523,12 +1467,8 @@ export default function BusinessDashboard() {
           ) : (
             <div style={{ display: "grid", gap: 16, marginTop: 12 }}>
               {campaigns.filter((c) => c.status !== "completed" && c.status !== "cancelled").map((campaign) => {
-                const diagStats = campaignDiagnosticsStats.find((d) => d.campaignId === campaign.id);
                 const rows = (applicationsByCampaignId[campaign.id] || []).sort(
                   (a, b) => new Date(b.app.applied_at).getTime() - new Date(a.app.applied_at).getTime()
-                );
-                const activeAthletes = rows.filter((r) =>
-                  r.app.status === "accepted" || r.app.status === "submitted" || r.app.status === "approved"
                 );
                 const applicants = rows.filter((r) => r.app.status === "applied");
                 const completedCount = rows.filter((r) => r.app.status === "approved").length;
@@ -1561,7 +1501,7 @@ export default function BusinessDashboard() {
                       <div>
                         <div style={{ fontWeight: 700, fontSize: 15 }}>{campaign.title}</div>
                         <div style={{ fontSize: 12, color: "#6b7280", marginTop: 2 }}>
-                          {campaignTemplateLabel(campaign)} • {campaign.preferred_tier} • {(campaign.claim_method && claimMethodLabel[campaign.claim_method]) || "Business selects"} • ${(campaign.payout_cents / 100).toFixed(0)} payout
+                          {campaignTemplateLabel(campaign)} • {campaign.preferred_tier} • {(campaign.claim_method && claimMethodLabel[campaign.claim_method]) || "Business selects"}
                         </div>
                       </div>
                       <span style={{ fontSize: 12, color: "#6b7280", whiteSpace: "nowrap" }}>
@@ -1599,17 +1539,6 @@ export default function BusinessDashboard() {
                         {completedCount}/{participantCount} completed • {applicants.length} pending
                       </span>
                       <div style={{ display: "flex", gap: 8, alignItems: "center", justifyContent: "flex-end", flexWrap: "wrap" }}>
-                        {diagStats && (
-                          <button
-                            className="small-button"
-                            style={{ whiteSpace: "nowrap" }}
-                            disabled={syncingCampaignDiagnosticsId === campaign.id}
-                            onClick={() => syncCampaignDiagnostics(campaign.id)}
-                            title="Sync Instagram diagnostics for all submitted proofs in this campaign"
-                          >
-                            {syncingCampaignDiagnosticsId === campaign.id ? "Syncing…" : "Sync Metrics"}
-                          </button>
-                        )}
                         <button
                           className="small-button"
                           style={{ whiteSpace: "nowrap" }}
@@ -1628,6 +1557,22 @@ export default function BusinessDashboard() {
                           </button>
                         )}
                       </div>
+                    </div>
+
+                    <div style={{ padding: "10px 16px", background: "#fcfcfd", borderBottom: rows.length > 0 ? "1px solid #f1f5f9" : undefined }}>
+                      <details>
+                        <summary style={{ cursor: "pointer", fontWeight: 600, fontSize: 13 }}>Campaign details</summary>
+                        <div style={{ marginTop: 8, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 8, fontSize: 12, color: "#475569" }}>
+                          <div><strong>ID:</strong> {campaign.id}</div>
+                          <div><strong>Type:</strong> {campaignTemplateLabel(campaign)}</div>
+                          <div><strong>Status:</strong> {campaign.status}</div>
+                          <div><strong>Claim method:</strong> {(campaign.claim_method && claimMethodLabel[campaign.claim_method]) || "Business selects"}</div>
+                          <div><strong>Slots:</strong> {campaign.open_slots ?? campaign.slots}/{campaign.slots}</div>
+                          <div><strong>Created:</strong> {new Date(campaign.created_at).toLocaleDateString()}</div>
+                          <div><strong>Starts:</strong> {campaign.start_date || "—"}</div>
+                          <div><strong>Due:</strong> {campaign.due_date || "—"}</div>
+                        </div>
+                      </details>
                     </div>
 
                     {/* Athlete rows */}
@@ -1777,7 +1722,6 @@ export default function BusinessDashboard() {
           ) : (
             <div style={{ display: "grid", gap: 16, marginTop: 12 }}>
               {campaigns.filter((c) => c.status === "completed" || c.status === "cancelled" || c.status === "closed").map((campaign) => {
-                const diagStats = campaignDiagnosticsStats.find((d) => d.campaignId === campaign.id);
                 const rows = (applicationsByCampaignId[campaign.id] || []).sort(
                   (a, b) => new Date(b.app.applied_at).getTime() - new Date(a.app.applied_at).getTime()
                 );
@@ -1805,7 +1749,7 @@ export default function BusinessDashboard() {
                       <div>
                         <div style={{ fontWeight: 700, fontSize: 15 }}>{campaign.title}</div>
                         <div style={{ fontSize: 12, color: "#6b7280", marginTop: 2 }}>
-                          {campaignTemplateLabel(campaign)} • {campaign.preferred_tier} • {(campaign.claim_method && claimMethodLabel[campaign.claim_method]) || "Business selects"} • ${(campaign.payout_cents / 100).toFixed(0)} payout
+                          {campaignTemplateLabel(campaign)} • {campaign.preferred_tier} • {(campaign.claim_method && claimMethodLabel[campaign.claim_method]) || "Business selects"}
                         </div>
                       </div>
                       <span
@@ -1827,17 +1771,6 @@ export default function BusinessDashboard() {
                       <span style={{ fontSize: 12, color: "#6b7280", whiteSpace: "nowrap" }}>
                         Due {campaign.due_date || "—"}
                       </span>
-                      {diagStats && (
-                        <button
-                          className="small-button"
-                          style={{ whiteSpace: "nowrap" }}
-                          disabled={syncingCampaignDiagnosticsId === campaign.id}
-                          onClick={() => syncCampaignDiagnostics(campaign.id)}
-                          title="Sync Instagram diagnostics for all submitted proofs in this campaign"
-                        >
-                          {syncingCampaignDiagnosticsId === campaign.id ? "Syncing…" : "Sync Metrics"}
-                        </button>
-                      )}
                       <button
                         className="small-button"
                         style={{ whiteSpace: "nowrap" }}
@@ -1845,6 +1778,22 @@ export default function BusinessDashboard() {
                       >
                         Review Submissions
                       </button>
+                    </div>
+
+                    <div style={{ padding: "10px 16px", background: "#fcfcfd", borderBottom: rows.length > 0 ? "1px solid #f1f5f9" : undefined }}>
+                      <details>
+                        <summary style={{ cursor: "pointer", fontWeight: 600, fontSize: 13 }}>Campaign details</summary>
+                        <div style={{ marginTop: 8, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 8, fontSize: 12, color: "#475569" }}>
+                          <div><strong>ID:</strong> {campaign.id}</div>
+                          <div><strong>Type:</strong> {campaignTemplateLabel(campaign)}</div>
+                          <div><strong>Status:</strong> {campaign.status}</div>
+                          <div><strong>Claim method:</strong> {(campaign.claim_method && claimMethodLabel[campaign.claim_method]) || "Business selects"}</div>
+                          <div><strong>Slots:</strong> {campaign.open_slots ?? campaign.slots}/{campaign.slots}</div>
+                          <div><strong>Created:</strong> {new Date(campaign.created_at).toLocaleDateString()}</div>
+                          <div><strong>Starts:</strong> {campaign.start_date || "—"}</div>
+                          <div><strong>Due:</strong> {campaign.due_date || "—"}</div>
+                        </div>
+                      </details>
                     </div>
 
                     {rows.length > 0 && (
@@ -2301,6 +2250,7 @@ export default function BusinessDashboard() {
                     <input
                       type="number"
                       min="0"
+                      placeholder="Set amount"
                       value={Math.floor(form.payoutCents / 100)}
                       onChange={(e) => setForm({ ...form, payoutCents: (Number(e.target.value) || 0) * 100 })}
                     />
@@ -2464,7 +2414,7 @@ export default function BusinessDashboard() {
                   <div style={{ display: "grid", gap: 6, fontSize: 14 }}>
                     <div><strong>Template:</strong> {TEMPLATE_LABELS[form.template]}</div>
                     <div><strong>Type:</strong> {campaignTypeLabel[form.campaignType]}</div>
-                    <div><strong>Compensation:</strong> ${(form.payoutCents / 100).toFixed(0)} per athlete{form.additionalCompensation ? ` + ${form.additionalCompensation}` : ""}</div>
+                    <div><strong>Compensation:</strong> {form.payoutCents > 0 ? `$${(form.payoutCents / 100).toFixed(0)} per athlete` : "Set in campaign settings"}{form.additionalCompensation ? ` + ${form.additionalCompensation}` : ""}</div>
                     <div><strong>Slots:</strong> {form.slots}</div>
                     <div><strong>Claim method:</strong> {claimMethodLabel[form.claimMethod]}</div>
                     <div><strong>Eligible tiers:</strong> {form.eligibleAthleteTiers.join(", ")}</div>
