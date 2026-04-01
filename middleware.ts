@@ -86,13 +86,25 @@ export async function middleware(req: NextRequest) {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("role")
+    .select("role, athlete_verification_status")
     .eq("id", auth.user.id)
     .single();
 
   const role = String(profile?.role || "").trim().toLowerCase();
   if (role !== expectedRole) {
     return NextResponse.redirect(new URL("/role-redirect", req.url));
+  }
+
+  // Admin approval gate — all non-admin users must be approved before accessing portals.
+  if (role !== "admin") {
+    const approvalStatus = String(profile?.athlete_verification_status || "pending").trim();
+    if (approvalStatus !== "approved") {
+      const pendingPath = role === "athlete" ? "/athlete/pending" : "/business/pending";
+      // Allow the pending page itself through to avoid redirect loop.
+      if (pathname !== pendingPath) {
+        return NextResponse.redirect(new URL(pendingPath, req.url));
+      }
+    }
   }
 
   return response;
