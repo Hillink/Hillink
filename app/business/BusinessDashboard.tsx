@@ -1924,7 +1924,6 @@ export default function BusinessDashboard() {
                       })()}</strong> to complete. If the campaign isn&apos;t filled in {form.claimWindowDays} days, it auto-closes.
                     </div>
                   </div>
-                </div>
               </div>
 
               <div className="modal-footer">
