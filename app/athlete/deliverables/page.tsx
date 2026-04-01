@@ -2,6 +2,8 @@ import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import AthleteDeliverablesDashboard from "./AthleteDeliverablesDashboard";
 
+export const dynamic = "force-dynamic";
+
 export default async function AthleteDeliverablesPage() {
   const supabase = await createClient();
   const { data: userData, error: userError } = await supabase.auth.getUser();

@@ -6,7 +6,18 @@ export async function createClient() {
   const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
   if (!url || !anonKey) {
-    throw new Error("Missing Supabase environment variables.");
+    // During build/prerender this module can execute on the server.
+    // Return a placeholder client to avoid hard build failures for prelaunch pages.
+    return createServerClient("https://placeholder.supabase.co", "placeholder-anon-key", {
+      cookies: {
+        getAll() {
+          return [];
+        },
+        setAll() {
+          // no-op
+        },
+      },
+    });
   }
 
   const cookieStore = await cookies();
