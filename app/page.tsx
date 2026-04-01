@@ -279,23 +279,24 @@ export default function Home() {
                 and athletes. Join the waitlist to get early access.
               </p>
             </div>
-                  {/* PRELAUNCH: bottom CTA section */}
-                  <section className="landing-section" style={{ textAlign: "center" }}>
-                    <div className="section-kicker">Early Access</div>
-                    <h2 className="section-heading">Be first when we launch in College Station</h2>
-                    <p className="section-copy">
-                      We are starting narrow and local. If you are a Texas A&amp;M athlete
-                      or a College Station business, now is the time to get on the list.
-                    </p>
-                    <div className="hero-actions" style={{ justifyContent: "center", marginTop: 24 }}>
-                      <Link href="/waitlist/business">
-                        <button className="cta-button large-button">I&apos;m a Business</button>
-                      </Link>
-                      <Link href="/waitlist/athlete">
-                        <button className="secondary-button large-button">I&apos;m an Athlete</button>
-                      </Link>
-                    </div>
-                  </section>
+          </div>
+        </section>
+
+        {/* PRELAUNCH: bottom CTA section */}
+        <section className="landing-section" style={{ textAlign: "center" }}>
+          <div className="section-kicker">Early Access</div>
+          <h2 className="section-heading">Be first when we launch in College Station</h2>
+          <p className="section-copy">
+            We are starting narrow and local. If you are a Texas A&amp;M athlete
+            or a College Station business, now is the time to get on the list.
+          </p>
+          <div className="hero-actions" style={{ justifyContent: "center", marginTop: 24 }}>
+            <Link href="/waitlist/business">
+              <button className="cta-button large-button">I&apos;m a Business</button>
+            </Link>
+            <Link href="/waitlist/athlete">
+              <button className="secondary-button large-button">I&apos;m an Athlete</button>
+            </Link>
           </div>
         </section>
       </main>
