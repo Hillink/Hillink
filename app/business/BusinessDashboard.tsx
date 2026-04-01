@@ -6,12 +6,36 @@ import { createClient } from "@/lib/supabase/client";
 import { getTierFromXp, type AthleteTier } from "@/lib/xp";
 import { formatMilesLabel, locationKey, milesBetween, storedCoords, type LatLng } from "@/lib/location";
 import NotificationBell from "@/components/NotificationBell";
+import {
+  CONTENT_FORMAT_LABELS,
+  TEMPLATE_CLAIM_METHOD_OPTIONS,
+  TEMPLATE_DEFAULT_COMPLETION_DAYS,
+  TEMPLATE_FORMAT_OPTIONS,
+  TEMPLATE_LABELS,
+  TEMPLATE_PROOF_REQUIREMENTS,
+  defaultClaimMethod,
+  defaultLocationType,
+  type BusinessAccessTier,
+  type CampaignContentFormat,
+  type CampaignTemplateKey,
+  type ClaimMethod,
+  type LocationType,
+} from "@/lib/campaignTemplates";
 
 type Campaign = {
   id: string;
   title: string;
   campaign_type: "basic_post" | "story_pack" | "reel_boost" | "event_appearance" | "brand_ambassador";
   deliverables: string;
+  campaign_template?: CampaignTemplateKey | null;
+  campaign_objective?: string | null;
+  claim_method?: ClaimMethod | null;
+  completion_window_days?: number | null;
+  review_window_hours?: number | null;
+  location_type?: LocationType | null;
+  eligible_athlete_tiers?: string[] | null;
+  proof_requirements?: string[] | null;
+  template_config?: Record<string, unknown> | null;
   additional_compensation: string | null;
   preferred_tier: "Bronze" | "Silver" | "Gold" | "Platinum" | "Diamond" | "Any";
   payout_cents: number;
@@ -86,7 +110,19 @@ type CampaignTemplate = {
   name: string;
   createdAt: string;
   config: {
+    template: CampaignTemplateKey;
     campaignType: Campaign["campaign_type"];
+    objective: string;
+    shortDescription: string;
+    claimMethod: ClaimMethod;
+    contentFormat: CampaignContentFormat;
+    numberOfPosts: number;
+    postingDeadlineDays: number;
+    locationType: LocationType;
+    proofRequirements: string[];
+    eligibleAthleteTiers: AthleteTier[];
+    termsAccepted: boolean;
+    prohibitedAcknowledged: boolean;
     additionalCompensation: string;
     tier: Campaign["preferred_tier"];
     slots: number;
@@ -94,7 +130,7 @@ type CampaignTemplate = {
     locationText: string;
     directions: string;
     claimWindowDays: 3 | 5 | 7;
-    completionWindowKey: string;
+    completionWindowDays: number;
   };
 };
 
@@ -106,11 +142,18 @@ const tierOrder: Record<AthleteTier, number> = {
   Diamond: 5,
 };
 
-const tierCampaignTypes: Record<"starter" | "growth" | "scale" | "domination", Array<Campaign["campaign_type"]>> = {
-  starter: ["basic_post", "story_pack"],
-  growth: ["basic_post", "story_pack", "reel_boost"],
-  scale: ["basic_post", "story_pack", "reel_boost", "event_appearance"],
-  domination: ["basic_post", "story_pack", "reel_boost", "event_appearance", "brand_ambassador"],
+const tierCampaignTemplates: Record<BusinessAccessTier, CampaignTemplateKey[]> = {
+  starter: ["instagram_post", "dine_and_post"],
+  growth: ["instagram_post", "dine_and_post", "product_review"],
+  scale: ["instagram_post", "dine_and_post", "product_review", "monthly_ambassador"],
+  domination: ["instagram_post", "dine_and_post", "product_review", "monthly_ambassador"],
+};
+
+const templateCampaignType: Record<CampaignTemplateKey, Campaign["campaign_type"]> = {
+  instagram_post: "basic_post",
+  dine_and_post: "story_pack",
+  product_review: "reel_boost",
+  monthly_ambassador: "brand_ambassador",
 };
 
 const tierDisplayName: Record<"starter" | "growth" | "scale" | "domination", string> = {
@@ -128,12 +171,23 @@ const campaignTypeLabel: Record<Campaign["campaign_type"], string> = {
   brand_ambassador: "Brand Ambassador Series",
 };
 
-const COMPLETION_WINDOW_OPTIONS: Record<Campaign["campaign_type"], Array<{ key: string; label: string; hours: number }>> = {
-  basic_post:       [{ key: "48h",  label: "48 hours — Quick post",        hours: 48  }, { key: "72h", label: "72 hours — Standard",          hours: 72  }],
-  story_pack:       [{ key: "48h",  label: "48 hours — Quick story",       hours: 48  }, { key: "72h", label: "72 hours — Standard",          hours: 72  }],
-  reel_boost:       [{ key: "72h",  label: "72 hours — Quick reel",        hours: 72  }, { key: "5d",  label: "5 days — Full edit",           hours: 120 }],
-  event_appearance: [{ key: "3d",   label: "3 days — Event + post",        hours: 72  }, { key: "5d",  label: "5 days — Full coverage",       hours: 120 }],
-  brand_ambassador: [{ key: "7d",   label: "7 days — Weekly deliverable",  hours: 168 }, { key: "14d", label: "14 days — Biweekly deliverable", hours: 336 }],
+const claimMethodLabel: Record<ClaimMethod, string> = {
+  first_come_first_serve: "First come, first serve",
+  business_selects: "Business selects",
+};
+
+function campaignTemplateLabel(campaign: Campaign): string {
+  if (campaign.campaign_template && TEMPLATE_LABELS[campaign.campaign_template]) {
+    return TEMPLATE_LABELS[campaign.campaign_template];
+  }
+  return campaignTypeLabel[campaign.campaign_type];
+}
+
+const TEMPLATE_COMPLETION_DAY_OPTIONS: Record<CampaignTemplateKey, number[]> = {
+  instagram_post: [2, 3, 5],
+  dine_and_post: [2, 3, 5],
+  product_review: [5, 7, 10],
+  monthly_ambassador: [30],
 };
 
 function canAccessTier(currentMax: AthleteTier, requested: AthleteTier) {
@@ -223,16 +277,28 @@ export default function BusinessDashboard() {
   }, [allAthletes]);
 
   const [form, setForm] = useState({
+    template: "instagram_post" as CampaignTemplateKey,
     title: "",
+    shortDescription: "",
+    objective: "",
     campaignType: "basic_post" as Campaign["campaign_type"],
+    claimMethod: "first_come_first_serve" as ClaimMethod,
+    contentFormat: "feed_post" as CampaignContentFormat,
+    numberOfPosts: 1,
+    postingDeadlineDays: 3,
+    locationType: "local_only" as LocationType,
+    proofRequirements: [...TEMPLATE_PROOF_REQUIREMENTS.instagram_post],
+    eligibleAthleteTiers: ["Bronze", "Silver", "Gold", "Platinum", "Diamond"] as AthleteTier[],
+    termsAccepted: false,
+    prohibitedAcknowledged: false,
     additionalCompensation: "",
     tier: "Silver" as Campaign["preferred_tier"],
     slots: 2,
     payoutCents: 6500,
     locationText: "",
     directions: "",
-     claimWindowDays: 5 as 3 | 5 | 7,
-     completionWindowKey: "72h",
+    claimWindowDays: 5 as 3 | 5 | 7,
+    completionWindowDays: 3,
   });
 
     const templateStorageKey = businessId ? `hillink:campaign-templates:${businessId}` : "";
@@ -464,8 +530,36 @@ export default function BusinessDashboard() {
       return;
     }
 
+    if (!form.shortDescription.trim()) {
+      const message = "Short description is required.";
+      setError(message);
+      setCampaignError(message);
+      return;
+    }
+
+    if (!form.objective.trim()) {
+      const message = "Campaign objective is required.";
+      setError(message);
+      setCampaignError(message);
+      return;
+    }
+
     if (!form.directions.trim()) {
       const message = "Directions for athletes are required.";
+      setError(message);
+      setCampaignError(message);
+      return;
+    }
+
+    if (!form.termsAccepted || !form.prohibitedAcknowledged) {
+      const message = "You must acknowledge campaign terms and prohibited categories before publishing.";
+      setError(message);
+      setCampaignError(message);
+      return;
+    }
+
+    if (!form.eligibleAthleteTiers.length) {
+      const message = "Select at least one eligible athlete tier.";
       setError(message);
       setCampaignError(message);
       return;
@@ -500,9 +594,16 @@ export default function BusinessDashboard() {
       return;
     }
 
-    const effectiveAccessTier = billingProfile.access_tier_override || billingProfile.subscription_tier;
-    if (!tierCampaignTypes[effectiveAccessTier].includes(form.campaignType)) {
-      const message = "Your selected campaign type is not available on your current plan tier.";
+    const effectiveAccessTier = (billingProfile.access_tier_override || billingProfile.subscription_tier) as BusinessAccessTier;
+    if (!tierCampaignTemplates[effectiveAccessTier].includes(form.template)) {
+      const message = "Your selected campaign template is not available on your current plan tier.";
+      setError(message);
+      setCampaignError(message);
+      return;
+    }
+
+    if (!TEMPLATE_CLAIM_METHOD_OPTIONS[form.template].includes(form.claimMethod)) {
+      const message = "This template does not allow the selected claim method.";
       setError(message);
       setCampaignError(message);
       return;
@@ -527,26 +628,49 @@ export default function BusinessDashboard() {
       const now = new Date();
       const claimClose = new Date(now);
       claimClose.setDate(claimClose.getDate() + form.claimWindowDays);
-      const completionOpts = COMPLETION_WINDOW_OPTIONS[form.campaignType];
-      const selectedCompletion = completionOpts.find((o) => o.key === form.completionWindowKey) || completionOpts[0];
       const athleteDue = new Date(claimClose);
-      athleteDue.setHours(athleteDue.getHours() + selectedCompletion.hours);
+      athleteDue.setDate(athleteDue.getDate() + form.postingDeadlineDays);
       const computedStartDate = now.toISOString().split("T")[0];
       const computedDueDate = athleteDue.toISOString().split("T")[0];
+
+    const campaignType = templateCampaignType[form.template];
+    const templateConfig = {
+      short_description: form.shortDescription.trim(),
+      campaign_objective: form.objective.trim(),
+      platform: "instagram",
+      claim_method: form.claimMethod,
+      content_format: form.contentFormat,
+      number_of_posts: form.numberOfPosts,
+      posting_deadline_days_after_claim: form.postingDeadlineDays,
+      content_guidelines: form.directions.trim(),
+      proof_requirements: form.proofRequirements,
+      location_type: form.locationType,
+      completion_window_days: form.completionWindowDays,
+    } as Record<string, unknown>;
 
     const baseCampaignInsert = {
       business_id: auth.user.id,
       title: form.title.trim(),
-      campaign_type: form.campaignType,
+      campaign_type: campaignType,
+      campaign_template: form.template,
+      campaign_objective: form.objective.trim(),
+      claim_method: form.claimMethod,
+      completion_window_days: form.completionWindowDays,
+      review_window_hours: 48,
+      location_type: form.locationType,
+      eligible_athlete_tiers: form.eligibleAthleteTiers,
+      proof_requirements: form.proofRequirements,
+      template_config: templateConfig,
       deliverables: form.directions.trim(),
       preferred_tier: form.tier,
       payout_cents: form.payoutCents,
-        start_date: computedStartDate,
+      start_date: computedStartDate,
       slots: form.slots,
       open_slots: form.slots,
       location_text: normalizedLocation,
-        due_date: computedDueDate,
-      status: "draft",
+      due_date: computedDueDate,
+      auto_accept_enabled: form.claimMethod === "first_come_first_serve",
+      status: "active",
     };
 
     let insertError: { message: string } | null = null;
@@ -577,8 +701,20 @@ export default function BusinessDashboard() {
     setCampaignError("");
     setShowModal(false);
     setForm({
+      template: "instagram_post",
       title: "",
+      shortDescription: "",
+      objective: "",
       campaignType: "basic_post",
+      claimMethod: defaultClaimMethod("instagram_post", effectiveAccessTier),
+      contentFormat: "feed_post",
+      numberOfPosts: 1,
+      postingDeadlineDays: 3,
+      locationType: defaultLocationType("instagram_post"),
+      proofRequirements: [...TEMPLATE_PROOF_REQUIREMENTS.instagram_post],
+      eligibleAthleteTiers: ["Bronze", "Silver", "Gold", "Platinum", "Diamond"],
+      termsAccepted: false,
+      prohibitedAcknowledged: false,
       additionalCompensation: "",
       tier: "Silver",
       slots: 2,
@@ -586,7 +722,7 @@ export default function BusinessDashboard() {
       locationText: "",
       directions: "",
       claimWindowDays: 5,
-      completionWindowKey: COMPLETION_WINDOW_OPTIONS.basic_post[1].key,
+      completionWindowDays: TEMPLATE_DEFAULT_COMPLETION_DAYS.instagram_post,
     });
     await loadData();
   };
@@ -623,7 +759,19 @@ export default function BusinessDashboard() {
       name: trimmed,
       createdAt: new Date().toISOString(),
       config: {
+        template: form.template,
         campaignType: form.campaignType,
+        objective: form.objective,
+        shortDescription: form.shortDescription,
+        claimMethod: form.claimMethod,
+        contentFormat: form.contentFormat,
+        numberOfPosts: form.numberOfPosts,
+        postingDeadlineDays: form.postingDeadlineDays,
+        locationType: form.locationType,
+        proofRequirements: form.proofRequirements,
+        eligibleAthleteTiers: form.eligibleAthleteTiers,
+        termsAccepted: form.termsAccepted,
+        prohibitedAcknowledged: form.prohibitedAcknowledged,
         additionalCompensation: form.additionalCompensation,
         tier: form.tier,
         slots: form.slots,
@@ -631,7 +779,7 @@ export default function BusinessDashboard() {
         locationText: form.locationText,
         directions: form.directions,
         claimWindowDays: form.claimWindowDays,
-        completionWindowKey: form.completionWindowKey,
+        completionWindowDays: form.completionWindowDays,
       },
     };
 
@@ -647,22 +795,32 @@ export default function BusinessDashboard() {
     const template = templates.find((t) => t.id === selectedTemplateId);
     if (!template) return;
 
-    const completionOptions = COMPLETION_WINDOW_OPTIONS[template.config.campaignType];
-    const completionWindowKey = completionOptions.some((o) => o.key === template.config.completionWindowKey)
-      ? template.config.completionWindowKey
-      : completionOptions[0].key;
+    const tpl = template.config.template || "instagram_post";
+    const fallbackTier = (billingProfile?.access_tier_override || billingProfile?.subscription_tier || "starter") as BusinessAccessTier;
 
     setForm((prev) => ({
       ...prev,
-      campaignType: template.config.campaignType,
-      additionalCompensation: template.config.additionalCompensation,
-      tier: template.config.tier,
-      slots: template.config.slots,
-      payoutCents: template.config.payoutCents,
-      locationText: template.config.locationText,
+      template: tpl,
+      campaignType: template.config.campaignType || templateCampaignType[tpl],
+      objective: template.config.objective || "",
+      shortDescription: template.config.shortDescription || "",
+      claimMethod: template.config.claimMethod || defaultClaimMethod(tpl, fallbackTier),
+      contentFormat: template.config.contentFormat || TEMPLATE_FORMAT_OPTIONS[tpl][0],
+      numberOfPosts: template.config.numberOfPosts || 1,
+      postingDeadlineDays: template.config.postingDeadlineDays || TEMPLATE_DEFAULT_COMPLETION_DAYS[tpl],
+      locationType: template.config.locationType || defaultLocationType(tpl),
+      proofRequirements: template.config.proofRequirements?.length ? template.config.proofRequirements : [...TEMPLATE_PROOF_REQUIREMENTS[tpl]],
+      eligibleAthleteTiers: template.config.eligibleAthleteTiers?.length ? template.config.eligibleAthleteTiers : ["Bronze", "Silver", "Gold", "Platinum", "Diamond"],
+      termsAccepted: template.config.termsAccepted ?? false,
+      prohibitedAcknowledged: template.config.prohibitedAcknowledged ?? false,
+      additionalCompensation: template.config.additionalCompensation || "",
+      tier: template.config.tier || "Silver",
+      slots: template.config.slots || 2,
+      payoutCents: template.config.payoutCents || 6500,
+      locationText: template.config.locationText || "",
       directions: template.config.directions || "",
-      claimWindowDays: template.config.claimWindowDays,
-      completionWindowKey,
+      claimWindowDays: (template.config.claimWindowDays || 5) as 3 | 5 | 7,
+      completionWindowDays: template.config.completionWindowDays || TEMPLATE_DEFAULT_COMPLETION_DAYS[tpl],
     }));
     setCampaignError("");
   };
@@ -1139,10 +1297,11 @@ export default function BusinessDashboard() {
     return tiers.filter((t) => canAccessTier(maxTier, t));
   }, [billingProfile]);
 
-  const allowedCampaignTypes = useMemo(() => {
-    const tier = billingProfile?.access_tier_override || billingProfile?.subscription_tier || "starter";
-    return tierCampaignTypes[tier];
+  const effectiveAccessTier = useMemo(() => {
+    return (billingProfile?.access_tier_override || billingProfile?.subscription_tier || "starter") as BusinessAccessTier;
   }, [billingProfile]);
+
+  const allowedTemplates = useMemo(() => tierCampaignTemplates[effectiveAccessTier], [effectiveAccessTier]);
 
   useEffect(() => {
     if (!allowedCampaignTiers.includes(form.tier as AthleteTier)) {
@@ -1151,10 +1310,59 @@ export default function BusinessDashboard() {
   }, [allowedCampaignTiers, form.tier]);
 
   useEffect(() => {
-    if (!allowedCampaignTypes.includes(form.campaignType)) {
-      setForm((prev) => ({ ...prev, campaignType: allowedCampaignTypes[0] || "basic_post" }));
+    if (!allowedTemplates.includes(form.template)) {
+      const nextTemplate = allowedTemplates[0] || "instagram_post";
+      setForm((prev) => ({
+        ...prev,
+        template: nextTemplate,
+        campaignType: templateCampaignType[nextTemplate],
+        claimMethod: defaultClaimMethod(nextTemplate, effectiveAccessTier),
+        contentFormat: TEMPLATE_FORMAT_OPTIONS[nextTemplate][0],
+        proofRequirements: [...TEMPLATE_PROOF_REQUIREMENTS[nextTemplate]],
+        locationType: defaultLocationType(nextTemplate),
+        completionWindowDays: TEMPLATE_DEFAULT_COMPLETION_DAYS[nextTemplate],
+      }));
     }
-  }, [allowedCampaignTypes, form.campaignType]);
+  }, [allowedTemplates, form.template, effectiveAccessTier]);
+
+  useEffect(() => {
+    const nextType = templateCampaignType[form.template];
+    const nextFormats = TEMPLATE_FORMAT_OPTIONS[form.template];
+    const nextClaimMethods = TEMPLATE_CLAIM_METHOD_OPTIONS[form.template];
+    const nextClaimMethod = nextClaimMethods.includes(form.claimMethod)
+      ? form.claimMethod
+      : defaultClaimMethod(form.template, effectiveAccessTier);
+    const nextFormat = nextFormats.includes(form.contentFormat) ? form.contentFormat : nextFormats[0];
+    const nextCompletion = TEMPLATE_COMPLETION_DAY_OPTIONS[form.template].includes(form.completionWindowDays)
+      ? form.completionWindowDays
+      : TEMPLATE_DEFAULT_COMPLETION_DAYS[form.template];
+
+    setForm((prev) => {
+      const proofRequirements = prev.proofRequirements.length
+        ? prev.proofRequirements
+        : [...TEMPLATE_PROOF_REQUIREMENTS[form.template]];
+      const locationType = defaultLocationType(form.template);
+      if (
+        prev.campaignType === nextType &&
+        prev.claimMethod === nextClaimMethod &&
+        prev.contentFormat === nextFormat &&
+        prev.completionWindowDays === nextCompletion &&
+        prev.locationType === locationType &&
+        prev.proofRequirements.length === proofRequirements.length
+      ) {
+        return prev;
+      }
+      return {
+        ...prev,
+        campaignType: nextType,
+        claimMethod: nextClaimMethod,
+        contentFormat: nextFormat,
+        completionWindowDays: nextCompletion,
+        proofRequirements,
+        locationType,
+      };
+    });
+  }, [form.template]);
 
   const selectedAthlete = profileModalAthleteId ? athletesById[profileModalAthleteId] : undefined;
 
@@ -1353,7 +1561,7 @@ export default function BusinessDashboard() {
                       <div>
                         <div style={{ fontWeight: 700, fontSize: 15 }}>{campaign.title}</div>
                         <div style={{ fontSize: 12, color: "#6b7280", marginTop: 2 }}>
-                          {campaignTypeLabel[campaign.campaign_type]} • {campaign.preferred_tier} • ${(campaign.payout_cents / 100).toFixed(0)} payout
+                          {campaignTemplateLabel(campaign)} • {campaign.preferred_tier} • {(campaign.claim_method && claimMethodLabel[campaign.claim_method]) || "Business selects"} • ${(campaign.payout_cents / 100).toFixed(0)} payout
                         </div>
                       </div>
                       <span style={{ fontSize: 12, color: "#6b7280", whiteSpace: "nowrap" }}>
@@ -1597,7 +1805,7 @@ export default function BusinessDashboard() {
                       <div>
                         <div style={{ fontWeight: 700, fontSize: 15 }}>{campaign.title}</div>
                         <div style={{ fontSize: 12, color: "#6b7280", marginTop: 2 }}>
-                          {campaignTypeLabel[campaign.campaign_type]} • {campaign.preferred_tier} • ${(campaign.payout_cents / 100).toFixed(0)} payout
+                          {campaignTemplateLabel(campaign)} • {campaign.preferred_tier} • {(campaign.claim_method && claimMethodLabel[campaign.claim_method]) || "Business selects"} • ${(campaign.payout_cents / 100).toFixed(0)} payout
                         </div>
                       </div>
                       <span
@@ -1947,12 +2155,102 @@ export default function BusinessDashboard() {
 
                 <div className="form-grid two">
                   <label>
+                    Campaign template
+                    <select
+                      value={form.template}
+                      onChange={(e) => {
+                        const nextTemplate = e.target.value as CampaignTemplateKey;
+                        const nextFormats = TEMPLATE_FORMAT_OPTIONS[nextTemplate];
+                        const nextClaim = defaultClaimMethod(nextTemplate, effectiveAccessTier);
+                        setForm({
+                          ...form,
+                          template: nextTemplate,
+                          campaignType: templateCampaignType[nextTemplate],
+                          claimMethod: nextClaim,
+                          contentFormat: nextFormats[0],
+                          postingDeadlineDays: TEMPLATE_DEFAULT_COMPLETION_DAYS[nextTemplate],
+                          completionWindowDays: TEMPLATE_DEFAULT_COMPLETION_DAYS[nextTemplate],
+                          locationType: defaultLocationType(nextTemplate),
+                          proofRequirements: [...TEMPLATE_PROOF_REQUIREMENTS[nextTemplate]],
+                        });
+                      }}
+                    >
+                      {allowedTemplates.map((tpl) => (
+                        <option key={tpl} value={tpl}>{TEMPLATE_LABELS[tpl]}</option>
+                      ))}
+                    </select>
+                  </label>
+
+                  <label>
+                    Content format
+                    <select
+                      value={form.contentFormat}
+                      onChange={(e) => setForm({ ...form, contentFormat: e.target.value as CampaignContentFormat })}
+                    >
+                      {TEMPLATE_FORMAT_OPTIONS[form.template].map((format) => (
+                        <option key={format} value={format}>{CONTENT_FORMAT_LABELS[format]}</option>
+                      ))}
+                    </select>
+                  </label>
+
+                  <label>
                     Campaign title
                     <input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} />
                   </label>
 
                   <label>
-                    Eligible tier
+                    Short description
+                    <input
+                      value={form.shortDescription}
+                      onChange={(e) => setForm({ ...form, shortDescription: e.target.value })}
+                      placeholder="One-line campaign pitch"
+                    />
+                  </label>
+
+                  <label style={{ gridColumn: "1 / -1" }}>
+                    Campaign objective
+                    <input
+                      value={form.objective}
+                      onChange={(e) => setForm({ ...form, objective: e.target.value })}
+                      placeholder="What result are you trying to drive? (foot traffic, awareness, code usage...)"
+                    />
+                  </label>
+
+                  <label>
+                    Number of posts
+                    <select value={form.numberOfPosts} onChange={(e) => setForm({ ...form, numberOfPosts: Number(e.target.value) || 1 })}>
+                      {[1, 2, 3, 4, 5].map((n) => (
+                        <option key={n} value={n}>{n}</option>
+                      ))}
+                    </select>
+                  </label>
+
+                  <label>
+                    Posting deadline after claim
+                    <select
+                      value={form.postingDeadlineDays}
+                      onChange={(e) => setForm({ ...form, postingDeadlineDays: Number(e.target.value) || 3 })}
+                    >
+                      {TEMPLATE_COMPLETION_DAY_OPTIONS[form.template].map((days) => (
+                        <option key={days} value={days}>{days} day{days === 1 ? "" : "s"}</option>
+                      ))}
+                    </select>
+                  </label>
+
+                  <label>
+                    Claim method
+                    <select
+                      value={form.claimMethod}
+                      onChange={(e) => setForm({ ...form, claimMethod: e.target.value as ClaimMethod })}
+                    >
+                      {TEMPLATE_CLAIM_METHOD_OPTIONS[form.template].map((method) => (
+                        <option key={method} value={method}>{claimMethodLabel[method]}</option>
+                      ))}
+                    </select>
+                  </label>
+
+                  <label>
+                    Primary payout tier
                     <select value={form.tier} onChange={(e) => setForm({ ...form, tier: e.target.value as Campaign["preferred_tier"] })}>
                       {allowedCampaignTiers.map((tierOption) => (
                         <option key={tierOption} value={tierOption}>{tierOption}</option>
@@ -1960,35 +2258,37 @@ export default function BusinessDashboard() {
                     </select>
                   </label>
 
-                  <label>
-                    Campaign type
-                      <select value={form.campaignType} onChange={(e) => {
-                        const newType = e.target.value as Campaign["campaign_type"];
-                        setForm({
-                          ...form,
-                          campaignType: newType,
-                          completionWindowKey: COMPLETION_WINDOW_OPTIONS[newType][0].key,
-                        });
-                      }}>
-                      {allowedCampaignTypes.map((typeOption) => (
-                        <option key={typeOption} value={typeOption}>{campaignTypeLabel[typeOption]}</option>
-                      ))}
-                    </select>
+                  <label style={{ gridColumn: "1 / -1" }}>
+                    Eligible athlete tiers
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 12, marginTop: 8 }}>
+                      {["Bronze", "Silver", "Gold", "Platinum", "Diamond"].map((tierOption) => {
+                        const disabled = !allowedCampaignTiers.includes(tierOption as AthleteTier);
+                        const checked = form.eligibleAthleteTiers.includes(tierOption as AthleteTier);
+                        return (
+                          <label key={tierOption} style={{ display: "inline-flex", alignItems: "center", gap: 6, opacity: disabled ? 0.45 : 1 }}>
+                            <input
+                              type="checkbox"
+                              disabled={disabled}
+                              checked={checked}
+                              onChange={(e) => {
+                                const tierValue = tierOption as AthleteTier;
+                                const next = e.target.checked
+                                  ? [...form.eligibleAthleteTiers, tierValue]
+                                  : form.eligibleAthleteTiers.filter((x) => x !== tierValue);
+                                setForm({ ...form, eligibleAthleteTiers: next });
+                              }}
+                            />
+                            {tierOption}
+                          </label>
+                        );
+                      })}
+                    </div>
                   </label>
 
                   <label>
-                    Additional compensation (optional)
+                    Slots ({form.slots})
                     <input
-                      value={form.additionalCompensation}
-                      onChange={(e) => setForm({ ...form, additionalCompensation: e.target.value })}
-                      placeholder="food, free membership, gift card, store credit"
-                    />
-                  </label>
-
-                  <label>
-                    Slots
-                    <input
-                      type="number"
+                      type="range"
                       min="1"
                       max={billingProfile?.max_slots_per_campaign || 1}
                       value={form.slots}
@@ -2007,12 +2307,66 @@ export default function BusinessDashboard() {
                   </label>
 
                   <label>
+                    Location mode
+                    <select value={form.locationType} onChange={(e) => setForm({ ...form, locationType: e.target.value as LocationType })}>
+                      <option value="local_only">Local only</option>
+                      <option value="shipped">Shipped</option>
+                      <option value="hybrid">Hybrid</option>
+                    </select>
+                  </label>
+
+                  <label>
                     Campaign location
                     <input
                       value={form.locationText}
                       onChange={(e) => setForm({ ...form, locationText: e.target.value })}
-                      placeholder="Austin, TX or Remote (for online campaigns)"
+                      placeholder={form.locationType === "shipped" ? "Shipping region (e.g. US only)" : "Austin, TX"}
                     />
+                  </label>
+
+                  <label>
+                    Additional compensation (optional)
+                    <input
+                      value={form.additionalCompensation}
+                      onChange={(e) => setForm({ ...form, additionalCompensation: e.target.value })}
+                      placeholder="food, free membership, gift card, store credit"
+                    />
+                  </label>
+
+                  <label>
+                    Completion window
+                    <select
+                      value={form.completionWindowDays}
+                      onChange={(e) => setForm({ ...form, completionWindowDays: Number(e.target.value) || 3 })}
+                    >
+                      {TEMPLATE_COMPLETION_DAY_OPTIONS[form.template].map((days) => (
+                        <option key={days} value={days}>{days} day{days === 1 ? "" : "s"}</option>
+                      ))}
+                    </select>
+                  </label>
+
+                  <label style={{ gridColumn: "1 / -1" }}>
+                    Proof requirements
+                    <div style={{ display: "grid", gap: 6, marginTop: 8 }}>
+                      {TEMPLATE_PROOF_REQUIREMENTS[form.template].map((item) => {
+                        const checked = form.proofRequirements.includes(item);
+                        return (
+                          <label key={item} style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={(e) => {
+                                const next = e.target.checked
+                                  ? [...form.proofRequirements, item]
+                                  : form.proofRequirements.filter((value) => value !== item);
+                                setForm({ ...form, proofRequirements: next });
+                              }}
+                            />
+                            {item}
+                          </label>
+                        );
+                      })}
+                    </div>
                   </label>
 
                   <label style={{ gridColumn: "1 / -1" }}>
@@ -2020,13 +2374,13 @@ export default function BusinessDashboard() {
                     <textarea
                       value={form.directions}
                       onChange={(e) => setForm({ ...form, directions: e.target.value })}
-                      placeholder="What should athletes do exactly? Include message angle, required tags, posting timing, CTA, and any brand rules."
+                      placeholder="Exact instructions athletes must follow, including required talking points and CTA."
                       style={{ minHeight: 110 }}
                     />
                   </label>
-                  </div>
+                </div>
 
-                  <div className="campaign-timeline-section">
+                <div className="campaign-timeline-section">
                     <div className="timeline-section-header">
                       <span className="timeline-icon">⏱</span>
                       <div>
@@ -2067,14 +2421,14 @@ export default function BusinessDashboard() {
                           </div>
                         </div>
                         <div className="timeline-options">
-                          {COMPLETION_WINDOW_OPTIONS[form.campaignType].map((opt) => (
+                          {TEMPLATE_COMPLETION_DAY_OPTIONS[form.template].map((days) => (
                             <button
-                              key={opt.key}
+                              key={days}
                               type="button"
-                              className={`timeline-option-btn${form.completionWindowKey === opt.key ? " selected" : ""}`}
-                              onClick={() => setForm({ ...form, completionWindowKey: opt.key })}
+                              className={`timeline-option-btn${form.completionWindowDays === days ? " selected" : ""}`}
+                              onClick={() => setForm({ ...form, completionWindowDays: days })}
                             >
-                              {opt.label}
+                              {days} day{days === 1 ? "" : "s"}
                             </button>
                           ))}
                         </div>
@@ -2099,12 +2453,42 @@ export default function BusinessDashboard() {
                       Athletes have until <strong>{(() => {
                         const d = new Date();
                         d.setDate(d.getDate() + form.claimWindowDays);
-                        const opt = COMPLETION_WINDOW_OPTIONS[form.campaignType].find(o => o.key === form.completionWindowKey) || COMPLETION_WINDOW_OPTIONS[form.campaignType][0];
-                        d.setHours(d.getHours() + opt.hours);
+                        d.setDate(d.getDate() + form.postingDeadlineDays);
                         return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
                       })()}</strong> to complete. If the campaign isn&apos;t filled in {form.claimWindowDays} days, it auto-closes.
                     </div>
                   </div>
+
+                <div style={{ border: "1px solid #e5e7eb", borderRadius: 12, padding: 14, marginTop: 14 }}>
+                  <div style={{ fontWeight: 700, marginBottom: 8 }}>Review before publishing</div>
+                  <div style={{ display: "grid", gap: 6, fontSize: 14 }}>
+                    <div><strong>Template:</strong> {TEMPLATE_LABELS[form.template]}</div>
+                    <div><strong>Type:</strong> {campaignTypeLabel[form.campaignType]}</div>
+                    <div><strong>Compensation:</strong> ${(form.payoutCents / 100).toFixed(0)} per athlete{form.additionalCompensation ? ` + ${form.additionalCompensation}` : ""}</div>
+                    <div><strong>Slots:</strong> {form.slots}</div>
+                    <div><strong>Claim method:</strong> {claimMethodLabel[form.claimMethod]}</div>
+                    <div><strong>Eligible tiers:</strong> {form.eligibleAthleteTiers.join(", ")}</div>
+                    <div><strong>Proof required:</strong> {form.proofRequirements.join(" • ")}</div>
+                  </div>
+                  <div style={{ display: "grid", gap: 6, marginTop: 10 }}>
+                    <label style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+                      <input
+                        type="checkbox"
+                        checked={form.termsAccepted}
+                        onChange={(e) => setForm({ ...form, termsAccepted: e.target.checked })}
+                      />
+                      I confirm these requirements are accurate and compensation is truthful.
+                    </label>
+                    <label style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+                      <input
+                        type="checkbox"
+                        checked={form.prohibitedAcknowledged}
+                        onChange={(e) => setForm({ ...form, prohibitedAcknowledged: e.target.checked })}
+                      />
+                      I acknowledge prohibited categories and compliance rules.
+                    </label>
+                  </div>
+                </div>
               </div>
 
               <div className="modal-footer">

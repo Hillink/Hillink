@@ -12,6 +12,7 @@ import {
 import { formatMilesLabel, locationKey, milesBetween, normalizeLocationPart, storedCoords, type LatLng } from "@/lib/location";
 import NotificationBell from "@/components/NotificationBell";
 import type { LeaderboardEntry } from "@/app/api/athlete/leaderboard/route";
+import { TEMPLATE_LABELS, type CampaignTemplateKey, type ClaimMethod, type LocationType } from "@/lib/campaignTemplates";
 
 const CAMPAIGN_TYPE_LABELS: Record<string, string> = {
   basic_post: "Instagram Post",
@@ -21,11 +22,25 @@ const CAMPAIGN_TYPE_LABELS: Record<string, string> = {
   brand_ambassador: "Brand Ambassador",
 };
 
+const CLAIM_METHOD_LABELS: Record<ClaimMethod, string> = {
+  first_come_first_serve: "First come, first serve",
+  business_selects: "Business selects",
+};
+
 type Campaign = {
   id: string;
   title: string;
   campaign_type: string;
   deliverables: string;
+  campaign_template?: CampaignTemplateKey | null;
+  claim_method?: ClaimMethod | null;
+  campaign_objective?: string | null;
+  completion_window_days?: number | null;
+  review_window_hours?: number | null;
+  location_type?: LocationType | null;
+  eligible_athlete_tiers?: string[] | null;
+  proof_requirements?: string[] | null;
+  template_config?: Record<string, unknown> | null;
   additional_compensation: string | null;
   preferred_tier: "Bronze" | "Silver" | "Gold" | "Platinum" | "Diamond" | "Any";
   payout_cents: number;
@@ -186,6 +201,13 @@ function canJoinCampaignAtTier(currentTier: string, preferredTier: Campaign["pre
   return (rank[currentTier] || 0) >= (rank[preferredTier] || 0);
 }
 
+function campaignTemplateName(campaign: Campaign): string {
+  if (campaign.campaign_template && TEMPLATE_LABELS[campaign.campaign_template]) {
+    return TEMPLATE_LABELS[campaign.campaign_template];
+  }
+  return CAMPAIGN_TYPE_LABELS[campaign.campaign_type] || campaign.campaign_type;
+}
+
 export default function AthleteDashboard({ initialXp = 0 }: AthleteDashboardProps) {
   const router = useRouter();
   const supabase = createClient();
@@ -200,6 +222,7 @@ export default function AthleteDashboard({ initialXp = 0 }: AthleteDashboardProp
   const [athleteProfile, setAthleteProfile] = useState<AthleteProfile | null>(null);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [campaignModalId, setCampaignModalId] = useState<string | null>(null);
+  const [acceptTermsByCampaign, setAcceptTermsByCampaign] = useState<Record<string, boolean>>({});
   const [applyingCampaignId, setApplyingCampaignId] = useState<string | null>(null);
   const [submittingAppId, setSubmittingAppId] = useState<string | null>(null);
   const [withdrawingAppId, setWithdrawingAppId] = useState<string | null>(null);
@@ -282,7 +305,7 @@ export default function AthleteDashboard({ initialXp = 0 }: AthleteDashboardProp
     const [campaignRes, appRes, xpRes, athleteProfileRes] = await Promise.all([
       supabase
         .from("campaigns")
-        .select("id, title, campaign_type, deliverables, additional_compensation, preferred_tier, payout_cents, open_slots, auto_accept_enabled, auto_accept_radius_miles, start_date, location_text, due_date, status, business_id")
+        .select("id, title, campaign_type, campaign_template, campaign_objective, claim_method, completion_window_days, review_window_hours, location_type, eligible_athlete_tiers, proof_requirements, template_config, deliverables, additional_compensation, preferred_tier, payout_cents, open_slots, auto_accept_enabled, auto_accept_radius_miles, start_date, location_text, due_date, status, business_id")
         .or("status.eq.active,status.eq.open")
         .order("created_at", { ascending: false }),
       supabase
@@ -323,7 +346,7 @@ export default function AthleteDashboard({ initialXp = 0 }: AthleteDashboardProp
     if (campaignIds.length > 0) {
       const { data: relatedCampaigns, error: relatedCampaignError } = await supabase
         .from("campaigns")
-        .select("id, title, campaign_type, deliverables, additional_compensation, preferred_tier, payout_cents, open_slots, auto_accept_enabled, auto_accept_radius_miles, start_date, location_text, due_date, status, business_id")
+        .select("id, title, campaign_type, campaign_template, campaign_objective, claim_method, completion_window_days, review_window_hours, location_type, eligible_athlete_tiers, proof_requirements, template_config, deliverables, additional_compensation, preferred_tier, payout_cents, open_slots, auto_accept_enabled, auto_accept_radius_miles, start_date, location_text, due_date, status, business_id")
         .in("id", campaignIds);
 
       if (relatedCampaignError) {
@@ -573,7 +596,11 @@ export default function AthleteDashboard({ initialXp = 0 }: AthleteDashboardProp
       return;
     }
 
-    setInfoMessage("You're in!");
+    if (data?.joinStatus === "applied") {
+      setInfoMessage("Application submitted. The business will review and select athletes.");
+    } else {
+      setInfoMessage("You're in!");
+    }
     await loadData(true);
   };
 
@@ -1342,14 +1369,17 @@ export default function AthleteDashboard({ initialXp = 0 }: AthleteDashboardProp
                 <div className="table-row six" key={campaign.id}>
                   <span>
                     <div>{campaign.title}</div>
+                    <div style={{ fontSize: 11, color: "var(--muted)" }}>
+                      {campaign.open_slots} slots • {campaign.claim_method ? CLAIM_METHOD_LABELS[campaign.claim_method] : "Business selects"}
+                    </div>
                     {campaign.auto_accept_enabled && (
                       <div style={{ fontSize: 11, color: "#166534", fontWeight: 600 }}>
                         Auto-Accept ON • {campaign.auto_accept_radius_miles}mi radius
                       </div>
                     )}
                   </span>
-                  <span>{CAMPAIGN_TYPE_LABELS[campaign.campaign_type] ?? campaign.campaign_type}</span>
-                  <span>{campaign.preferred_tier}</span>
+                  <span>{campaignTemplateName(campaign)}</span>
+                  <span>{(campaign.eligible_athlete_tiers && campaign.eligible_athlete_tiers.length > 0) ? campaign.eligible_athlete_tiers.join(", ") : campaign.preferred_tier}</span>
                   <span>${(campaign.payout_cents / 100).toFixed(0)}</span>
                   <span>
                     <button className="ghost-button" style={{ padding: 0, textAlign: "left" }} onClick={() => setCampaignModalId(campaign.id)}>
@@ -1360,7 +1390,7 @@ export default function AthleteDashboard({ initialXp = 0 }: AthleteDashboardProp
                       {distanceLabel && (
                         <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 1 }}>{distanceLabel}</div>
                       )}
-                      <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 1 }}>View Campaign</div>
+                      <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 1 }}>Due {campaign.due_date || "-"}</div>
                     </button>
                   </span>
                   <span>
@@ -1374,10 +1404,10 @@ export default function AthleteDashboard({ initialXp = 0 }: AthleteDashboardProp
                       <button
                         className="small-button"
                         style={{ background: "#dc2626", color: "#fff", borderColor: "#dc2626" }}
-                        disabled={applyingCampaignId === campaign.id || !canApply}
-                        onClick={() => applyToCampaign(campaign.id)}
+                        disabled={!canApply}
+                        onClick={() => setCampaignModalId(campaign.id)}
                       >
-                        {applyingCampaignId === campaign.id ? "Joining..." : "Join"}
+                        Review & Join
                       </button>
                     )}
                   </span>
@@ -1672,28 +1702,53 @@ export default function AthleteDashboard({ initialXp = 0 }: AthleteDashboardProp
                     <div className="stat-subtext">per athlete</div>
                   </div>
                   <div className="stat-card">
-                    <div className="stat-title">Tier Requirement</div>
-                    <div className="stat-value" style={{ fontSize: 18 }}>{selectedCampaign.preferred_tier}</div>
-                    <div className="stat-subtext">minimum athlete tier</div>
+                    <div className="stat-title">Campaign Type</div>
+                    <div className="stat-value" style={{ fontSize: 18 }}>{campaignTemplateName(selectedCampaign)}</div>
+                    <div className="stat-subtext">template</div>
                   </div>
                   <div className="stat-card">
-                    <div className="stat-title">Dates</div>
+                    <div className="stat-title">Deadline</div>
                     <div className="stat-value" style={{ fontSize: 18 }}>
-                      {selectedCampaign.start_date || "-"} to {selectedCampaign.due_date || "-"}
+                      {selectedCampaign.due_date || "-"}
                     </div>
-                    <div className="stat-subtext">start to end</div>
+                    <div className="stat-subtext">exact completion date</div>
                   </div>
                 </div>
 
                 <div style={{ marginTop: 12, display: "grid", gap: 8 }}>
-                  <div><strong>Deliverables:</strong> {selectedCampaign.deliverables || "Not provided"}</div>
+                  <div><strong>Compensation:</strong> ${(selectedCampaign.payout_cents / 100).toFixed(0)} {selectedCampaign.additional_compensation ? `+ ${selectedCampaign.additional_compensation}` : ""}</div>
+                  <div><strong>Claim method:</strong> {selectedCampaign.claim_method ? CLAIM_METHOD_LABELS[selectedCampaign.claim_method] : "Business selects"}</div>
+                  <div><strong>Tier eligibility:</strong> {(selectedCampaign.eligible_athlete_tiers && selectedCampaign.eligible_athlete_tiers.length > 0) ? selectedCampaign.eligible_athlete_tiers.join(", ") : selectedCampaign.preferred_tier}</div>
+                  <div><strong>Directions:</strong> {selectedCampaign.deliverables || "Not provided"}</div>
+                  <div><strong>Proof required:</strong> {(selectedCampaign.proof_requirements && selectedCampaign.proof_requirements.length > 0) ? selectedCampaign.proof_requirements.join(" • ") : "Live post URL and screenshot"}</div>
+                  <div><strong>Location / fulfillment:</strong> {selectedCampaign.location_type || "local_only"} • {selectedCampaign.location_text || [selectedBusiness?.city, selectedBusiness?.state].filter(Boolean).join(", ") || "Not provided"}</div>
                   <div><strong>Additional compensation:</strong> {selectedCampaign.additional_compensation || "None listed"}</div>
-                  <div><strong>Location:</strong> {selectedCampaign.location_text || [selectedBusiness?.city, selectedBusiness?.state].filter(Boolean).join(", ") || "Not provided"}</div>
                   <div><strong>Business:</strong> {selectedBusiness?.business_name || "Business"}</div>
                 </div>
               </div>
               <div className="modal-footer">
                 <button className="secondary-button" onClick={() => setCampaignModalId(null)}>Close</button>
+                {!appliedByCampaignId[selectedCampaign.id] && selectedCampaign.status === "active" && selectedCampaign.open_slots > 0 && (
+                  <>
+                    <label style={{ display: "inline-flex", alignItems: "center", gap: 8, marginRight: "auto" }}>
+                      <input
+                        type="checkbox"
+                        checked={acceptTermsByCampaign[selectedCampaign.id] || false}
+                        onChange={(e) => setAcceptTermsByCampaign((prev) => ({ ...prev, [selectedCampaign.id]: e.target.checked }))}
+                      />
+                      I understand requirements, proof rules, and payout terms.
+                    </label>
+                    <button
+                      className="cta-button"
+                      disabled={applyingCampaignId === selectedCampaign.id || !(acceptTermsByCampaign[selectedCampaign.id] || false)}
+                      onClick={async () => {
+                        await applyToCampaign(selectedCampaign.id);
+                      }}
+                    >
+                      {applyingCampaignId === selectedCampaign.id ? "Joining..." : "Join Campaign"}
+                    </button>
+                  </>
+                )}
               </div>
             </div>
           </div>

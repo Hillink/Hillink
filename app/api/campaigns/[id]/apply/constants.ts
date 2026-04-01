@@ -10,6 +10,7 @@ export const REASON_MESSAGES: Record<string, string> = {
   tier_insufficient: "You do not meet the minimum tier for this campaign",
   outside_radius: "You are outside the campaign's acceptance radius",
   already_applied: "You have already applied to this campaign",
+  duplicate_application: "You have already applied to this campaign",
   location_missing: "Your profile is missing location data",
   campaign_location_missing: "This campaign has no location set",
 };
