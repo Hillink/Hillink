@@ -20,7 +20,7 @@ export default function Home() {
           <a href="#faq">FAQ</a>
 
           <a
-            href="https://www.instagram.com/hillinkofficial?igsh=MWE1eGZ0ZTdxbHpsMQ%3D%3D"
+            href="https://www.instagram.com/hillink.io"
             target="_blank"
             rel="noopener noreferrer"
             className="insta-nav"
@@ -34,9 +34,9 @@ export default function Home() {
           <Link href="/waitlist">
             <button className="cta-button">Join the Waitlist</button>
           </Link>
-          <Link href="/preview">
+          <a href="https://github.com/Hillink/Hillink" target="_blank" rel="noopener noreferrer">
             <button className="secondary-button">Check out the Prototype</button>
-          </Link>
+          </a>
         </div>
         {/* Optionally, add a section to highlight the prototype elsewhere if desired */}
       </header>
@@ -212,14 +212,14 @@ export default function Home() {
         <section id="pricing" className="landing-section">
           <div className="section-kicker">Pricing</div>
           <h2 className="section-heading">
-            Simple pricing that is easy to explain to businesses
+            Let athletes do the marketing for you
           </h2>
 
           <div className="pricing-grid">
             <div className="pricing-card">
               <h3>Platform Access</h3>
               <div className="pricing-big">
-                $250<span>/month</span>
+                $200 <span>/ month</span>
               </div>
               <p>
                 Businesses pay a base monthly subscription for platform access,
@@ -283,12 +283,12 @@ export default function Home() {
         </section>
 
         {/* PRELAUNCH: bottom CTA section */}
-        <section className="landing-section" style={{ textAlign: "center" }}>
+        <section className="landing-section early-access-section">
           <div className="section-kicker">Early Access</div>
-          <h2 className="section-heading">Be first when we launch in College Station</h2>
+          <h2 className="section-heading">Be first when we launch in College Station and Houston</h2>
           <p className="section-copy">
             We are starting narrow and local. If you are a Texas A&amp;M athlete
-            or a College Station business, now is the time to get on the list.
+            or a College Station or Houston-area business, now is the time to get on the list.
           </p>
           <div className="hero-actions" style={{ justifyContent: "center", marginTop: 24 }}>
             <Link href="/waitlist/business">

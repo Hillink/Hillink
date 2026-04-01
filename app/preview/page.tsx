@@ -42,40 +42,37 @@ export default function PreviewPage() {
           This is a prototype walkthrough. Final production details may change before launch.
         </p>
 
-        <div style={{ display: "grid", gap: 14, marginBottom: 20 }}>
+        <div className="preview-journey-grid">
           {previewSteps.map((step) => (
-            <article
-              key={step.title}
-              style={{
-                background: "var(--surface-2)",
-                border: "1px solid var(--border)",
-                borderRadius: 14,
-                padding: 16,
-                textAlign: "left",
-              }}
-            >
-              <h3 style={{ margin: "0 0 8px" }}>{step.title}</h3>
-              <p style={{ margin: 0, color: "var(--muted)", lineHeight: 1.5 }}>{step.body}</p>
+            <article key={step.title} className="preview-step-card">
+              <h3>{step.title}</h3>
+              <p>{step.body}</p>
             </article>
           ))}
         </div>
 
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 12, marginBottom: 24 }}>
+        <div className="preview-features-grid">
           {featureCards.map((card) => (
-            <article
-              key={card.heading}
-              style={{
-                background: "var(--surface)",
-                border: "1px solid var(--border)",
-                borderRadius: 14,
-                padding: 14,
-                textAlign: "left",
-              }}
-            >
-              <h4 style={{ margin: "0 0 8px" }}>{card.heading}</h4>
-              <p style={{ margin: 0, color: "var(--muted)", lineHeight: 1.5, fontSize: 14 }}>{card.text}</p>
+            <article key={card.heading} className="preview-feature-card">
+              <h4>{card.heading}</h4>
+              <p>{card.text}</p>
             </article>
           ))}
+        </div>
+
+        <div className="preview-signals-grid">
+          <article className="preview-signal-card">
+            <h4>For Businesses</h4>
+            <p>See who accepted, who posted, and how each campaign is pacing before renewal decisions.</p>
+          </article>
+          <article className="preview-signal-card">
+            <h4>For Athletes</h4>
+            <p>Track active campaigns, deliverables, and progression milestones in one clean workflow.</p>
+          </article>
+          <article className="preview-signal-card">
+            <h4>For Admin Ops</h4>
+            <p>Prototype includes moderation, approvals, and lifecycle controls for safe rollout at launch.</p>
+          </article>
         </div>
 
         <div className="waitlist-success-actions">
