@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { generateReferralCode } from "@/lib/referrals";
@@ -11,7 +11,7 @@ type ProfileResult = {
   referred_by_code?: string | null;
 };
 
-export default function SettingsPage() {
+function SettingsContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [userId, setUserId] = useState("");
@@ -1452,5 +1452,13 @@ export default function SettingsPage() {
         )}
       </div>
     </div>
+  );
+}
+
+export default function SettingsPage() {
+  return (
+    <Suspense fallback={<div className="auth-shell"><div className="auth-card">Loading settings...</div></div>}>
+      <SettingsContent />
+    </Suspense>
   );
 }
