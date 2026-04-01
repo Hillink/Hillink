@@ -87,7 +87,6 @@ type CampaignTemplate = {
   createdAt: string;
   config: {
     campaignType: Campaign["campaign_type"];
-    deliverables: string;
     additionalCompensation: string;
     tier: Campaign["preferred_tier"];
     slots: number;
@@ -126,34 +125,6 @@ const campaignTypeLabel: Record<Campaign["campaign_type"], string> = {
   reel_boost: "Reel Boost Campaign",
   event_appearance: "In-Person Event Appearance",
   brand_ambassador: "Brand Ambassador Series",
-};
-
-const deliverableOptions: Record<Campaign["campaign_type"], string[]> = {
-  basic_post: [
-    "1 feed post with brand tag + CTA",
-    "1 feed post + 1 story repost",
-    "1 feed post with location tag",
-  ],
-  story_pack: [
-    "3 Instagram stories with swipe CTA",
-    "5 Instagram stories over 48h",
-    "Story sequence: intro, product, CTA",
-  ],
-  reel_boost: [
-    "1 reel (15-30 sec) with caption CTA",
-    "1 reel + 1 teaser story",
-    "1 edited reel with product demo",
-  ],
-  event_appearance: [
-    "On-site appearance + 1 recap post",
-    "Event attendance + 3 stories",
-    "In-store content shoot + feed post",
-  ],
-  brand_ambassador: [
-    "Weekly post + weekly story",
-    "2 posts + 2 stories per month",
-    "Monthly creator bundle (reel + stories)",
-  ],
 };
 
 const COMPLETION_WINDOW_OPTIONS: Record<Campaign["campaign_type"], Array<{ key: string; label: string; hours: number }>> = {
@@ -253,7 +224,6 @@ export default function BusinessDashboard() {
   const [form, setForm] = useState({
     title: "",
     campaignType: "basic_post" as Campaign["campaign_type"],
-    deliverables: deliverableOptions.basic_post[0],
     additionalCompensation: "",
     tier: "Silver" as Campaign["preferred_tier"],
     slots: 2,
@@ -485,8 +455,8 @@ export default function BusinessDashboard() {
   const submitCampaign = async () => {
     setCampaignError("");
 
-    if (!form.title.trim() || !form.deliverables.trim()) {
-      const message = "Campaign title and deliverables are required.";
+    if (!form.title.trim()) {
+      const message = "Campaign title is required.";
       setError(message);
       setCampaignError(message);
       return;
@@ -559,7 +529,7 @@ export default function BusinessDashboard() {
       business_id: auth.user.id,
       title: form.title.trim(),
       campaign_type: form.campaignType,
-      deliverables: form.deliverables.trim(),
+      deliverables: "Standard deliverables based on campaign type",
       preferred_tier: form.tier,
       payout_cents: form.payoutCents,
         start_date: computedStartDate,
@@ -600,7 +570,6 @@ export default function BusinessDashboard() {
     setForm({
       title: "",
       campaignType: "basic_post",
-      deliverables: deliverableOptions.basic_post[0],
       additionalCompensation: "",
       tier: "Silver",
       slots: 2,
@@ -611,13 +580,6 @@ export default function BusinessDashboard() {
     });
     await loadData();
   };
-
-  useEffect(() => {
-    const options = deliverableOptions[form.campaignType] || [];
-    if (!options.includes(form.deliverables)) {
-      setForm((prev) => ({ ...prev, deliverables: options[0] || "" }));
-    }
-  }, [form.campaignType, form.deliverables]);
 
   useEffect(() => {
     if (!templateStorageKey) return;
@@ -652,7 +614,6 @@ export default function BusinessDashboard() {
       createdAt: new Date().toISOString(),
       config: {
         campaignType: form.campaignType,
-        deliverables: form.deliverables,
         additionalCompensation: form.additionalCompensation,
         tier: form.tier,
         slots: form.slots,
@@ -680,15 +641,9 @@ export default function BusinessDashboard() {
       ? template.config.completionWindowKey
       : completionOptions[0].key;
 
-    const deliverableList = deliverableOptions[template.config.campaignType];
-    const deliverables = deliverableList.includes(template.config.deliverables)
-      ? template.config.deliverables
-      : deliverableList[0];
-
     setForm((prev) => ({
       ...prev,
       campaignType: template.config.campaignType,
-      deliverables,
       additionalCompensation: template.config.additionalCompensation,
       tier: template.config.tier,
       slots: template.config.slots,
@@ -1998,21 +1953,11 @@ export default function BusinessDashboard() {
                         setForm({
                           ...form,
                           campaignType: newType,
-                          deliverables: deliverableOptions[newType][0],
                           completionWindowKey: COMPLETION_WINDOW_OPTIONS[newType][0].key,
                         });
                       }}>
                       {allowedCampaignTypes.map((typeOption) => (
                         <option key={typeOption} value={typeOption}>{campaignTypeLabel[typeOption]}</option>
-                      ))}
-                    </select>
-                  </label>
-
-                  <label>
-                    Deliverables
-                    <select value={form.deliverables} onChange={(e) => setForm({ ...form, deliverables: e.target.value })}>
-                      {deliverableOptions[form.campaignType].map((option) => (
-                        <option key={option} value={option}>{option}</option>
                       ))}
                     </select>
                   </label>
