@@ -26,6 +26,11 @@ export function isValidResendKey(value?: string) {
 function getMetaEnvIssues() {
   const issues: string[] = [];
 
+  // Instagram OAuth validation is opt-in during prelaunch.
+  if (process.env.ENABLE_INSTAGRAM_OAUTH_VALIDATION !== "true") {
+    return issues;
+  }
+
   const appId = process.env.INSTAGRAM_APP_ID || process.env.META_APP_ID;
   const appSecret = process.env.INSTAGRAM_APP_SECRET || process.env.META_APP_SECRET;
   const redirectUri = process.env.INSTAGRAM_REDIRECT_URI || process.env.META_REDIRECT_URI;
@@ -66,10 +71,6 @@ export function assertStartupEnv() {
     "Startup environment validation failed for Instagram OAuth:",
     ...metaIssues.map((issue) => `- ${issue}`),
   ].join("\n");
-
-  if (process.env.NODE_ENV === "production") {
-    throw new Error(message);
-  }
 
   console.warn(message);
 }
