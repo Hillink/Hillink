@@ -1836,11 +1836,6 @@ export default function BusinessDashboard() {
                   </label>
 
                   <label>
-                    Start date
-                    <input type="date" value={form.startDate} onChange={(e) => setForm({ ...form, startDate: e.target.value })} />
-                  </label>
-
-                  <label>
                     Campaign location
                     <input
                       value={form.locationText}
@@ -1848,19 +1843,6 @@ export default function BusinessDashboard() {
                       placeholder="Austin, TX or Remote (for online campaigns)"
                     />
                   </label>
-
-                  <label>
-                    End date
-                    <input type="date" value={form.dueDate} onChange={(e) => setForm({ ...form, dueDate: e.target.value })} />
-                  </label>
-                    <label>
-                      Campaign location
-                      <input
-                        value={form.locationText}
-                        onChange={(e) => setForm({ ...form, locationText: e.target.value })}
-                        placeholder="Austin, TX or Remote (for online campaigns)"
-                      />
-                    </label>
                   </div>
 
                   <div className="campaign-timeline-section">
@@ -1942,8 +1924,6 @@ export default function BusinessDashboard() {
                       })()}</strong> to complete. If the campaign isn&apos;t filled in {form.claimWindowDays} days, it auto-closes.
                     </div>
                   </div>
-
-                  <div style={{ display: "none" }}>
                 </div>
               </div>
 
