@@ -2,16 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireRole } from "@/lib/rbac";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createNotification } from "@/lib/notifications";
-
-export const VALID_TRANSITIONS: Record<string, string[]> = {
-  draft: ["active", "cancelled"],
-  active: ["paused", "completed", "cancelled"],
-  open: ["paused", "completed", "cancelled"],
-  paused: ["active", "cancelled"],
-  closed: ["active", "cancelled"],
-  completed: [],
-  cancelled: [],
-};
+import { VALID_TRANSITIONS } from "./constants";
 
 type Body = {
   toStatus?: string;
