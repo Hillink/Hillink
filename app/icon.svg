@@ -1,0 +1,4 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="HILLink favicon">
+  <!-- Zoom the existing LL logo so the mark reads larger in tiny favicon slots -->
+  <image href="/LL%20logo.png" x="-16" y="-16" width="96" height="96" preserveAspectRatio="xMidYMid slice" />
+</svg>

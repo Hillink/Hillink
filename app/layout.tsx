@@ -24,8 +24,8 @@ export const metadata: Metadata = {
   title: "HILLink",
   description: "Connect local businesses with college athletes in minutes.",
   icons: {
-    icon: "/LL%20logo.png",
-    shortcut: "/LL%20logo.png",
+    icon: "/icon.svg",
+    shortcut: "/icon.svg",
     apple: "/LL%20logo.png",
   },
 };
