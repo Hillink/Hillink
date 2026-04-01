@@ -81,6 +81,23 @@ type BusinessBillingProfile = {
   billing_ready: boolean;
 };
 
+type CampaignTemplate = {
+  id: string;
+  name: string;
+  createdAt: string;
+  config: {
+    campaignType: Campaign["campaign_type"];
+    deliverables: string;
+    additionalCompensation: string;
+    tier: Campaign["preferred_tier"];
+    slots: number;
+    payoutCents: number;
+    locationText: string;
+    claimWindowDays: 3 | 5 | 7;
+    completionWindowKey: string;
+  };
+};
+
 const tierOrder: Record<AthleteTier, number> = {
   Bronze: 1,
   Silver: 2,
@@ -101,6 +118,42 @@ const tierDisplayName: Record<"starter" | "growth" | "scale" | "domination", str
   growth: "Growth",
   scale: "Scale",
   domination: "Domination",
+};
+
+const campaignTypeLabel: Record<Campaign["campaign_type"], string> = {
+  basic_post: "Instagram Post Promotion",
+  story_pack: "Instagram Story Package",
+  reel_boost: "Reel Boost Campaign",
+  event_appearance: "In-Person Event Appearance",
+  brand_ambassador: "Brand Ambassador Series",
+};
+
+const deliverableOptions: Record<Campaign["campaign_type"], string[]> = {
+  basic_post: [
+    "1 feed post with brand tag + CTA",
+    "1 feed post + 1 story repost",
+    "1 feed post with location tag",
+  ],
+  story_pack: [
+    "3 Instagram stories with swipe CTA",
+    "5 Instagram stories over 48h",
+    "Story sequence: intro, product, CTA",
+  ],
+  reel_boost: [
+    "1 reel (15-30 sec) with caption CTA",
+    "1 reel + 1 teaser story",
+    "1 edited reel with product demo",
+  ],
+  event_appearance: [
+    "On-site appearance + 1 recap post",
+    "Event attendance + 3 stories",
+    "In-store content shoot + feed post",
+  ],
+  brand_ambassador: [
+    "Weekly post + weekly story",
+    "2 posts + 2 stories per month",
+    "Monthly creator bundle (reel + stories)",
+  ],
 };
 
 const COMPLETION_WINDOW_OPTIONS: Record<Campaign["campaign_type"], Array<{ key: string; label: string; hours: number }>> = {
@@ -168,6 +221,10 @@ export default function BusinessDashboard() {
   const [profileModalAthleteId, setProfileModalAthleteId] = useState<string | null>(null);
   const [expandedCampaignAthleteId, setExpandedCampaignAthleteId] = useState<string | null>(null);
   const [allAthletes, setAllAthletes] = useState<AthleteProfile[]>([]);
+  const [businessId, setBusinessId] = useState<string>("");
+  const [templates, setTemplates] = useState<CampaignTemplate[]>([]);
+  const [templateName, setTemplateName] = useState("");
+  const [selectedTemplateId, setSelectedTemplateId] = useState("");
   const [allAthletesXp, setAllAthletesXp] = useState<Record<string, number>>({});
   const [allAthletesLoaded, setAllAthletesLoaded] = useState(false);
   const [loadingAthletes, setLoadingAthletes] = useState(false);
@@ -196,7 +253,7 @@ export default function BusinessDashboard() {
   const [form, setForm] = useState({
     title: "",
     campaignType: "basic_post" as Campaign["campaign_type"],
-    deliverables: "",
+    deliverables: deliverableOptions.basic_post[0],
     additionalCompensation: "",
     tier: "Silver" as Campaign["preferred_tier"],
     slots: 2,
@@ -205,6 +262,8 @@ export default function BusinessDashboard() {
      claimWindowDays: 5 as 3 | 5 | 7,
      completionWindowKey: "72h",
   });
+
+    const templateStorageKey = businessId ? `hillink:campaign-templates:${businessId}` : "";
 
   function scrollTo(id: string) {
     const el = document.getElementById(id);
@@ -220,6 +279,8 @@ export default function BusinessDashboard() {
       router.push("/login");
       return;
     }
+
+    setBusinessId(user.id);
 
     const { data: roleProfile } = await supabase
       .from("profiles")
@@ -536,12 +597,114 @@ export default function BusinessDashboard() {
 
     setCampaignError("");
     setShowModal(false);
+    setForm({
+      title: "",
+      campaignType: "basic_post",
+      deliverables: deliverableOptions.basic_post[0],
+      additionalCompensation: "",
+      tier: "Silver",
+      slots: 2,
+      payoutCents: 6500,
+      locationText: "",
+      claimWindowDays: 5,
+      completionWindowKey: COMPLETION_WINDOW_OPTIONS.basic_post[1].key,
+    });
+    await loadData();
+  };
+
+  useEffect(() => {
+    const options = deliverableOptions[form.campaignType] || [];
+    if (!options.includes(form.deliverables)) {
+      setForm((prev) => ({ ...prev, deliverables: options[0] || "" }));
+    }
+  }, [form.campaignType, form.deliverables]);
+
+  useEffect(() => {
+    if (!templateStorageKey) return;
+    try {
+      const raw = localStorage.getItem(templateStorageKey);
+      if (!raw) {
+        setTemplates([]);
+        return;
+      }
+      const parsed = JSON.parse(raw) as CampaignTemplate[];
+      setTemplates(Array.isArray(parsed) ? parsed : []);
+    } catch {
+      setTemplates([]);
+    }
+  }, [templateStorageKey]);
+
+  const persistTemplates = (next: CampaignTemplate[]) => {
+    setTemplates(next);
+    if (!templateStorageKey) return;
+    localStorage.setItem(templateStorageKey, JSON.stringify(next));
+  };
+
+  const saveTemplate = () => {
+    const trimmed = templateName.trim();
+    if (!trimmed) {
+      setCampaignError("Add a template name before saving.");
+      return;
+    }
+    const template: CampaignTemplate = {
+      id: `${Date.now()}`,
+      name: trimmed,
+      createdAt: new Date().toISOString(),
+      config: {
+        campaignType: form.campaignType,
+        deliverables: form.deliverables,
+        additionalCompensation: form.additionalCompensation,
+        tier: form.tier,
+        slots: form.slots,
+        payoutCents: form.payoutCents,
+        locationText: form.locationText,
+        claimWindowDays: form.claimWindowDays,
+        completionWindowKey: form.completionWindowKey,
+      },
+    };
+
+    const filtered = templates.filter((t) => t.name.toLowerCase() !== trimmed.toLowerCase());
+    const next = [template, ...filtered].slice(0, 12);
+    persistTemplates(next);
+    setSelectedTemplateId(template.id);
+    setCampaignError("");
+    setTemplateName("");
+  };
+
+  const loadTemplate = () => {
+    const template = templates.find((t) => t.id === selectedTemplateId);
+    if (!template) return;
+
+    const completionOptions = COMPLETION_WINDOW_OPTIONS[template.config.campaignType];
+    const completionWindowKey = completionOptions.some((o) => o.key === template.config.completionWindowKey)
+      ? template.config.completionWindowKey
+      : completionOptions[0].key;
+
+    const deliverableList = deliverableOptions[template.config.campaignType];
+    const deliverables = deliverableList.includes(template.config.deliverables)
+      ? template.config.deliverables
+      : deliverableList[0];
+
     setForm((prev) => ({
       ...prev,
-      claimWindowDays: 5,
-      completionWindowKey: COMPLETION_WINDOW_OPTIONS[prev.campaignType][0].key,
+      campaignType: template.config.campaignType,
+      deliverables,
+      additionalCompensation: template.config.additionalCompensation,
+      tier: template.config.tier,
+      slots: template.config.slots,
+      payoutCents: template.config.payoutCents,
+      locationText: template.config.locationText,
+      claimWindowDays: template.config.claimWindowDays,
+      completionWindowKey,
     }));
-    await loadData();
+    setCampaignError("");
+  };
+
+  const deleteTemplate = () => {
+    if (!selectedTemplateId) return;
+    const next = templates.filter((t) => t.id !== selectedTemplateId);
+    persistTemplates(next);
+    setSelectedTemplateId("");
   };
 
   const updateApplicationStatus = async (application: Application, nextStatus: Application["status"]) => {
@@ -1096,6 +1259,23 @@ export default function BusinessDashboard() {
         <div className="topbar">
           <h1 className="page-title">Business Portal</h1>
           <div className="topbar-actions">
+            <button
+              className="cta-button"
+              onClick={() => {
+                if (!billingProfile?.billing_ready || billingProfile?.subscription_status !== "active") {
+                  const message = "Finish billing setup in Settings before posting your first campaign.";
+                  setError(message);
+                  setCampaignError(message);
+                  router.push("/settings");
+                  return;
+                }
+                setError("");
+                setCampaignError("");
+                setShowModal(true);
+              }}
+            >
+              Post New Campaign
+            </button>
             <NotificationBell />
             <button className="secondary-button" onClick={handleLogout} disabled={signOutLoading}>
               {signOutLoading ? "Signing out..." : "Log out"}
@@ -1206,7 +1386,7 @@ export default function BusinessDashboard() {
                       <div>
                         <div style={{ fontWeight: 700, fontSize: 15 }}>{campaign.title}</div>
                         <div style={{ fontSize: 12, color: "#6b7280", marginTop: 2 }}>
-                          {campaign.campaign_type.replace(/_/g, " ")} • {campaign.preferred_tier} • ${(campaign.payout_cents / 100).toFixed(0)} payout
+                          {campaignTypeLabel[campaign.campaign_type]} • {campaign.preferred_tier} • ${(campaign.payout_cents / 100).toFixed(0)} payout
                         </div>
                       </div>
                       <span style={{ fontSize: 12, color: "#6b7280", whiteSpace: "nowrap" }}>
@@ -1765,14 +1945,37 @@ export default function BusinessDashboard() {
 
         {showModal && (
           <div className="modal-overlay" onClick={() => setShowModal(false)}>
-            <div className="modal wide" onClick={(e) => e.stopPropagation()}>
+            <div className="modal wide" onClick={(e) => e.stopPropagation()} style={{ maxHeight: "92vh", display: "flex", flexDirection: "column" }}>
               <div className="modal-header">
                 <h3>Post New Campaign</h3>
                 <button className="ghost-button" onClick={() => setShowModal(false)}>✕</button>
               </div>
 
-              <div className="modal-body">
+              <div className="modal-body" style={{ overflowY: "auto" }}>
                 {campaignError && <div className="error-message" style={{ marginBottom: 12 }}>{campaignError}</div>}
+
+                <div style={{ border: "1px solid #e5e7eb", borderRadius: 10, padding: 12, marginBottom: 14, background: "#fafafa" }}>
+                  <div style={{ fontWeight: 700, marginBottom: 8 }}>Saved Templates</div>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr auto auto", gap: 8, marginBottom: 8 }}>
+                    <select value={selectedTemplateId} onChange={(e) => setSelectedTemplateId(e.target.value)}>
+                      <option value="">Select a template</option>
+                      {templates.map((template) => (
+                        <option key={template.id} value={template.id}>{template.name}</option>
+                      ))}
+                    </select>
+                    <button type="button" className="secondary-button" disabled={!selectedTemplateId} onClick={loadTemplate}>Load</button>
+                    <button type="button" className="ghost-button" disabled={!selectedTemplateId} onClick={deleteTemplate}>Delete</button>
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 8 }}>
+                    <input
+                      value={templateName}
+                      onChange={(e) => setTemplateName(e.target.value)}
+                      placeholder="Template name (e.g. Weekend Launch)"
+                    />
+                    <button type="button" className="secondary-button" onClick={saveTemplate}>Save Current</button>
+                  </div>
+                </div>
+
                 <div className="form-grid two">
                   <label>
                     Campaign title
@@ -1792,17 +1995,26 @@ export default function BusinessDashboard() {
                     Campaign type
                       <select value={form.campaignType} onChange={(e) => {
                         const newType = e.target.value as Campaign["campaign_type"];
-                        setForm({ ...form, campaignType: newType, completionWindowKey: COMPLETION_WINDOW_OPTIONS[newType][0].key });
+                        setForm({
+                          ...form,
+                          campaignType: newType,
+                          deliverables: deliverableOptions[newType][0],
+                          completionWindowKey: COMPLETION_WINDOW_OPTIONS[newType][0].key,
+                        });
                       }}>
                       {allowedCampaignTypes.map((typeOption) => (
-                        <option key={typeOption} value={typeOption}>{typeOption}</option>
+                        <option key={typeOption} value={typeOption}>{campaignTypeLabel[typeOption]}</option>
                       ))}
                     </select>
                   </label>
 
                   <label>
                     Deliverables
-                    <input value={form.deliverables} onChange={(e) => setForm({ ...form, deliverables: e.target.value })} />
+                    <select value={form.deliverables} onChange={(e) => setForm({ ...form, deliverables: e.target.value })}>
+                      {deliverableOptions[form.campaignType].map((option) => (
+                        <option key={option} value={option}>{option}</option>
+                      ))}
+                    </select>
                   </label>
 
                   <label>

@@ -25,7 +25,10 @@ export async function POST(req: NextRequest) {
   const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
   const hasValidSecret = isValidStripeSecretKey(stripeSecretKey);
   const hasValidPrice = isValidStripePriceId(tierConfig.envPriceId);
-  const allowDevFallback = process.env.STRIPE_DEV_FALLBACK === "true";
+  const allowDevFallback =
+    process.env.STRIPE_DEV_FALLBACK === "true" ||
+    process.env.NODE_ENV !== "production" ||
+    process.env.VERCEL_ENV === "preview";
 
   console.log("[stripe/create-subscription-checkout] request", {
     userId,
@@ -78,7 +81,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(
       {
         error:
-          "Stripe is not configured. Set STRIPE_SECRET_KEY and all STRIPE_PRICE_* values to real keys, or set STRIPE_DEV_FALLBACK=true to intentionally bypass Stripe in local development.",
+          "Stripe is not configured. Set STRIPE_SECRET_KEY and STRIPE_PRICE_* values in Vercel for production billing, or enable STRIPE_DEV_FALLBACK=true to bypass Stripe in local/preview testing.",
         diagnostics: {
           hasValidSecret,
           hasValidPrice,

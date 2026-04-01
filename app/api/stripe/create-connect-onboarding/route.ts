@@ -20,7 +20,10 @@ export async function POST() {
   const recipientEmail = authUser.email || null;
 
   const hasValidSecret = isValidStripeSecretKey(process.env.STRIPE_SECRET_KEY);
-  const allowDevFallback = process.env.STRIPE_DEV_FALLBACK === "true";
+  const allowDevFallback =
+    process.env.STRIPE_DEV_FALLBACK === "true" ||
+    process.env.NODE_ENV !== "production" ||
+    process.env.VERCEL_ENV === "preview";
 
   if (!hasValidSecret) {
      if (allowDevFallback) {
@@ -47,7 +50,7 @@ export async function POST() {
     return NextResponse.json(
       {
         error:
-          "Stripe is not configured. Set STRIPE_SECRET_KEY to a valid key, or set STRIPE_DEV_FALLBACK=true to intentionally bypass Stripe in local development.",
+          "Stripe is not configured. Set STRIPE_SECRET_KEY in Vercel for production payouts, or enable STRIPE_DEV_FALLBACK=true for local/preview testing.",
       },
       { status: 503 }
     );
