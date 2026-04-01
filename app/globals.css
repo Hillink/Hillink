@@ -1996,6 +1996,166 @@ label {
   color: rgba(255, 255, 255, 0.82);
 }
 
+.prototype-banner {
+  margin: 8px auto 24px;
+  width: min(720px, 100%);
+  border: 1px dashed rgba(226, 27, 35, 0.45);
+  border-radius: 12px;
+  padding: 10px 14px;
+  background: rgba(226, 27, 35, 0.06);
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 0.9rem;
+  color: #7b1d22;
+  font-weight: 700;
+}
+
+.prototype-portals-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.prototype-portal-card {
+  text-align: left;
+  border-radius: 16px;
+  border: 1px solid rgba(17, 17, 17, 0.12);
+  background: #ffffff;
+  padding: 16px;
+  box-shadow: 0 12px 24px rgba(17, 17, 17, 0.08);
+}
+
+.prototype-portal-head h3 {
+  margin: 0;
+  font-size: 1.25rem;
+}
+
+.prototype-portal-head p {
+  margin: 6px 0 0;
+  color: var(--muted);
+}
+
+.prototype-portal-head {
+  border-radius: 12px;
+  padding: 12px;
+  margin-bottom: 12px;
+}
+
+.prototype-portal-head.athlete {
+  background: linear-gradient(135deg, #f4f7ff 0%, #eef2ff 100%);
+}
+
+.prototype-portal-head.business {
+  background: linear-gradient(135deg, #fff4f5 0%, #ffeef0 100%);
+}
+
+.prototype-stats-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.prototype-stats-row div {
+  background: #f8fafc;
+  border: 1px solid #e4e8ef;
+  border-radius: 10px;
+  padding: 10px;
+}
+
+.prototype-stats-row strong {
+  display: block;
+  font-size: 1.1rem;
+}
+
+.prototype-stats-row span {
+  color: #5a6373;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.prototype-list-card {
+  border: 1px solid #e3e7ee;
+  border-radius: 12px;
+  padding: 12px;
+  margin-bottom: 12px;
+  background: #fbfcfe;
+}
+
+.prototype-list-card h4 {
+  margin: 0 0 10px;
+}
+
+.prototype-list-card ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 8px;
+}
+
+.prototype-list-card li {
+  border: 1px solid #e4e8ef;
+  border-radius: 10px;
+  background: #ffffff;
+  padding: 10px;
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: center;
+}
+
+.prototype-list-card li span {
+  font-weight: 700;
+  font-size: 0.92rem;
+}
+
+.prototype-list-card li em {
+  font-style: normal;
+  font-size: 0.78rem;
+  color: #5a6373;
+  font-weight: 700;
+}
+
+.prototype-actions {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.prototype-actions button {
+  min-height: 38px;
+  border-radius: 10px;
+  border: 1px solid #d7dce5;
+  background: #f0f3f7;
+  color: #4f596c;
+  font-weight: 800;
+  cursor: not-allowed;
+  opacity: 0.88;
+}
+
+.prototype-note {
+  margin: 0 auto 22px;
+  width: min(760px, 100%);
+  border: 1px solid rgba(17, 17, 17, 0.1);
+  border-radius: 14px;
+  background: linear-gradient(160deg, #f7f8fb 0%, #f3f5f9 100%);
+  padding: 16px;
+  text-align: left;
+}
+
+.prototype-note h4 {
+  margin: 0 0 6px;
+}
+
+.prototype-note p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.6;
+}
+
 .feature-number {
   width: 40px;
   height: 40px;
@@ -2210,8 +2370,24 @@ label {
 
   .waitlist-selector-grid,
   .preview-features-grid,
-  .preview-signals-grid {
+  .preview-signals-grid,
+  .prototype-portals-grid {
     grid-template-columns: 1fr;
+  }
+
+  .prototype-banner {
+    flex-direction: column;
+    text-align: center;
+  }
+
+  .prototype-actions,
+  .prototype-stats-row {
+    grid-template-columns: 1fr;
+  }
+
+  .prototype-list-card li {
+    flex-direction: column;
+    align-items: flex-start;
   }
 
   .waitlist-success-actions {

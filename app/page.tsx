@@ -34,9 +34,9 @@ export default function Home() {
           <Link href="/waitlist">
             <button className="cta-button">Join the Waitlist</button>
           </Link>
-          <a href="https://github.com/Hillink/Hillink" target="_blank" rel="noopener noreferrer">
+          <Link href="/preview">
             <button className="secondary-button">Check out the Prototype</button>
-          </a>
+          </Link>
         </div>
         {/* Optionally, add a section to highlight the prototype elsewhere if desired */}
       </header>
