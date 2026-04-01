@@ -5,12 +5,9 @@ type Role = "business" | "athlete" | "admin";
 
 function isPrelaunchMode(): boolean {
   const rawValue = process.env.PRELAUNCH_MODE?.trim().toLowerCase();
-
-  if (!rawValue) {
-    return process.env.VERCEL_ENV === "production";
-  }
-
-  return !["0", "false", "off", "no"].includes(rawValue);
+  // Default is MVP open. Only lock down when PRELAUNCH_MODE is explicitly true/1/on/yes.
+  if (!rawValue) return false;
+  return ["1", "true", "on", "yes"].includes(rawValue);
 }
 
 function isLocalDevRequest(req: NextRequest): boolean {
