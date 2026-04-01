@@ -92,6 +92,7 @@ type CampaignTemplate = {
     slots: number;
     payoutCents: number;
     locationText: string;
+    directions: string;
     claimWindowDays: 3 | 5 | 7;
     completionWindowKey: string;
   };
@@ -229,6 +230,7 @@ export default function BusinessDashboard() {
     slots: 2,
     payoutCents: 6500,
     locationText: "",
+    directions: "",
      claimWindowDays: 5 as 3 | 5 | 7,
      completionWindowKey: "72h",
   });
@@ -462,6 +464,13 @@ export default function BusinessDashboard() {
       return;
     }
 
+    if (!form.directions.trim()) {
+      const message = "Directions for athletes are required.";
+      setError(message);
+      setCampaignError(message);
+      return;
+    }
+
     if (!billingProfile || !billingProfile.billing_ready || billingProfile.subscription_status !== "active") {
       const message = "Complete billing setup and activate a subscription tier in Settings before posting campaigns.";
       setError(message);
@@ -529,7 +538,7 @@ export default function BusinessDashboard() {
       business_id: auth.user.id,
       title: form.title.trim(),
       campaign_type: form.campaignType,
-      deliverables: "Standard deliverables based on campaign type",
+      deliverables: form.directions.trim(),
       preferred_tier: form.tier,
       payout_cents: form.payoutCents,
         start_date: computedStartDate,
@@ -575,6 +584,7 @@ export default function BusinessDashboard() {
       slots: 2,
       payoutCents: 6500,
       locationText: "",
+      directions: "",
       claimWindowDays: 5,
       completionWindowKey: COMPLETION_WINDOW_OPTIONS.basic_post[1].key,
     });
@@ -619,6 +629,7 @@ export default function BusinessDashboard() {
         slots: form.slots,
         payoutCents: form.payoutCents,
         locationText: form.locationText,
+        directions: form.directions,
         claimWindowDays: form.claimWindowDays,
         completionWindowKey: form.completionWindowKey,
       },
@@ -649,6 +660,7 @@ export default function BusinessDashboard() {
       slots: template.config.slots,
       payoutCents: template.config.payoutCents,
       locationText: template.config.locationText,
+      directions: template.config.directions || "",
       claimWindowDays: template.config.claimWindowDays,
       completionWindowKey,
     }));
@@ -1379,23 +1391,24 @@ export default function BusinessDashboard() {
                         {completedCount}/{participantCount} completed • {applicants.length} pending
                       </span>
                       <div style={{ display: "flex", gap: 8, alignItems: "center", justifyContent: "flex-end", flexWrap: "wrap" }}>
-                        <button
-                          className="small-button"
-                          style={{ whiteSpace: "nowrap" }}
-                          onClick={() => router.push(`/business/campaigns/${campaign.id}`)}
-                        >
-                          Manage Lifecycle
-                        </button>
                         {diagStats && (
                           <button
                             className="small-button"
                             style={{ whiteSpace: "nowrap" }}
                             disabled={syncingCampaignDiagnosticsId === campaign.id}
                             onClick={() => syncCampaignDiagnostics(campaign.id)}
+                            title="Sync Instagram diagnostics for all submitted proofs in this campaign"
                           >
-                            {syncingCampaignDiagnosticsId === campaign.id ? "Syncing…" : "Sync All"}
+                            {syncingCampaignDiagnosticsId === campaign.id ? "Syncing…" : "Sync Metrics"}
                           </button>
                         )}
+                        <button
+                          className="small-button"
+                          style={{ whiteSpace: "nowrap" }}
+                          onClick={() => router.push(`/business/campaigns/${campaign.id}/deliverables`)}
+                        >
+                          Review Submissions
+                        </button>
                         {completedCount === 0 && (
                           <button
                             className="small-button"
@@ -1584,7 +1597,7 @@ export default function BusinessDashboard() {
                       <div>
                         <div style={{ fontWeight: 700, fontSize: 15 }}>{campaign.title}</div>
                         <div style={{ fontSize: 12, color: "#6b7280", marginTop: 2 }}>
-                          {campaign.campaign_type.replace(/_/g, " ")} • {campaign.preferred_tier} • ${(campaign.payout_cents / 100).toFixed(0)} payout
+                          {campaignTypeLabel[campaign.campaign_type]} • {campaign.preferred_tier} • ${(campaign.payout_cents / 100).toFixed(0)} payout
                         </div>
                       </div>
                       <span
@@ -1612,16 +1625,17 @@ export default function BusinessDashboard() {
                           style={{ whiteSpace: "nowrap" }}
                           disabled={syncingCampaignDiagnosticsId === campaign.id}
                           onClick={() => syncCampaignDiagnostics(campaign.id)}
+                          title="Sync Instagram diagnostics for all submitted proofs in this campaign"
                         >
-                          {syncingCampaignDiagnosticsId === campaign.id ? "Syncing…" : "Sync All"}
+                          {syncingCampaignDiagnosticsId === campaign.id ? "Syncing…" : "Sync Metrics"}
                         </button>
                       )}
                       <button
                         className="small-button"
                         style={{ whiteSpace: "nowrap" }}
-                        onClick={() => router.push(`/business/campaigns/${campaign.id}`)}
+                        onClick={() => router.push(`/business/campaigns/${campaign.id}/deliverables`)}
                       >
-                        Manage Lifecycle
+                        Review Submissions
                       </button>
                     </div>
 
@@ -1998,6 +2012,16 @@ export default function BusinessDashboard() {
                       value={form.locationText}
                       onChange={(e) => setForm({ ...form, locationText: e.target.value })}
                       placeholder="Austin, TX or Remote (for online campaigns)"
+                    />
+                  </label>
+
+                  <label style={{ gridColumn: "1 / -1" }}>
+                    Directions for athletes
+                    <textarea
+                      value={form.directions}
+                      onChange={(e) => setForm({ ...form, directions: e.target.value })}
+                      placeholder="What should athletes do exactly? Include message angle, required tags, posting timing, CTA, and any brand rules."
+                      style={{ minHeight: 110 }}
                     />
                   </label>
                   </div>
