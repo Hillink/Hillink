@@ -22,7 +22,12 @@ const inter = Inter({
 
 export const metadata: Metadata = {
   title: "HILLink",
-  description: "Connect local businesses with college athletes in minutes."
+  description: "Connect local businesses with college athletes in minutes.",
+  icons: {
+    icon: "/L.png",
+    shortcut: "/L.png",
+    apple: "/L.png",
+  },
 };
 
 export default function RootLayout({
