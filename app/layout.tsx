@@ -1,7 +1,9 @@
 import "./globals.css";
 import { Inter } from "next/font/google";
+import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import { assertStartupEnv } from "@/lib/env/validation";
+import SiteFooter from "@/components/SiteFooter";
 
 const startupValidationState = globalThis as typeof globalThis & {
   __hillinkStartupEnvChecked?: boolean;
@@ -18,7 +20,7 @@ const inter = Inter({
   display: "swap",
 });
 
-export const metadata = {
+export const metadata: Metadata = {
   title: "HILLink",
   description: "Connect local businesses with college athletes in minutes."
 };
@@ -30,7 +32,12 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" data-theme="light" className={inter.variable}>
-      <body>{children}</body>
+      <body>
+        <div className="site-shell">
+          <div className="site-main">{children}</div>
+          <SiteFooter />
+        </div>
+      </body>
     </html>
   );
 }
