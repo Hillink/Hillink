@@ -102,7 +102,10 @@ export default function PreviewPage() {
       <section className="prototype-stage">
         <aside className="prototype-sidebar">
           <div className="prototype-brand-block">
-            <img src="/Hillink-logo-black-red.png" alt="HILLink" className="prototype-brand-logo" />
+            <div className="prototype-brand-logo" aria-label="HILLink">
+              <span className="prototype-brand-logo-hil">HIL</span>
+              <span className="prototype-brand-logo-link">Link</span>
+            </div>
             <p>Prelaunch interior preview based on the real dashboard structure.</p>
           </div>
 

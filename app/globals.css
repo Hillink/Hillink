@@ -2218,8 +2218,22 @@ label {
 }
 
 .prototype-brand-logo {
-  width: 112px;
-  max-width: 100%;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0;
+  font-size: clamp(2rem, 3vw, 2.7rem);
+  font-weight: 900;
+  letter-spacing: -0.08em;
+  line-height: 0.9;
+  text-transform: none;
+}
+
+.prototype-brand-logo-hil {
+  color: #e42321;
+}
+
+.prototype-brand-logo-link {
+  color: #ffffff;
 }
 
 .prototype-mode-switch {

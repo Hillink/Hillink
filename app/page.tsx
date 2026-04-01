@@ -223,17 +223,17 @@ export default function Home() {
             </div>
 
             <div className="pricing-card featured-pricing">
-              <h3>Per Athlete Campaign Pricing</h3>
-              <div className="price-list">
-                <div><span>Bronze</span><strong>$35</strong></div>
-                <div><span>Silver</span><strong>$65</strong></div>
-                <div><span>Gold</span><strong>$100</strong></div>
-                <div><span>Platinum</span><strong>$200</strong></div>
-              </div>
-              <p>
-                Businesses pay based on which athlete tier accepts. HILLink
-                keeps the spread and handles the workflow.
-              </p>
+                <h3>Let athletes do the marketing for you</h3>
+                <p>
+                  Launch local campaigns with college athletes who already know
+                  how to create attention, drive foot traffic, and keep your
+                  business visible in the community.
+                </p>
+                <p>
+                  HILLink gives businesses one simple subscription for access to
+                  campaign tools, athlete discovery, and the workflow needed to
+                  get promotions live fast.
+                </p>
             </div>
           </div>
         </section>
