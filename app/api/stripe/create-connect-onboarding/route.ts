@@ -23,7 +23,7 @@ export async function POST() {
   const allowDevFallback = process.env.STRIPE_DEV_FALLBACK === "true";
 
   if (!hasValidSecret) {
-    if (process.env.NODE_ENV !== "production" && allowDevFallback) {
+     if (allowDevFallback) {
       const adminClient = createAdminClient();
       const { error: payoutError } = await adminClient.from("athlete_payout_profiles").upsert(
         {

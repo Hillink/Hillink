@@ -37,7 +37,7 @@ export async function POST(req: NextRequest) {
   });
 
   if (!hasValidSecret || !hasValidPrice) {
-    if (process.env.NODE_ENV !== "production" && allowDevFallback) {
+     if (allowDevFallback) {
       console.log("[stripe/create-subscription-checkout] using dev fallback", {
         userId,
         tier,

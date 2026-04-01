@@ -1372,6 +1372,90 @@ img {
 }
 
 /* -------------------- */
+/* Campaign Timeline    */
+/* -------------------- */
+.campaign-timeline-section {
+  margin-top: 24px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  overflow: hidden;
+  background: var(--surface-2);
+}
+.timeline-section-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 16px 18px 14px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-1);
+}
+.timeline-icon { font-size: 1.4rem; line-height: 1; margin-top: 2px; }
+.timeline-section-header strong { display: block; font-size: 0.95rem; margin-bottom: 2px; }
+.timeline-subtext { font-size: 0.8rem; color: var(--text-muted); margin: 0; }
+.timeline-row { display: flex; flex-direction: column; gap: 0; }
+.timeline-layer {
+  padding: 16px 18px;
+  border-bottom: 1px solid var(--border);
+}
+.timeline-layer:last-child { border-bottom: none; }
+.timeline-layer-fixed { opacity: 0.85; }
+.timeline-layer-label {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.timeline-badge {
+  width: 24px; height: 24px;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 0.75rem; font-weight: 700;
+  flex-shrink: 0; margin-top: 1px;
+}
+.timeline-badge.claim    { background: #1d4ed8; color: #fff; }
+.timeline-badge.complete { background: #15803d; color: #fff; }
+.timeline-badge.review   { background: #b45309; color: #fff; }
+.timeline-layer-label strong { display: block; font-size: 0.88rem; margin-bottom: 2px; }
+.timeline-layer-desc { font-size: 0.78rem; color: var(--text-muted); }
+.timeline-options {
+  display: flex; flex-wrap: wrap; gap: 8px;
+}
+.timeline-option-btn {
+  padding: 7px 14px;
+  border-radius: 8px;
+  border: 1.5px solid var(--border);
+  background: var(--surface-1);
+  color: var(--text);
+  font-size: 0.82rem;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s, color 0.15s;
+}
+.timeline-option-btn:hover { border-color: var(--red); }
+.timeline-option-btn.selected {
+  border-color: var(--red);
+  background: var(--red);
+  color: #fff;
+  font-weight: 600;
+}
+.timeline-fixed-note {
+  display: flex; flex-direction: column; gap: 4px;
+}
+.timeline-fixed-note span:first-child {
+  font-size: 0.85rem; font-weight: 600; color: var(--text);
+}
+.timeline-auto-note {
+  font-size: 0.77rem; color: var(--text-muted);
+}
+.timeline-summary {
+  padding: 12px 18px;
+  border-top: 1px solid var(--border);
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  background: var(--surface-1);
+}
+.timeline-summary strong { color: var(--text); }
+
+/* -------------------- */
 /* Forms                */
 /* -------------------- */
 

@@ -103,6 +103,14 @@ const tierDisplayName: Record<"starter" | "growth" | "scale" | "domination", str
   domination: "Domination",
 };
 
+const COMPLETION_WINDOW_OPTIONS: Record<Campaign["campaign_type"], Array<{ key: string; label: string; hours: number }>> = {
+  basic_post:       [{ key: "48h",  label: "48 hours — Quick post",        hours: 48  }, { key: "72h", label: "72 hours — Standard",          hours: 72  }],
+  story_pack:       [{ key: "48h",  label: "48 hours — Quick story",       hours: 48  }, { key: "72h", label: "72 hours — Standard",          hours: 72  }],
+  reel_boost:       [{ key: "72h",  label: "72 hours — Quick reel",        hours: 72  }, { key: "5d",  label: "5 days — Full edit",           hours: 120 }],
+  event_appearance: [{ key: "3d",   label: "3 days — Event + post",        hours: 72  }, { key: "5d",  label: "5 days — Full coverage",       hours: 120 }],
+  brand_ambassador: [{ key: "7d",   label: "7 days — Weekly deliverable",  hours: 168 }, { key: "14d", label: "14 days — Biweekly deliverable", hours: 336 }],
+};
+
 function canAccessTier(currentMax: AthleteTier, requested: AthleteTier) {
   return tierOrder[requested] <= tierOrder[currentMax];
 }
@@ -193,9 +201,9 @@ export default function BusinessDashboard() {
     tier: "Silver" as Campaign["preferred_tier"],
     slots: 2,
     payoutCents: 6500,
-    startDate: "",
     locationText: "",
-    dueDate: "",
+     claimWindowDays: 5 as 3 | 5 | 7,
+     completionWindowKey: "72h",
   });
 
   function scrollTo(id: string) {
@@ -475,6 +483,17 @@ export default function BusinessDashboard() {
       ? "Remote"
       : (normalizedLocationInput || null);
 
+      // Compute campaign timeline from structured windows
+      const now = new Date();
+      const claimClose = new Date(now);
+      claimClose.setDate(claimClose.getDate() + form.claimWindowDays);
+      const completionOpts = COMPLETION_WINDOW_OPTIONS[form.campaignType];
+      const selectedCompletion = completionOpts.find((o) => o.key === form.completionWindowKey) || completionOpts[0];
+      const athleteDue = new Date(claimClose);
+      athleteDue.setHours(athleteDue.getHours() + selectedCompletion.hours);
+      const computedStartDate = now.toISOString().split("T")[0];
+      const computedDueDate = athleteDue.toISOString().split("T")[0];
+
     const baseCampaignInsert = {
       business_id: auth.user.id,
       title: form.title.trim(),
@@ -482,11 +501,11 @@ export default function BusinessDashboard() {
       deliverables: form.deliverables.trim(),
       preferred_tier: form.tier,
       payout_cents: form.payoutCents,
-      start_date: form.startDate || null,
+        start_date: computedStartDate,
       slots: form.slots,
       open_slots: form.slots,
       location_text: normalizedLocation,
-      due_date: form.dueDate || null,
+        due_date: computedDueDate,
       status: "draft",
     };
 
@@ -519,8 +538,8 @@ export default function BusinessDashboard() {
     setShowModal(false);
     setForm((prev) => ({
       ...prev,
-      startDate: "",
-      dueDate: "",
+      claimWindowDays: 5,
+      completionWindowKey: COMPLETION_WINDOW_OPTIONS[prev.campaignType][0].key,
     }));
     await loadData();
   };
@@ -1771,7 +1790,10 @@ export default function BusinessDashboard() {
 
                   <label>
                     Campaign type
-                    <select value={form.campaignType} onChange={(e) => setForm({ ...form, campaignType: e.target.value as Campaign["campaign_type"] })}>
+                      <select value={form.campaignType} onChange={(e) => {
+                        const newType = e.target.value as Campaign["campaign_type"];
+                        setForm({ ...form, campaignType: newType, completionWindowKey: COMPLETION_WINDOW_OPTIONS[newType][0].key });
+                      }}>
                       {allowedCampaignTypes.map((typeOption) => (
                         <option key={typeOption} value={typeOption}>{typeOption}</option>
                       ))}
@@ -1831,6 +1853,97 @@ export default function BusinessDashboard() {
                     End date
                     <input type="date" value={form.dueDate} onChange={(e) => setForm({ ...form, dueDate: e.target.value })} />
                   </label>
+                    <label>
+                      Campaign location
+                      <input
+                        value={form.locationText}
+                        onChange={(e) => setForm({ ...form, locationText: e.target.value })}
+                        placeholder="Austin, TX or Remote (for online campaigns)"
+                      />
+                    </label>
+                  </div>
+
+                  <div className="campaign-timeline-section">
+                    <div className="timeline-section-header">
+                      <span className="timeline-icon">⏱</span>
+                      <div>
+                        <strong>Campaign Timeline</strong>
+                        <p className="timeline-subtext">Set how long each stage lasts. These keep your marketplace active and protect both sides.</p>
+                      </div>
+                    </div>
+
+                    <div className="timeline-row">
+                      <div className="timeline-layer">
+                        <div className="timeline-layer-label">
+                          <span className="timeline-badge claim">1</span>
+                          <div>
+                            <strong>Claim Window</strong>
+                            <span className="timeline-layer-desc">How long athletes have to apply</span>
+                          </div>
+                        </div>
+                        <div className="timeline-options">
+                          {([3, 5, 7] as const).map((days) => (
+                            <button
+                              key={days}
+                              type="button"
+                              className={`timeline-option-btn${form.claimWindowDays === days ? " selected" : ""}`}
+                              onClick={() => setForm({ ...form, claimWindowDays: days })}
+                            >
+                              {days} days{days === 5 ? " ✓" : ""}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className="timeline-layer">
+                        <div className="timeline-layer-label">
+                          <span className="timeline-badge complete">2</span>
+                          <div>
+                            <strong>Completion Window</strong>
+                            <span className="timeline-layer-desc">How long athletes have to post after claiming</span>
+                          </div>
+                        </div>
+                        <div className="timeline-options">
+                          {COMPLETION_WINDOW_OPTIONS[form.campaignType].map((opt) => (
+                            <button
+                              key={opt.key}
+                              type="button"
+                              className={`timeline-option-btn${form.completionWindowKey === opt.key ? " selected" : ""}`}
+                              onClick={() => setForm({ ...form, completionWindowKey: opt.key })}
+                            >
+                              {opt.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className="timeline-layer timeline-layer-fixed">
+                        <div className="timeline-layer-label">
+                          <span className="timeline-badge review">3</span>
+                          <div>
+                            <strong>Review Window</strong>
+                            <span className="timeline-layer-desc">Your time to approve or dispute a submitted post</span>
+                          </div>
+                        </div>
+                        <div className="timeline-fixed-note">
+                          <span>48 hours — fixed</span>
+                          <span className="timeline-auto-note">After 48h with no action, post is auto-approved and payout is released</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="timeline-summary">
+                      Athletes have until <strong>{(() => {
+                        const d = new Date();
+                        d.setDate(d.getDate() + form.claimWindowDays);
+                        const opt = COMPLETION_WINDOW_OPTIONS[form.campaignType].find(o => o.key === form.completionWindowKey) || COMPLETION_WINDOW_OPTIONS[form.campaignType][0];
+                        d.setHours(d.getHours() + opt.hours);
+                        return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+                      })()}</strong> to complete. If the campaign isn&apos;t filled in {form.claimWindowDays} days, it auto-closes.
+                    </div>
+                  </div>
+
+                  <div style={{ display: "none" }}>
                 </div>
               </div>
 
