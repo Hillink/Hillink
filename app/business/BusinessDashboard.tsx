@@ -1503,6 +1503,10 @@ export default function BusinessDashboard() {
               <span className="sidebar-icon">⚙</span>
               <span>Settings</span>
             </button>
+            <button className="sidebar-link" onClick={() => router.push("/help")}>
+              <span className="sidebar-icon">?</span>
+              <span>Help</span>
+            </button>
           </nav>
         </div>
 
@@ -1554,6 +1558,7 @@ export default function BusinessDashboard() {
             >
               Post New Campaign
             </button>
+            <a className="secondary-button" href="/help">Help</a>
             <NotificationBell />
             <button className="secondary-button" onClick={handleLogout} disabled={signOutLoading}>
               {signOutLoading ? "Signing out..." : "Log out"}

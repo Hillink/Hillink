@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import HelpLink from "@/components/help/HelpLink";
 
 type Campaign = {
   id: string;
@@ -127,6 +128,9 @@ export default function AthleteEarningsDashboard() {
       <p style={{ color: "#6f7481", marginBottom: 24, marginTop: 0 }}>
         Track your campaign payouts and escrow status.
       </p>
+      <div style={{ marginTop: -16, marginBottom: 20 }}>
+        <HelpLink category="payments" slug="when-do-i-get-paid" label="When do I get paid?" />
+      </div>
 
       {error && (
         <div

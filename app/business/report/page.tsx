@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import HelpLink from "@/components/help/HelpLink";
 
 type CampaignResult = {
   campaignId: string;
@@ -135,6 +136,7 @@ export default function BusinessReportPage() {
           <div>
             <Link href="/business" className="muted" style={{ fontWeight: 700 }}>← Dashboard</Link>
             <h1 className="page-title" style={{ fontSize: "2rem", marginTop: 6 }}>Results for {monthLabel(month)}</h1>
+            <HelpLink category="customer-codes" slug="customer-codes-for-businesses" label="How customer codes work" />
             {report && <p className="muted" style={{ margin: 0 }}>{report.businessName}</p>}
           </div>
           <div style={{ display: "flex", gap: 8, alignItems: "center" }} className="no-print">

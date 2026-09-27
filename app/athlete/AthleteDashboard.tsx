@@ -14,6 +14,7 @@ import NotificationBell from "@/components/NotificationBell";
 import type { LeaderboardEntry } from "@/app/api/athlete/leaderboard/route";
 import { TEMPLATE_LABELS, type CampaignTemplateKey, type ClaimMethod, type LocationType } from "@/lib/campaignTemplates";
 import { improvementTip, scoreLabel } from "@/lib/score/hillinkScore";
+import HelpLink from "@/components/help/HelpLink";
 
 const CAMPAIGN_TYPE_LABELS: Record<string, string> = {
   basic_post: "Instagram Post",
@@ -965,6 +966,10 @@ export default function AthleteDashboard({ initialXp = 0 }: AthleteDashboardProp
               <span className="sidebar-icon">⚙</span>
               <span>Settings</span>
             </button>
+            <button className="sidebar-link" onClick={() => router.push("/help")}>
+              <span className="sidebar-icon">?</span>
+              <span>Help</span>
+            </button>
           </nav>
         </div>
       </aside>
@@ -973,6 +978,7 @@ export default function AthleteDashboard({ initialXp = 0 }: AthleteDashboardProp
         <div className="topbar">
           <h1 className="page-title">Athlete Portal</h1>
           <div className="topbar-actions">
+            <a className="secondary-button" href="/help">Help</a>
             <NotificationBell />
             <button className="secondary-button" onClick={handleLogout} disabled={signOutLoading}>
               {signOutLoading ? "Signing out..." : "Log out"}
@@ -1051,6 +1057,7 @@ export default function AthleteDashboard({ initialXp = 0 }: AthleteDashboardProp
         <section className="panel" style={{ marginTop: 20 }}>
           <div className="panel-header">
             <h2>XP Progress</h2>
+            <HelpLink category="xp-levels" slug="xp-and-tiers" label="How XP and tiers work" />
           </div>
           <div className="progress-track">
             <div className="progress-fill" style={{ width: `${progressWithinTier}%` }} />
@@ -1523,6 +1530,7 @@ export default function AthleteDashboard({ initialXp = 0 }: AthleteDashboardProp
         <section id="active-deals" className="panel">
           <div className="panel-header">
             <h2>My Campaigns and Proof Upload</h2>
+            <HelpLink category="proof-approval" slug="what-happens-after-i-submit-proof" label="How proof approval works" />
           </div>
 
           {visibleApplications.length === 0 ? (
