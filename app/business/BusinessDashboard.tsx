@@ -725,6 +725,16 @@ export default function BusinessDashboard() {
     const firstInsert = await supabase.from("campaigns").insert(withCompensation);
     insertError = firstInsert.error as { message: string } | null;
 
+    // Databases without the customer-codes migration: create the campaign without the offer and say so.
+    if (insertError && insertError.message.includes("customer_offer")) {
+      const { customer_offer: _offer, ...withoutOffer } = withCompensation as typeof withCompensation & { customer_offer?: string };
+      const retry = await supabase.from("campaigns").insert(withoutOffer);
+      insertError = retry.error as { message: string } | null;
+      if (!insertError) {
+        setError("Campaign created, but the customer offer wasn't saved: the customer codes database update hasn't been applied yet.");
+      }
+    }
+
     if (insertError && insertError.message.includes("additional_compensation")) {
       const fallbackInsert = await supabase.from("campaigns").insert(baseCampaignInsert);
       insertError = fallbackInsert.error as { message: string } | null;

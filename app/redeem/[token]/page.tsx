@@ -33,23 +33,31 @@ export default function StaffRedeemPage() {
     setSubmitting(true);
     setError("");
     const dollars = amount.trim() ? Number(amount.replace(/[$,]/g, "")) : null;
-    const res = await fetch("/api/redemptions/staff", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        token,
-        code,
-        purchaseCents: dollars != null && Number.isFinite(dollars) ? Math.round(dollars * 100) : null,
-      }),
-    });
-    const data = await res.json();
-    setSubmitting(false);
+    let res: Response;
+    let data: { error?: string; athleteFirstName?: string | null; campaignTitle?: string; duplicate?: boolean };
+    try {
+      res = await fetch("/api/redemptions/staff", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          token,
+          code,
+          purchaseCents: dollars != null && Number.isFinite(dollars) ? Math.round(dollars * 100) : null,
+        }),
+      });
+      data = await res.json();
+    } catch {
+      setError("Couldn't reach Hillink. Check the connection and try again.");
+      return;
+    } finally {
+      setSubmitting(false);
+    }
     if (!res.ok) {
       setError(data.error || "Couldn't log that code.");
       return;
     }
     setLogged((prev) => [
-      { code: code.toUpperCase().trim(), athlete: data.athleteFirstName, campaign: data.campaignTitle, at: new Date().toLocaleTimeString(), duplicate: data.duplicate },
+      { code: code.toUpperCase().trim(), athlete: data.athleteFirstName ?? null, campaign: data.campaignTitle ?? "", at: new Date().toLocaleTimeString(), duplicate: !!data.duplicate },
       ...prev,
     ].slice(0, 20));
     setCode("");

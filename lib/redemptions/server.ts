@@ -1,6 +1,6 @@
 import { createHash, randomBytes } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { isDuplicateTap, makeCode, normalizeCode } from "@/lib/redemptions/codes";
+import { DAILY_CAP_PER_CODE, DUPLICATE_TAP_WINDOW_MS, makeCode, normalizeCode } from "@/lib/redemptions/codes";
 
 // Applications whose athlete is actively promoting the business.
 export const CODE_ACTIVE_STATUSES = ["accepted", "submitted", "approved", "completed"] as const;
@@ -96,38 +96,33 @@ export async function recordRedemption(
   }
   const base = { athleteFirstName: athlete?.first_name ?? null, campaignTitle: campaign?.title ?? "Campaign" };
 
-  const { data: last } = await admin
-    .from("redemptions")
-    .select("id, redeemed_at")
-    .eq("promo_code_id", row.id)
-    .order("redeemed_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  if (isDuplicateTap(last?.redeemed_at, new Date())) {
-    return { ok: true, duplicate: true, redemptionId: last?.id ?? null, ...base };
-  }
-
   const purchase = args.purchaseCents == null ? null : Math.round(Number(args.purchaseCents));
   if (purchase != null && (!Number.isFinite(purchase) || purchase < 0 || purchase > 10_000_00)) {
     return { ok: false, status: 400, error: "Purchase amount looks wrong." };
   }
-  const { data: inserted, error } = await admin
-    .from("redemptions")
-    .insert({
-      promo_code_id: row.id,
-      application_id: row.application_id,
-      campaign_id: row.campaign_id,
-      athlete_id: row.athlete_id,
-      business_id: row.business_id,
-      source: args.source,
-      recorded_by: args.recordedBy,
-      purchase_cents: purchase,
-      note: args.note ? args.note.slice(0, 280) : null,
-    })
-    .select("id")
-    .single();
+
+  // One atomic step in the database: duplicate-tap check, daily cap, insert.
+  const { data, error } = await admin.rpc("record_redemption_once", {
+    p_promo_code_id: row.id,
+    p_source: args.source,
+    p_recorded_by: args.recordedBy,
+    p_purchase_cents: purchase,
+    p_note: args.note ? args.note.slice(0, 280) : null,
+    p_window_seconds: DUPLICATE_TAP_WINDOW_MS / 1000,
+    p_daily_cap: DAILY_CAP_PER_CODE,
+  });
   if (error) return { ok: false, status: 500, error: error.message };
-  return { ok: true, duplicate: false, redemptionId: inserted.id, ...base };
+  const result = (Array.isArray(data) ? data[0] : data) as { redemption_id: string | null; duplicate: boolean; capped: boolean } | null;
+  if (!result) return { ok: false, status: 500, error: "Couldn't log that code." };
+  if (result.capped) {
+    return { ok: false, status: 429, error: `This code has hit ${DAILY_CAP_PER_CODE} customers today. Contact Hillink if that's real.` };
+  }
+  return { ok: true, duplicate: result.duplicate, redemptionId: result.redemption_id, ...base };
+}
+
+export async function staffLinkCreatedAt(admin: SupabaseClient, businessId: string): Promise<string | null> {
+  const { data } = await admin.from("business_staff_links").select("created_at").eq("business_id", businessId).maybeSingle();
+  return data?.created_at ?? null;
 }
 
 /** Creates (or replaces) the business's staff link token. The old link stops working. */

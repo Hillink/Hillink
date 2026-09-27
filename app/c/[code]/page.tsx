@@ -13,10 +13,14 @@ export default async function CustomerCodePage({ params }: { params: Promise<{ c
     const admin = createAdminClient();
     const { data: promo } = await admin
       .from("athlete_promo_codes")
-      .select("campaign_id, athlete_id, business_id, active")
+      .select("application_id, campaign_id, athlete_id, business_id, active")
       .eq("code", code)
       .maybeSingle();
-    if (promo?.active) {
+    const { data: application } = promo
+      ? await admin.from("campaign_applications").select("status").eq("id", promo.application_id).maybeSingle()
+      : { data: null };
+    const stillOn = !!application && ["accepted", "submitted", "approved", "completed"].includes(application.status);
+    if (promo?.active && stillOn) {
       const [{ data: business }, { data: campaign }, { data: athlete }] = await Promise.all([
         admin.from("business_profiles").select("business_name, city, state").eq("id", promo.business_id).maybeSingle(),
         admin.from("campaigns").select("customer_offer, location_text").eq("id", promo.campaign_id).maybeSingle(),

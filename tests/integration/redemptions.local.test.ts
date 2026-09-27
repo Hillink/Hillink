@@ -18,7 +18,7 @@ let businessId: string;
 let otherBusinessId: string;
 let athleteId: string;
 
-async function makeUser(role: string, extra?: (id: string) => Promise<unknown>) {
+async function makeUser(role: string, extra?: (id: string) => PromiseLike<unknown>) {
   const email = `${role}-${Date.now()}-${Math.random().toString(36).slice(2)}@test.local`;
   const { data, error } = await admin.auth.admin.createUser({ email, password: "Password123!", email_confirm: true });
   if (error) throw error;
@@ -142,4 +142,53 @@ test("signed-in users can't read other businesses' redemptions", { skip }, async
   assert.equal((rows || []).length, 0);
   const { data: links } = await client.from("business_staff_links").select("*");
   assert.equal((links || []).length, 0);
+});
+
+test("owner and staff logging the same code at the same moment count once", { skip }, async () => {
+  const { code } = await freshCode();
+  const results = await Promise.all(
+    Array.from({ length: 6 }, (_, i) =>
+      recordRedemption(admin, { businessId, rawCode: code, source: i % 2 ? "staff_link" : "business", recordedBy: null })
+    )
+  );
+  assert.ok(results.every((r) => r.ok));
+  assert.equal(results.filter((r) => r.ok && !r.duplicate).length, 1);
+  const { data: promo } = await admin.from("athlete_promo_codes").select("id").eq("code", code).single();
+  const { count } = await admin.from("redemptions").select("id", { count: "exact", head: true }).eq("promo_code_id", promo!.id);
+  assert.equal(count, 1);
+});
+
+test("a code stops at 50 customers a day", { skip }, async () => {
+  const { applicationId, code } = await freshCode();
+  const { data: promo } = await admin.from("athlete_promo_codes").select("id, campaign_id").eq("code", code).single();
+  // 50 earlier today, spread out so none is inside the duplicate window.
+  const rows = Array.from({ length: 50 }, (_, i) => ({
+    promo_code_id: promo!.id, application_id: applicationId, campaign_id: promo!.campaign_id, athlete_id: athleteId,
+    business_id: businessId, source: "business", redeemed_at: new Date(Date.now() - (i + 2) * 5 * 60 * 1000).toISOString(),
+  }));
+  await admin.from("redemptions").insert(rows);
+  const r = await recordRedemption(admin, { businessId, rawCode: code, source: "staff_link", recordedBy: null });
+  assert.equal(r.ok, false);
+  assert.equal(!r.ok && r.status, 429);
+});
+
+test("monthly totals come from the database, grouped by campaign and athlete", { skip }, async () => {
+  const { code } = await freshCode();
+  await recordRedemption(admin, { businessId, rawCode: code, source: "business", recordedBy: null, purchaseCents: 900 });
+  const now = new Date();
+  const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString();
+  const end = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1)).toISOString();
+  const { data, error } = await admin.rpc("business_redemption_totals", { p_business_id: businessId, p_start: start, p_end: end });
+  assert.equal(error, null);
+  const total = (data as { customers: number }[]).reduce((s, r) => s + Number(r.customers), 0);
+  assert.ok(total >= 1);
+  // Signed-in users can't call it for someone else's business.
+  const anonKey = process.env.LOCAL_SUPABASE_ANON_KEY;
+  if (anonKey) {
+    const anon = createClient(url!, anonKey, { auth: { persistSession: false } });
+    const denied = await anon.rpc("business_redemption_totals", { p_business_id: businessId, p_start: start, p_end: end });
+    assert.ok(denied.error);
+    const denied2 = await anon.rpc("record_redemption_once", { p_promo_code_id: "00000000-0000-0000-0000-000000000000", p_source: "business", p_recorded_by: null, p_purchase_cents: null, p_note: null });
+    assert.ok(denied2.error);
+  }
 });

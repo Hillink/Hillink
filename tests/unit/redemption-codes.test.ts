@@ -71,10 +71,9 @@ test("monthly report adds up customers, cost and cost per customer", () => {
       { id: "a5", campaign_id: "c2", athlete_id: "t4", status: "declined", approved_at: null },
     ],
     redemptions: [
-      { campaign_id: "c1", athlete_id: "t1", purchase_cents: 1200 },
-      { campaign_id: "c1", athlete_id: "t1", purchase_cents: null },
-      { campaign_id: "c1", athlete_id: "t2", purchase_cents: 800 },
-      { campaign_id: "c2", athlete_id: "t1", purchase_cents: 500 },
+      { campaign_id: "c1", athlete_id: "t1", customers: 2, purchase_cents: 1200 },
+      { campaign_id: "c1", athlete_id: "t2", customers: 1, purchase_cents: 800 },
+      { campaign_id: "c2", athlete_id: "t1", customers: 1, purchase_cents: 500 },
     ],
     reach: [{ application_id: "a1", reach: 900, impressions: 1500 }, { application_id: "a2", reach: null, impressions: 400 }],
     subscriptionCents: 25000,
@@ -83,7 +82,7 @@ test("monthly report adds up customers, cost and cost per customer", () => {
   });
 
   const tacos = report.campaigns.find((c) => c.campaignId === "c1")!;
-  assert.equal(tacos.athletes, 3);
+  assert.equal(tacos.athletes, 2, "only athletes with approved work or customers this month");
   assert.equal(tacos.postsApproved, 2);
   assert.equal(tacos.customers, 3);
   assert.equal(tacos.reportedSalesCents, 2000);
@@ -94,11 +93,11 @@ test("monthly report adds up customers, cost and cost per customer", () => {
   const coffee = report.campaigns.find((c) => c.campaignId === "c2")!;
   assert.equal(coffee.postsApproved, 0, "approved last month doesn't count this month");
   assert.equal(coffee.customers, 1);
-  assert.equal(coffee.athletes, 1, "declined athletes aren't counted");
+  assert.equal(coffee.athletes, 1, "declined athletes aren't counted; a customer this month counts");
 
   assert.equal(report.campaigns.some((c) => c.campaignId === "c3"), false, "campaigns with nothing are hidden");
   assert.equal(report.totals.customers, 4);
-  assert.equal(report.totals.athletes, 3);
+  assert.equal(report.totals.athletes, 2);
   assert.equal(report.totals.totalCostCents, 35000);
   assert.equal(report.totals.totalCostPerCustomerCents, 8750);
   assert.deepEqual(report.topAthletes[0], { athleteId: "t1", customers: 3 });

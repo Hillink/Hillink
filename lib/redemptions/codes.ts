@@ -8,6 +8,9 @@ export const CODE_PATTERN = /^[A-Z0-9]{2,12}-[A-Z0-9]{4}$/;
 /** Same code tapped twice within this window counts once (double taps, two staff at once). */
 export const DUPLICATE_TAP_WINDOW_MS = 60_000;
 
+/** Most customers one code can log in 24 hours; stops a leaked staff link from inflating results. */
+export const DAILY_CAP_PER_CODE = 50;
+
 /** Readable prefix from the athlete's first name, e.g. "Jake" -> "JAKE". Falls back to "HL". */
 export function codePrefix(firstName: string | null | undefined): string {
   const cleaned = (firstName || "")
@@ -61,7 +64,8 @@ export function currentMonth(now: Date): string {
 
 export type ReportCampaign = { id: string; title: string; payout_cents: number };
 export type ReportApplication = { id: string; campaign_id: string; athlete_id: string; status: string; approved_at: string | null };
-export type ReportRedemption = { campaign_id: string; athlete_id: string; purchase_cents: number | null };
+/** Redemptions already totalled per campaign and athlete for the month. */
+export type ReportRedemption = { campaign_id: string; athlete_id: string; customers: number; purchase_cents: number | null };
 export type ReportReach = { application_id: string; reach: number | null; impressions: number | null };
 
 export type CampaignResult = {
@@ -86,9 +90,10 @@ const WORKING = new Set(["accepted", "submitted", "approved", "completed"]);
 const DONE = new Set(["approved", "completed"]);
 
 /**
- * Builds the report from rows already limited to one business and one month:
- * `applications` are the business's working applications, `redemptions` those logged in the month,
- * and a post counts toward the month it was approved in (its pay is the campaign's payout).
+ * Builds the report from rows already limited to one business: `applications` are all its
+ * applications, `redemptions` the month's totals. A post counts toward the month it was approved in
+ * (its pay is the campaign's payout). An athlete counts for a month if they had a post approved or
+ * brought in a customer that month.
  */
 export function buildMonthlyReport(input: {
   campaigns: ReportCampaign[];
@@ -102,21 +107,24 @@ export function buildMonthlyReport(input: {
   const inMonth = (iso: string | null) => !!iso && iso >= input.monthStart && iso < input.monthEnd;
   const reachByApp = new Map(input.reach.map((r) => [r.application_id, Number(r.reach ?? r.impressions ?? 0)]));
 
+  const customersOf = (rows: ReportRedemption[]) => rows.reduce((sum, r) => sum + Number(r.customers || 0), 0);
+
   const campaigns: CampaignResult[] = input.campaigns.map((c) => {
     const apps = input.applications.filter((a) => a.campaign_id === c.id && WORKING.has(a.status));
     const approvedThisMonth = apps.filter((a) => DONE.has(a.status) && inMonth(a.approved_at));
     const reds = input.redemptions.filter((r) => r.campaign_id === c.id);
+    const customers = customersOf(reds);
     const athletePayCents = approvedThisMonth.length * Math.max(0, c.payout_cents || 0);
     return {
       campaignId: c.id,
       title: c.title,
-      athletes: new Set(apps.map((a) => a.athlete_id)).size,
+      athletes: new Set([...approvedThisMonth.map((a) => a.athlete_id), ...reds.map((r) => r.athlete_id)]).size,
       postsApproved: approvedThisMonth.length,
-      customers: reds.length,
-      reportedSalesCents: reds.reduce((sum, r) => sum + (r.purchase_cents || 0), 0),
+      customers,
+      reportedSalesCents: reds.reduce((sum, r) => sum + Number(r.purchase_cents || 0), 0),
       athletePayCents,
       reach: approvedThisMonth.reduce((sum, a) => sum + (reachByApp.get(a.id) || 0), 0),
-      costPerCustomerCents: reds.length ? Math.round(athletePayCents / reds.length) : null,
+      costPerCustomerCents: customers ? Math.round(athletePayCents / customers) : null,
     };
   }).filter((c) => c.athletes > 0 || c.customers > 0);
 
@@ -125,8 +133,12 @@ export function buildMonthlyReport(input: {
   const athletePayCents = sum("athletePayCents");
   const totalCostCents = athletePayCents + Math.max(0, input.subscriptionCents);
 
+  const activeAthletes = new Set<string>();
+  for (const a of input.applications) if (WORKING.has(a.status) && DONE.has(a.status) && inMonth(a.approved_at)) activeAthletes.add(a.athlete_id);
+  for (const r of input.redemptions) activeAthletes.add(r.athlete_id);
+
   const byAthlete = new Map<string, number>();
-  for (const r of input.redemptions) byAthlete.set(r.athlete_id, (byAthlete.get(r.athlete_id) || 0) + 1);
+  for (const r of input.redemptions) byAthlete.set(r.athlete_id, (byAthlete.get(r.athlete_id) || 0) + Number(r.customers || 0));
   const topAthletes = [...byAthlete.entries()]
     .map(([athleteId, n]) => ({ athleteId, customers: n }))
     .sort((a, b) => b.customers - a.customers)
@@ -135,7 +147,7 @@ export function buildMonthlyReport(input: {
   return {
     campaigns,
     totals: {
-      athletes: new Set(input.applications.filter((a) => WORKING.has(a.status)).map((a) => a.athlete_id)).size,
+      athletes: activeAthletes.size,
       postsApproved: sum("postsApproved"),
       customers,
       reportedSalesCents: sum("reportedSalesCents"),

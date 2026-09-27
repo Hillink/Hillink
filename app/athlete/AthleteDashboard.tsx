@@ -651,18 +651,23 @@ export default function AthleteDashboard({ initialXp = 0 }: AthleteDashboardProp
   const getCustomerCode = async (applicationId: string) => {
     setError("");
     setPromoLoadingId(applicationId);
-    const res = await fetch("/api/athlete/promo-code", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ applicationId }),
-    });
-    const data = await res.json();
-    setPromoLoadingId(null);
-    if (!res.ok) {
-      setError(data.error || "Couldn't get your customer code.");
-      return;
+    try {
+      const res = await fetch("/api/athlete/promo-code", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ applicationId }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || "Couldn't get your customer code.");
+        return;
+      }
+      setPromoByAppId((prev) => ({ ...prev, [applicationId]: data }));
+    } catch {
+      setError("Couldn't reach Hillink. Check your connection.");
+    } finally {
+      setPromoLoadingId(null);
     }
-    setPromoByAppId((prev) => ({ ...prev, [applicationId]: data }));
   };
 
   const withdrawApplication = async (application: Application) => {
@@ -1524,7 +1529,7 @@ export default function AthleteDashboard({ initialXp = 0 }: AthleteDashboardProp
                         {submittingAppId === app.id ? "Submitting..." : "Submit Proof"}
                       </button>
 
-                      {(app.status === "accepted" || app.status === "submitted" || app.status === "approved") && !promoByAppId[app.id] && (
+                      {(app.status === "accepted" || app.status === "submitted" || app.status === "approved" || (app.status as string) === "completed") && !promoByAppId[app.id] && (
                         <button className="secondary-button" disabled={promoLoadingId === app.id} onClick={() => getCustomerCode(app.id)}>
                           {promoLoadingId === app.id ? "Getting code..." : "Get customer code"}
                         </button>

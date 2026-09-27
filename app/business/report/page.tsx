@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 
 type CampaignResult = {
@@ -47,47 +47,83 @@ export default function BusinessReportPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const [staffLink, setStaffLink] = useState("");
+  const [staffLinkExists, setStaffLinkExists] = useState(false);
+  const latestRequest = useRef(0);
   const [code, setCode] = useState("");
   const [logMessage, setLogMessage] = useState("");
 
   const load = async (m: string) => {
+    // Only the newest request may update the page, so fast month switching never shows the wrong month.
+    const requestId = ++latestRequest.current;
     setLoading(true);
     setError("");
-    const res = await fetch(`/api/business/report?month=${m}`);
-    const data = await res.json();
-    setLoading(false);
-    if (!res.ok) setError(data.error || "Couldn't load the report.");
-    else setReport(data);
+    try {
+      const res = await fetch(`/api/business/report?month=${m}`);
+      const data = await res.json();
+      if (requestId !== latestRequest.current) return;
+      if (!res.ok) {
+        setReport(null);
+        setError(data.error || "Couldn't load the report.");
+      } else {
+        setReport(data);
+      }
+    } catch {
+      if (requestId === latestRequest.current) {
+        setReport(null);
+        setError("Couldn't reach Hillink. Check your connection.");
+      }
+    } finally {
+      if (requestId === latestRequest.current) setLoading(false);
+    }
   };
 
   useEffect(() => {
     load(month);
   }, [month]);
 
+  useEffect(() => {
+    fetch("/api/business/staff-link")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => setStaffLinkExists(!!data?.exists))
+      .catch(() => {});
+  }, []);
+
   const makeStaffLink = async () => {
-    if (staffLink && !confirm("Make a new staff link? The old one will stop working.")) return;
-    const res = await fetch("/api/business/staff-link", { method: "POST" });
-    const data = await res.json();
-    if (!res.ok) setError(data.error || "Couldn't make a staff link.");
-    else setStaffLink(data.url);
+    if ((staffLink || staffLinkExists) && !confirm("Make a new staff link? The link your staff use now will stop working.")) return;
+    try {
+      const res = await fetch("/api/business/staff-link", { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || "Couldn't make a staff link.");
+      } else {
+        setStaffLink(data.url);
+        setStaffLinkExists(true);
+      }
+    } catch {
+      setError("Couldn't reach Hillink. Check your connection.");
+    }
   };
 
   const logCode = async (e: React.FormEvent) => {
     e.preventDefault();
     setLogMessage("");
-    const res = await fetch("/api/business/redemptions", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ code }),
-    });
-    const data = await res.json();
-    if (!res.ok) {
-      setLogMessage(data.error || "Couldn't log that code.");
-      return;
+    try {
+      const res = await fetch("/api/business/redemptions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setLogMessage(data.error || "Couldn't log that code.");
+        return;
+      }
+      setLogMessage(data.duplicate ? "Already logged a moment ago." : `Logged ${data.athleteFirstName ? `${data.athleteFirstName}'s` : "a"} customer.`);
+      setCode("");
+      load(month);
+    } catch {
+      setLogMessage("Couldn't reach Hillink. Check your connection.");
     }
-    setLogMessage(data.duplicate ? "Already logged a moment ago." : `Logged ${data.athleteFirstName ? `${data.athleteFirstName}'s` : "a"} customer.`);
-    setCode("");
-    load(month);
   };
 
   const t = report?.totals;
@@ -123,7 +159,7 @@ export default function BusinessReportPage() {
               <div className="stat-card">
                 <div className="stat-title">Cost per customer</div>
                 <div className="stat-value">{usd(t.totalCostPerCustomerCents)}</div>
-                <div className="stat-subtext">athlete pay + plan, {usd(t.totalCostCents)} total</div>
+                <div className="stat-subtext">athlete pay + your current plan, {usd(t.totalCostCents)} total</div>
               </div>
               <div className="stat-card">
                 <div className="stat-title">Posts approved</div>
@@ -196,7 +232,7 @@ export default function BusinessReportPage() {
           </form>
           {logMessage && <p style={{ marginBottom: 0 }}>{logMessage}</p>}
           <div style={{ marginTop: 16, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-            <button className="small-button" onClick={makeStaffLink}>{staffLink ? "Make a new staff link" : "Get staff link"}</button>
+            <button className="small-button" onClick={makeStaffLink}>{staffLink || staffLinkExists ? "Make a new staff link" : "Get staff link"}</button>
             {staffLink && (
               <>
                 <input readOnly value={staffLink} onFocus={(e) => e.currentTarget.select()} style={{ flex: "1 1 260px" }} aria-label="Staff link" />
