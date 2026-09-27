@@ -62,6 +62,7 @@ type Application = {
 type PaymentSummary = {
   application_id: string;
   hold_status: "uncommitted" | "held" | "released" | "refunded" | "disputed";
+  amount_cents: number;
   business_charge_cents: number | null;
   stripe_transfer_id: string | null;
 };
@@ -320,8 +321,9 @@ export default function BusinessDashboard() {
     if (el) el.scrollIntoView({ behavior: "smooth" });
   }
 
+  // Doesn't clear the error: actions clear it when they start and reload afterwards, and the reload
+  // must not wipe the message explaining why the action failed.
   const loadData = async () => {
-    setError("");
     const { data: auth } = await supabase.auth.getUser();
     const user = auth.user;
 
@@ -424,7 +426,7 @@ export default function BusinessDashboard() {
     if (loadedApps.length) {
       const { data: paymentRows } = await supabase
         .from("payments")
-        .select("application_id, hold_status, business_charge_cents, stripe_transfer_id")
+        .select("application_id, hold_status, amount_cents, business_charge_cents, stripe_transfer_id")
         .in("application_id", loadedApps.map((a) => a.id));
       const nextPayments: Record<string, PaymentSummary> = {};
       for (const row of (paymentRows || []) as PaymentSummary[]) {
@@ -1783,6 +1785,7 @@ export default function BusinessDashboard() {
                                     )}
                                     {(app.status === "approved" || app.status === "completed") &&
                                       (paymentByApplicationId[app.id]?.hold_status === "held" || paymentByApplicationId[app.id]?.hold_status === "released") &&
+                                      (paymentByApplicationId[app.id]?.amount_cents ?? 0) > 0 &&
                                       !paymentByApplicationId[app.id]?.stripe_transfer_id && (
                                       <button className="small-button" disabled={payingId === app.id} onClick={() => payAthlete(app.id)}>
                                         {payingId === app.id ? "Paying…" : "Pay athlete"}
