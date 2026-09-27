@@ -65,13 +65,14 @@ ORDERED_FILES=(
   athlete-approval-audit.sql
   notifications.sql
   notifications-v2.sql
+  # instagram.sql must run before admin-actions-bundle.sql, which creates stub versions of its tables.
+  instagram.sql
   admin-actions-bundle.sql
   auto-accept.sql
   campaign-slot-locking.sql
   fn-auto-accept.sql
   deliverables.sql
   disputes.sql
-  instagram.sql
   profile-photos.sql
   diamond-tier.sql
   waitlist.sql
