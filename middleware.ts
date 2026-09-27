@@ -27,6 +27,9 @@ function isPublicPath(pathname: string, prelaunchMode: boolean): boolean {
     pathname === "/preview" ||
     pathname.startsWith("/preview/") ||
     pathname === "/admin/login" ||
+    // Customer code pages and the counter staff page are used by people without Hillink accounts.
+    pathname.startsWith("/c/") ||
+    pathname.startsWith("/redeem/") ||
     (!prelaunchMode &&
       (pathname === "/login" || pathname === "/signup" || pathname.startsWith("/signup/")))
   );

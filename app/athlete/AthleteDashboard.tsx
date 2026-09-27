@@ -226,6 +226,8 @@ export default function AthleteDashboard({ initialXp = 0 }: AthleteDashboardProp
   const [applyingCampaignId, setApplyingCampaignId] = useState<string | null>(null);
   const [submittingAppId, setSubmittingAppId] = useState<string | null>(null);
   const [withdrawingAppId, setWithdrawingAppId] = useState<string | null>(null);
+  const [promoByAppId, setPromoByAppId] = useState<Record<string, { code: string; shareUrl: string }>>({});
+  const [promoLoadingId, setPromoLoadingId] = useState<string | null>(null);
   const [proofInputs, setProofInputs] = useState<Record<string, { url: string; notes: string }>>({});
   const [athleteXp, setAthleteXp] = useState(initialXp);
   const [recentXpActivity, setRecentXpActivity] = useState<XpActivity[]>([]);
@@ -643,6 +645,29 @@ export default function AthleteDashboard({ initialXp = 0 }: AthleteDashboardProp
     }
 
     await loadData(true);
+  };
+
+  // The athlete's customer code for this campaign, to share with followers.
+  const getCustomerCode = async (applicationId: string) => {
+    setError("");
+    setPromoLoadingId(applicationId);
+    try {
+      const res = await fetch("/api/athlete/promo-code", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ applicationId }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || "Couldn't get your customer code.");
+        return;
+      }
+      setPromoByAppId((prev) => ({ ...prev, [applicationId]: data }));
+    } catch {
+      setError("Couldn't reach Hillink. Check your connection.");
+    } finally {
+      setPromoLoadingId(null);
+    }
   };
 
   const withdrawApplication = async (application: Application) => {
@@ -1481,6 +1506,20 @@ export default function AthleteDashboard({ initialXp = 0 }: AthleteDashboardProp
                       </>
                     )}
 
+                    {promoByAppId[app.id] && (
+                      <div style={{ marginTop: 10, padding: 12, border: "1px dashed var(--border)", borderRadius: 12, background: "var(--surface-2)" }}>
+                        <div style={{ fontSize: 13, color: "var(--muted)", fontWeight: 700 }}>Your customer code</div>
+                        <div style={{ fontSize: 24, fontWeight: 900, letterSpacing: "0.06em" }}>{promoByAppId[app.id].code}</div>
+                        <div style={{ fontSize: 13, color: "var(--muted)" }}>
+                          Put this in your post or story. Every customer who shows it counts toward your results.
+                        </div>
+                        <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
+                          <input readOnly value={promoByAppId[app.id].shareUrl} onFocus={(e) => e.currentTarget.select()} style={{ flex: "1 1 220px" }} aria-label="Share link" />
+                          <button className="small-button" onClick={() => navigator.clipboard?.writeText(promoByAppId[app.id].shareUrl)}>Copy link</button>
+                        </div>
+                      </div>
+                    )}
+
                     <div style={{ marginTop: 10, display: "flex", gap: 8, flexWrap: "wrap" }}>
                       <button
                         className="cta-button"
@@ -1489,6 +1528,12 @@ export default function AthleteDashboard({ initialXp = 0 }: AthleteDashboardProp
                       >
                         {submittingAppId === app.id ? "Submitting..." : "Submit Proof"}
                       </button>
+
+                      {(app.status === "accepted" || app.status === "submitted" || app.status === "approved" || (app.status as string) === "completed") && !promoByAppId[app.id] && (
+                        <button className="secondary-button" disabled={promoLoadingId === app.id} onClick={() => getCustomerCode(app.id)}>
+                          {promoLoadingId === app.id ? "Getting code..." : "Get customer code"}
+                        </button>
+                      )}
 
                       {(app.status === "applied" || app.status === "accepted" || app.status === "submitted") && (
                         <button
