@@ -87,3 +87,41 @@ The migrations folder is moved aside during `supabase start` because the repo's 
 - `/api/cron/scores` recomputes scores daily through `vercel.json` (needs `CRON_SECRET`).
 - Also fixed: business ratings never updated the athlete's average rating because of row security, and athletes could edit their own average. Both are handled in the migration.
 - Migration: `supabase/migrations/20260928000400_hillink_score.sql`.
+
+## Rewards road
+
+- Athletes open it from their dashboard (`/athlete/rewards`).
+- **Seasons** follow the semester: spring (Jan–May), summer (Jun–Jul), fall (Aug–Dec), with boundaries at midnight UTC. Points reset each season. Tier, XP and Hillink Score carry over.
+- **Levels 1–50** come from XP earned this season. Level 2 takes 60 XP, and each later level takes 2 XP more. About 8 campaigns in a semester reaches level 20.
+- **Points** (starting values in `lib/rewards/road.ts`):
+
+  | What | Points |
+  |---|---|
+  | Every level | 10 |
+  | Every 5th level, extra | 25 |
+  | Pro track, every level, extra | 15 |
+  | Pro track, every 5th level, extra | 50 |
+  | Each customer who uses the athlete's code | 5 |
+  | Each badge, first time only | 20 |
+
+- **Pro track**: a Hillink Score of 90+ after 3 campaigns. Athletes never pay for it. Pro points are paid only for levels reached while Pro, and are kept if the athlete later drops below 90. The first time an athlete opens the road, levels they already reached count at their Pro status that day.
+- **Badges**:
+  - First Campaign
+  - Regular (5 campaigns)
+  - 10 Customers Driven
+  - 5-Star Streak
+  - Always On Time
+  - Verified Reach
+  - Hillink Pro
+- **Store**:
+  - `reward_items` starts with stickers, a T-shirt, a partner gift card and a hoodie.
+  - All items are **off** (`active = false`) until Hillink sets prices. To turn one on, set `active` and `points_cost` in Supabase.
+  - A redemption records a `reward_claims` row with status `requested`. Hillink ships the item and sets the status to `sent`. There's no admin screen for this yet.
+- Customer points are capped at 20 customers per campaign per season, so a business can't pad an athlete's points with fake customers.
+- XP an admin sets by hand (`admin_tier_set`) doesn't move the road, and each XP challenge counts once (a unique index now blocks duplicate challenge awards).
+- Points live in `athlete_points_ledger`. Only the server writes it, through `sync_reward_points`. Each grant has a unique `ref`, so syncing again never pays twice. If the XP or customer behind a grant goes away, the grant is reversed with a `revoke:` row, and paid again with a `regrant:` row if it's earned back. Badges are never reversed.
+- The sync only writes when something changed, so opening the page doesn't add rows.
+- Two taps can't spend the same points twice: claims lock per athlete.
+- To cancel a request, call `cancel_reward_claim(claim_id)` with the service role. It refunds the points and puts the item back in stock.
+- Before running the migration in production, check for duplicate XP challenge rows. If there are any, the migration warns and skips the unique index; delete the extras and create the index by hand.
+- Migration: `supabase/migrations/20260928000500_rewards_road.sql`.

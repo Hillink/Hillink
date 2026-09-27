@@ -116,14 +116,21 @@ export async function POST() {
       },
     }));
 
-  if (toInsert.length) {
-    const { error: insertError } = await adminClient.from("athlete_xp_events").insert(toInsert);
+  // One row at a time: a unique index pays each challenge once, so a parallel request that already
+  // awarded it (23505) is skipped instead of failing the whole batch.
+  const granted: typeof toInsert = [];
+  for (const row of toInsert) {
+    const { error: insertError } = await adminClient.from("athlete_xp_events").insert(row);
+    if (insertError?.code === "23505") continue;
     if (insertError) {
       return NextResponse.json({ error: insertError.message }, { status: 500 });
     }
+    granted.push(row);
+  }
 
+  if (granted.length) {
     // Notify athlete for each challenge completed
-    for (const row of toInsert) {
+    for (const row of granted) {
       const challenge = challenges.find(
         (c) => c.id === (row.details_json as { challenge_id: string }).challenge_id
       );
@@ -141,9 +148,9 @@ export async function POST() {
 
   return NextResponse.json({
     success: true,
-    granted: toInsert.length,
+    granted: granted.length,
     grantedTitles: challenges
-      .filter((challenge) => toInsert.some((row) => row.details_json.challenge_id === challenge.id))
+      .filter((challenge) => granted.some((row) => row.details_json.challenge_id === challenge.id))
       .map((c) => c.title),
   });
 }

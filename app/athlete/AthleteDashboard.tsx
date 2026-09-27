@@ -1230,6 +1230,11 @@ export default function AthleteDashboard({ initialXp = 0 }: AthleteDashboardProp
             </div>
           </div>
 
+          <div className="panel" style={{ marginBottom: 16, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+            <span><strong>Rewards road</strong>: level up this season, earn points and badges, and trade points for Hillink gear.</span>
+            <a className="cta-button" href="/athlete/rewards">Open rewards</a>
+          </div>
+
           {!hillinkScore && hillinkScoreChecked && (
             <div className="panel" style={{ marginBottom: 16 }}>
               <div className="stat-title">Hillink Score</div>
