@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { notifyUser } from "@/lib/notifications";
 import { requireRoleAccess } from "@/lib/auth/requireRoleAccess";
+import { getStripe } from "@/lib/stripe/config";
+import { refundPaymentIfFunded } from "@/lib/payments/server";
 
 type CancelBody = {
   campaignId?: string;
@@ -50,7 +52,7 @@ export async function POST(req: NextRequest) {
   }
 
   const applications = appRows || [];
-  const hasCompletedPost = applications.some((app: { status: string }) => app.status === "approved");
+  const hasCompletedPost = applications.some((app: { status: string }) => app.status === "approved" || app.status === "completed");
   if (hasCompletedPost) {
     return NextResponse.json(
       { error: "This campaign cannot be cancelled because an athlete has already completed and been approved." },
@@ -59,6 +61,14 @@ export async function POST(req: NextRequest) {
   }
 
   const applicationIds = applications.map((app: { id: string }) => app.id);
+
+  // Refund every funded athlete payment first: deleting the applications below also deletes their payments.
+  for (const applicationId of applicationIds) {
+    const refund = await refundPaymentIfFunded(getStripe, admin, applicationId);
+    if (refund.error) {
+      return NextResponse.json({ error: `Refund failed, campaign not cancelled: ${refund.error}` }, { status: 502 });
+    }
+  }
 
   const notifyAthleteIds = Array.from(
     new Set(

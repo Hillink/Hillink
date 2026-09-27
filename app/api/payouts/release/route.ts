@@ -3,6 +3,7 @@ import { requireRole } from "@/lib/rbac";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getStripe } from "@/lib/stripe/config";
 import { notifyUser } from "@/lib/notifications";
+import { getPaymentForApplication, payOutPayment } from "@/lib/payments/server";
 
 type ReleaseBody = {
   applicationId: string;
@@ -146,56 +147,23 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Generate idempotency key if not exists
-    let idempotencyKey = paymentRow.idempotency_key;
-    if (!idempotencyKey) {
-      idempotencyKey = `payout-${paymentRow.id}-${Date.now()}`;
+    const fullPayment = await getPaymentForApplication(admin, applicationId);
+    if (!fullPayment) {
+      return NextResponse.json({ error: "Payment not found" }, { status: 404 });
     }
 
-    // Call Stripe transfers.create with idempotency
-    const stripe = getStripe();
-
-    let transfer;
-    try {
-      transfer = await stripe.transfers.create(
-        {
-          amount: paymentRow.amount_cents,
-          currency: "usd",
-          destination: profile.stripe_account_id,
-          description: `Hillink payout for application ${applicationId}`,
-        },
-        {
-          idempotencyKey,
-        }
-      );
-    } catch (stripeError: any) {
-      console.error("Stripe transfer error:", stripeError);
+    // Deterministic idempotency key + single-claim lock: retries can never pay twice.
+    const result = await payOutPayment(getStripe(), admin, fullPayment, profile.stripe_account_id);
+    if (!result.ok) {
+      return NextResponse.json({ error: result.error }, { status: result.status });
+    }
+    if (result.alreadyPaid) {
       return NextResponse.json(
-        {
-          error: "Stripe transfer failed",
-          message: stripeError.message || "Unknown error",
-        },
-        { status: 500 }
+        { error: "Payout already processed for this application", transferId: result.transferId },
+        { status: 409 }
       );
     }
-
-    // Update payment with stripe_transfer_id and idempotency_key
-    const { error: updateError } = await admin
-      .from("payments")
-      .update({
-        stripe_transfer_id: transfer.id,
-        idempotency_key: idempotencyKey,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", paymentRow.id);
-
-    if (updateError) {
-      console.error("Error updating payment:", updateError);
-      return NextResponse.json(
-        { error: "Failed to update payment record after transfer" },
-        { status: 500 }
-      );
-    }
+    const transfer = { id: result.transferId };
 
     try {
       await notifyUser({

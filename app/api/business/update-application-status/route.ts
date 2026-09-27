@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { notifyUser } from "@/lib/notifications";
 import { requireRoleAccess } from "@/lib/auth/requireRoleAccess";
+import { canTransition } from "@/lib/payments/fees";
+import { ensurePaymentForApplication, getPaymentForApplication } from "@/lib/payments/server";
 
 const VALID_STATUSES = ["accepted", "declined", "approved", "rejected"] as const;
 type ValidStatus = (typeof VALID_STATUSES)[number];
@@ -83,7 +85,7 @@ export async function POST(req: NextRequest) {
 
   const { data: campaign, error: campaignError } = await admin
     .from("campaigns")
-    .select("id, title, business_id, open_slots")
+    .select("id, title, business_id, open_slots, payout_cents")
     .eq("id", appRow.campaign_id)
     .single();
 
@@ -96,6 +98,30 @@ export async function POST(req: NextRequest) {
       { error: "Not authorized for this campaign" },
       { status: 403 }
     );
+  }
+
+  if (!canTransition(appRow.status, nextStatus)) {
+    return NextResponse.json(
+      { error: `Can't change an application from ${appRow.status} to ${nextStatus}.` },
+      { status: 409 }
+    );
+  }
+
+  // Approving means paying the athlete, so the payment must already be funded.
+  let payoutCents = 0;
+  if (nextStatus === "approved") {
+    const payment = await getPaymentForApplication(admin, appRow.id);
+    payoutCents = payment?.amount_cents ?? 0;
+    if (!payment || (payment.hold_status !== "held" && payment.hold_status !== "released")) {
+      return NextResponse.json(
+        {
+          error: "Fund this athlete's payment before approving their post.",
+          code: "payment_not_funded",
+          paymentId: payment?.id ?? null,
+        },
+        { status: 409 }
+      );
+    }
   }
 
   // Build update payload
@@ -112,13 +138,38 @@ export async function POST(req: NextRequest) {
     updatePayload.reviewed_at = new Date().toISOString();
   }
 
-  const { error: updateError } = await admin
+  // Only update if nobody changed the status in the meantime (e.g. a double click).
+  const { data: updatedRows, error: updateError } = await admin
     .from("campaign_applications")
     .update(updatePayload)
-    .eq("id", body.applicationId);
+    .eq("id", body.applicationId)
+    .eq("status", appRow.status)
+    .select("id");
 
   if (updateError) {
     return NextResponse.json({ error: updateError.message }, { status: 500 });
+  }
+  if (!updatedRows || updatedRows.length === 0) {
+    return NextResponse.json({ error: "This application was already updated." }, { status: 409 });
+  }
+
+  let paymentInfo: { paymentId: string; needsFunding: boolean; businessChargeCents: number } | null = null;
+  if (nextStatus === "accepted") {
+    try {
+      const payment = await ensurePaymentForApplication(admin, {
+        applicationId: appRow.id,
+        businessId: campaign.business_id,
+        athleteId: appRow.athlete_id,
+        payoutCents: Number(campaign.payout_cents || 0),
+      });
+      paymentInfo = {
+        paymentId: payment.id,
+        needsFunding: payment.hold_status === "uncommitted",
+        businessChargeCents: payment.business_charge_cents,
+      };
+    } catch (err) {
+      console.error("[update-application-status] failed to create payment", err);
+    }
   }
 
   // Decrement open_slots on accept
@@ -149,6 +200,11 @@ export async function POST(req: NextRequest) {
   return NextResponse.json({
     success: true,
     nextStatus,
-    needsPayout: nextStatus === "approved",
+    // A $0 (in-kind) deal has nothing to transfer.
+    needsPayout: nextStatus === "approved" && payoutCents > 0,
+    // If the payment row failed to save, let the dashboard retry through fund-application.
+    needsFunding: paymentInfo ? paymentInfo.needsFunding : nextStatus === "accepted",
+    paymentId: paymentInfo?.paymentId ?? null,
+    businessChargeCents: paymentInfo?.businessChargeCents ?? null,
   });
 }

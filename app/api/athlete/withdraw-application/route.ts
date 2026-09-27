@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requireRoleAccess } from "@/lib/auth/requireRoleAccess";
+import { getStripe } from "@/lib/stripe/config";
+import { refundPaymentIfFunded } from "@/lib/payments/server";
 
 type WithdrawBody = {
   applicationId?: string;
@@ -45,6 +47,12 @@ export async function POST(req: NextRequest) {
   }
 
   if (status === "accepted" || status === "submitted") {
+    // Give the business its money back before the application (and its payment row) is deleted.
+    const refund = await refundPaymentIfFunded(getStripe, adminClient, appRow.id);
+    if (refund.error) {
+      return NextResponse.json({ error: `Couldn't withdraw yet: ${refund.error}` }, { status: 409 });
+    }
+
     const { data: campaign, error: campaignError } = await adminClient
       .from("campaigns")
       .select("id, open_slots, slots")
