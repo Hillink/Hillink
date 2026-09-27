@@ -1021,6 +1021,22 @@ export default function BusinessDashboard() {
     }
 
     const profiles = profileRows as AthleteProfile[];
+    // Also load the top-scored athletes, so "Best Hillink Score" isn't limited to the newest 100 sign-ups.
+    const { data: topScoreRows } = await supabase
+      .from("athlete_scores")
+      .select("athlete_id")
+      .eq("provisional", false)
+      .order("score", { ascending: false })
+      .limit(100);
+    const loadedIds = new Set(profiles.map((p) => p.id));
+    const missingTopIds = ((topScoreRows || []) as { athlete_id: string }[]).map((r) => r.athlete_id).filter((id) => !loadedIds.has(id));
+    if (missingTopIds.length) {
+      const { data: topProfiles } = await supabase
+        .from("athlete_profiles")
+        .select("id, first_name, last_name, school, sport, city, state, latitude, longitude, instagram, deal_types, bio, minimum_payout, preferred_company_type, average_rating, total_ratings, profile_photo_url")
+        .in("id", missingTopIds);
+      profiles.push(...((topProfiles || []) as AthleteProfile[]));
+    }
     const athleteIds = profiles.map((p) => p.id);
     const xpMap: Record<string, number> = {};
 
@@ -1345,7 +1361,13 @@ export default function BusinessDashboard() {
   const sortedAthletes = useMemo(() => {
     const next = [...filteredAthletes];
     if (afSort === "score_desc") {
-      next.sort((a, b) => (athleteScoreById[b.id]?.score ?? -1) - (athleteScoreById[a.id]?.score ?? -1));
+      // Athletes with a settled score first, then new ("provisional") athletes, then those with no score yet.
+      const rank = (id: string) => {
+        const s = athleteScoreById[id];
+        if (!s) return -1;
+        return (s.provisional ? 0 : 1000) + s.score;
+      };
+      next.sort((a, b) => rank(b.id) - rank(a.id));
       return next;
     }
     if (afSort === "rating_desc") {
@@ -2000,7 +2022,7 @@ export default function BusinessDashboard() {
                                   </div>
                                   <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: diag ? 8 : 0 }}>
                                     <button className="small-button" onClick={() => setProfileModalAthleteId(app.athlete_id)}>Full Profile</button>
-                                    {app.status === "approved" && (
+                                    {(app.status === "approved" || app.status === "completed") && (
                                       <button className="small-button" onClick={() => setRatingModal({ applicationId: app.id, athleteName: fullName(athlete) })}>Rate Athlete</button>
                                     )}
                                     {app.proof_url && (

@@ -30,6 +30,7 @@ export type ScoreInputs = {
   timed: number; // completed campaigns where we know when proof came in
   onTime: number;
   firstTry: number;
+  firstTryTracked?: number; // completed campaigns with tracked proof rounds (defaults to completed)
   trackedCampaigns: number; // completed campaigns where the business logs customer codes
   customers: number; // customers logged on those campaigns
 };
@@ -48,6 +49,7 @@ export function computeHillinkScore(raw: Partial<ScoreInputs>): HillinkScore {
     timed: safe(raw.timed ?? 0),
     onTime: safe(raw.onTime ?? 0),
     firstTry: safe(raw.firstTry ?? 0),
+    firstTryTracked: safe(raw.firstTryTracked ?? raw.completed ?? 0),
     trackedCampaigns: safe(raw.trackedCampaigns ?? 0),
     customers: safe(raw.customers ?? 0),
   };
@@ -55,7 +57,8 @@ export function computeHillinkScore(raw: Partial<ScoreInputs>): HillinkScore {
   const meanRating = (i.ratingSum + PRIOR.ratingMean * PRIOR.ratingWeight) / (i.ratingCount + PRIOR.ratingWeight);
   const rating = clamp(((meanRating - 1) / 4) * 100);
   const onTime = clamp(((Math.min(i.onTime, i.timed) + PRIOR.rate * PRIOR.rateWeight) / (i.timed + PRIOR.rateWeight)) * 100);
-  const firstTry = clamp(((Math.min(i.firstTry, i.completed) + PRIOR.rate * PRIOR.rateWeight) / (i.completed + PRIOR.rateWeight)) * 100);
+  const tries = i.firstTryTracked ?? i.completed;
+  const firstTry = clamp(((Math.min(i.firstTry, tries) + PRIOR.rate * PRIOR.rateWeight) / (tries + PRIOR.rateWeight)) * 100);
   const perCampaign =
     (i.customers + PRIOR.customersPerCampaign * PRIOR.customersWeight) / (i.trackedCampaigns + PRIOR.customersWeight);
   const customers = clamp((perCampaign / FULL_MARKS_CUSTOMERS_PER_CAMPAIGN) * 100);

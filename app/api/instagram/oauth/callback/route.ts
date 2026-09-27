@@ -127,6 +127,8 @@ export async function GET(req: NextRequest) {
         token_expires_at: expiresAt,
         connected_at: new Date().toISOString(),
         last_sync_at: new Date().toISOString(),
+        // Only accounts connected through Instagram login get the verified follower badge.
+        verified: true,
       },
       { onConflict: "athlete_id" }
     );

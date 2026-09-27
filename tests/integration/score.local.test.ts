@@ -110,7 +110,7 @@ test("athletes can't edit their own rating average, and a business rating update
 test("verified follower counts come from Instagram and are checked at most weekly", { skip }, async () => {
   const a = await makeUser("athlete");
   await refreshAllScores(admin);
-  await admin.from("athlete_instagram_connections").upsert({ athlete_id: a.id, ig_user_id: "17841400000000000", ig_username: "score_test", access_token: "tok" });
+  await admin.from("athlete_instagram_connections").upsert({ athlete_id: a.id, ig_user_id: "17841400000000000", ig_username: "score_test", access_token: "tok", verified: true });
   let calls = 0;
   const fakeFetch = async (u: string) => {
     calls++;
@@ -125,4 +125,90 @@ test("verified follower counts come from Instagram and are checked at most weekl
   const { data: again } = await admin.from("athlete_scores").select("followers_checked_at").eq("athlete_id", a.id).single();
   assert.equal(again!.followers_checked_at, data!.followers_checked_at, "not re-checked within a week");
   assert.ok(calls >= before);
+});
+
+test("ratings only count from the business that ran the campaign", { skip }, async () => {
+  const a = await makeUser("athlete");
+  const rival = await makeUser("athlete");
+  const appId = await completedCampaign(a.id, { onTime: true });
+  const rivalApp = await completedCampaign(rival.id, { onTime: true });
+  const c = await signedIn(a.email);
+  // Rating yourself, even while claiming to be the business.
+  const self = await c.from("athlete_ratings").insert({ athlete_id: a.id, business_id: a.id, application_id: appId, rating: 5 });
+  assert.notEqual(self.error, null, "athlete can't rate themselves");
+  // A different business can't rate work on a campaign it didn't run.
+  const other = await makeUser("business");
+  const o = await signedIn(other.email);
+  const stranger = await o.from("athlete_ratings").insert({ athlete_id: rival.id, business_id: other.id, application_id: rivalApp, rating: 1 });
+  assert.notEqual(stranger.error, null, "stranger business can't rate");
+  // A mismatched athlete on a real application is rejected too.
+  const b = await signedIn(business.email);
+  const mismatch = await b.from("athlete_ratings").insert({ athlete_id: rival.id, business_id: business.id, application_id: appId, rating: 1 });
+  assert.notEqual(mismatch.error, null, "athlete must match the application");
+  // Rows planted before the fix (inserted here by the server) don't count toward the average or the score.
+  await admin.from("athlete_ratings").insert({ athlete_id: rival.id, business_id: other.id, application_id: appId, rating: 1 });
+  const { data: p } = await admin.from("athlete_profiles").select("total_ratings").eq("id", rival.id).single();
+  assert.equal(p!.total_ratings, 0);
+});
+
+test("athletes can't rewrite the timestamps the on-time part uses", { skip }, async () => {
+  const a = await makeUser("athlete");
+  const appId = await completedCampaign(a.id, { onTime: false });
+  const { data: before } = await admin.from("campaign_applications").select("accepted_at, submitted_at").eq("id", appId).single();
+  const c = await signedIn(a.email);
+  await c.from("campaign_applications").update({ submitted_at: daysAgo(30), accepted_at: new Date().toISOString() }).eq("id", appId);
+  const { data: after } = await admin.from("campaign_applications").select("accepted_at, submitted_at").eq("id", appId).single();
+  assert.deepEqual(after, before);
+});
+
+test("campaigns without tracked proof rounds don't earn first-try credit", { skip }, async () => {
+  const a = await makeUser("athlete");
+  for (let i = 0; i < 4; i++) await completedCampaign(a.id, { onTime: true });
+  await refreshAllScores(admin);
+  const { data } = await admin.from("athlete_scores").select("first_try_part").eq("athlete_id", a.id).single();
+  assert.equal(data!.first_try_part, 80, "stays at the starting value, not 100");
+});
+
+test("only Instagram-login connections are verified, and switching accounts clears the count", { skip }, async () => {
+  const a = await makeUser("athlete");
+  await refreshAllScores(admin);
+  const c = await signedIn(a.email);
+  // Direct write claiming to be verified: stored as unverified, never checked.
+  await c.from("athlete_instagram_connections").upsert({ athlete_id: a.id, ig_user_id: "999", access_token: "brand-token", verified: true });
+  const { data: conn } = await admin.from("athlete_instagram_connections").select("verified").eq("athlete_id", a.id).single();
+  assert.equal(conn!.verified, false);
+  const fetched: string[] = [];
+  const fakeFetch = async (u: string) => {
+    fetched.push(u);
+    return { ok: true, json: async () => ({ followers_count: 1_000_000 }) };
+  };
+  await refreshInstagramFollowers(admin, fakeFetch, 500);
+  assert.ok(!fetched.some((u) => u.includes("brand-token")), "unverified token never used");
+
+  // A verified connection gets a count; the athlete then swaps the account id and the count is cleared.
+  await admin.from("athlete_instagram_connections").upsert({ athlete_id: a.id, ig_user_id: "1784", access_token: "real", verified: true });
+  await refreshInstagramFollowers(admin, fakeFetch, 500);
+  const { data: counted } = await admin.from("athlete_scores").select("instagram_followers").eq("athlete_id", a.id).single();
+  assert.equal(counted!.instagram_followers, 1_000_000);
+  await c.from("athlete_instagram_connections").update({ ig_user_id: "999" }).eq("athlete_id", a.id);
+  const { data: cleared } = await admin.from("athlete_scores").select("instagram_followers").eq("athlete_id", a.id).single();
+  assert.equal(cleared!.instagram_followers, null);
+});
+
+test("a dead Instagram token is stamped and doesn't block other athletes", { skip }, async () => {
+  const dead = await makeUser("athlete");
+  const live = await makeUser("athlete");
+  await refreshAllScores(admin);
+  await admin.from("athlete_instagram_connections").upsert([
+    { athlete_id: dead.id, ig_user_id: "1", access_token: "dead", verified: true },
+    { athlete_id: live.id, ig_user_id: "2", access_token: "live", verified: true },
+  ]);
+  const fakeFetch = async (u: string) =>
+    u.includes("dead") ? { ok: false, json: async () => ({ error: { message: "expired" } }) } : { ok: true, json: async () => ({ followers_count: 42 }) };
+  await refreshInstagramFollowers(admin, fakeFetch, 500);
+  const { data } = await admin.from("athlete_scores").select("athlete_id, instagram_followers, followers_checked_at").in("athlete_id", [dead.id, live.id]);
+  const m = new Map((data || []).map((r) => [r.athlete_id, r]));
+  assert.equal(m.get(live.id)!.instagram_followers, 42);
+  assert.equal(m.get(dead.id)!.instagram_followers, null);
+  assert.ok(m.get(dead.id)!.followers_checked_at, "failure is stamped");
 });

@@ -43,3 +43,11 @@ test("labels and tips", () => {
   assert.match(improvementTip({ rating: 90, onTime: 20, firstTry: 90, customers: 90 }), /deadline/);
   assert.match(improvementTip({ rating: 90, onTime: 90, firstTry: 90, customers: 10 }), /customer code/);
 });
+
+test("first-try only counts campaigns with tracked proof rounds", () => {
+  // 4 campaigns done, only 2 tracked and both needed a redo: legacy campaigns must not count as first-try wins.
+  const s = computeHillinkScore({ completed: 4, firstTry: 0, firstTryTracked: 2 });
+  const noLegacyCredit = computeHillinkScore({ completed: 2, firstTry: 0, firstTryTracked: 2 });
+  assert.equal(s.parts.firstTry, noLegacyCredit.parts.firstTry);
+  assert.ok(s.parts.firstTry < 50);
+});

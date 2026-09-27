@@ -231,6 +231,7 @@ export default function AthleteDashboard({ initialXp = 0 }: AthleteDashboardProp
   const [promoLoadingId, setPromoLoadingId] = useState<string | null>(null);
   const [needsEligibility, setNeedsEligibility] = useState(false);
   const [hillinkScore, setHillinkScore] = useState<{ score: number; provisional: boolean; rating_part: number; on_time_part: number; first_try_part: number; customers_part: number } | null>(null);
+  const [hillinkScoreChecked, setHillinkScoreChecked] = useState(false);
 
   useEffect(() => {
     supabase.auth.getUser().then(async ({ data }) => {
@@ -241,6 +242,7 @@ export default function AthleteDashboard({ initialXp = 0 }: AthleteDashboardProp
         .eq("athlete_id", data.user.id)
         .maybeSingle();
       if (row) setHillinkScore(row);
+      setHillinkScoreChecked(true);
     });
   }, []);
 
@@ -1228,6 +1230,15 @@ export default function AthleteDashboard({ initialXp = 0 }: AthleteDashboardProp
               <div style={{ fontSize: 11, color: "rgba(255,255,255,0.5)", marginTop: 2 }}>XP</div>
             </div>
           </div>
+
+          {!hillinkScore && hillinkScoreChecked && (
+            <div className="panel" style={{ marginBottom: 16 }}>
+              <div className="stat-title">Hillink Score</div>
+              <p style={{ margin: "6px 0 0", fontSize: 13, color: "rgba(255,255,255,0.7)" }}>
+                Your score shows up after tonight&apos;s update. It grows with good ratings, on-time proof, and customers you bring in.
+              </p>
+            </div>
+          )}
 
           {hillinkScore && (
             <div className="panel" style={{ marginBottom: 16 }}>
