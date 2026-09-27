@@ -41,20 +41,13 @@ export default function RoleRedirectPage() {
           return;
         }
 
-        const upsertPayload: Record<string, unknown> =
-          intendedRole === "athlete"
-            ? {
-                id: user.id,
-                role: intendedRole,
-                athlete_verification_status: "pending",
-                referral_code: generateReferralCode(user.id),
-              }
-            : {
-                id: user.id,
-                role: intendedRole,
-                athlete_verification_status: "approved",
-                referral_code: generateReferralCode(user.id),
-              };
+        // Everyone starts pending until an admin approves them (the database enforces this too).
+        const upsertPayload: Record<string, unknown> = {
+          id: user.id,
+          role: intendedRole,
+          athlete_verification_status: "pending",
+          referral_code: generateReferralCode(user.id),
+        };
 
         const { error: upsertError } = await supabase.from("profiles").upsert(upsertPayload, {
           onConflict: "id",

@@ -4,6 +4,7 @@ export async function sendAthleteVerificationEmail(params: {
   to: string;
   status: "approved" | "rejected" | "pending";
   reason?: string;
+  role?: "athlete" | "business";
 }) {
   const apiKey = process.env.RESEND_API_KEY;
   const fromEmail = process.env.NOTIFICATIONS_FROM_EMAIL || "no-reply@hillink.io";
@@ -20,17 +21,19 @@ export async function sendAthleteVerificationEmail(params: {
       ? "rejected"
       : "updated";
 
+  const role = params.role || "athlete";
+
   const actionLine =
     params.status === "approved"
-      ? `You can now access the athlete portal: ${appUrl}/athlete`
+      ? `You can now access the ${role} portal: ${appUrl}/${role}`
       : params.status === "rejected"
-      ? `You can update your profile and re-apply here: ${appUrl}/onboarding/athlete`
-      : `Check your account status here: ${appUrl}/athlete/pending`;
+      ? `You can update your profile and re-apply here: ${appUrl}/onboarding/${role}`
+      : `Check your account status here: ${appUrl}/${role}/pending`;
 
-  const subject = `HILLink athlete verification ${statusText}`;
+  const subject = `HILLink ${role} verification ${statusText}`;
 
   const text = [
-    `Your athlete verification has been ${statusText}.`,
+    `Your ${role} verification has been ${statusText}.`,
     params.status === "rejected" && params.reason ? `Reason: ${params.reason}` : null,
     "",
     actionLine,

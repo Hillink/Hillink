@@ -17,4 +17,5 @@ export const REASON_MESSAGES: Record<string, string> = {
   visa_not_cleared: "Student visas usually don't allow paid NIL work in the US. Check with your school's international office, then update your eligibility.",
   school_conflict: "Your school has an exclusive deal in this business's category, so you can't join this campaign.",
   business_restricted: "This business is in a category athletes can't promote.",
+  instagram_not_verified: "Connect your Instagram with Instagram login in Settings before joining campaigns.",
 };

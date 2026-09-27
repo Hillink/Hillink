@@ -162,6 +162,16 @@ export default function BusinessOnboardingPage() {
       error = retry.error;
     }
 
+    if (!error) {
+      // Saving after a rejection sends the business back to the admin review queue.
+      await supabase
+        .from("profiles")
+        .update({ athlete_verification_status: "pending" })
+        .eq("id", userId)
+        .eq("role", "business")
+        .eq("athlete_verification_status", "rejected");
+    }
+
     setSaving(false);
 
     if (error) {
