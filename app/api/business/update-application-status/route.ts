@@ -108,8 +108,10 @@ export async function POST(req: NextRequest) {
   }
 
   // Approving means paying the athlete, so the payment must already be funded.
+  let payoutCents = 0;
   if (nextStatus === "approved") {
     const payment = await getPaymentForApplication(admin, appRow.id);
+    payoutCents = payment?.amount_cents ?? 0;
     if (!payment || (payment.hold_status !== "held" && payment.hold_status !== "released")) {
       return NextResponse.json(
         {
@@ -134,6 +136,10 @@ export async function POST(req: NextRequest) {
   }
   if (nextStatus === "approved" || nextStatus === "rejected") {
     updatePayload.reviewed_at = new Date().toISOString();
+  }
+  // The Hillink Score measures on-time proof from here.
+  if (nextStatus === "accepted") {
+    updatePayload.accepted_at = updatePayload.decided_at;
   }
 
   // Only update if nobody changed the status in the meantime (e.g. a double click).
@@ -198,7 +204,8 @@ export async function POST(req: NextRequest) {
   return NextResponse.json({
     success: true,
     nextStatus,
-    needsPayout: nextStatus === "approved",
+    // A $0 (in-kind) deal has nothing to transfer.
+    needsPayout: nextStatus === "approved" && payoutCents > 0,
     // If the payment row failed to save, let the dashboard retry through fund-application.
     needsFunding: paymentInfo ? paymentInfo.needsFunding : nextStatus === "accepted",
     paymentId: paymentInfo?.paymentId ?? null,
