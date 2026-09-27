@@ -41,7 +41,7 @@ export default function RoleRedirectPage() {
           return;
         }
 
-        const upsertPayload =
+        const upsertPayload: Record<string, unknown> =
           intendedRole === "athlete"
             ? {
                 id: user.id,

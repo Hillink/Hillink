@@ -59,6 +59,13 @@ type Application = {
   submitted_at: string | null;
 };
 
+type PaymentSummary = {
+  application_id: string;
+  hold_status: "uncommitted" | "held" | "released" | "refunded" | "disputed";
+  business_charge_cents: number | null;
+  stripe_transfer_id: string | null;
+};
+
 type InstagramDiagnostics = {
   application_id: string;
   likes: number;
@@ -233,6 +240,9 @@ export default function BusinessDashboard() {
   const [athleteXpById, setAthleteXpById] = useState<Record<string, number>>({});
   const [diagnosticsByApplicationId, setDiagnosticsByApplicationId] = useState<Record<string, InstagramDiagnostics>>({});
   const [statusUpdatingId, setStatusUpdatingId] = useState<string | null>(null);
+  const [paymentByApplicationId, setPaymentByApplicationId] = useState<Record<string, PaymentSummary>>({});
+  const [fundingId, setFundingId] = useState<string | null>(null);
+  const [notice, setNotice] = useState("");
   const [syncingDiagnosticsId, setSyncingDiagnosticsId] = useState<string | null>(null);
   const [removingAthleteId, setRemovingAthleteId] = useState<string | null>(null);
   const [cancellingCampaignId, setCancellingCampaignId] = useState<string | null>(null);
@@ -409,6 +419,20 @@ export default function BusinessDashboard() {
     setApplications(loadedApps);
 
     if (loadedApps.length) {
+      const { data: paymentRows } = await supabase
+        .from("payments")
+        .select("application_id, hold_status, business_charge_cents, stripe_transfer_id")
+        .in("application_id", loadedApps.map((a) => a.id));
+      const nextPayments: Record<string, PaymentSummary> = {};
+      for (const row of (paymentRows || []) as PaymentSummary[]) {
+        nextPayments[row.application_id] = row;
+      }
+      setPaymentByApplicationId(nextPayments);
+    } else {
+      setPaymentByApplicationId({});
+    }
+
+    if (loadedApps.length) {
       const { data: diagnosticsRows, error: diagnosticsError } = await supabase
         .from("instagram_post_diagnostics")
         .select("application_id, likes, comments, saves, reach, impressions, video_views, diagnostics_status, diagnostics_notes, last_synced_at")
@@ -487,6 +511,21 @@ export default function BusinessDashboard() {
 
   useEffect(() => {
     loadData();
+  }, []);
+
+  // Coming back from Stripe Checkout after funding an athlete's payment.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const funding = params.get("funding");
+    if (!funding) return;
+    if (funding === "success") {
+      setNotice("Payment received. The athlete's pay is held safely until you approve their post.");
+    } else if (funding === "cancelled") {
+      setNotice("Checkout was cancelled. The athlete can't be approved until their payment is funded.");
+    }
+    params.delete("funding");
+    const query = params.toString();
+    window.history.replaceState(null, "", `${window.location.pathname}${query ? `?${query}` : ""}`);
   }, []);
 
   useEffect(() => {
@@ -831,6 +870,31 @@ export default function BusinessDashboard() {
     setSelectedTemplateId("");
   };
 
+  // Sends the business to Stripe Checkout to fund one athlete's payout (athlete pay + Hillink fee).
+  const fundApplication = async (applicationId: string) => {
+    setFundingId(applicationId);
+    setError("");
+
+    const res = await fetch("/api/payments/fund-application", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ applicationId }),
+    });
+    const data = await res.json() as { error?: string; url?: string; funded?: boolean };
+
+    if (!res.ok) {
+      setFundingId(null);
+      setError(data.error || "Couldn't start payment. Try again.");
+      return;
+    }
+    if (data.url) {
+      window.location.href = data.url;
+      return;
+    }
+    setFundingId(null);
+    await loadData();
+  };
+
   const updateApplicationStatus = async (application: Application, nextStatus: Application["status"]) => {
     setStatusUpdatingId(application.id);
     setError("");
@@ -841,11 +905,18 @@ export default function BusinessDashboard() {
       body: JSON.stringify({ applicationId: application.id, status: nextStatus }),
     });
 
-    const data = await res.json() as { error?: string; needsPayout?: boolean };
+    const data = await res.json() as { error?: string; code?: string; needsPayout?: boolean; needsFunding?: boolean };
 
     if (!res.ok) {
       setStatusUpdatingId(null);
       setError(data.error || "Failed to update application status.");
+      await loadData();
+      return;
+    }
+
+    if (nextStatus === "accepted" && data.needsFunding) {
+      setStatusUpdatingId(null);
+      await fundApplication(application.id);
       return;
     }
 
@@ -1404,6 +1475,7 @@ export default function BusinessDashboard() {
 
         {authError && <div className="error-message">Logout error: {authError}</div>}
         {error && <div className="error-message">{error}</div>}
+        {notice && <div className="success-message" role="status" onClick={() => setNotice("")}>{notice}</div>}
 
         <section className="stats-grid four">
           <div className="stat-card">
@@ -1657,6 +1729,16 @@ export default function BusinessDashboard() {
                                         <button className="small-button" disabled={statusUpdatingId === app.id} onClick={() => updateApplicationStatus(app, "accepted")}>Accept</button>
                                         <button className="small-button" disabled={statusUpdatingId === app.id} onClick={() => updateApplicationStatus(app, "declined")}>Decline</button>
                                       </>
+                                    )}
+                                    {(app.status === "accepted" || app.status === "submitted") && paymentByApplicationId[app.id]?.hold_status === "uncommitted" && (
+                                      <button className="small-button" disabled={fundingId === app.id} onClick={() => fundApplication(app.id)}>
+                                        {fundingId === app.id
+                                          ? "Opening checkout…"
+                                          : `Fund payment${paymentByApplicationId[app.id]?.business_charge_cents ? ` ($${((paymentByApplicationId[app.id]?.business_charge_cents ?? 0) / 100).toFixed(2)})` : ""}`}
+                                      </button>
+                                    )}
+                                    {(app.status === "accepted" || app.status === "submitted") && paymentByApplicationId[app.id]?.hold_status === "held" && (
+                                      <span style={{ fontSize: 12, color: "#047857", alignSelf: "center" }}>Payment held</span>
                                     )}
                                     {app.status === "submitted" && (
                                       <>

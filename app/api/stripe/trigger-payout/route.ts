@@ -3,7 +3,9 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getStripe } from "@/lib/stripe/config";
 import { notifyUser } from "@/lib/notifications";
 import { requireRoleAccess } from "@/lib/auth/requireRoleAccess";
+import { getPaymentForApplication, payOutPayment } from "@/lib/payments/server";
 
+// Pays an athlete for an approved application from the money the business already funded.
 export async function POST(req: NextRequest) {
   const access = await requireRoleAccess(["business"]);
   if (!access.ok) {
@@ -30,7 +32,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: appError?.message || "Application not found" }, { status: 404 });
   }
 
-  if (appRow.status !== "approved") {
+  if (appRow.status !== "approved" && appRow.status !== "completed") {
     return NextResponse.json({ error: "Payout only allowed for approved applications" }, { status: 400 });
   }
 
@@ -44,6 +46,14 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Not allowed for this campaign" }, { status: 403 });
   }
 
+  const payment = await getPaymentForApplication(adminClient, appRow.id);
+  if (!payment) {
+    return NextResponse.json(
+      { error: "This athlete's payment hasn't been funded yet. Fund it before paying out.", code: "payment_not_funded" },
+      { status: 409 }
+    );
+  }
+
   const { data: payoutProfile } = await adminClient
     .from("athlete_payout_profiles")
     .select("stripe_account_id, payout_ready")
@@ -54,20 +64,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Athlete payout account is not ready" }, { status: 400 });
   }
 
-  try {
-    const stripe = getStripe();
+  const result = await payOutPayment(getStripe(), adminClient, payment, payoutProfile.stripe_account_id);
 
-    // NOTE: This is a scaffold for destination charges/transfers.
-    // In production, you should charge the platform customer and transfer net funds.
-    const transfer = await stripe.transfers.create({
-      amount: campaign.payout_cents,
-      currency: "usd",
-      destination: payoutProfile.stripe_account_id,
-      metadata: {
-        campaign_application_id: appRow.id,
-      },
-    });
-
+  if (!result.ok) {
     await adminClient.from("finance_events").insert({
       source: "payout_trigger",
       event_type: "stripe.transfer.created",
@@ -75,57 +74,59 @@ export async function POST(req: NextRequest) {
       athlete_id: appRow.athlete_id,
       campaign_id: appRow.campaign_id,
       application_id: appRow.id,
-      transfer_id: transfer.id,
-      amount_cents: campaign.payout_cents,
-      currency: "usd",
-      status: "succeeded",
-      details_json: {
-        destination_account: payoutProfile.stripe_account_id,
-      },
-    });
-
-    const { data: athleteAuthData } = await adminClient.auth.admin.getUserById(appRow.athlete_id);
-    const amountUsd = (campaign.payout_cents / 100).toLocaleString("en-US", {
-      style: "currency",
-      currency: "USD",
-    });
-
-    await notifyUser({
-      userId: appRow.athlete_id,
-      email: athleteAuthData.user?.email ? { to: athleteAuthData.user.email } : undefined,
-      type: "payout_sent",
-      title: "Payout sent",
-      body: `Your payout for \"${campaign.title || "Campaign"}\" has been processed for ${amountUsd}.`,
-      metadata: {
-        campaignTitle: campaign.title || "Campaign",
-        amount: amountUsd,
-        paymentMethod: "Stripe",
-        transferId: transfer.id,
-        campaignId: appRow.campaign_id,
-        applicationId: appRow.id,
-        amountCents: campaign.payout_cents,
-      },
-    });
-
-    return NextResponse.json({ success: true, transferId: transfer.id });
-  } catch (e) {
-    const message = e instanceof Error ? e.message : "Payout transfer failed";
-
-    await adminClient.from("finance_events").insert({
-      source: "payout_trigger",
-      event_type: "stripe.transfer.created",
-      business_id: userId,
-      athlete_id: appRow.athlete_id,
-      campaign_id: appRow.campaign_id,
-      application_id: appRow.id,
-      amount_cents: campaign.payout_cents,
+      amount_cents: payment.amount_cents,
       currency: "usd",
       status: "failed",
-      details_json: {
-        error: message,
-      },
+      details_json: { error: result.error, payment_id: payment.id },
     });
-
-    return NextResponse.json({ error: message }, { status: 500 });
+    return NextResponse.json({ error: result.error }, { status: result.status });
   }
+
+  if (result.alreadyPaid) {
+    return NextResponse.json({ success: true, transferId: result.transferId, alreadyPaid: true });
+  }
+
+  await adminClient.from("finance_events").insert({
+    source: "payout_trigger",
+    event_type: "stripe.transfer.created",
+    business_id: userId,
+    athlete_id: appRow.athlete_id,
+    campaign_id: appRow.campaign_id,
+    application_id: appRow.id,
+    transfer_id: result.transferId,
+    amount_cents: result.amountCents,
+    currency: "usd",
+    status: "succeeded",
+    details_json: {
+      destination_account: payoutProfile.stripe_account_id,
+      payment_id: payment.id,
+      platform_fee_cents: payment.platform_fee_cents,
+      funding_source: payment.funding_source,
+    },
+  });
+
+  const { data: athleteAuthData } = await adminClient.auth.admin.getUserById(appRow.athlete_id);
+  const amountUsd = (result.amountCents / 100).toLocaleString("en-US", {
+    style: "currency",
+    currency: "USD",
+  });
+
+  await notifyUser({
+    userId: appRow.athlete_id,
+    email: athleteAuthData.user?.email ? { to: athleteAuthData.user.email } : undefined,
+    type: "payout_sent",
+    title: "Payout sent",
+    body: `Your payout for \"${campaign.title || "Campaign"}\" has been processed for ${amountUsd}.`,
+    metadata: {
+      campaignTitle: campaign.title || "Campaign",
+      amount: amountUsd,
+      paymentMethod: "Stripe",
+      transferId: result.transferId,
+      campaignId: appRow.campaign_id,
+      applicationId: appRow.id,
+      amountCents: result.amountCents,
+    },
+  });
+
+  return NextResponse.json({ success: true, transferId: result.transferId });
 }

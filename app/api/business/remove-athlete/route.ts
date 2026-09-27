@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requireRoleAccess } from "@/lib/auth/requireRoleAccess";
+import { getStripe } from "@/lib/stripe/config";
+import { refundPaymentIfFunded } from "@/lib/payments/server";
 
 type RemoveBody = {
   applicationId?: string;
@@ -56,6 +58,14 @@ export async function POST(req: NextRequest) {
 
   if (status === "approved") {
     return NextResponse.json({ error: "Approved applications cannot be removed" }, { status: 400 });
+  }
+
+  // Give the business its money back before the athlete leaves the campaign.
+  if (status === "accepted" || status === "submitted") {
+    const refund = await refundPaymentIfFunded(getStripe, adminClient, appRow.id);
+    if (refund.error) {
+      return NextResponse.json({ error: `Refund failed: ${refund.error}` }, { status: 502 });
+    }
   }
 
   const nextStatus: ManagedStatus = status === "applied" ? "declined" : "withdrawn";

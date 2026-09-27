@@ -1,0 +1,45 @@
+# Campaign payments and local testing
+
+## How athlete pay moves
+
+1. **Accept.** When a business accepts an athlete, Hillink creates one `payments` row for that application with a quote: the athlete's pay, Hillink's platform fee (20% by default), and card processing.
+2. **Fund.** The business is sent to Stripe Checkout for that total. When Stripe confirms the charge (`checkout.session.completed` webhook), the payment moves from `uncommitted` to `held`.
+3. **Approve.** A business can only approve submitted proof once the payment is `held`.
+4. **Pay out.** The athlete is paid with a Stripe transfer tied to the business's charge (`source_transaction`). Each payment has one fixed idempotency key (`hillink-payout-<payment id>`) and a claim lock, so double clicks, retries and the admin/cron release route can never pay twice. Once a transfer id is saved, the database refuses to change it.
+5. **Remove or cancel.** Removing an accepted athlete, or cancelling a campaign, refunds a held payment first. A payment that was already paid out is never refunded, and the cancel stops if a refund fails.
+
+A $0 (in-kind) deal needs no money moved and is held straight away.
+
+## Settings (environment variables)
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `PLATFORM_FEE_BPS` | `2000` | Hillink's fee as basis points of athlete pay (2000 = 20%). |
+| `PASS_CARD_FEES_TO_BUSINESS` | `true` | Add Stripe's 2.9% + 30c to the business's charge. `false` means Hillink absorbs it. |
+| `ATHLETE_PAY_MODE` | `on_top` | `on_top`: businesses pay athletes on top of their tier. `included`: each month's tier price includes athlete credit. |
+| `INCLUDED_ATHLETE_CREDIT_BPS` | `6000` | In `included` mode, the share of the monthly tier price available as athlete credit (6000 = 60%). |
+
+## Database change
+
+Run `supabase/migrations/20260928000100_campaign_payment_funding.sql` on production before deploying this code. It adds funding columns to `payments`, a unique payment per application, and the guard that stops a saved transfer id from being changed.
+
+## Running tests
+
+Pure fee math, no setup:
+
+```bash
+npm run test:unit
+```
+
+Payment flow against a local database, with a fake Stripe (needs Docker):
+
+```bash
+mv supabase/migrations /tmp/hillink-migrations && npx supabase start && mv /tmp/hillink-migrations supabase/migrations
+./scripts/local-db-bootstrap.sh            # RESET=1 to rebuild from scratch
+LOCAL_SUPABASE_URL=http://127.0.0.1:54321 \
+LOCAL_SUPABASE_SERVICE_ROLE_KEY="<service role key from npx supabase status>" \
+NEXT_PUBLIC_APP_URL=http://localhost:3000 \
+npm run test:payments:local
+```
+
+The migrations folder is moved aside during `supabase start` because the repo's first migration is empty and the schema lives in the loose `supabase/*.sql` files, which the bootstrap script applies in order.

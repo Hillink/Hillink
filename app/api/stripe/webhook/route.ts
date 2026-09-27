@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getBillingTierFromPriceId, getStripe, getTierConfig, type BillingTier } from "@/lib/stripe/config";
 import { isValidStripeWebhookSecret } from "@/lib/env/validation";
+import { markPaymentFunded } from "@/lib/payments/server";
 
 // AUTH_EXEMPT: Stripe signed webhook endpoint; auth is verified by signature.
 
@@ -36,6 +37,29 @@ export async function POST(req: NextRequest) {
   };
 
   try {
+    if (
+      (event.type === "checkout.session.completed" || event.type === "checkout.session.async_payment_succeeded") &&
+      event.data.object.mode === "payment" &&
+      event.data.object.metadata?.kind === "athlete_payment"
+    ) {
+      const session = event.data.object;
+      const result = await markPaymentFunded(getStripe(), adminClient, session);
+      await logFinanceEvent({
+        source: "stripe_webhook",
+        event_type: event.type,
+        event_id: event.id,
+        amount_cents: typeof session.amount_total === "number" ? session.amount_total : null,
+        currency: session.currency || "usd",
+        status: result.applied ? "applied" : "ignored",
+        details_json: {
+          kind: "athlete_payment",
+          payment_id: session.metadata?.payment_id ?? null,
+          application_id: session.metadata?.application_id ?? null,
+          reason: result.reason ?? null,
+        },
+      });
+    }
+
     if (event.type === "checkout.session.completed") {
       const session = event.data.object;
       if (session.mode === "subscription" && session.metadata?.user_id && session.metadata?.billing_tier) {
