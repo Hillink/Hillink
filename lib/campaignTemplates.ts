@@ -47,21 +47,25 @@ export const TEMPLATE_PROOF_REQUIREMENTS: Record<CampaignTemplateKey, string[]> 
     "Live post URL",
     "Screenshot of live content",
     "Screenshot showing required tags or mentions",
+    "Screenshot showing #ad or the Paid partnership label (FTC rule)",
   ],
   dine_and_post: [
     "Photo or screenshot of visit confirmation",
     "Live post URL",
     "Screenshot of live content",
+    "Screenshot showing #ad or the Paid partnership label (FTC rule)",
   ],
   product_review: [
     "Delivery or pickup confirmation",
     "Live content URL",
     "Screenshot of live content",
+    "Screenshot showing #ad or the Paid partnership label (FTC rule)",
   ],
   monthly_ambassador: [
     "Live content URL for each deliverable",
     "Screenshot for each deliverable",
-    "Optional referral code usage screenshot",
+    "Screenshot showing #ad or the Paid partnership label (FTC rule)",
+    "Optional customer code usage screenshot",
   ],
 };
 
