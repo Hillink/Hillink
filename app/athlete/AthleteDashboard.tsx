@@ -228,6 +228,14 @@ export default function AthleteDashboard({ initialXp = 0 }: AthleteDashboardProp
   const [withdrawingAppId, setWithdrawingAppId] = useState<string | null>(null);
   const [promoByAppId, setPromoByAppId] = useState<Record<string, { code: string; shareUrl: string }>>({});
   const [promoLoadingId, setPromoLoadingId] = useState<string | null>(null);
+  const [needsEligibility, setNeedsEligibility] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/athlete/compliance")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => setNeedsEligibility(!!data && !data.compliance?.compliance_confirmed_at))
+      .catch(() => {});
+  }, []);
   const [proofInputs, setProofInputs] = useState<Record<string, { url: string; notes: string }>>({});
   const [athleteXp, setAthleteXp] = useState(initialXp);
   const [recentXpActivity, setRecentXpActivity] = useState<XpActivity[]>([]);
@@ -592,8 +600,7 @@ export default function AthleteDashboard({ initialXp = 0 }: AthleteDashboardProp
       if (response.status === 409 || message.toLowerCase().includes("already applied")) {
         setError("You already applied to this campaign.");
       } else {
-        const reason = typeof data?.reason === "string" ? data.reason : "";
-        setError(reason ? `${message} (${reason})` : message);
+        setError(message);
       }
       return;
     }
@@ -959,6 +966,12 @@ export default function AthleteDashboard({ initialXp = 0 }: AthleteDashboardProp
 
         {authError && <div className="error-message">Logout error: {authError}</div>}
         {error && <div className="error-message">{error}</div>}
+        {needsEligibility && (
+          <div className="panel" style={{ borderColor: "var(--warning)", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+            <span><strong>Confirm your eligibility</strong> (age, visa and school disclosure) before joining campaigns.</span>
+            <a className="cta-button" href="/athlete/eligibility">Confirm now</a>
+          </div>
+        )}
         {infoMessage && <div className="success-message">{infoMessage}</div>}
 
         <section className="stats-grid four">
@@ -1504,6 +1517,12 @@ export default function AthleteDashboard({ initialXp = 0 }: AthleteDashboardProp
                           />
                         </label>
                       </>
+                    )}
+
+                    {(app.status === "accepted" || app.status === "submitted") && (
+                      <p style={{ margin: "10px 0 0", fontSize: 13, color: "var(--muted)" }}>
+                        FTC rule: your post must say <strong>#ad</strong> or use Instagram&apos;s <strong>Paid partnership</strong> label, and your proof screenshot should show it.
+                      </p>
                     )}
 
                     {promoByAppId[app.id] && (

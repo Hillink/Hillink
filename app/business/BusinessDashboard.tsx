@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/client";
 import { getTierFromXp, type AthleteTier } from "@/lib/xp";
 import { formatMilesLabel, locationKey, milesBetween, storedCoords, type LatLng } from "@/lib/location";
 import NotificationBell from "@/components/NotificationBell";
+import { DEFAULT_REVIEW_WINDOW_HOURS } from "@/lib/compliance/rules";
 import {
   CONTENT_FORMAT_LABELS,
   TEMPLATE_CLAIM_METHOD_OPTIONS,
@@ -699,7 +700,7 @@ export default function BusinessDashboard() {
       campaign_objective: form.objective.trim(),
       claim_method: form.claimMethod,
       completion_window_days: form.completionWindowDays,
-      review_window_hours: 48,
+      review_window_hours: DEFAULT_REVIEW_WINDOW_HOURS,
       location_type: form.locationType,
       eligible_athlete_tiers: form.eligibleAthleteTiers,
       proof_requirements: form.proofRequirements,

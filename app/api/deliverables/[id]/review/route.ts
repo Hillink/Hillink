@@ -3,6 +3,7 @@ import { requireRole } from "@/lib/rbac";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { notifyUser } from "@/lib/notifications";
 import { ensurePaymentForApplication } from "@/lib/payments/server";
+import { completeIfAllRequiredApproved } from "@/lib/deliverables/completion";
 
 type ReviewStatus = "approved" | "rejected" | "revision_requested";
 
@@ -29,16 +30,6 @@ type ApplicationRow = {
 type CampaignRow = {
   id: string;
   business_id: string;
-};
-
-type RequirementRow = {
-  id: string;
-};
-
-type SubmissionStatusRow = {
-  requirement_id: string;
-  status: string;
-  version: number;
 };
 
 const VALID_STATUSES = new Set<ReviewStatus>([
@@ -150,61 +141,11 @@ export async function PATCH(
     return NextResponse.json({ error: updateError?.message || "Failed to update submission" }, { status: 500 });
   }
 
-  const { data: requiredRequirements, error: requiredError } = await admin
-    .from("deliverable_requirements")
-    .select("id")
-    .eq("campaign_id", campaign.id)
-    .eq("is_required", true)
-    .returns<RequirementRow[]>();
-
-  if (requiredError) {
-    return NextResponse.json({ error: requiredError.message }, { status: 500 });
+  const completion = await completeIfAllRequiredApproved(admin, application);
+  if (!completion.ok) {
+    return NextResponse.json({ error: completion.error }, { status: 500 });
   }
-
-  const requiredIds = (requiredRequirements || []).map((r) => r.id);
-  let allRequiredApproved = true;
-
-  if (requiredIds.length > 0) {
-    const { data: allRequiredSubmissions, error: requiredSubmissionError } = await admin
-      .from("deliverable_submissions")
-      .select("requirement_id, status, version")
-      .eq("application_id", application.id)
-      .in("requirement_id", requiredIds)
-      .order("requirement_id", { ascending: true })
-      .order("version", { ascending: false })
-      .returns<SubmissionStatusRow[]>();
-
-    if (requiredSubmissionError) {
-      return NextResponse.json({ error: requiredSubmissionError.message }, { status: 500 });
-    }
-
-    const latestByRequirement = new Map<string, SubmissionStatusRow>();
-    for (const row of allRequiredSubmissions || []) {
-      if (!latestByRequirement.has(row.requirement_id)) {
-        latestByRequirement.set(row.requirement_id, row);
-      }
-    }
-
-    allRequiredApproved = requiredIds.every((idKey) => {
-      const latest = latestByRequirement.get(idKey);
-      return !!latest && latest.status === "approved";
-    });
-  }
-
-  let applicationStatus = application.status;
-  if (allRequiredApproved && application.status !== "completed") {
-    const { error: completeError } = await admin
-      .from("campaign_applications")
-      // reviewed_at records when the work was approved (reports count pay in that month).
-      .update({ status: "completed", reviewed_at: new Date().toISOString() })
-      .eq("id", application.id);
-
-    if (completeError) {
-      return NextResponse.json({ error: completeError.message }, { status: 500 });
-    }
-
-    applicationStatus = "completed";
-  }
+  const { allRequiredApproved, applicationStatus } = completion;
 
   try {
     const label =

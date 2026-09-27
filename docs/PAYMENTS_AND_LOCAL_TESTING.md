@@ -60,3 +60,16 @@ The migrations folder is moved aside during `supabase start` because the repo's 
 - Migration: `supabase/migrations/20260928000200_customer_redemptions.sql`.
 
 `npm run test:payments:local` runs every local-database test, payments and customer codes. Set `LOCAL_SUPABASE_ANON_KEY` too to include the row-security check.
+
+## Eligibility, restricted categories and auto-approve
+
+- **Athlete eligibility** (`/athlete/eligibility`): 18+, visa status, a promise to report deals to their school, and the categories where their school has exclusive sponsors. Athletes who haven't confirmed see a banner and can't join campaigns. Uncleared international students can't join. A school exclusive in a category blocks campaigns from businesses in that category.
+- **Business categories**: onboarding picks from a fixed list. Alcohol, tobacco/vape, cannabis/CBD, betting, adult, firearms and supplements can't be saved.
+- These rules are enforced in the database (`athlete_join_block()` and a trigger on new applications), so every way of joining is covered: the apply API, auto-accept, and direct API calls. The server (service role) is exempt.
+- **#ad**: every campaign template's proof checklist asks for a screenshot showing #ad or the Paid partnership label, and athletes see the FTC reminder next to Submit Proof.
+- **Auto-approve** (`/api/cron/auto-approve`, daily through `vercel.json`):
+  - Proof left unreviewed past the campaign's review window (default 72h, minimum 24h) is approved.
+  - The athlete is paid if their payout account is ready.
+  - Unfunded work is never approved; the business gets a reminder instead.
+  - Needs `CRON_SECRET` set in Vercel.
+- Migration: `supabase/migrations/20260928000300_compliance_and_automation.sql`.

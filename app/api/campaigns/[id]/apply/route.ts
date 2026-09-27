@@ -17,6 +17,12 @@ type CampaignClaimRecord = {
   claim_method: "first_come_first_serve" | "business_selects" | null;
 };
 
+// Database rule violations are raised as "HILLINK:<reason>".
+function hillinkReason(message: string | undefined): string | null {
+  const match = /HILLINK:([a-z_]+)/.exec(message || "");
+  return match ? match[1] : null;
+}
+
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -49,6 +55,12 @@ export async function POST(
     return NextResponse.json({ error: REASON_MESSAGES.no_slots, reason: "no_slots" }, { status: 422 });
   }
 
+  // Eligibility and school-conflict rules (also enforced by a database trigger on insert).
+  const { data: block } = await supabase.rpc("athlete_join_block", { p_athlete_id: userId, p_campaign_id: campaignId });
+  if (typeof block === "string" && block) {
+    return NextResponse.json({ error: REASON_MESSAGES[block] ?? block, reason: block }, { status: 422 });
+  }
+
   const claimMethod = campaign.claim_method || "business_selects";
 
   if (claimMethod === "business_selects") {
@@ -65,6 +77,10 @@ export async function POST(
     if (insertError) {
       if (insertError.code === "23505") {
         return NextResponse.json({ error: "Already applied", reason: "duplicate_application" }, { status: 409 });
+      }
+      const blocked = hillinkReason(insertError.message);
+      if (blocked) {
+        return NextResponse.json({ error: REASON_MESSAGES[blocked] ?? blocked, reason: blocked }, { status: 422 });
       }
       return NextResponse.json({ error: insertError.message || "Apply failed", reason: "internal_error" }, { status: 500 });
     }
@@ -99,6 +115,10 @@ export async function POST(
   });
 
   if (result.error) {
+    const blocked = hillinkReason(result.error.message);
+    if (blocked) {
+      return NextResponse.json({ error: REASON_MESSAGES[blocked] ?? blocked, reason: blocked }, { status: 422 });
+    }
     return NextResponse.json(
       { error: "Internal error", reason: "internal_error" },
       { status: 500 }

@@ -180,6 +180,20 @@ async function seed() {
         throw new Error(`athlete_profiles upsert failed for ${config.email}: ${athleteProfileError.message}`);
       }
 
+      // Test athletes are eligible to join campaigns (skipped on databases without the compliance migration).
+      const { error: eligibilityError } = await admin
+        .from("athlete_profiles")
+        .update({
+          confirmed_adult: true,
+          visa_status: "us_citizen_or_resident",
+          school_disclosure_ack: true,
+          compliance_confirmed_at: new Date().toISOString(),
+        })
+        .eq("id", id);
+      if (eligibilityError && !eligibilityError.message.includes("column")) {
+        throw new Error(`athlete eligibility update failed for ${config.email}: ${eligibilityError.message}`);
+      }
+
       const { error: payoutError } = await admin.from("athlete_payout_profiles").upsert(
         {
           athlete_id: id,

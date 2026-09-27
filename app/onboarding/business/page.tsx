@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { BUSINESS_CATEGORIES, categoryByKey } from "@/lib/compliance/rules";
 
 export default function BusinessOnboardingPage() {
   const router = useRouter();
@@ -16,6 +17,7 @@ export default function BusinessOnboardingPage() {
     contactFirstName: "",
     contactLastName: "",
     category: "",
+    categoryKey: "",
     city: "",
     state: "",
     website: "",
@@ -64,6 +66,16 @@ export default function BusinessOnboardingPage() {
 
     if (textValues.some((value) => selfReferencePattern.test(value))) {
       setError("ERR_SELF_REFERENCE_NOT_ALLOWED");
+      return;
+    }
+
+    const chosenCategory = categoryByKey(form.categoryKey);
+    if (!chosenCategory) {
+      setError("Choose your business category.");
+      return;
+    }
+    if (chosenCategory.restrictedReason) {
+      setError(`Hillink can't run campaigns for this category. ${chosenCategory.restrictedReason}`);
       return;
     }
 
@@ -118,7 +130,8 @@ export default function BusinessOnboardingPage() {
       business_name: form.businessName,
       contact_first_name: form.contactFirstName,
       contact_last_name: form.contactLastName,
-      business_category: form.category,
+      business_category: chosenCategory.label,
+      category_key: chosenCategory.key,
       city: form.city,
       state: form.state,
       latitude: coords?.lat ?? null,
@@ -135,6 +148,13 @@ export default function BusinessOnboardingPage() {
     };
 
     let { error } = await supabase.from("business_profiles").upsert(payload);
+
+    // Databases without the compliance migration don't have category_key yet.
+    if (error && error.message.toLowerCase().includes("category_key")) {
+      const { category_key: _categoryKey, ...withoutKey } = payload;
+      const retry = await supabase.from("business_profiles").upsert(withoutKey);
+      error = retry.error;
+    }
 
     if (error && error.message.toLowerCase().includes("latitude")) {
       const { latitude: _latitude, longitude: _longitude, ...legacyPayload } = payload;
@@ -195,10 +215,20 @@ export default function BusinessOnboardingPage() {
 
           <label>
             Business category
-            <input
-              value={form.category}
-              onChange={(e) => setForm({ ...form, category: e.target.value })}
-            />
+            <select
+              value={form.categoryKey}
+              onChange={(e) => setForm({ ...form, categoryKey: e.target.value, category: categoryByKey(e.target.value)?.label || "" })}
+            >
+              <option value="">Choose one</option>
+              {BUSINESS_CATEGORIES.map((c) => (
+                <option key={c.key} value={c.key}>
+                  {c.label}{c.restrictedReason ? " (not allowed on Hillink)" : ""}
+                </option>
+              ))}
+            </select>
+            {categoryByKey(form.categoryKey)?.restrictedReason && (
+              <span style={{ color: "var(--red)", fontSize: 13 }}>{categoryByKey(form.categoryKey)?.restrictedReason}</span>
+            )}
           </label>
 
           <div className="form-row two">
