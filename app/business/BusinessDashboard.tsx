@@ -52,7 +52,7 @@ type Application = {
   id: string;
   campaign_id: string;
   athlete_id: string;
-  status: "applied" | "accepted" | "declined" | "withdrawn" | "submitted" | "approved" | "rejected";
+  status: "applied" | "accepted" | "declined" | "withdrawn" | "submitted" | "approved" | "rejected" | "completed";
   proof_url: string | null;
   proof_notes: string | null;
   applied_at: string;
@@ -242,6 +242,7 @@ export default function BusinessDashboard() {
   const [statusUpdatingId, setStatusUpdatingId] = useState<string | null>(null);
   const [paymentByApplicationId, setPaymentByApplicationId] = useState<Record<string, PaymentSummary>>({});
   const [fundingId, setFundingId] = useState<string | null>(null);
+  const [payingId, setPayingId] = useState<string | null>(null);
   const [notice, setNotice] = useState("");
   const [syncingDiagnosticsId, setSyncingDiagnosticsId] = useState<string | null>(null);
   const [removingAthleteId, setRemovingAthleteId] = useState<string | null>(null);
@@ -892,6 +893,25 @@ export default function BusinessDashboard() {
       return;
     }
     setFundingId(null);
+    await loadData();
+  };
+
+  // Retry for approved work whose payout didn't go through (e.g. the athlete's payout account wasn't ready).
+  const payAthlete = async (applicationId: string) => {
+    setPayingId(applicationId);
+    setError("");
+    const res = await fetch("/api/stripe/trigger-payout", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ applicationId }),
+    });
+    const data = await res.json() as { error?: string };
+    setPayingId(null);
+    if (!res.ok) {
+      setError(data.error || "Payout failed. Try again.");
+    } else {
+      setNotice("Athlete paid.");
+    }
     await loadData();
   };
 
@@ -1730,7 +1750,8 @@ export default function BusinessDashboard() {
                                         <button className="small-button" disabled={statusUpdatingId === app.id} onClick={() => updateApplicationStatus(app, "declined")}>Decline</button>
                                       </>
                                     )}
-                                    {(app.status === "accepted" || app.status === "submitted") && paymentByApplicationId[app.id]?.hold_status === "uncommitted" && (
+                                    {(app.status === "accepted" || app.status === "submitted" || app.status === "approved" || app.status === "completed") &&
+                                      (!paymentByApplicationId[app.id] || paymentByApplicationId[app.id]?.hold_status === "uncommitted") && (
                                       <button className="small-button" disabled={fundingId === app.id} onClick={() => fundApplication(app.id)}>
                                         {fundingId === app.id
                                           ? "Opening checkout…"
@@ -1739,6 +1760,13 @@ export default function BusinessDashboard() {
                                     )}
                                     {(app.status === "accepted" || app.status === "submitted") && paymentByApplicationId[app.id]?.hold_status === "held" && (
                                       <span style={{ fontSize: 12, color: "#047857", alignSelf: "center" }}>Payment held</span>
+                                    )}
+                                    {(app.status === "approved" || app.status === "completed") &&
+                                      (paymentByApplicationId[app.id]?.hold_status === "held" || paymentByApplicationId[app.id]?.hold_status === "released") &&
+                                      !paymentByApplicationId[app.id]?.stripe_transfer_id && (
+                                      <button className="small-button" disabled={payingId === app.id} onClick={() => payAthlete(app.id)}>
+                                        {payingId === app.id ? "Paying…" : "Pay athlete"}
+                                      </button>
                                     )}
                                     {app.status === "submitted" && (
                                       <>

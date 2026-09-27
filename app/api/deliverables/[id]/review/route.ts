@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireRole } from "@/lib/rbac";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { notifyUser } from "@/lib/notifications";
+import { ensurePaymentForApplication } from "@/lib/payments/server";
 
 type ReviewStatus = "approved" | "rejected" | "revision_requested";
 
@@ -105,9 +106,9 @@ export async function PATCH(
 
   const { data: campaign, error: campaignError } = await admin
     .from("campaigns")
-    .select("id, business_id")
+    .select("id, business_id, payout_cents")
     .eq("id", application.campaign_id)
-    .single<CampaignRow>();
+    .single<CampaignRow & { payout_cents: number | null }>();
 
   if (campaignError || !campaign) {
     return NextResponse.json({ error: "Campaign not found" }, { status: 404 });
@@ -115,6 +116,22 @@ export async function PATCH(
 
   if (auth.role === "business" && campaign.business_id !== auth.userId) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
+  // Approving work requires the athlete's pay to be funded first, so completed work is never unpaid.
+  if (status === "approved") {
+    const payment = await ensurePaymentForApplication(admin, {
+      applicationId: application.id,
+      businessId: campaign.business_id,
+      athleteId: submission.athlete_id,
+      payoutCents: Math.max(0, campaign.payout_cents ?? 0),
+    });
+    if (payment.hold_status === "uncommitted") {
+      return NextResponse.json(
+        { error: "Fund this athlete's payment before approving their work.", code: "payment_not_funded" },
+        { status: 409 }
+      );
+    }
   }
 
   const { data: updatedSubmission, error: updateError } = await admin

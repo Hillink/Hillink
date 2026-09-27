@@ -199,7 +199,8 @@ export async function POST(req: NextRequest) {
     success: true,
     nextStatus,
     needsPayout: nextStatus === "approved",
-    needsFunding: paymentInfo?.needsFunding ?? false,
+    // If the payment row failed to save, let the dashboard retry through fund-application.
+    needsFunding: paymentInfo ? paymentInfo.needsFunding : nextStatus === "accepted",
     paymentId: paymentInfo?.paymentId ?? null,
     businessChargeCents: paymentInfo?.businessChargeCents ?? null,
   });

@@ -1,6 +1,12 @@
 -- Campaign payment funding: a business pays an athlete's payout (plus Hillink's fee) up front,
 -- and the athlete is paid from those funds. Before this, payouts came out of Hillink's own balance.
--- Safe to re-run.
+-- Safe to re-run. Needs public.payments from supabase/payments.sql.
+
+do $$ begin
+  if to_regclass('public.payments') is null then
+    raise exception 'public.payments is missing: run supabase/payments.sql first';
+  end if;
+end $$;
 
 alter table public.payments
   add column if not exists platform_fee_cents integer not null default 0 check (platform_fee_cents >= 0),
@@ -18,6 +24,10 @@ do $$ begin
   if not exists (
     select 1 from pg_constraint where conname = 'payments_application_id_key'
   ) then
+    -- Stop rather than guess which money record to delete.
+    if exists (select 1 from public.payments group by application_id having count(*) > 1) then
+      raise exception 'payments has more than one row for some applications. Review them first: select application_id, count(*) from public.payments group by 1 having count(*) > 1;';
+    end if;
     alter table public.payments add constraint payments_application_id_key unique (application_id);
   end if;
 end $$;
@@ -44,3 +54,26 @@ create trigger payments_guard_transfer
 before update on public.payments
 for each row
 execute function public.payments_guard_transfer();
+
+-- Dispute outcomes. The old trigger marked the business "refunded" without moving any money.
+-- Now a business win leaves the payment disputed and the resolve API refunds it through Stripe,
+-- then marks it refunded. An athlete win still releases the payment for payout.
+do $$ begin
+  if to_regclass('public.disputes') is not null then
+    create or replace function public.settle_payment_on_dispute_resolution()
+    returns trigger
+    language plpgsql
+    set search_path = public
+    as $fn$
+    begin
+      if old.status in ('open', 'under_review') and new.status = 'resolved_athlete' then
+        update public.payments
+        set hold_status = 'released', payout_at = now(), updated_at = now()
+        where application_id = new.application_id
+          and hold_status = 'disputed';
+      end if;
+      return new;
+    end;
+    $fn$;
+  end if;
+end $$;

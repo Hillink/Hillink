@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireRole } from "@/lib/rbac";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { notifyUser } from "@/lib/notifications";
+import { getStripe } from "@/lib/stripe/config";
+import { refundPaymentIfFunded } from "@/lib/payments/server";
 
 type ResolveDisputeBody = {
   status?: string;
@@ -126,6 +128,14 @@ export async function PATCH(
     updatePayload.resolved_at = now;
   } else if (newStatus === "under_review") {
     updatePayload.resolution_notes = resolutionNotes || null;
+  }
+
+  // Business wins: refund the business through Stripe before closing the dispute.
+  if (newStatus === "resolved_business") {
+    const refund = await refundPaymentIfFunded(getStripe, adminClient, row.application_id);
+    if (refund.error) {
+      return NextResponse.json({ error: `Refund failed, dispute not resolved: ${refund.error}` }, { status: 502 });
+    }
   }
 
   // Update dispute — triggers fire to settle payment

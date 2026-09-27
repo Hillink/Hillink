@@ -36,7 +36,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Not allowed for this campaign" }, { status: 403 });
   }
 
-  if (!["accepted", "submitted", "approved"].includes(appRow.status)) {
+  if (!["accepted", "submitted", "approved", "completed"].includes(appRow.status)) {
     return NextResponse.json({ error: "Only accepted athletes can be funded." }, { status: 409 });
   }
 

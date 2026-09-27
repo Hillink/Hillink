@@ -188,15 +188,24 @@ export async function markPaymentFunded(
   if (!paymentId) return { applied: false, reason: "no payment_id" };
   if (session.payment_status !== "paid") return { applied: false, reason: `payment_status ${session.payment_status}` };
 
+  const paymentIntentId = typeof session.payment_intent === "string" ? session.payment_intent : session.payment_intent?.id ?? null;
+
   const { data: payment } = await admin.from("payments").select(PAYMENT_COLUMNS).eq("id", paymentId).maybeSingle();
-  if (!payment) return { applied: false, reason: "payment not found" };
-  const row = payment as PaymentRow;
+  const row = payment as PaymentRow | null;
+  // The athlete was removed or the campaign cancelled while checkout was open: give the money back.
+  const unwanted = !row || row.hold_status === "refunded";
+  // Paid twice for the same payment (two tabs): refund the extra charge.
+  const secondCharge = !!row && row.hold_status !== "uncommitted" && !!row.stripe_payment_intent_id && row.stripe_payment_intent_id !== paymentIntentId;
+  if ((unwanted || secondCharge) && paymentIntentId) {
+    await stripe.refunds.create({ payment_intent: paymentIntentId }, { idempotencyKey: `hillink-refund-late-${paymentIntentId}` });
+    return { applied: false, reason: unwanted ? "payment no longer needed; refunded" : "duplicate charge; refunded" };
+  }
+  if (!row) return { applied: false, reason: "payment not found" };
   if (row.hold_status !== "uncommitted") return { applied: false, reason: `already ${row.hold_status}` };
   if ((session.amount_total ?? 0) < row.business_charge_cents) {
     return { applied: false, reason: "amount paid is less than the amount due" };
   }
 
-  const paymentIntentId = typeof session.payment_intent === "string" ? session.payment_intent : session.payment_intent?.id ?? null;
   let chargeId: string | null = null;
   if (paymentIntentId) {
     const intent = await stripe.paymentIntents.retrieve(paymentIntentId);
@@ -219,6 +228,10 @@ export async function markPaymentFunded(
     .select("id");
   if (error) throw new Error(error.message);
   return { applied: (updated || []).length > 0 };
+}
+
+export function payoutTransferGroup(paymentId: string): string {
+  return `hillink-payment-${paymentId}`;
 }
 
 export type PayoutResult =
@@ -260,28 +273,36 @@ export async function payOutPayment(
     .update({ payout_claimed_at: new Date().toISOString() })
     .eq("id", payment.id)
     .is("stripe_transfer_id", null)
+    .in("hold_status", ["held", "released"])
     .or(`payout_claimed_at.is.null,payout_claimed_at.lt.${staleBefore}`)
     .select("id");
   if (claimError) return { ok: false, status: 500, error: claimError.message };
   if (!claimed || claimed.length === 0) {
-    return { ok: false, status: 409, error: "A payout for this application is already in progress." };
+    return { ok: false, status: 409, error: "A payout or refund for this application is already in progress, or it can no longer be paid." };
   }
 
   let transfer: Stripe.Transfer;
   try {
-    transfer = await stripe.transfers.create(
-      {
-        amount: payment.amount_cents,
-        currency: "usd",
-        destination: destinationAccountId,
-        // Tie the transfer to the business's charge so it's paid from those funds.
-        ...(payment.funding_source === "checkout" && payment.stripe_charge_id
-          ? { source_transaction: payment.stripe_charge_id }
-          : {}),
-        metadata: { payment_id: payment.id, campaign_application_id: payment.application_id },
-      },
-      { idempotencyKey: payoutIdempotencyKey(payment.id) }
-    );
+    // Idempotency keys expire after 24h, so also check Stripe for a transfer an earlier attempt made
+    // but failed to save. transfer_group is unique per payment.
+    const group = payoutTransferGroup(payment.id);
+    const earlier = await stripe.transfers.list({ transfer_group: group, limit: 1 });
+    transfer =
+      earlier.data[0] ??
+      (await stripe.transfers.create(
+        {
+          amount: payment.amount_cents,
+          currency: "usd",
+          destination: destinationAccountId,
+          transfer_group: group,
+          // Tie the transfer to the business's charge so it's paid from those funds.
+          ...(payment.funding_source === "checkout" && payment.stripe_charge_id
+            ? { source_transaction: payment.stripe_charge_id }
+            : {}),
+          metadata: { payment_id: payment.id, campaign_application_id: payment.application_id },
+        },
+        { idempotencyKey: payoutIdempotencyKey(payment.id) }
+      ));
   } catch (err) {
     await admin.from("payments").update({ payout_claimed_at: null }).eq("id", payment.id).is("stripe_transfer_id", null);
     const message = err instanceof Error ? err.message : "Stripe transfer failed";
@@ -305,7 +326,10 @@ export async function payOutPayment(
   return { ok: true, transferId: transfer.id, amountCents: payment.amount_cents };
 }
 
-/** Refunds a funded payment that will never be paid out (athlete removed, campaign cancelled). */
+/**
+ * Refunds a payment that will never be paid out (athlete removed or withdrew, campaign cancelled,
+ * business won a dispute). Uses the same claim as payouts, so a refund and a payout can't both happen.
+ */
 export async function refundPaymentIfFunded(
   getStripeClient: () => Stripe,
   admin: SupabaseClient,
@@ -314,12 +338,43 @@ export async function refundPaymentIfFunded(
   const payment = await getPaymentForApplication(admin, applicationId);
   if (!payment) return { refunded: false };
   if (payment.stripe_transfer_id) return { refunded: false, error: "Athlete was already paid" };
+  const now = () => new Date().toISOString();
 
   if (payment.hold_status === "uncommitted") {
-    await admin.from("payments").update({ hold_status: "refunded", refunded_at: new Date().toISOString() }).eq("id", payment.id).eq("hold_status", "uncommitted");
-    return { refunded: false };
+    const { data: closed } = await admin
+      .from("payments")
+      .update({ hold_status: "refunded", refunded_at: now(), updated_at: now() })
+      .eq("id", payment.id)
+      .eq("hold_status", "uncommitted")
+      .select("id");
+    // Close any open checkout so the business can't pay for an athlete who's gone. If it was paid
+    // in the meantime, the webhook sees the refunded row and refunds that charge.
+    if ((closed || []).length > 0 && payment.stripe_checkout_session_id) {
+      try {
+        await getStripeClient().checkout.sessions.expire(payment.stripe_checkout_session_id);
+      } catch {
+        // Already completed or expired.
+      }
+    }
+    if ((closed || []).length > 0) return { refunded: false };
+    // Funded meanwhile: fall through with the fresh row.
+    return refundPaymentIfFunded(getStripeClient, admin, applicationId);
   }
-  if (payment.hold_status !== "held") return { refunded: false };
+  if (payment.hold_status !== "held" && payment.hold_status !== "disputed") return { refunded: false };
+
+  const staleBefore = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+  const { data: claimed, error: claimError } = await admin
+    .from("payments")
+    .update({ payout_claimed_at: now() })
+    .eq("id", payment.id)
+    .is("stripe_transfer_id", null)
+    .in("hold_status", ["held", "disputed"])
+    .or(`payout_claimed_at.is.null,payout_claimed_at.lt.${staleBefore}`)
+    .select("id");
+  if (claimError) return { refunded: false, error: claimError.message };
+  if (!claimed || claimed.length === 0) {
+    return { refunded: false, error: "A payout for this athlete is in progress. Try again in a minute." };
+  }
 
   if (payment.funding_source === "checkout" && payment.stripe_payment_intent_id) {
     try {
@@ -328,13 +383,28 @@ export async function refundPaymentIfFunded(
         { idempotencyKey: `hillink-refund-${payment.id}` }
       );
     } catch (err) {
-      return { refunded: false, error: err instanceof Error ? err.message : "Refund failed" };
+      const code = (err as { code?: string }).code;
+      if (code !== "charge_already_refunded") {
+        await admin.from("payments").update({ payout_claimed_at: null }).eq("id", payment.id).is("stripe_transfer_id", null);
+        return { refunded: false, error: err instanceof Error ? err.message : "Refund failed" };
+      }
     }
   }
+  // The claim stays set, so this payment can never be paid out afterwards.
   await admin
     .from("payments")
-    .update({ hold_status: "refunded", refunded_at: new Date().toISOString(), updated_at: new Date().toISOString() })
-    .eq("id", payment.id)
-    .eq("hold_status", "held");
+    .update({ hold_status: "refunded", refunded_at: now(), updated_at: now() })
+    .eq("id", payment.id);
+  await admin.from("finance_events").insert({
+    source: "system",
+    event_type: "athlete_payment.refunded",
+    business_id: payment.business_id,
+    athlete_id: payment.athlete_id,
+    amount_cents: payment.business_charge_cents,
+    currency: "usd",
+    status: "succeeded",
+    // Ids live in details so the record survives the application being deleted.
+    details_json: { payment_id: payment.id, application_id: payment.application_id, funding_source: payment.funding_source },
+  });
   return { refunded: true };
 }
