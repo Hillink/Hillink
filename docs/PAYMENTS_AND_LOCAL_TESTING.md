@@ -73,3 +73,17 @@ The migrations folder is moved aside during `supabase start` because the repo's 
   - Unfunded work is never approved; the business gets a reminder instead.
   - Needs `CRON_SECRET` set in Vercel.
 - Migration: `supabase/migrations/20260928000300_compliance_and_automation.sql`.
+
+## Hillink Score
+
+- Every athlete gets a 0–100 score from four parts:
+  - average star rating (40%)
+  - on-time proof (25%)
+  - proof approved the first time (15%)
+  - customers brought in per campaign (20%)
+- New athletes start near the middle instead of 0 or 100, and are marked "New" until they finish 3 campaigns.
+- Athletes see their score, the four bars and one tip on their dashboard. Businesses see the score on athlete cards and can sort by "Best Hillink Score".
+- Instagram follower counts are refreshed at most weekly for linked accounts and shown as verified ("3.5k followers ✓").
+- `/api/cron/scores` recomputes scores daily through `vercel.json` (needs `CRON_SECRET`).
+- Also fixed: business ratings never updated the athlete's average rating because of row security, and athletes could edit their own average. Both are handled in the migration.
+- Migration: `supabase/migrations/20260928000400_hillink_score.sql`.

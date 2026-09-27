@@ -1,5 +1,6 @@
 {
   "crons": [
-    { "path": "/api/cron/auto-approve", "schedule": "0 15 * * *" }
+    { "path": "/api/cron/auto-approve", "schedule": "0 15 * * *" },
+    { "path": "/api/cron/scores", "schedule": "30 15 * * *" }
   ]
 }
