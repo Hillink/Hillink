@@ -203,3 +203,30 @@ test("a business can't ask the eligibility check about someone else's athlete", 
   const own = await (await signedIn(athlete.email)).rpc("athlete_join_block", { p_athlete_id: athlete.id, p_campaign_id: await makeCampaign() });
   assert.equal(own.data, "visa_not_cleared");
 });
+
+test("new campaigns auto-approve after 72 hours, and a payout that throws doesn't stop the run", { skip }, async () => {
+  const athlete = await eligibleAthlete();
+  await admin.from("athlete_payout_profiles").upsert({
+    athlete_id: athlete.id, payout_method: "stripe_connect", recipient_name: "Test", stripe_account_id: "acct_test", payout_ready: true, stripe_onboarding_complete: true,
+  });
+  const mk = async (submittedHoursAgo: number) => {
+    const { data: app } = await admin
+      .from("campaign_applications")
+      .insert({ campaign_id: await makeCampaign({ review_window_hours: undefined }), athlete_id: athlete.id, status: "submitted", submitted_at: hoursAgo(submittedHoursAgo), proof_url: "https://instagram.com/p/w" })
+      .select("id")
+      .single();
+    await admin.from("payments").insert({
+      application_id: app!.id, business_id: businessId, athlete_id: athlete.id, amount_cents: 5000, hold_status: "held", funding_source: "checkout", stripe_charge_id: "ch_x",
+    });
+    return app!.id as string;
+  };
+  const at50 = await mk(50);
+  const at80 = await mk(80);
+  const summary = await runAutoApprove(admin, () => {
+    throw new Error("Missing STRIPE_SECRET_KEY");
+  });
+  const status = async (id: string) => (await admin.from("campaign_applications").select("status").eq("id", id).single()).data!.status;
+  assert.equal(await status(at50), "submitted", "inside the 72h window");
+  assert.equal(await status(at80), "approved");
+  assert.ok(summary.errors.some((e) => e.includes(at80) && e.includes("STRIPE")), "payout failure recorded, not thrown");
+});

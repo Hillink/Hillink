@@ -89,3 +89,8 @@ create trigger campaign_applications_enforce_join_rules
 before insert on public.campaign_applications
 for each row
 execute function public.enforce_athlete_join_rules();
+
+-- Proof is auto-approved after 72 hours. The old 48h default was never shown to businesses, so campaigns
+-- still on it move to 72h too.
+alter table public.campaigns alter column review_window_hours set default 72;
+update public.campaigns set review_window_hours = 72 where review_window_hours = 48;

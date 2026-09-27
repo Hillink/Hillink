@@ -616,8 +616,7 @@ export default function AthleteDashboard({ initialXp = 0 }: AthleteDashboardProp
       if (response.status === 409 || message.toLowerCase().includes("already applied")) {
         setError("You already applied to this campaign.");
       } else {
-        const reason = typeof data?.reason === "string" ? data.reason : "";
-        setError(reason ? `${message} (${reason})` : message);
+        setError(message);
       }
       return;
     }
