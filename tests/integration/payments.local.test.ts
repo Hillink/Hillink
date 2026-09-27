@@ -344,6 +344,7 @@ test("signed-in users can't change application status directly", { skip }, async
   await admin.from("athlete_profiles").upsert({
     id: u.user!.id, first_name: "Guard", confirmed_adult: true, visa_status: "us_citizen_or_resident", school_disclosure_ack: true,
   });
+  await admin.from("athlete_instagram_connections").upsert({ athlete_id: u.user!.id, ig_user_id: `ig-${u.user!.id}`, verified: true });
   const { data: campaign } = await admin
     .from("campaigns")
     .insert({ business_id: businessId, title: "Guard", deliverables: "1 post", preferred_tier: "Bronze", payout_cents: 5000, slots: 3 })

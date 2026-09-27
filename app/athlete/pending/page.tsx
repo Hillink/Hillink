@@ -24,6 +24,17 @@ export default async function AthletePendingPage() {
     redirect("/athlete");
   }
 
+  // New signups land here before they've filled in their profile, so send them to onboarding first.
+  const { data: athleteProfile } = await supabase
+    .from("athlete_profiles")
+    .select("id")
+    .eq("id", userData.user.id)
+    .maybeSingle();
+
+  if (!athleteProfile) {
+    redirect("/onboarding/athlete");
+  }
+
   const isRejected = profile.athlete_verification_status === "rejected";
 
   return (
