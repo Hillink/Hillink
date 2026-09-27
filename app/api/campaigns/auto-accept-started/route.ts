@@ -72,7 +72,7 @@ export async function POST() {
   // Bulk accept
   const { error: updateError } = await admin
     .from("campaign_applications")
-    .update({ status: "accepted", decided_at: now })
+    .update({ status: "accepted", decided_at: now, accepted_at: now })
     .in("id", acceptIds);
 
   if (updateError) {

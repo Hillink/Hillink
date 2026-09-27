@@ -1233,7 +1233,7 @@ export default function AthleteDashboard({ initialXp = 0 }: AthleteDashboardProp
           {!hillinkScore && hillinkScoreChecked && (
             <div className="panel" style={{ marginBottom: 16 }}>
               <div className="stat-title">Hillink Score</div>
-              <p style={{ margin: "6px 0 0", fontSize: 13, color: "rgba(255,255,255,0.7)" }}>
+              <p style={{ margin: "6px 0 0", fontSize: 13, color: "var(--muted)" }}>
                 Your score shows up after tonight&apos;s update. It grows with good ratings, on-time proof, and customers you bring in.
               </p>
             </div>
