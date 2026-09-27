@@ -125,7 +125,13 @@ export default function AthleteEligibilityPage() {
               {saving ? "Saving…" : "Confirm eligibility"}
             </button>
             {error && <div className="error-message">{error}</div>}
-            {saved && <div className="success-message">Saved. You can join campaigns.</div>}
+            {saved && (
+              <div className="success-message">
+                {visa === "international_not_cleared"
+                  ? "Saved. You can join campaigns once your school clears you for paid work."
+                  : "Saved. You can join campaigns."}
+              </div>
+            )}
             {confirmedAt && !saved && <p className="muted" style={{ margin: 0, fontSize: 13 }}>Last confirmed {new Date(confirmedAt).toLocaleDateString()}.</p>}
           </form>
         )}

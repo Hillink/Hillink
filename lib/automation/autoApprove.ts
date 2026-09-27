@@ -49,9 +49,15 @@ async function payIfReady(
     .maybeSingle();
   // No payout account yet: the payment stays held and the business's "Pay athlete" button retries later.
   if (!profile?.stripe_account_id || !profile.payout_ready) return;
-  const result = await payOutPayment(getStripeClient(), admin, payment, profile.stripe_account_id);
-  if (result.ok && !result.alreadyPaid) summary.paid++;
-  if (!result.ok && result.status !== 409) summary.errors.push(`payout ${applicationId}: ${result.error}`);
+  // A failed payout (Stripe down, missing key) is logged and left for the "Pay athlete" retry, so it
+  // can't stop the rest of the run.
+  try {
+    const result = await payOutPayment(getStripeClient(), admin, payment, profile.stripe_account_id);
+    if (result.ok && !result.alreadyPaid) summary.paid++;
+    if (!result.ok && result.status !== 409) summary.errors.push(`payout ${applicationId}: ${result.error}`);
+  } catch (error) {
+    summary.errors.push(`payout ${applicationId}: ${error instanceof Error ? error.message : String(error)}`);
+  }
 }
 
 type FundedApp = {
