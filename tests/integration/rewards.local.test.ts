@@ -1,5 +1,5 @@
 // Rewards road: points ledger, badges and the store, against a local Supabase.
-import { test, before } from "node:test";
+import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { CUSTOMER_POINTS_CAP_PER_CAMPAIGN, claimReward, seasonBalance, syncAthleteRewards } from "../../lib/rewards/server.ts";
@@ -34,6 +34,8 @@ async function giveXp(athleteId: string, xp: number) {
   if (error) throw error;
 }
 
+const madeItems: string[] = [];
+
 async function makeItem(cost: number, stock: number | null = null) {
   const { data, error } = await admin
     .from("reward_items")
@@ -41,8 +43,14 @@ async function makeItem(cost: number, stock: number | null = null) {
     .select("id")
     .single();
   if (error) throw error;
+  madeItems.push(data.id);
   return data.id as string;
 }
+
+// Switch test items off so they never show in the store of a shared database.
+after(async () => {
+  if (!skip && madeItems.length) await admin.from("reward_items").update({ active: false }).in("id", madeItems);
+});
 
 before(async () => {
   if (skip) return;
