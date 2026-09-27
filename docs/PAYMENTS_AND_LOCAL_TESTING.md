@@ -87,3 +87,36 @@ The migrations folder is moved aside during `supabase start` because the repo's 
 - `/api/cron/scores` recomputes scores daily through `vercel.json` (needs `CRON_SECRET`).
 - Also fixed: business ratings never updated the athlete's average rating because of row security, and athletes could edit their own average. Both are handled in the migration.
 - Migration: `supabase/migrations/20260928000400_hillink_score.sql`.
+
+## Rewards road
+
+- Athletes open it from their dashboard (`/athlete/rewards`).
+- **Seasons** follow the semester: spring (Jan–May), summer (Jun–Jul), fall (Aug–Dec). Points reset each season. Tier, XP and Hillink Score carry over.
+- **Levels 1–50** come from XP earned this season. Level 2 takes 60 XP, and each later level takes 2 XP more. About 8 campaigns in a semester reaches level 20.
+- **Points** (starting values in `lib/rewards/road.ts`):
+
+  | What | Points |
+  |---|---|
+  | Every level | 10 |
+  | Every 5th level, extra | 25 |
+  | Pro track, every level, extra | 15 |
+  | Pro track, every 5th level, extra | 50 |
+  | Each customer who uses the athlete's code | 5 |
+  | Each badge, first time only | 20 |
+
+- **Pro track**: a Hillink Score of 90+ after 3 campaigns. Athletes never pay for it.
+- **Badges**:
+  - First Campaign
+  - Regular (5 campaigns)
+  - 10 Customers Driven
+  - 5-Star Streak
+  - Always On Time
+  - Verified Reach
+  - Hillink Pro
+- **Store**:
+  - `reward_items` starts with stickers, a T-shirt, a partner gift card and a hoodie.
+  - All items are **off** (`active = false`) until Hillink sets prices. To turn one on, set `active` and `points_cost` in Supabase.
+  - A redemption records a `reward_claims` row with status `requested`. Hillink ships the item and sets the status to `sent`. There's no admin screen for this yet.
+- Points live in `athlete_points_ledger`. Only the server writes it. Each grant has a unique `ref`, so syncing again never pays twice.
+- Two taps can't spend the same points twice: claims lock per athlete.
+- Migration: `supabase/migrations/20260928000500_rewards_road.sql`.
