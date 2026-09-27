@@ -2,7 +2,7 @@
 import { test, before } from "node:test";
 import assert from "node:assert/strict";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import { claimReward, seasonBalance, syncAthleteRewards } from "../../lib/rewards/server.ts";
+import { CUSTOMER_POINTS_CAP_PER_CAMPAIGN, claimReward, seasonBalance, syncAthleteRewards } from "../../lib/rewards/server.ts";
 import { POINTS, seasonFor } from "../../lib/rewards/road.ts";
 
 const url = process.env.LOCAL_SUPABASE_URL;
@@ -134,4 +134,99 @@ test("badges are awarded once and count toward points", { skip }, async () => {
   assert.equal(s.pro, true);
   assert.equal(s.points, earned.length * POINTS.badge);
   assert.equal((await syncAthleteRewards(admin, a.id)).points, s.points);
+});
+
+const LEVEL_5_XP = 60 + 62 + 64 + 66;
+
+test("an XP challenge can only be awarded once, even from parallel requests", { skip }, async () => {
+  const a = await makeUser("athlete");
+  const row = { athlete_id: a.id, action: "weekly_activity_streak", xp_delta: 75, details_json: { source: "xp_challenge", challenge_id: "campaign-starter" } };
+  const results = await Promise.all([admin.from("athlete_xp_events").insert(row), admin.from("athlete_xp_events").insert(row)]);
+  assert.equal(results.filter((r) => r.error === null).length, 1);
+  assert.equal(results.find((r) => r.error)?.error?.code, "23505");
+});
+
+test("points from XP that goes away are taken back, and paid again when re-earned", { skip }, async () => {
+  const a = await makeUser("athlete");
+  const { data: ev } = await admin.from("athlete_xp_events").insert({ athlete_id: a.id, action: "complete_campaign", xp_delta: LEVEL_5_XP }).select("id").single();
+  assert.equal((await syncAthleteRewards(admin, a.id)).points, 4 * POINTS.perLevel + POINTS.milestone);
+  await admin.from("athlete_xp_events").delete().eq("id", ev!.id);
+  const lost = await syncAthleteRewards(admin, a.id);
+  assert.equal(lost.progress.level, 1);
+  assert.equal(lost.points, 0);
+  await giveXp(a.id, LEVEL_5_XP);
+  assert.equal((await syncAthleteRewards(admin, a.id)).points, 4 * POINTS.perLevel + POINTS.milestone);
+  assert.equal((await syncAthleteRewards(admin, a.id)).points, 4 * POINTS.perLevel + POINTS.milestone, "stable once in line");
+});
+
+test("admin-set XP doesn't move the road", { skip }, async () => {
+  const a = await makeUser("athlete");
+  await admin.from("athlete_xp_events").insert({ athlete_id: a.id, action: "complete_campaign", xp_delta: 5000, details_json: { source: "admin_tier_set" } });
+  const s = await syncAthleteRewards(admin, a.id);
+  assert.equal(s.progress.level, 1);
+  assert.equal(s.points, 0);
+});
+
+test("customer points are capped per campaign", { skip }, async () => {
+  const a = await makeUser("athlete");
+  const { data: c } = await admin
+    .from("campaigns")
+    .insert({ business_id: business.id, title: "Cap", deliverables: "1 post", preferred_tier: "Bronze", payout_cents: 3000, slots: 2 })
+    .select("id")
+    .single();
+  const { data: app } = await admin.from("campaign_applications").insert({ campaign_id: c!.id, athlete_id: a.id, status: "accepted" }).select("id").single();
+  const code = `CP${Date.now().toString(36).slice(-6).toUpperCase()}-${Math.random().toString(36).slice(2, 6).toUpperCase().replace(/[^A-Z0-9]/g, "Z").padEnd(4, "Z")}`;
+  const { data: promo, error } = await admin
+    .from("athlete_promo_codes")
+    .insert({ code, application_id: app!.id, campaign_id: c!.id, athlete_id: a.id, business_id: business.id })
+    .select("id")
+    .single();
+  assert.equal(error, null, error?.message);
+  const ins = await admin.from("redemptions").insert(
+    Array.from({ length: CUSTOMER_POINTS_CAP_PER_CAMPAIGN + 5 }, () => ({ promo_code_id: promo!.id, application_id: app!.id, campaign_id: c!.id, athlete_id: a.id, business_id: business.id, source: "business" }))
+  );
+  assert.equal(ins.error, null, ins.error?.message);
+  const s = await syncAthleteRewards(admin, a.id);
+  const { data: badgeRows } = await admin.from("athlete_points_ledger").select("delta").eq("athlete_id", a.id).like("ref", "badge:%");
+  const badgePoints = (badgeRows || []).reduce((t, r) => t + r.delta, 0);
+  assert.equal(s.points - badgePoints, CUSTOMER_POINTS_CAP_PER_CAMPAIGN * POINTS.perCustomer);
+});
+
+test("Pro track pays only for levels reached while Pro", { skip }, async () => {
+  const a = await makeUser("athlete");
+  await giveXp(a.id, LEVEL_5_XP);
+  await syncAthleteRewards(admin, a.id);
+  await admin.from("athlete_scores").upsert({ athlete_id: a.id, score: 93, rating_part: 90, on_time_part: 95, first_try_part: 90, customers_part: 90, completed_campaigns: 5, provisional: false });
+  const nowPro = await syncAthleteRewards(admin, a.id);
+  assert.equal(nowPro.pro, true);
+  const proRefs = async () =>
+    ((await admin.from("athlete_points_ledger").select("ref").eq("athlete_id", a.id).or("ref.like.pro:*,ref.like.promilestone:*")).data || []).map((r) => r.ref.split(":").pop());
+  assert.deepEqual(await proRefs(), [], "levels 2-5 were reached before Pro");
+  await giveXp(a.id, 68); // level 6
+  await syncAthleteRewards(admin, a.id);
+  assert.deepEqual(await proRefs(), ["6"]);
+  // Losing Pro later keeps what was earned while Pro.
+  await admin.from("athlete_scores").update({ score: 70 }).eq("athlete_id", a.id);
+  await syncAthleteRewards(admin, a.id);
+  const { data: rows } = await admin.from("athlete_points_ledger").select("delta").eq("athlete_id", a.id).eq("base_ref", `pro:${seasonFor(new Date()).key}:6`);
+  assert.equal((rows || []).reduce((t, r) => t + r.delta, 0), POINTS.proPerLevel);
+});
+
+test("cancelling a reward request refunds the points and the stock, once", { skip }, async () => {
+  const a = await makeUser("athlete");
+  await giveXp(a.id, LEVEL_5_XP);
+  const before = (await syncAthleteRewards(admin, a.id)).points;
+  const item = await makeItem(40, 3);
+  const claimed = await claimReward(admin, a.id, item);
+  assert.equal(claimed.ok, true);
+  const id = claimed.ok ? claimed.claimId : "";
+  const first = await admin.rpc("cancel_reward_claim", { p_claim_id: id });
+  assert.equal(first.data, true);
+  const second = await admin.rpc("cancel_reward_claim", { p_claim_id: id });
+  assert.equal(second.data, false);
+  assert.equal(await seasonBalance(admin, a.id, seasonFor(new Date()).key), before);
+  const { data: stock } = await admin.from("reward_items").select("stock").eq("id", item).single();
+  assert.equal(stock!.stock, 3);
+  const c = await signedIn(a.email);
+  assert.notEqual((await c.rpc("cancel_reward_claim", { p_claim_id: id })).error, null, "cancel is server-only");
 });

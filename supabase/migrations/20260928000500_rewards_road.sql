@@ -112,3 +112,117 @@ select * from (values
   ('Hillink hoodie', 'Official Hillink hoodie.', 1500, null::integer, false, 40)
 ) as v(name, description, points_cost, stock, active, sort_order)
 where not exists (select 1 from public.reward_items);
+
+-- Each XP challenge pays once. Parallel requests used to be able to award the same challenge many times,
+-- and XP now turns into points. Skipped (with a warning) if production already has duplicates; the rewards
+-- road also counts each challenge only once either way.
+do $$ begin
+  if exists (
+    select 1 from public.athlete_xp_events
+    where details_json->>'source' = 'xp_challenge'
+    group by athlete_id, details_json->>'challenge_id'
+    having count(*) > 1
+  ) then
+    raise warning 'duplicate XP challenge awards exist; clean them up, then create athlete_xp_events_challenge_once';
+  else
+    create unique index if not exists athlete_xp_events_challenge_once
+      on public.athlete_xp_events (athlete_id, (details_json->>'challenge_id'))
+      where details_json->>'source' = 'xp_challenge';
+  end if;
+end $$;
+
+-- Which grant a ledger row belongs to, so grants can be reversed and re-earned.
+alter table public.athlete_points_ledger add column if not exists base_ref text;
+create index if not exists athlete_points_ledger_base_ref_idx on public.athlete_points_ledger (athlete_id, base_ref);
+update public.athlete_points_ledger set base_ref = ref where base_ref is null and ref not like 'spend:%' and ref not like 'refund:%';
+
+-- Brings an athlete's grants in line with what they've earned: pays missing grants, re-pays reversed ones
+-- that are earned again, and reverses grants in the given season whose source went away (a cancelled campaign's
+-- XP or a deleted customer). Badges and spending are never reversed here. Same lock as claims.
+create or replace function public.sync_reward_points(
+  p_athlete_id uuid,
+  p_season text,
+  p_desired jsonb,
+  p_revocable_prefixes text[]
+)
+returns integer
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  r record;
+  v_net integer;
+  v_n integer;
+  v_balance integer;
+begin
+  perform pg_advisory_xact_lock(hashtextextended('reward-claim:' || p_athlete_id::text, 0));
+
+  for r in
+    select d->>'ref' as ref, (d->>'delta')::integer as delta, d->>'reason' as reason
+    from jsonb_array_elements(coalesce(p_desired, '[]'::jsonb)) d
+  loop
+    select coalesce(sum(delta), 0), count(*) into v_net, v_n
+    from public.athlete_points_ledger
+    where athlete_id = p_athlete_id and base_ref = r.ref;
+    if v_n = 0 then
+      insert into public.athlete_points_ledger (athlete_id, season, delta, reason, ref, base_ref)
+      values (p_athlete_id, p_season, r.delta, r.reason, r.ref, r.ref)
+      on conflict (athlete_id, ref) do nothing;
+    elsif v_net <= 0 then
+      insert into public.athlete_points_ledger (athlete_id, season, delta, reason, ref, base_ref)
+      values (p_athlete_id, p_season, r.delta, r.reason, 'regrant:' || r.ref || ':' || v_n, r.ref);
+    end if;
+  end loop;
+
+  for r in
+    select l.base_ref, sum(l.delta)::integer as net, count(*)::integer as n
+    from public.athlete_points_ledger l
+    where l.athlete_id = p_athlete_id
+      and l.season = p_season
+      and l.base_ref is not null
+      and split_part(l.base_ref, ':', 1) = any(p_revocable_prefixes)
+    group by l.base_ref
+    having sum(l.delta) > 0
+  loop
+    if not exists (select 1 from jsonb_array_elements(coalesce(p_desired, '[]'::jsonb)) d where d->>'ref' = r.base_ref) then
+      insert into public.athlete_points_ledger (athlete_id, season, delta, reason, ref, base_ref)
+      values (p_athlete_id, p_season, -r.net, 'Reversed: no longer earned', 'revoke:' || r.base_ref || ':' || r.n, r.base_ref);
+    end if;
+  end loop;
+
+  select coalesce(sum(delta), 0)::integer into v_balance
+  from public.athlete_points_ledger
+  where athlete_id = p_athlete_id and season = p_season;
+  return v_balance;
+end;
+$$;
+
+revoke all on function public.sync_reward_points(uuid, text, jsonb, text[]) from public, anon, authenticated;
+grant execute on function public.sync_reward_points(uuid, text, jsonb, text[]) to service_role;
+
+-- Cancelling a requested reward gives the points back and returns the item to stock.
+create or replace function public.cancel_reward_claim(p_claim_id uuid)
+returns boolean
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_claim public.reward_claims%rowtype;
+begin
+  select * into v_claim from public.reward_claims where id = p_claim_id for update;
+  if not found or v_claim.status <> 'requested' then
+    return false;
+  end if;
+  perform pg_advisory_xact_lock(hashtextextended('reward-claim:' || v_claim.athlete_id::text, 0));
+  update public.reward_claims set status = 'cancelled' where id = p_claim_id;
+  insert into public.athlete_points_ledger (athlete_id, season, delta, reason, ref)
+  values (v_claim.athlete_id, v_claim.season, v_claim.points_cost, 'Refund: reward cancelled', 'refund:' || p_claim_id::text);
+  update public.reward_items set stock = stock + 1 where id = v_claim.item_id and stock is not null;
+  return true;
+end;
+$$;
+
+revoke all on function public.cancel_reward_claim(uuid) from public, anon, authenticated;
+grant execute on function public.cancel_reward_claim(uuid) to service_role;

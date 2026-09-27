@@ -15,14 +15,16 @@ export async function POST(req: NextRequest) {
   if (!UUID.test(itemId)) return NextResponse.json({ error: "Pick a reward." }, { status: 400 });
 
   const admin = createAdminClient();
+  // One clock for the sync and the claim, so a claim at the season boundary spends from the season it counted.
+  const now = new Date();
   try {
     // Make sure everything earned so far is counted before checking the balance.
-    await syncAthleteRewards(admin, access.userId);
+    await syncAthleteRewards(admin, access.userId, now);
   } catch (error) {
     console.error("rewards sync before claim failed", error);
     return NextResponse.json({ error: "Couldn't load your points." }, { status: 500 });
   }
-  const result = await claimReward(admin, access.userId, itemId);
+  const result = await claimReward(admin, access.userId, itemId, now);
   if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.status });
   return NextResponse.json({ claimId: result.claimId, points: result.balance });
 }
