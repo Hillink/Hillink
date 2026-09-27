@@ -53,6 +53,29 @@ create policy "Businesses can rate athletes"
 
 -- Everything the score needs, aggregated for one page of athletes (keyset paging by id).
 drop function if exists public.athlete_score_inputs();
+-- Some databases don't have deliverable_submissions (the deliverables flow is optional). There, first-try
+-- and proof timing come from the application alone. Re-run this block after adding that table.
+do $score$
+declare
+  subs_sql text;
+begin
+  if to_regclass('public.deliverable_submissions') is not null then
+    subs_sql := $subs$
+    select s.application_id, max(s.version) as max_version,
+           bool_or(s.status in ('rejected', 'revision_requested')) as had_redo,
+           min(s.submitted_at) as first_submitted_at
+    from public.deliverable_submissions s
+    where s.application_id in (select id from done)
+    group by s.application_id
+    $subs$;
+  else
+    subs_sql := $subs$
+    select null::uuid as application_id, null::integer as max_version, null::boolean as had_redo,
+           null::timestamptz as first_submitted_at
+    where false
+    $subs$;
+  end if;
+  execute format($fn$
 create or replace function public.athlete_score_inputs(p_after uuid default null, p_limit integer default 500)
 returns table (
   athlete_id uuid,
@@ -70,7 +93,7 @@ language sql
 stable
 security definer
 set search_path = public
-as $$
+as $body$
   with page as (
     select ap.id
     from public.athlete_profiles ap
@@ -87,12 +110,7 @@ as $$
       and a.athlete_id in (select id from page)
   ),
   subs as (
-    select s.application_id, max(s.version) as max_version,
-           bool_or(s.status in ('rejected', 'revision_requested')) as had_redo,
-           min(s.submitted_at) as first_submitted_at
-    from public.deliverable_submissions s
-    where s.application_id in (select id from done)
-    group by s.application_id
+%s
   ),
   reds as (
     select r.application_id, count(*) as n
@@ -140,7 +158,10 @@ as $$
   left join work w on w.athlete_id = p.id
   left join ratings ra on ra.athlete_id = p.id
   order by p.id;
-$$;
+$body$
+  $fn$, subs_sql);
+end
+$score$;
 
 revoke all on function public.athlete_score_inputs(uuid, integer) from public, anon, authenticated;
 grant execute on function public.athlete_score_inputs(uuid, integer) to service_role;

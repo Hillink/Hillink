@@ -143,6 +143,8 @@ async function approveDeliverables(admin: SupabaseClient, getStripeClient: () =>
       .lte("submitted_at", cutoff)
       .order("submitted_at", { ascending: true })
       .range(page * PAGE, page * PAGE + PAGE - 1);
+    // Databases without the deliverables tables have nothing to approve here.
+    if (error && (error.code === "42P01" || error.code === "PGRST205")) return;
     if (error) {
       summary.errors.push(error.message);
       break;
