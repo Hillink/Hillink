@@ -28,7 +28,6 @@ export default function BusinessOnboardingPage() {
     localRadius: "",
     heardAbout: "",
     friendReferralCode: "",
-    subscriptionTier: "",
     description: "",
   });
 
@@ -41,6 +40,35 @@ export default function BusinessOnboardingPage() {
         return;
       }
       setUserId(data.user.id);
+
+      // Re-applying after a rejection: start from what they saved last time.
+      const { data: existing } = await supabase
+        .from("business_profiles")
+        .select("*")
+        .eq("id", data.user.id)
+        .maybeSingle();
+      if (existing) {
+        const text = (value: unknown) => (typeof value === "string" ? value : "");
+        const savedKey = text(existing.category_key);
+        setForm((prev) => ({
+          ...prev,
+          businessName: text(existing.business_name),
+          contactFirstName: text(existing.contact_first_name),
+          contactLastName: text(existing.contact_last_name),
+          categoryKey: categoryByKey(savedKey) ? savedKey : "",
+          category: categoryByKey(savedKey)?.label || "",
+          city: text(existing.city),
+          state: text(existing.state),
+          website: text(existing.website),
+          instagram: text(existing.instagram),
+          campaignInterests: text(existing.campaign_interests),
+          budget: text(existing.budget),
+          preferredTiers: text(existing.preferred_tiers),
+          localRadius: text(existing.local_radius),
+          heardAbout: text(existing.heard_about),
+          description: text(existing.description),
+        }));
+      }
       setLoading(false);
     };
 
@@ -130,7 +158,7 @@ export default function BusinessOnboardingPage() {
       business_name: form.businessName,
       contact_first_name: form.contactFirstName,
       contact_last_name: form.contactLastName,
-      business_category: chosenCategory.label,
+      category: chosenCategory.label,
       category_key: chosenCategory.key,
       city: form.city,
       state: form.state,
@@ -139,12 +167,11 @@ export default function BusinessOnboardingPage() {
       website: form.website,
       instagram: form.instagram,
       campaign_interests: form.campaignInterests,
-      budget_range: form.budget,
-      preferred_athlete_tiers: form.preferredTiers,
+      budget: form.budget,
+      preferred_tiers: form.preferredTiers,
       local_radius: form.localRadius,
       heard_about: form.heardAbout,
-      subscription_tier: form.subscriptionTier,
-      company_description: form.description,
+      description: form.description,
     };
 
     let { error } = await supabase.from("business_profiles").upsert(payload);
@@ -355,14 +382,6 @@ export default function BusinessOnboardingPage() {
               value={form.friendReferralCode}
               onChange={(e) => setForm({ ...form, friendReferralCode: e.target.value.toUpperCase() })}
               placeholder="HL-ABCD-1234"
-            />
-          </label>
-
-          <label>
-            Subscription tier
-            <input
-              value={form.subscriptionTier}
-              onChange={(e) => setForm({ ...form, subscriptionTier: e.target.value })}
             />
           </label>
 

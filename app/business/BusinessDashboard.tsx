@@ -577,49 +577,42 @@ export default function BusinessDashboard() {
 
     if (!form.title.trim()) {
       const message = "Campaign title is required.";
-      setError(message);
       setCampaignError(message);
       return;
     }
 
     if (!form.shortDescription.trim()) {
       const message = "Short description is required.";
-      setError(message);
       setCampaignError(message);
       return;
     }
 
     if (!form.objective.trim()) {
       const message = "Campaign objective is required.";
-      setError(message);
       setCampaignError(message);
       return;
     }
 
     if (!form.directions.trim()) {
       const message = "Directions for athletes are required.";
-      setError(message);
       setCampaignError(message);
       return;
     }
 
     if (!form.termsAccepted || !form.prohibitedAcknowledged) {
       const message = "You must acknowledge campaign terms and prohibited categories before publishing.";
-      setError(message);
       setCampaignError(message);
       return;
     }
 
     if (!form.eligibleAthleteTiers.length) {
       const message = "Select at least one eligible athlete tier.";
-      setError(message);
       setCampaignError(message);
       return;
     }
 
     if (!billingProfile || !billingProfile.billing_ready || billingProfile.subscription_status !== "active") {
       const message = "Complete billing setup and activate a subscription tier in Settings before posting campaigns.";
-      setError(message);
       setCampaignError(message);
       return;
     }
@@ -627,21 +620,18 @@ export default function BusinessDashboard() {
     const activeOpenCampaigns = campaigns.filter((c) => c.status === "active" || c.status === "open").length;
     if (activeOpenCampaigns >= billingProfile.max_open_campaigns) {
       const message = `Your plan allows up to ${billingProfile.max_open_campaigns} open campaign(s).`;
-      setError(message);
       setCampaignError(message);
       return;
     }
 
     if (form.slots > billingProfile.max_slots_per_campaign) {
       const message = `Your plan allows up to ${billingProfile.max_slots_per_campaign} athlete slot(s) per campaign.`;
-      setError(message);
       setCampaignError(message);
       return;
     }
 
     if (form.tier !== "Any" && !canAccessTier(billingProfile.max_athlete_tier, form.tier as AthleteTier)) {
       const message = `Your plan supports up to ${billingProfile.max_athlete_tier} athletes.`;
-      setError(message);
       setCampaignError(message);
       return;
     }
@@ -649,14 +639,12 @@ export default function BusinessDashboard() {
     const effectiveAccessTier = (billingProfile.access_tier_override || billingProfile.subscription_tier) as BusinessAccessTier;
     if (!tierCampaignTemplates[effectiveAccessTier].includes(form.template)) {
       const message = "Your selected campaign template is not available on your current plan tier.";
-      setError(message);
       setCampaignError(message);
       return;
     }
 
     if (!TEMPLATE_CLAIM_METHOD_OPTIONS[form.template].includes(form.claimMethod)) {
       const message = "This template does not allow the selected claim method.";
-      setError(message);
       setCampaignError(message);
       return;
     }
@@ -757,7 +745,6 @@ export default function BusinessDashboard() {
     setCreating(false);
 
     if (insertError) {
-      setError(insertError.message);
       setCampaignError(insertError.message);
       return;
     }
@@ -2268,7 +2255,6 @@ export default function BusinessDashboard() {
               </div>
 
               <div className="modal-body" style={{ overflowY: "auto" }}>
-                {campaignError && <div className="error-message" style={{ marginBottom: 12 }}>{campaignError}</div>}
 
                 <div style={{ border: "1px solid #e5e7eb", borderRadius: 10, padding: 12, marginBottom: 14, background: "#fafafa" }}>
                   <div style={{ fontWeight: 700, marginBottom: 8 }}>Saved Templates</div>
@@ -2593,8 +2579,8 @@ export default function BusinessDashboard() {
                           </div>
                         </div>
                         <div className="timeline-fixed-note">
-                          <span>48 hours — fixed</span>
-                          <span className="timeline-auto-note">After 48h with no action, post is auto-approved and payout is released</span>
+                          <span>{DEFAULT_REVIEW_WINDOW_HOURS} hours — fixed</span>
+                          <span className="timeline-auto-note">After {DEFAULT_REVIEW_WINDOW_HOURS}h with no action, post is auto-approved and payout is released</span>
                         </div>
                       </div>
                     </div>
@@ -2641,7 +2627,10 @@ export default function BusinessDashboard() {
                 </div>
               </div>
 
-              <div className="modal-footer">
+              <div className="modal-footer" style={{ flexWrap: "wrap" }}>
+                {campaignError && (
+                  <div className="error-message" role="alert" style={{ flexBasis: "100%", margin: 0 }}>{campaignError}</div>
+                )}
                 <button className="secondary-button" onClick={() => setShowModal(false)}>Cancel</button>
                 <button className="cta-button" disabled={creating} onClick={submitCampaign}>
                   {creating ? "Creating..." : "Create Campaign"}
