@@ -13,6 +13,7 @@ import { formatMilesLabel, locationKey, milesBetween, normalizeLocationPart, sto
 import NotificationBell from "@/components/NotificationBell";
 import type { LeaderboardEntry } from "@/app/api/athlete/leaderboard/route";
 import { TEMPLATE_LABELS, type CampaignTemplateKey, type ClaimMethod, type LocationType } from "@/lib/campaignTemplates";
+import { improvementTip, scoreLabel } from "@/lib/score/hillinkScore";
 
 const CAMPAIGN_TYPE_LABELS: Record<string, string> = {
   basic_post: "Instagram Post",
@@ -229,6 +230,21 @@ export default function AthleteDashboard({ initialXp = 0 }: AthleteDashboardProp
   const [promoByAppId, setPromoByAppId] = useState<Record<string, { code: string; shareUrl: string }>>({});
   const [promoLoadingId, setPromoLoadingId] = useState<string | null>(null);
   const [needsEligibility, setNeedsEligibility] = useState(false);
+  const [hillinkScore, setHillinkScore] = useState<{ score: number; provisional: boolean; rating_part: number; on_time_part: number; first_try_part: number; customers_part: number } | null>(null);
+  const [hillinkScoreChecked, setHillinkScoreChecked] = useState(false);
+
+  useEffect(() => {
+    supabase.auth.getUser().then(async ({ data }) => {
+      if (!data.user) return;
+      const { data: row } = await supabase
+        .from("athlete_scores")
+        .select("score, provisional, rating_part, on_time_part, first_try_part, customers_part")
+        .eq("athlete_id", data.user.id)
+        .maybeSingle();
+      if (row) setHillinkScore(row);
+      setHillinkScoreChecked(true);
+    });
+  }, []);
 
   useEffect(() => {
     fetch("/api/athlete/compliance")
@@ -1213,6 +1229,50 @@ export default function AthleteDashboard({ initialXp = 0 }: AthleteDashboardProp
               <div style={{ fontSize: 11, color: "rgba(255,255,255,0.5)", marginTop: 2 }}>XP</div>
             </div>
           </div>
+
+          {!hillinkScore && hillinkScoreChecked && (
+            <div className="panel" style={{ marginBottom: 16 }}>
+              <div className="stat-title">Hillink Score</div>
+              <p style={{ margin: "6px 0 0", fontSize: 13, color: "var(--muted)" }}>
+                Your score shows up after tonight&apos;s update. It grows with good ratings, on-time proof, and customers you bring in.
+              </p>
+            </div>
+          )}
+
+          {hillinkScore && (
+            <div className="panel" style={{ marginBottom: 16 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12, flexWrap: "wrap" }}>
+                <div>
+                  <div className="stat-title">Hillink Score</div>
+                  <div style={{ fontSize: 34, fontWeight: 900 }}>
+                    {hillinkScore.score}
+                    <span className="muted" style={{ fontSize: 15, fontWeight: 700, marginLeft: 8 }}>
+                      {hillinkScore.provisional ? "New: finish 3 campaigns to lock it in" : scoreLabel(hillinkScore.score)}
+                    </span>
+                  </div>
+                </div>
+                <div className="muted" style={{ fontSize: 13, textAlign: "right" }}>Businesses see this when choosing athletes.</div>
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: 8, marginTop: 10 }}>
+                {([
+                  ["Ratings", hillinkScore.rating_part, "40%"],
+                  ["On time", hillinkScore.on_time_part, "25%"],
+                  ["First-try proof", hillinkScore.first_try_part, "15%"],
+                  ["Customers", hillinkScore.customers_part, "20%"],
+                ] as [string, number, string][]).map(([label, value, weight]) => (
+                  <div key={label}>
+                    <div style={{ fontSize: 12, color: "var(--muted)", fontWeight: 700 }}>{label} · {weight}</div>
+                    <div style={{ height: 6, background: "var(--track)", borderRadius: 99, marginTop: 4 }}>
+                      <div style={{ width: `${value}%`, height: 6, background: "var(--red)", borderRadius: 99 }} />
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <p className="muted" style={{ margin: "10px 0 0", fontSize: 13 }}>
+                {improvementTip({ rating: hillinkScore.rating_part, onTime: hillinkScore.on_time_part, firstTry: hillinkScore.first_try_part, customers: hillinkScore.customers_part })}
+              </p>
+            </div>
+          )}
 
           {/* Details grid */}
           <div className="stats-grid four" style={{ marginBottom: 16 }}>

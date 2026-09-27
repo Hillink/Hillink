@@ -137,6 +137,10 @@ export async function POST(req: NextRequest) {
   if (nextStatus === "approved" || nextStatus === "rejected") {
     updatePayload.reviewed_at = new Date().toISOString();
   }
+  // The Hillink Score measures on-time proof from here.
+  if (nextStatus === "accepted") {
+    updatePayload.accepted_at = updatePayload.decided_at;
+  }
 
   // Only update if nobody changed the status in the meantime (e.g. a double click).
   const { data: updatedRows, error: updateError } = await admin

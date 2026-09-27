@@ -23,6 +23,13 @@ import {
   type LocationType,
 } from "@/lib/campaignTemplates";
 
+function formatFollowers(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1).replace(/\.0$/, "")}M`;
+  if (n >= 10_000) return `${Math.round(n / 1000)}k`;
+  if (n >= 1_000) return `${(n / 1000).toFixed(1).replace(/\.0$/, "")}k`;
+  return String(n);
+}
+
 type Campaign = {
   id: string;
   title: string;
@@ -265,6 +272,7 @@ export default function BusinessDashboard() {
   const [templateName, setTemplateName] = useState("");
   const [selectedTemplateId, setSelectedTemplateId] = useState("");
   const [allAthletesXp, setAllAthletesXp] = useState<Record<string, number>>({});
+  const [athleteScoreById, setAthleteScoreById] = useState<Record<string, { score: number; provisional: boolean; instagram_followers: number | null }>>({});
   const [allAthletesLoaded, setAllAthletesLoaded] = useState(false);
   const [loadingAthletes, setLoadingAthletes] = useState(false);
   const [afSearch, setAfSearch] = useState("");
@@ -1016,6 +1024,22 @@ export default function BusinessDashboard() {
     }
 
     const profiles = profileRows as AthleteProfile[];
+    // Also load the top-scored athletes, so "Best Hillink Score" isn't limited to the newest 100 sign-ups.
+    const { data: topScoreRows } = await supabase
+      .from("athlete_scores")
+      .select("athlete_id")
+      .eq("provisional", false)
+      .order("score", { ascending: false })
+      .limit(100);
+    const loadedIds = new Set(profiles.map((p) => p.id));
+    const missingTopIds = ((topScoreRows || []) as { athlete_id: string }[]).map((r) => r.athlete_id).filter((id) => !loadedIds.has(id));
+    if (missingTopIds.length) {
+      const { data: topProfiles } = await supabase
+        .from("athlete_profiles")
+        .select("id, first_name, last_name, school, sport, city, state, latitude, longitude, instagram, deal_types, bio, minimum_payout, preferred_company_type, average_rating, total_ratings, profile_photo_url")
+        .in("id", missingTopIds);
+      profiles.push(...((topProfiles || []) as AthleteProfile[]));
+    }
     const athleteIds = profiles.map((p) => p.id);
     const xpMap: Record<string, number> = {};
 
@@ -1029,6 +1053,17 @@ export default function BusinessDashboard() {
       for (const row of (xpRows || []) as { athlete_id: string; xp_delta: number }[]) {
         xpMap[row.athlete_id] = (xpMap[row.athlete_id] || 0) + row.xp_delta;
       }
+
+      // Hillink Score and verified Instagram reach (empty until the score migration and job have run).
+      const { data: scoreRows } = await supabase
+        .from("athlete_scores")
+        .select("athlete_id, score, provisional, instagram_followers")
+        .in("athlete_id", athleteIds);
+      const scores: Record<string, { score: number; provisional: boolean; instagram_followers: number | null }> = {};
+      for (const row of (scoreRows || []) as { athlete_id: string; score: number; provisional: boolean; instagram_followers: number | null }[]) {
+        scores[row.athlete_id] = row;
+      }
+      setAthleteScoreById(scores);
     }
 
     setAllAthletes(profiles);
@@ -1328,6 +1363,16 @@ export default function BusinessDashboard() {
 
   const sortedAthletes = useMemo(() => {
     const next = [...filteredAthletes];
+    if (afSort === "score_desc") {
+      // Athletes with a settled score first, then new ("provisional") athletes, then those with no score yet.
+      const rank = (id: string) => {
+        const s = athleteScoreById[id];
+        if (!s) return -1;
+        return (s.provisional ? 0 : 1000) + s.score;
+      };
+      next.sort((a, b) => rank(b.id) - rank(a.id));
+      return next;
+    }
     if (afSort === "rating_desc") {
       next.sort((a, b) => (b.average_rating || 0) - (a.average_rating || 0));
       return next;
@@ -1344,7 +1389,7 @@ export default function BusinessDashboard() {
       next.sort((a, b) => (athleteDistanceById[a.id] ?? Number.POSITIVE_INFINITY) - (athleteDistanceById[b.id] ?? Number.POSITIVE_INFINITY));
     }
     return next;
-  }, [filteredAthletes, afSort, athleteDistanceById, allAthletesXp]);
+  }, [filteredAthletes, afSort, athleteDistanceById, allAthletesXp, athleteScoreById]);
 
   const allowedCampaignTiers = useMemo(() => {
     const maxTier = billingProfile?.max_athlete_tier || "Bronze";
@@ -1981,7 +2026,7 @@ export default function BusinessDashboard() {
                                   </div>
                                   <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: diag ? 8 : 0 }}>
                                     <button className="small-button" onClick={() => setProfileModalAthleteId(app.athlete_id)}>Full Profile</button>
-                                    {app.status === "approved" && (
+                                    {(app.status === "approved" || app.status === "completed") && (
                                       <button className="small-button" onClick={() => setRatingModal({ applicationId: app.id, athleteName: fullName(athlete) })}>Rate Athlete</button>
                                     )}
                                     {app.proof_url && (
@@ -2108,6 +2153,7 @@ export default function BusinessDashboard() {
                 />
                 <select className="filter-select" value={afSort} onChange={(e) => setAfSort(e.target.value)}>
                   <option value="nearest">Nearest first</option>
+                  <option value="score_desc">Best Hillink Score</option>
                   <option value="rating_desc">Highest rated</option>
                   <option value="payout_asc">Lowest payout</option>
                   <option value="tier_desc">Highest tier</option>
@@ -2180,6 +2226,16 @@ export default function BusinessDashboard() {
                             )}
                             {athlete.average_rating && (
                               <span className="athlete-dir-rating">{Number(athlete.average_rating).toFixed(1)} ★</span>
+                            )}
+                            {athleteScoreById[athlete.id] && (
+                              <span className="athlete-dir-rating" title="Hillink Score: ratings, on-time proof, first-try approvals and customers brought in">
+                                Score {athleteScoreById[athlete.id].provisional ? "New" : athleteScoreById[athlete.id].score}
+                              </span>
+                            )}
+                            {athleteScoreById[athlete.id]?.instagram_followers != null && (
+                              <span className="athlete-dir-rating" title="Verified from Instagram">
+                                {formatFollowers(athleteScoreById[athlete.id].instagram_followers ?? 0)} followers ✓
+                              </span>
                             )}
                           </div>
                           <button
