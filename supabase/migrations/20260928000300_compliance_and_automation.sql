@@ -24,6 +24,7 @@ alter table public.athlete_profiles add constraint athlete_profiles_visa_status_
 );
 
 -- Why an athlete can't join a campaign, or null. Mirrors joinBlock() in lib/compliance/rules.ts.
+-- A signed-in user can only ask about themselves (the answer reveals visa status).
 create or replace function public.athlete_join_block(p_athlete_id uuid, p_campaign_id uuid)
 returns text
 language plpgsql
@@ -35,6 +36,9 @@ declare
   a record;
   category text;
 begin
+  if auth.uid() is not null and auth.uid() <> p_athlete_id then
+    raise exception 'not allowed' using errcode = '42501';
+  end if;
   select confirmed_adult, visa_status, school_disclosure_ack, school_conflict_categories
     into a from public.athlete_profiles where id = p_athlete_id;
   if not found or not a.confirmed_adult or a.visa_status is null or not a.school_disclosure_ack then
@@ -78,6 +82,9 @@ end;
 $$;
 
 drop trigger if exists campaign_applications_enforce_join_rules on public.campaign_applications;
+
+-- The auto-approve job reminds a business once per application to fund overdue proof.
+alter table public.campaign_applications add column if not exists funding_reminder_sent_at timestamptz;
 create trigger campaign_applications_enforce_join_rules
 before insert on public.campaign_applications
 for each row

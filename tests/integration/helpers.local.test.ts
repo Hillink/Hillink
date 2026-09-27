@@ -142,11 +142,15 @@ test("overdue funded proof is approved and paid; unfunded and recent proof is le
   const { data: pay } = await admin.from("payments").select("hold_status, stripe_transfer_id").eq("application_id", overdue).single();
   assert.equal(pay!.hold_status, "released");
   assert.ok(pay!.stripe_transfer_id);
-  assert.ok(summary.waitingOnFunding >= 1);
+  const { data: reminded } = await admin.from("campaign_applications").select("funding_reminder_sent_at").eq("id", unfunded).single();
+  assert.ok(reminded!.funding_reminder_sent_at, "business reminded to fund");
 
-  // Running again doesn't pay twice.
-  await runAutoApprove(admin, stripe.get);
+  // Running again doesn't pay twice or remind twice.
+  const again = await runAutoApprove(admin, stripe.get);
   assert.equal(stripe.state.transfers, 1);
+  const { data: remindedAgain } = await admin.from("campaign_applications").select("funding_reminder_sent_at").eq("id", unfunded).single();
+  assert.equal(remindedAgain!.funding_reminder_sent_at, reminded!.funding_reminder_sent_at);
+  assert.deepEqual(again.errors, []);
 });
 
 test("overdue deliverables are approved and the application completes", { skip }, async () => {
@@ -168,4 +172,34 @@ test("overdue deliverables are approved and the application completes", { skip }
   const { data: after } = await admin.from("campaign_applications").select("status, reviewed_at").eq("id", app!.id).single();
   assert.equal(after!.status, "completed");
   assert.ok(after!.reviewed_at);
+});
+
+test("work under an open dispute is never auto-approved", { skip }, async () => {
+  const athlete = await eligibleAthlete();
+  const { data: app } = await admin
+    .from("campaign_applications")
+    .insert({ campaign_id: await makeCampaign(), athlete_id: athlete.id, status: "submitted", submitted_at: hoursAgo(80), proof_url: "https://instagram.com/p/z" })
+    .select("id")
+    .single();
+  await admin.from("payments").insert({ application_id: app!.id, business_id: businessId, athlete_id: athlete.id, amount_cents: 5000, hold_status: "held" });
+  const { error: disputeError } = await admin.from("disputes").insert({ application_id: app!.id, opened_by: businessId, opened_by_role: "business", reason: "Post was deleted", status: "open" });
+  assert.equal(disputeError, null, disputeError?.message);
+  // The freeze trigger marks the payment disputed; put it back to "held" to test the job's own check.
+  await admin.from("payments").update({ hold_status: "held" }).eq("application_id", app!.id);
+
+  const stripe = fakeStripe();
+  await runAutoApprove(admin, stripe.get);
+  const { data: after } = await admin.from("campaign_applications").select("status").eq("id", app!.id).single();
+  assert.equal(after!.status, "submitted");
+  assert.equal(stripe.state.transfers, 0);
+});
+
+test("a business can't ask the eligibility check about someone else's athlete", { skip }, async () => {
+  const athlete = await eligibleAthlete({ visa_status: "international_not_cleared" });
+  const b = await makeUser("business");
+  const c = await signedIn(b.email);
+  const { data, error } = await c.rpc("athlete_join_block", { p_athlete_id: athlete.id, p_campaign_id: await makeCampaign() });
+  assert.ok(error, `expected refusal, got ${JSON.stringify(data)}`);
+  const own = await (await signedIn(athlete.email)).rpc("athlete_join_block", { p_athlete_id: athlete.id, p_campaign_id: await makeCampaign() });
+  assert.equal(own.data, "visa_not_cleared");
 });

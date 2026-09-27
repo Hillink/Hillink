@@ -50,7 +50,9 @@ export async function completeIfAllRequiredApproved(
       .from("campaign_applications")
       // reviewed_at records when the work was approved (reports count pay in that month).
       .update({ status: "completed", reviewed_at: new Date().toISOString() })
-      .eq("id", application.id);
+      .eq("id", application.id)
+      // Don't overwrite a status that changed meanwhile (athlete removed or withdrew).
+      .in("status", ["accepted", "submitted"]);
     if (completeError) return { ok: false, error: completeError.message };
     applicationStatus = "completed";
   }
