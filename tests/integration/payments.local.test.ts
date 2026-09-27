@@ -334,3 +334,38 @@ test("a disputed payment can't be paid out", { skip }, async () => {
   assert.equal(payout.ok, false);
   assert.equal(stripe.transfers.calls, 0);
 });
+
+test("signed-in users can't change application status directly", { skip }, async () => {
+  const anonKey = process.env.LOCAL_SUPABASE_ANON_KEY;
+  if (!anonKey) return;
+  const email = `athlete-guard-${Date.now()}@test.local`;
+  const { data: u } = await admin.auth.admin.createUser({ email, password: "Password123!", email_confirm: true });
+  await admin.from("profiles").upsert({ id: u.user!.id, role: "athlete" });
+  const { data: campaign } = await admin
+    .from("campaigns")
+    .insert({ business_id: businessId, title: "Guard", deliverables: "1 post", preferred_tier: "Bronze", payout_cents: 5000, slots: 3 })
+    .select("id")
+    .single();
+  const { data: app } = await admin
+    .from("campaign_applications")
+    .insert({ campaign_id: campaign!.id, athlete_id: u.user!.id, status: "accepted" })
+    .select("id")
+    .single();
+
+  const athlete = createClient(url!, anonKey, { auth: { persistSession: false } });
+  await athlete.auth.signInWithPassword({ email, password: "Password123!" });
+  const upd = await athlete.from("campaign_applications").update({ status: "completed" }).eq("id", app!.id);
+  assert.ok(upd.error, "athlete should not be able to complete their own work");
+  const { data: after } = await admin.from("campaign_applications").select("status").eq("id", app!.id).single();
+  assert.equal(after!.status, "accepted");
+
+  const { data: campaign2 } = await admin
+    .from("campaigns")
+    .insert({ business_id: businessId, title: "Guard 2", deliverables: "1 post", preferred_tier: "Bronze", payout_cents: 5000, slots: 3 })
+    .select("id")
+    .single();
+  const ins = await athlete.from("campaign_applications").insert({ campaign_id: campaign2!.id, athlete_id: u.user!.id, status: "approved" });
+  assert.ok(ins.error, "athlete should not be able to insert an approved application");
+  const ok = await athlete.from("campaign_applications").insert({ campaign_id: campaign2!.id, athlete_id: u.user!.id, status: "applied" });
+  assert.equal(ok.error, null, "a normal application still works");
+});

@@ -195,7 +195,8 @@ export async function PATCH(
   if (allRequiredApproved && application.status !== "completed") {
     const { error: completeError } = await admin
       .from("campaign_applications")
-      .update({ status: "completed" })
+      // reviewed_at records when the work was approved (reports count pay in that month).
+      .update({ status: "completed", reviewed_at: new Date().toISOString() })
       .eq("id", application.id);
 
     if (completeError) {
