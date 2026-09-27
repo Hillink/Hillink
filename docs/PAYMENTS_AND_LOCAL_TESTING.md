@@ -43,3 +43,20 @@ npm run test:payments:local
 ```
 
 The migrations folder is moved aside during `supabase start` because the repo's first migration is empty and the schema lives in the loose `supabase/*.sql` files, which the bootstrap script applies in order.
+
+## Customer codes and the monthly results report
+
+- Once a business accepts an athlete, the athlete taps **Get customer code** on their dashboard and gets a code like `JAKE-7K2Q` plus a share link (`/c/JAKE-7K2Q`). The link shows the business, the campaign's customer offer, and the code.
+- When a customer shows the code, it's logged either by the owner on **Results & customer codes** (`/business/report`) or by counter staff on a private staff link (`/redeem/<token>`, no login). Only a hash of the staff token is stored, and making a new link turns the old one off.
+- The same code logged twice within 60 seconds counts once. Codes only work at their own business and stop working if the athlete leaves the campaign.
+- The report shows, for the month:
+  - customers from athletes
+  - cost per customer (athlete pay plus the plan price)
+  - posts approved
+  - order totals staff entered
+  - Instagram reach, where synced
+  - a per-campaign table and the top athletes
+  - "Print / save PDF" prints a clean copy.
+- Migration: `supabase/migrations/20260928000200_customer_redemptions.sql`.
+
+`npm run test:payments:local` runs every local-database test, payments and customer codes. Set `LOCAL_SUPABASE_ANON_KEY` too to include the row-security check.

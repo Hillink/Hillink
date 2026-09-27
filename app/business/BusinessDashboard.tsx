@@ -131,6 +131,7 @@ type CampaignTemplate = {
     termsAccepted: boolean;
     prohibitedAcknowledged: boolean;
     additionalCompensation: string;
+    customerOffer: string;
     tier: Campaign["preferred_tier"];
     slots: number;
     payoutCents: number;
@@ -302,6 +303,7 @@ export default function BusinessDashboard() {
     termsAccepted: false,
     prohibitedAcknowledged: false,
     additionalCompensation: "",
+    customerOffer: "",
     tier: "Silver" as Campaign["preferred_tier"],
     slots: 2,
     payoutCents: 0,
@@ -716,6 +718,8 @@ export default function BusinessDashboard() {
     const withCompensation = {
       ...baseCampaignInsert,
       additional_compensation: form.additionalCompensation.trim() || null,
+      // Only sent when filled so databases without the redemptions migration still accept the insert.
+      ...(form.customerOffer.trim() ? { customer_offer: form.customerOffer.trim().slice(0, 140) } : {}),
     };
 
     const firstInsert = await supabase.from("campaigns").insert(withCompensation);
@@ -755,6 +759,7 @@ export default function BusinessDashboard() {
       termsAccepted: false,
       prohibitedAcknowledged: false,
       additionalCompensation: "",
+      customerOffer: "",
       tier: "Silver",
       slots: 2,
       payoutCents: 0,
@@ -812,6 +817,7 @@ export default function BusinessDashboard() {
         termsAccepted: form.termsAccepted,
         prohibitedAcknowledged: form.prohibitedAcknowledged,
         additionalCompensation: form.additionalCompensation,
+        customerOffer: form.customerOffer,
         tier: form.tier,
         slots: form.slots,
         payoutCents: form.payoutCents,
@@ -853,6 +859,7 @@ export default function BusinessDashboard() {
       termsAccepted: template.config.termsAccepted ?? false,
       prohibitedAcknowledged: template.config.prohibitedAcknowledged ?? false,
       additionalCompensation: template.config.additionalCompensation || "",
+      customerOffer: template.config.customerOffer || "",
       tier: template.config.tier || "Silver",
       slots: template.config.slots || 2,
       payoutCents: template.config.payoutCents || 0,
@@ -1469,6 +1476,9 @@ export default function BusinessDashboard() {
         <div className="topbar">
           <h1 className="page-title">Business Portal</h1>
           <div className="topbar-actions">
+            <button className="secondary-button" onClick={() => router.push("/business/report")}>
+              Results &amp; customer codes
+            </button>
             <button
               className="cta-button"
               onClick={() => {
@@ -2390,6 +2400,16 @@ export default function BusinessDashboard() {
                       value={form.additionalCompensation}
                       onChange={(e) => setForm({ ...form, additionalCompensation: e.target.value })}
                       placeholder="food, free membership, gift card, store credit"
+                    />
+                  </label>
+
+                  <label>
+                    Customer offer (optional)
+                    <input
+                      value={form.customerOffer}
+                      maxLength={140}
+                      onChange={(e) => setForm({ ...form, customerOffer: e.target.value })}
+                      placeholder="What customers get for using an athlete's code, e.g. 10% off your order"
                     />
                   </label>
 

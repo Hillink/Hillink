@@ -3263,3 +3263,9 @@ label {
   width: auto;
   object-fit: contain;
 }
+
+@media print {
+  .no-print {
+    display: none !important;
+  }
+}
