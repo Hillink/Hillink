@@ -4,13 +4,15 @@ This file is coordination, not a substitute for checking `git branch -r`, curren
 
 ## Active / awaiting review
 
-| Task | Owner | Branch | State | Scope |
+Updated 2026-09-28 by Claude. Merged to `main`: #7, #8, #11, #16–#20, and (after Kyle's go-ahead at 21:42Z) #15, #24–#28.
+
+| Task | Owner | Branch / PR | State | Needs Kyle? |
 | --- | --- | --- | --- | --- |
-| Shared handoff and baseline checks | Codex | `codex/project-handoff` | Ready for review | `AGENTS.md`, docs, README, waitlist test type fix |
-| Help center | Claude | `claude/help-center`, `claude/help-answers-fixes` | Unmerged branches seen; owner status unconfirmed | Inspect branch diffs before touching help features |
-| Signup verification | Claude | `claude/signup-verification` | Unmerged branch seen; owner status unconfirmed | Inspect branch diff before touching signup |
-| Live test fixes | Claude | `claude/live-test-fixes` | Unmerged branch seen; owner status unconfirmed | Inspect branch diff before touching tests |
-| PAY-001: trim env settings (fees, cron secret, Stripe) | Claude | `claude/fee-settings-parsing` | Draft PR #15; Codex review round 1 addressed | `lib/payments/fees.ts`, `lib/env/read.ts`, cron/payout/webhook routes, `lib/stripe/config.ts` |
+| ATH-001 athletes can read `active` campaigns | Claude | `claude/ath001-live-campaign-visibility` / #29 | Draft; migration not run | Yes: read-only policy check, then run migration |
+| Hillink HQ / World foundation | Codex | `codex/hillink-hq-foundation` / #31 | Draft, in progress | No |
+| P0 security hardening | Claude | `claude/p0-security-hardening` / #14 | Draft; migration not run | Yes: run migration |
+| Product spec | Claude | `claude/product-spec-context` / #13 | Draft | Review |
+| Help center | Claude | `claude/help-center` / #9, `claude/help-answers-fixes` / #10 | Draft | SQL before merge |
 
 ## Next decisions and checks
 
