@@ -3,6 +3,7 @@ import { requireRole } from "@/lib/rbac";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createNotification } from "@/lib/notifications";
 import { VALID_TRANSITIONS } from "./constants";
+import { PLAN_BLOCK_MESSAGES, activationPlanBlock } from "@/lib/campaigns/planLimits";
 
 type Body = {
   toStatus?: string;
@@ -135,6 +136,14 @@ export async function PATCH(
         { error: "Campaign must have a start date to activate" },
         { status: 422 }
       );
+    }
+  }
+
+  // Going live counts against the business's plan (admins can still override).
+  if (toStatus === "active" && role === "business") {
+    const block = await activationPlanBlock(admin, campaign.business_id, campaign.id);
+    if (block) {
+      return NextResponse.json({ error: PLAN_BLOCK_MESSAGES[block], reason: block }, { status: 422 });
     }
   }
 

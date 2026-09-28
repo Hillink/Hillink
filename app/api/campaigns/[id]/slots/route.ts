@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireRole } from "@/lib/rbac";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { PLAN_BLOCK_MESSAGES, slotPlanBlock } from "@/lib/campaigns/planLimits";
 
 type CampaignRow = {
   id: string;
@@ -171,6 +172,14 @@ export async function PATCH(
       { error: "Forbidden" },
       { status: 403 }
     );
+  }
+
+  // A business can't raise slots past its plan.
+  if (role === "business") {
+    const block = await slotPlanBlock(admin, campaign.business_id, openSlots);
+    if (block) {
+      return NextResponse.json({ error: PLAN_BLOCK_MESSAGES[block], reason: block }, { status: 422 });
+    }
   }
 
   // Count current accepted applications.
