@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { fetchAllPages } from "@/lib/supabase/paginate";
 import {
   countJoinedCampaigns,
   getNextTierGoal,
@@ -214,6 +215,18 @@ export default function AthleteDashboard({ initialXp = 0 }: AthleteDashboardProp
   const router = useRouter();
   const supabase = createClient();
 
+  // Every XP event, newest first: the total and tier are the sum of all of them (XP-002).
+  const fetchAllXpEvents = (athleteId: string) =>
+    fetchAllPages<XpEventRow>((from, to) =>
+      supabase
+        .from("athlete_xp_events")
+        .select("id, action, xp_delta, created_at, details_json")
+        .eq("athlete_id", athleteId)
+        .order("created_at", { ascending: false })
+        .order("id", { ascending: false })
+        .range(from, to)
+    );
+
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [authError, setAuthError] = useState("");
@@ -340,12 +353,7 @@ export default function AthleteDashboard({ initialXp = 0 }: AthleteDashboardProp
         .select("id, campaign_id, athlete_id, status, proof_url, proof_notes, applied_at, decided_at, submitted_at, reviewed_at")
         .eq("athlete_id", user.id)
         .order("applied_at", { ascending: false }),
-      supabase
-        .from("athlete_xp_events")
-        .select("id, action, xp_delta, created_at, details_json")
-        .eq("athlete_id", user.id)
-        .order("created_at", { ascending: false })
-        .limit(100),
+      fetchAllXpEvents(user.id),
       supabase
         .from("athlete_profiles")
         .select("first_name, last_name, school, sport, city, state, latitude, longitude, deal_types, bio, average_rating, total_ratings, profile_photo_url, minimum_payout, instagram, preferred_company_type")
@@ -505,12 +513,7 @@ export default function AthleteDashboard({ initialXp = 0 }: AthleteDashboardProp
       };
 
       if ((challengeSyncData.granted || 0) > 0) {
-        const { data: refreshedXpRows, error: refreshedXpError } = await supabase
-          .from("athlete_xp_events")
-          .select("id, action, xp_delta, created_at, details_json")
-          .eq("athlete_id", user.id)
-          .order("created_at", { ascending: false })
-          .limit(100);
+        const { data: refreshedXpRows, error: refreshedXpError } = await fetchAllXpEvents(user.id);
 
         if (!refreshedXpError) {
           hydrateXpRows((refreshedXpRows || []) as XpEventRow[]);
