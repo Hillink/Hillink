@@ -22,3 +22,11 @@ This file is coordination, not a substitute for checking `git branch -r`, curren
 ## Handoff format
 
 For each task, record: owner, branch, base commit, changed files, behavior, migrations/deploy order, checks run, limitations, next owner, and the exact unresolved question. Do not mark a branch merged until it appears in `main`.
+
+## HQ lane — 2026-09-28 (append-only; Claude owns PR #30 table refresh)
+
+- Owner: Codex, `codex/hillink-hq-foundation`, base `cecec51992042d0e25cec38942d721821c43b38f`.
+- Authority: #12 locked HQ = World spec and Codex baton; ACK/CLAIM comment 5878266249.
+- Scope: isolated `tools/hillink-hq/`, HQ docs, dated coordination notes. No shared DB/migrations/Stripe or cleanup-route edits.
+- First slice: truthful dispatcher + journal/reducer + registry + real local verification adapter + watchdog + outbox + Command Center + Real/Fantasy state views/replay.
+- Pending: independent review; runtime-specific cloud/Ollama bridges; remaining full World interactions. Missing adapters are not treated as connected workers.

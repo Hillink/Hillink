@@ -26,3 +26,7 @@ The repository has baseline SQL in `supabase/*.sql`, an initial migration that d
 ## Known limits
 
 Production migrations, Stripe state, row security behavior in the deployed database, Vercel configuration, and actual user flows were not independently verified. The README previously described only the starter; this branch updates its introduction. Review open Claude branches before overlapping help center, signup, or live test work.
+
+## 2026-09-28 — HQ foundation branch (Codex)
+
+Isolated `codex/hillink-hq-foundation` starts at verified `main@cecec51992042d0e25cec38942d721821c43b38f`. `tools/hillink-hq/` implements a local durable event engine, allowlisted real verification worker, watchdog/recovery, material alert outbox, Command Center and two skins over the same state. Run `node tools/hillink-hq/server.mjs`. No marketplace API/schema/payment change. Cloud/Ollama execution and usage adapters are absent and explicitly UNKNOWN. This is a first reviewable slice, not completion of the locked World specification. See its README for safety boundaries, runtime/restart handling and remaining work. Shared cleanup PRs remain Claude-owned; this note does not revise their status or the older snapshot above.
