@@ -416,8 +416,9 @@ revoke all on function public.activate_campaign_within_plan(uuid, text) from pub
 grant execute on function public.activate_campaign_within_plan(uuid, text) to service_role;
 
 -- The slots API sets a campaign's total capacity. Auto-accept spends open_slots as remaining capacity,
--- so this stores total minus accepted. The campaign row is locked while it counts, so an acceptance
--- running at the same time either finishes first and is counted, or waits and decrements afterwards.
+-- so this stores total minus the athletes holding a slot. The campaign row is locked while it counts.
+-- Auto-accept and accept_application_with_slot (below) take a slot under the same row lock, so an
+-- acceptance running at the same time either finishes first and is counted, or waits.
 -- Returns {"reason": null | 'not_found' | 'below_filled_count' | plan block, "accepted": n}.
 create or replace function public.set_campaign_total_slots(
   p_campaign_id uuid,
@@ -439,9 +440,11 @@ begin
     return jsonb_build_object('reason', 'not_found', 'accepted', 0);
   end if;
 
+  -- Athletes keep their slot after accept, through proof and approval.
   select count(*) into v_accepted
     from public.campaign_applications
-    where campaign_id = p_campaign_id and status = 'accepted';
+    where campaign_id = p_campaign_id
+      and status in ('accepted', 'in_progress', 'submitted', 'approved', 'completed');
 
   if p_total_slots < greatest(v_accepted, 1) then
     return jsonb_build_object('reason', 'below_filled_count', 'accepted', v_accepted);
@@ -470,6 +473,52 @@ $$;
 
 revoke all on function public.set_campaign_total_slots(uuid, integer, boolean) from public, anon, authenticated;
 grant execute on function public.set_campaign_total_slots(uuid, integer, boolean) to service_role;
+
+-- A business accepting an athlete by hand. The status change and taking the slot happen together
+-- under the campaign row lock, so they can't interleave with a slot change or another accept, and a
+-- full campaign can't be overfilled. Returns null on success, 'stale' if the application's status
+-- changed meanwhile, or 'no_open_slots'.
+create or replace function public.accept_application_with_slot(
+  p_application_id uuid,
+  p_from_status text
+)
+returns text
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_campaign_id uuid;
+  v_open integer;
+  v_now timestamptz := now();
+begin
+  select campaign_id into v_campaign_id from public.campaign_applications where id = p_application_id;
+  if not found then
+    return 'stale';
+  end if;
+
+  select open_slots into v_open from public.campaigns where id = v_campaign_id for update;
+
+  perform 1 from public.campaign_applications where id = p_application_id and status = p_from_status;
+  if not found then
+    return 'stale';
+  end if;
+
+  if coalesce(v_open, 0) <= 0 then
+    return 'no_open_slots';
+  end if;
+
+  update public.campaign_applications
+    set status = 'accepted', decided_at = v_now, accepted_at = v_now
+    where id = p_application_id;
+
+  update public.campaigns set open_slots = open_slots - 1 where id = v_campaign_id;
+  return null;
+end;
+$$;
+
+revoke all on function public.accept_application_with_slot(uuid, text) from public, anon, authenticated;
+grant execute on function public.accept_application_with_slot(uuid, text) to service_role;
 
 -- H7. Athletes could write their own Stripe account id and mark Stripe onboarding complete, and payouts
 -- go to whatever id is stored. Those come only from Connect onboarding and Stripe's account.updated

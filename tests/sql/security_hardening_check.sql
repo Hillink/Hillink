@@ -119,4 +119,36 @@ select slots, open_slots from public.campaigns where id = '11111111-1111-1111-11
 select public.set_campaign_total_slots('11111111-1111-1111-1111-111111111111', 10, false);
 select slots, open_slots from public.campaigns where id = '11111111-1111-1111-1111-111111111111';
 reset role;
+\echo 'submitted athletes still hold a slot (expect accepted 1; then slots 3 / open 2):'
+update public.campaign_applications set status = 'submitted' where campaign_id = '11111111-1111-1111-1111-111111111111';
+set role service_role;
+select public.set_campaign_total_slots('11111111-1111-1111-1111-111111111111', 3, true);
+select slots, open_slots from public.campaigns where id = '11111111-1111-1111-1111-111111111111';
+reset role;
+
+\echo '--- Manual accept takes a slot in the same transaction'
+set session_replication_role = replica; -- fixture only
+insert into public.campaign_applications(id, campaign_id, athlete_id, status, applied_at) values
+  ('44444444-4444-4444-4444-444444444444','11111111-1111-1111-1111-111111111111','00000000-0000-0000-0000-00000000000d','applied', now()),
+  ('55555555-5555-5555-5555-555555555555','11111111-1111-1111-1111-111111111111','00000000-0000-0000-0000-00000000000e','applied', now()),
+  ('66666666-6666-6666-6666-666666666666','11111111-1111-1111-1111-111111111111','00000000-0000-0000-0000-00000000000f','applied', now());
+set session_replication_role = origin;
+\echo 'accept function is server-only (expect permission denied):'
+set role authenticated;
+select public.accept_application_with_slot('44444444-4444-4444-4444-444444444444', 'applied');
+reset role;
+-- The athletes' eligibility triggers aren't what's being checked here, so skip them for these calls.
+set session_replication_role = replica;
+set role service_role;
+\echo 'accept two (expect empty twice; then open 0):'
+select public.accept_application_with_slot('44444444-4444-4444-4444-444444444444', 'applied');
+select public.accept_application_with_slot('55555555-5555-5555-5555-555555555555', 'applied');
+select open_slots from public.campaigns where id = '11111111-1111-1111-1111-111111111111';
+\echo 'accept again (expect stale):'
+select public.accept_application_with_slot('44444444-4444-4444-4444-444444444444', 'applied');
+\echo 'campaign full (expect no_open_slots; application still applied):'
+select public.accept_application_with_slot('66666666-6666-6666-6666-666666666666', 'applied');
+select status from public.campaign_applications where id = '66666666-6666-6666-6666-666666666666';
+reset role;
+set session_replication_role = origin;
 rollback;
