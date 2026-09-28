@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getAppUrl, getStripe } from "@/lib/stripe/config";
-import { isValidStripeSecretKey } from "@/lib/env/validation";
+import { isStripeDevFallbackAllowed, isValidStripeSecretKey } from "@/lib/env/validation";
 import { requireRoleAccess } from "@/lib/auth/requireRoleAccess";
 
 export async function POST() {
@@ -20,12 +20,7 @@ export async function POST() {
   const recipientEmail = authUser.email || null;
 
   const hasValidSecret = isValidStripeSecretKey(process.env.STRIPE_SECRET_KEY);
-  const fallbackFlag = (process.env.STRIPE_DEV_FALLBACK || "").trim().toLowerCase();
-  const fallbackEnabledByFlag =
-    fallbackFlag === "true" || fallbackFlag === "1" || fallbackFlag === "yes";
-  const isProductionEnvironment =
-    process.env.NODE_ENV === "production" || process.env.VERCEL_ENV === "production";
-  const allowDevFallback = fallbackEnabledByFlag && !isProductionEnvironment;
+  const allowDevFallback = isStripeDevFallbackAllowed();
 
   if (!hasValidSecret) {
      if (allowDevFallback) {
