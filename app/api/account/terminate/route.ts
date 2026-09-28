@@ -23,7 +23,16 @@ export async function POST() {
     const stripeSubscriptionId = billingProfile?.stripe_subscription_id || null;
     const hasValidSecret = isValidStripeSecretKey(process.env.STRIPE_SECRET_KEY);
 
-    if (stripeSubscriptionId && hasValidSecret) {
+    if (stripeSubscriptionId && !hasValidSecret) {
+      return NextResponse.json(
+        {
+          error: "Unable to terminate account because billing status cannot be safely verified. Contact support.",
+        },
+        { status: 409 }
+      );
+    }
+
+    if (stripeSubscriptionId) {
       try {
         const stripe = getStripe();
         await stripe.subscriptions.cancel(stripeSubscriptionId, {
