@@ -111,3 +111,78 @@ create trigger campaigns_guard_cancel_after_proof
 before update on public.campaigns
 for each row
 execute function public.guard_campaign_cancel_after_proof();
+
+-- ---------------------------------------------------------------------------------------------
+-- Pay can't be cut after athletes apply (overnight finding BUS-001, 2026-09-28).
+-- Before: a business could lower campaigns.payout_cents from the browser (its own-campaign
+-- update policy), then accept. The payment is priced from the current payout, so a $0 payout
+-- became an instantly "held" $0 payment and the athlete worked for nothing.
+-- Now: every application remembers the pay it was offered, payments are priced from the higher
+-- of that and the current pay, and a business can't lower pay while anyone is still in the running.
+-- ---------------------------------------------------------------------------------------------
+alter table public.campaign_applications
+  add column if not exists offered_payout_cents integer check (offered_payout_cents >= 0);
+
+-- Existing applications keep today's pay as their offer.
+update public.campaign_applications a
+set offered_payout_cents = greatest(0, coalesce(c.payout_cents, 0))
+from public.campaigns c
+where c.id = a.campaign_id
+  and a.offered_payout_cents is null;
+
+-- The offer is always taken from the campaign, never from the caller, and never changes after.
+create or replace function public.snapshot_application_offer()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if tg_op = 'INSERT' then
+    select greatest(0, coalesce(c.payout_cents, 0)) into new.offered_payout_cents
+    from public.campaigns c
+    where c.id = new.campaign_id;
+    return new;
+  end if;
+
+  if new.offered_payout_cents is distinct from old.offered_payout_cents then
+    new.offered_payout_cents := old.offered_payout_cents;
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists campaign_applications_snapshot_offer on public.campaign_applications;
+create trigger campaign_applications_snapshot_offer
+before insert or update on public.campaign_applications
+for each row
+execute function public.snapshot_application_offer();
+
+create or replace function public.guard_campaign_payout_cut()
+returns trigger
+language plpgsql
+set search_path = public
+as $$
+begin
+  if current_user not in ('authenticated', 'anon') then
+    return new;
+  end if;
+  if coalesce(new.payout_cents, 0) >= coalesce(old.payout_cents, 0) then
+    return new;
+  end if;
+  if exists (
+    select 1 from public.campaign_applications a
+    where a.campaign_id = new.id
+      and a.status not in ('declined', 'withdrawn')
+  ) then
+    raise exception 'HILLINK:payout_locked' using errcode = '42501';
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists campaigns_guard_payout_cut on public.campaigns;
+create trigger campaigns_guard_payout_cut
+before update of payout_cents on public.campaigns
+for each row
+execute function public.guard_campaign_payout_cut();

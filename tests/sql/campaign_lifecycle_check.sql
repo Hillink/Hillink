@@ -46,4 +46,27 @@ select count(*) from public.campaign_status_log where campaign_id = '11111111-11
 select public.cancel_campaign_keep_records('22222222-2222-2222-2222-222222222222', null, 'Admin', true);
 select status from public.campaign_applications where id = 'a2222222-0000-0000-0000-000000000001';
 reset role;
+\echo '--- PAY CUTS (BUSINESS, signed in)'
+set role authenticated;
+set request.jwt.claim.sub = '00000000-0000-0000-0000-00000000000b';
+set request.jwt.claims = '{"sub":"00000000-0000-0000-0000-00000000000b","role":"authenticated"}';
+\echo 'lower pay with an athlete still in (expect HILLINK:payout_locked):'
+update public.campaigns set payout_cents = 0 where id = '22222222-2222-2222-2222-222222222222';
+\echo 'raise pay (expect UPDATE 1 and 1500):'
+update public.campaigns set payout_cents = 1500 where id = '22222222-2222-2222-2222-222222222222';
+select payout_cents from public.campaigns where id = '22222222-2222-2222-2222-222222222222';
+\echo 'lower pay when everyone is out (expect UPDATE 1):'
+update public.campaigns set payout_cents = 500 where id = '11111111-1111-1111-1111-111111111111';
+reset role;
+reset request.jwt.claim.sub; reset request.jwt.claims;
+\echo '--- OFFER SNAPSHOT (SERVER)'
+set role service_role;
+\echo 'offer comes from the campaign, not the caller (expect 1500):'
+insert into public.campaign_applications(id,campaign_id,athlete_id,status,offered_payout_cents)
+  values ('a2222222-0000-0000-0000-000000000002','22222222-2222-2222-2222-222222222222','00000000-0000-0000-0000-00000000000d','applied',1);
+select offered_payout_cents from public.campaign_applications where id = 'a2222222-0000-0000-0000-000000000002';
+\echo 'offer never changes after (expect 1500):'
+update public.campaign_applications set offered_payout_cents = 0 where id = 'a2222222-0000-0000-0000-000000000002';
+select offered_payout_cents from public.campaign_applications where id = 'a2222222-0000-0000-0000-000000000002';
+reset role;
 rollback;
