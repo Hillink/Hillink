@@ -1,12 +1,14 @@
-# HILLink Vercel Starter
+# HILLink
 
-This is a simple Next.js starter site for HILLink.
+HILLink is a Next.js application connecting local businesses and college athletes for NIL campaigns. It includes athlete, business, and admin portals; Supabase authentication and data; Stripe funding and payouts; and a separate waitlist database.
+
+For the current code map, setup caveats, and cross-agent handoff, start with [AGENTS.md](AGENTS.md) and [docs/CURRENT_STATE.md](docs/CURRENT_STATE.md). Payment behavior and local database testing are described in [docs/PAYMENTS_AND_LOCAL_TESTING.md](docs/PAYMENTS_AND_LOCAL_TESTING.md).
 
 ## What is included
-- Next.js app router setup
-- One polished landing page
-- Ready to push to GitHub
-- Ready to deploy on Vercel
+- Next.js App Router frontend and API routes
+- Supabase auth, role-aware portals, row security, and SQL migrations
+- Stripe Checkout, Connect payouts, and webhook processing
+- Campaigns, proof review, customer codes, athlete score, and rewards
 
 ## Run locally
 1. Open the project folder in VS Code
@@ -19,33 +21,8 @@ npm run dev
 
 3. Open `http://localhost:3000`
 
-## Push to GitHub
-1. Create a new GitHub repo
-2. From the project folder, run:
-
-```bash
-git init
-git add .
-git commit -m "Initial HILLink site"
-git branch -M main
-git remote add origin YOUR_GITHUB_REPO_URL
-git push -u origin main
-```
-
-## Deploy to Vercel
-1. Log into Vercel
-2. Click `Add New Project`
-3. Import your GitHub repo
-4. Leave the defaults as they are
-5. Click `Deploy`
-
-## Next steps
-Your developer can extend this with:
-- Supabase auth
-- Stripe subscriptions
-- Business dashboard
-- Athlete dashboard
-- Campaign posting and claiming
+## Before deploying
+Review the migration order and required environment variable names in [docs/CURRENT_STATE.md](docs/CURRENT_STATE.md). Deploying code before its corresponding schema migration can break live flows. Do not use test seed data in production.
 
 ## Automated Feature Testing (No Real Customer Base Needed)
 
