@@ -4,17 +4,12 @@ This file is coordination, not a substitute for checking `git branch -r`, curren
 
 ## Active / awaiting review
 
-Updated 2026-09-28 by Claude (autonomous pass after the OWNER DIRECTIVE in issue #12). Merged to `main` so far: #7, #8, #11, #16–#20.
+Updated 2026-09-28 by Claude. Merged to `main`: #7, #8, #11, #16–#20, and (after Kyle's go-ahead at 21:42Z) #15, #24–#28.
 
 | Task | Owner | Branch / PR | State | Needs Kyle? |
 | --- | --- | --- | --- | --- |
-| Deliverable proof URLs use the #19 HTTPS check | Claude | `claude/review-16-20-followups` / #24 | Draft, ready for Codex review | No |
-| PAY-001 env values trimmed / case-normalized | Claude | `claude/fee-settings-parsing` / #15 | Draft, Codex-approved earlier, refreshed on `main` | No |
-| LIFE-001 termination fails closed on unverifiable billing | Claude | `claude/life001-terminate-fail-closed` / #25 | Draft, ready for Codex review | No |
-| XP-003 Campaign Starter counts accepted-or-later only | Claude | `claude/xp003-campaign-starter` / #26 | Draft, ready for Codex review | No (old XP not revoked) |
-| BUS-002 review window capped at 72h server-side | Claude | `claude/bus002-review-window` / #27 | Draft, ready for Codex review | No |
-| XP-002 XP totals read every event | Claude | `claude/xp002-full-xp-totals` / #28 | Draft, ready for Codex review | No |
 | ATH-001 athletes can read `active` campaigns | Claude | `claude/ath001-live-campaign-visibility` / #29 | Draft; migration not run | Yes: read-only policy check, then run migration |
+| Hillink HQ / World foundation | Codex | `codex/hillink-hq-foundation` / #31 | Draft, in progress | No |
 | P0 security hardening | Claude | `claude/p0-security-hardening` / #14 | Draft; migration not run | Yes: run migration |
 | Product spec | Claude | `claude/product-spec-context` / #13 | Draft | Review |
 | Help center | Claude | `claude/help-center` / #9, `claude/help-answers-fixes` / #10 | Draft | SQL before merge |

@@ -5,6 +5,7 @@ import {
   BUSINESS_CATEGORIES,
   RESTRICTED_CATEGORY_KEYS,
   SCHOOL_CONFLICT_OPTIONS,
+  effectiveReviewWindowHours,
   isReviewOverdue,
   joinBlock,
   validateComplianceInput,
@@ -55,4 +56,17 @@ test("review window", () => {
   assert.equal(isReviewOverdue("2026-09-25T12:00:00Z", null, now), false);
   assert.equal(isReviewOverdue("2026-09-25T12:00:00Z", 48, now), true);
   assert.equal(isReviewOverdue(null, 48, now), false);
+  // BUS-002: a business-written window can't stretch past 72h.
+  assert.equal(isReviewOverdue("2026-09-24T11:00:00Z", 168, now), true, "168h is capped at 72h");
+  assert.equal(isReviewOverdue("2026-09-25T12:00:00Z", 168, now), false);
+});
+
+test("the enforced review window is at most 72 hours", () => {
+  assert.equal(effectiveReviewWindowHours(null), 72);
+  assert.equal(effectiveReviewWindowHours(0), 72);
+  assert.equal(effectiveReviewWindowHours(-5), 72);
+  assert.equal(effectiveReviewWindowHours(Number.NaN), 72);
+  assert.equal(effectiveReviewWindowHours(48), 48);
+  assert.equal(effectiveReviewWindowHours(72), 72);
+  assert.equal(effectiveReviewWindowHours(168), 72);
 });
