@@ -27,11 +27,10 @@ export async function POST(req: NextRequest) {
   const hasValidPrice = isValidStripePriceId(tierConfig.envPriceId);
   const fallbackFlag = (process.env.STRIPE_DEV_FALLBACK || "").trim().toLowerCase();
   const fallbackEnabledByFlag =
-    fallbackFlag === "" || fallbackFlag === "true" || fallbackFlag === "1" || fallbackFlag === "yes";
-  const allowDevFallback =
-    fallbackEnabledByFlag ||
-    process.env.NODE_ENV !== "production" ||
-    process.env.VERCEL_ENV === "preview";
+    fallbackFlag === "true" || fallbackFlag === "1" || fallbackFlag === "yes";
+  const isProductionEnvironment =
+    process.env.NODE_ENV === "production" || process.env.VERCEL_ENV === "production";
+  const allowDevFallback = fallbackEnabledByFlag && !isProductionEnvironment;
 
   console.log("[stripe/create-subscription-checkout] request", {
     userId,
