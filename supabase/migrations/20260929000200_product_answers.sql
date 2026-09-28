@@ -18,8 +18,10 @@ as $$
 $$;
 
 -- 2. Athletes rated below 1.5 stars can't join campaigns. This was only checked in the browser.
--- Same function as 20260928000300, plus the rating check. It runs for the apply API, direct inserts
--- and auto-accept, through the campaign_applications_enforce_join_rules trigger.
+-- Same function as 20260928000300, plus the rating check, plus the Instagram-login check from
+-- 20260929000100_signup_verification.sql (PR #7) when that migration has run. Keeping both here means
+-- neither check is lost, whichever PR merges first. This file must run after 20260929000100 if both run.
+-- It covers the apply API, direct inserts and auto-accept, through campaign_applications_enforce_join_rules.
 create or replace function public.athlete_join_block(p_athlete_id uuid, p_campaign_id uuid)
 returns text
 language plpgsql
@@ -30,6 +32,7 @@ as $$
 declare
   a record;
   category text;
+  instagram_required boolean := false;
 begin
   if auth.uid() is not null and auth.uid() <> p_athlete_id then
     raise exception 'not allowed' using errcode = '42501';
@@ -50,6 +53,18 @@ begin
     where c.id = p_campaign_id;
   if category is not null and category = any (a.school_conflict_categories) then
     return 'school_conflict';
+  end if;
+  -- PR #7: new athletes must connect Instagram through Instagram login. Checked only once its column exists.
+  if exists (select 1 from information_schema.columns
+             where table_schema = 'public' and table_name = 'profiles' and column_name = 'instagram_login_required') then
+    execute 'select coalesce((select instagram_login_required from public.profiles where id = $1), false)'
+      into instagram_required using p_athlete_id;
+  end if;
+  if instagram_required and not exists (
+       select 1 from public.athlete_instagram_connections ic
+       where ic.athlete_id = p_athlete_id and ic.verified
+     ) then
+    return 'instagram_not_verified';
   end if;
   return null;
 end;

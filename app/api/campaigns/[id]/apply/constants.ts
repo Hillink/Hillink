@@ -7,6 +7,7 @@ export const REASON_MESSAGES: Record<string, string> = {
   athlete_profile_not_found: "Athlete profile not found",
   not_verified: "Your account must be verified to apply",
   flagged: "Your account is not eligible to apply",
+  low_rating: "Your average rating is below 1.5 stars, so you can't join new campaigns right now.",
   tier_insufficient: "You do not meet the minimum tier for this campaign",
   outside_radius: "You are outside the campaign's acceptance radius",
   already_applied: "You have already applied to this campaign",
@@ -17,5 +18,4 @@ export const REASON_MESSAGES: Record<string, string> = {
   visa_not_cleared: "Student visas usually don't allow paid NIL work in the US. Check with your school's international office, then update your eligibility.",
   school_conflict: "Your school has an exclusive deal in this business's category, so you can't join this campaign.",
   business_restricted: "This business is in a category athletes can't promote.",
-  low_rating: "Your average rating is below 1.5 stars, so you can't join new campaigns right now.",
 };
