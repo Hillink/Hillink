@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireRole } from "@/lib/rbac";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { PLAN_BLOCK_MESSAGES, slotPlanBlock } from "@/lib/campaigns/planLimits";
+import { PLAN_BLOCK_MESSAGES, setCampaignTotalSlots, type SlotChangeBlock } from "@/lib/campaigns/planLimits";
 
 type CampaignRow = {
   id: string;
@@ -174,43 +174,6 @@ export async function PATCH(
     );
   }
 
-  // Count current accepted applications.
-  const { count: rawCount, error: countError } = await admin
-    .from("campaign_applications")
-    .select("id", { count: "exact", head: true })
-    .eq("campaign_id", campaignId)
-    .eq("status", "accepted");
-
-  if (countError) {
-    return NextResponse.json(
-      { error: "Failed to fetch application count" },
-      { status: 500 }
-    );
-  }
-
-  // Cast count to number (Supabase count returns string).
-  const acceptedCount = Number(rawCount ?? 0);
-
-  // Validate openSlots >= acceptedCount (admin does NOT bypass this).
-  if (openSlots < acceptedCount) {
-    return NextResponse.json(
-      {
-        error: "Cannot set slots below current accepted count",
-        reason: "below_filled_count",
-      },
-      { status: 422 }
-    );
-  }
-
-  // A business can't raise slots past its plan. Auto-accept spends open_slots, so athletes already
-  // accepted count on top of the open slots.
-  if (role === "business") {
-    const block = await slotPlanBlock(admin, campaign.business_id, acceptedCount + openSlots);
-    if (block) {
-      return NextResponse.json({ error: PLAN_BLOCK_MESSAGES[block], reason: block }, { status: 422 });
-    }
-  }
-
   // Admin bypasses lock window check, but not below_filled_count check.
   if (role !== "admin") {
     if (campaign.status === "active" && campaign.start_date !== null) {
@@ -232,20 +195,37 @@ export async function PATCH(
     }
   }
 
-  // Update campaign slots.
-  const { error: updateError } = await admin
-    .from("campaigns")
-    .update({ open_slots: openSlots })
-    .eq("id", campaignId);
-
-  if (updateError) {
+  // openSlots is the campaign's total capacity (accepted plus open). The count, the below-accepted
+  // check (admin does NOT bypass it), the plan check (businesses only) and the update run in one
+  // database transaction.
+  let result: Awaited<ReturnType<typeof setCampaignTotalSlots>>;
+  try {
+    result = await setCampaignTotalSlots(admin, campaignId, openSlots, role === "business");
+  } catch {
     return NextResponse.json(
       { error: "Failed to update campaign slots" },
       { status: 500 }
     );
   }
 
-  // Return response.
+  const acceptedCount = result.accepted;
+  const reason: SlotChangeBlock | null = result.reason;
+  if (reason === "not_found") {
+    return NextResponse.json({ error: "Campaign not found" }, { status: 404 });
+  }
+  if (reason === "below_filled_count") {
+    return NextResponse.json(
+      {
+        error: "Cannot set slots below current accepted count",
+        reason: "below_filled_count",
+      },
+      { status: 422 }
+    );
+  }
+  if (reason) {
+    return NextResponse.json({ error: PLAN_BLOCK_MESSAGES[reason], reason }, { status: 422 });
+  }
+
   const remaining = openSlots - acceptedCount;
 
   return NextResponse.json(

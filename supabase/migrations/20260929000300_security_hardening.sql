@@ -304,10 +304,10 @@ begin
     end if;
   end if;
 
+  if (tg_op = 'INSERT' or goes_live) and new.slots > b.max_slots_per_campaign then
+    raise exception 'HILLINK:plan_slot_limit' using errcode = 'P0001';
+  end if;
   if tg_op = 'INSERT' then
-    if new.slots > b.max_slots_per_campaign then
-      raise exception 'HILLINK:plan_slot_limit' using errcode = 'P0001';
-    end if;
     new.open_slots := new.slots;
   end if;
 
@@ -333,8 +333,9 @@ for each row
 execute function public.enforce_campaign_plan_limits();
 
 -- The status API changes campaigns with the service role, which the trigger above lets through. For a
--- business, it goes live through this function instead: the plan check and the status change share
--- one transaction and the same per-business lock, so two parallel requests can't both pass the count.
+-- business, it goes live through this function instead: every plan check and the status change share
+-- one transaction and the same per-business lock, so two parallel requests can't both pass the count,
+-- and a draft made on a bigger plan can't go live after a downgrade.
 -- Returns null when the campaign went live, 'stale' when its status changed meanwhile, or a plan block.
 create or replace function public.activate_campaign_within_plan(
   p_campaign_id uuid,
@@ -346,38 +347,66 @@ security definer
 set search_path = public
 as $$
 declare
-  v_business_id uuid;
+  c record;
   b record;
+  v_tiers text[];
   open_count integer;
 begin
-  select business_id into v_business_id from public.campaigns where id = p_campaign_id;
+  select business_id into c from public.campaigns where id = p_campaign_id;
   if not found then
     return 'stale';
   end if;
 
-  perform pg_advisory_xact_lock(hashtextextended('campaign-plan:' || v_business_id::text, 0));
+  perform pg_advisory_xact_lock(hashtextextended('campaign-plan:' || c.business_id::text, 0));
 
-  select subscription_status, billing_ready, max_open_campaigns
+  select business_id, status, slots, preferred_tier, min_athlete_tier, eligible_athlete_tiers
+    into c
+    from public.campaigns
+    where id = p_campaign_id
+    for update;
+  if c.status is distinct from p_from_status then
+    return 'stale';
+  end if;
+
+  select subscription_status, billing_ready, max_open_campaigns, max_slots_per_campaign, max_athlete_tier
     into b
     from public.business_billing_profiles
-    where business_id = v_business_id;
+    where business_id = c.business_id;
   if not found or b.subscription_status <> 'active' or not b.billing_ready then
     return 'subscription_required';
   end if;
 
+  if c.slots > b.max_slots_per_campaign then
+    return 'plan_slot_limit';
+  end if;
+
+  if (c.preferred_tier is not null and c.preferred_tier <> 'Any'
+      and public.athlete_tier_level(c.preferred_tier) > public.athlete_tier_level(b.max_athlete_tier))
+     or public.athlete_tier_level(c.min_athlete_tier) > public.athlete_tier_level(b.max_athlete_tier) then
+    return 'plan_tier_limit';
+  end if;
+
+  v_tiers := c.eligible_athlete_tiers;
+  if v_tiers is not null then
+    v_tiers := array(
+      select t from unnest(v_tiers) as t
+      where public.athlete_tier_level(t) <= public.athlete_tier_level(b.max_athlete_tier)
+    );
+    if cardinality(v_tiers) = 0 then
+      return 'plan_tier_limit';
+    end if;
+  end if;
+
   select count(*) into open_count
     from public.campaigns
-    where business_id = v_business_id and status in ('active', 'open') and id <> p_campaign_id;
+    where business_id = c.business_id and status in ('active', 'open') and id <> p_campaign_id;
   if open_count >= b.max_open_campaigns then
     return 'plan_campaign_limit';
   end if;
 
   update public.campaigns
-    set status = 'active'
-    where id = p_campaign_id and status = p_from_status;
-  if not found then
-    return 'stale';
-  end if;
+    set status = 'active', eligible_athlete_tiers = v_tiers
+    where id = p_campaign_id;
 
   return null;
 end;
@@ -385,6 +414,62 @@ $$;
 
 revoke all on function public.activate_campaign_within_plan(uuid, text) from public, anon, authenticated;
 grant execute on function public.activate_campaign_within_plan(uuid, text) to service_role;
+
+-- The slots API sets a campaign's total capacity. Auto-accept spends open_slots as remaining capacity,
+-- so this stores total minus accepted. The campaign row is locked while it counts, so an acceptance
+-- running at the same time either finishes first and is counted, or waits and decrements afterwards.
+-- Returns {"reason": null | 'not_found' | 'below_filled_count' | plan block, "accepted": n}.
+create or replace function public.set_campaign_total_slots(
+  p_campaign_id uuid,
+  p_total_slots integer,
+  p_check_plan boolean
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  c record;
+  b record;
+  v_accepted integer;
+begin
+  select business_id into c from public.campaigns where id = p_campaign_id for update;
+  if not found then
+    return jsonb_build_object('reason', 'not_found', 'accepted', 0);
+  end if;
+
+  select count(*) into v_accepted
+    from public.campaign_applications
+    where campaign_id = p_campaign_id and status = 'accepted';
+
+  if p_total_slots < greatest(v_accepted, 1) then
+    return jsonb_build_object('reason', 'below_filled_count', 'accepted', v_accepted);
+  end if;
+
+  if p_check_plan then
+    select subscription_status, billing_ready, max_slots_per_campaign
+      into b
+      from public.business_billing_profiles
+      where business_id = c.business_id;
+    if not found or b.subscription_status <> 'active' or not b.billing_ready then
+      return jsonb_build_object('reason', 'subscription_required', 'accepted', v_accepted);
+    end if;
+    if p_total_slots > b.max_slots_per_campaign then
+      return jsonb_build_object('reason', 'plan_slot_limit', 'accepted', v_accepted);
+    end if;
+  end if;
+
+  update public.campaigns
+    set slots = p_total_slots, open_slots = p_total_slots - v_accepted
+    where id = p_campaign_id;
+
+  return jsonb_build_object('reason', null, 'accepted', v_accepted);
+end;
+$$;
+
+revoke all on function public.set_campaign_total_slots(uuid, integer, boolean) from public, anon, authenticated;
+grant execute on function public.set_campaign_total_slots(uuid, integer, boolean) to service_role;
 
 -- H7. Athletes could write their own Stripe account id and mark Stripe onboarding complete, and payouts
 -- go to whatever id is stored. Those come only from Connect onboarding and Stripe's account.updated

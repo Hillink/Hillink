@@ -65,6 +65,8 @@ update public.campaigns set min_athlete_tier = 'gold' where title = 'OK';
 update public.campaigns set eligible_athlete_tiers = array['Bronze','Silver','Gold','Diamond'] where title = 'OK' returning eligible_athlete_tiers;
 \echo 'go-live function is server-only (expect permission denied):'
 select public.activate_campaign_within_plan('22222222-2222-2222-2222-222222222222', 'draft');
+\echo 'slots function is server-only (expect permission denied):'
+select public.set_campaign_total_slots('11111111-1111-1111-1111-111111111111', 3, true);
 \echo 'slot edit ignored (expect 2):'
 update public.campaigns set open_slots = 999, title='renamed' where id='11111111-1111-1111-1111-111111111111' returning open_slots, title;
 reset role;
@@ -82,5 +84,39 @@ select public.activate_campaign_within_plan('22222222-2222-2222-2222-22222222222
 select status from public.campaigns where id = '22222222-2222-2222-2222-222222222222';
 \echo 'stale from-status (expect stale):'
 select public.activate_campaign_within_plan('22222222-2222-2222-2222-222222222222', 'draft');
+reset role;
+\echo '--- Draft made before a downgrade (plan now: 3 slots, Silver)'
+update public.campaigns set status = 'paused' where id = '11111111-1111-1111-1111-111111111111';
+insert into public.campaigns(id,business_id,title,deliverables,preferred_tier,payout_cents,slots,open_slots,status) values ('33333333-3333-3333-3333-333333333333','00000000-0000-0000-0000-00000000000b','Big','d','Any',0,5,5,'draft');
+set role service_role;
+\echo 'too many slots (expect plan_slot_limit):'
+select public.activate_campaign_within_plan('33333333-3333-3333-3333-333333333333', 'draft');
+reset role; update public.campaigns set slots = 2, open_slots = 2, preferred_tier = 'Gold' where id = '33333333-3333-3333-3333-333333333333'; set role service_role;
+\echo 'preferred tier above plan (expect plan_tier_limit):'
+select public.activate_campaign_within_plan('33333333-3333-3333-3333-333333333333', 'draft');
+reset role; update public.campaigns set preferred_tier = 'Any', min_athlete_tier = 'gold' where id = '33333333-3333-3333-3333-333333333333'; set role service_role;
+\echo 'min tier above plan (expect plan_tier_limit):'
+select public.activate_campaign_within_plan('33333333-3333-3333-3333-333333333333', 'draft');
+reset role; update public.campaigns set min_athlete_tier = 'bronze', eligible_athlete_tiers = array['Bronze','Gold'] where id = '33333333-3333-3333-3333-333333333333'; set role service_role;
+\echo 'within plan (expect empty, then active / {Bronze}):'
+select public.activate_campaign_within_plan('33333333-3333-3333-3333-333333333333', 'draft');
+select status, eligible_athlete_tiers from public.campaigns where id = '33333333-3333-3333-3333-333333333333';
+reset role;
+
+\echo '--- Total slots (one accepted athlete, plan max 3)'
+set session_replication_role = replica; -- fixture only: skip the join-rule triggers
+insert into public.campaign_applications(campaign_id, athlete_id, status, applied_at) values ('11111111-1111-1111-1111-111111111111','00000000-0000-0000-0000-00000000000c','accepted', now());
+set session_replication_role = origin;
+set role service_role;
+\echo 'below accepted (expect below_filled_count):'
+select public.set_campaign_total_slots('11111111-1111-1111-1111-111111111111', 0, true);
+\echo 'over plan (expect plan_slot_limit):'
+select public.set_campaign_total_slots('11111111-1111-1111-1111-111111111111', 4, true);
+\echo 'total 3 (expect reason null, accepted 1; then slots 3 / open 2):'
+select public.set_campaign_total_slots('11111111-1111-1111-1111-111111111111', 3, true);
+select slots, open_slots from public.campaigns where id = '11111111-1111-1111-1111-111111111111';
+\echo 'admin skips the plan (expect reason null; then slots 10 / open 9):'
+select public.set_campaign_total_slots('11111111-1111-1111-1111-111111111111', 10, false);
+select slots, open_slots from public.campaigns where id = '11111111-1111-1111-1111-111111111111';
 reset role;
 rollback;

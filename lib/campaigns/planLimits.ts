@@ -1,43 +1,38 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-// Server-side copy of the plan checks that the campaigns_enforce_plan_limits trigger runs for direct
-// inserts (supabase/migrations/20260929000300_security_hardening.sql). Routes that change campaigns
-// with the service role bypass that trigger, so they use these instead.
+// Plan checks for routes that change campaigns with the service role, which the
+// campaigns_enforce_plan_limits trigger lets through. Each runs as one database function
+// (supabase/migrations/20260929000300_security_hardening.sql) so the check and the change are atomic.
 
-export type PlanBlock = "subscription_required" | "plan_slot_limit" | "plan_campaign_limit";
+export type PlanBlock = "subscription_required" | "plan_slot_limit" | "plan_tier_limit" | "plan_campaign_limit";
 
 export const PLAN_BLOCK_MESSAGES: Record<PlanBlock, string> = {
   subscription_required: "Activate a subscription in Settings before running campaigns.",
   plan_slot_limit: "Your plan doesn't allow that many athlete slots on one campaign.",
+  plan_tier_limit: "Your plan doesn't include athletes at this campaign's tier. Lower the tier or upgrade.",
   plan_campaign_limit: "Your plan's limit on open campaigns is reached. Pause or finish one first.",
 };
 
-type Billing = {
-  subscription_status: string | null;
-  billing_ready: boolean | null;
-  max_slots_per_campaign: number | null;
-  max_open_campaigns: number | null;
-};
+export type SlotChangeBlock = PlanBlock | "not_found" | "below_filled_count";
 
-async function loadBilling(admin: SupabaseClient, businessId: string): Promise<Billing | null> {
-  const { data } = await admin
-    .from("business_billing_profiles")
-    .select("subscription_status, billing_ready, max_slots_per_campaign, max_open_campaigns")
-    .eq("business_id", businessId)
-    .maybeSingle();
-  return (data as Billing | null) ?? null;
-}
-
-function activeSubscription(billing: Billing | null): billing is Billing {
-  return !!billing && billing.subscription_status === "active" && !!billing.billing_ready;
-}
-
-/** Why a business can't have this many athletes on one campaign (accepted plus open), or null. */
-export async function slotPlanBlock(admin: SupabaseClient, businessId: string, slots: number): Promise<PlanBlock | null> {
-  const billing = await loadBilling(admin, businessId);
-  if (!activeSubscription(billing)) return "subscription_required";
-  if (slots > Number(billing.max_slots_per_campaign ?? 0)) return "plan_slot_limit";
-  return null;
+/**
+ * Sets a campaign's total slots (accepted plus open) in one database transaction
+ * (set_campaign_total_slots), checking the plan when checkPlan is true.
+ */
+export async function setCampaignTotalSlots(
+  admin: SupabaseClient,
+  campaignId: string,
+  totalSlots: number,
+  checkPlan: boolean
+): Promise<{ reason: SlotChangeBlock | null; accepted: number }> {
+  const { data, error } = await admin.rpc("set_campaign_total_slots", {
+    p_campaign_id: campaignId,
+    p_total_slots: totalSlots,
+    p_check_plan: checkPlan,
+  });
+  if (error) throw new Error(error.message);
+  const result = (data ?? {}) as { reason?: SlotChangeBlock | null; accepted?: number };
+  return { reason: result.reason ?? null, accepted: Number(result.accepted ?? 0) };
 }
 
 /**
