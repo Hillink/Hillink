@@ -22,11 +22,10 @@ export async function POST() {
   const hasValidSecret = isValidStripeSecretKey(process.env.STRIPE_SECRET_KEY);
   const fallbackFlag = (process.env.STRIPE_DEV_FALLBACK || "").trim().toLowerCase();
   const fallbackEnabledByFlag =
-    fallbackFlag === "" || fallbackFlag === "true" || fallbackFlag === "1" || fallbackFlag === "yes";
-  const allowDevFallback =
-    fallbackEnabledByFlag ||
-    process.env.NODE_ENV !== "production" ||
-    process.env.VERCEL_ENV === "preview";
+    fallbackFlag === "true" || fallbackFlag === "1" || fallbackFlag === "yes";
+  const isProductionEnvironment =
+    process.env.NODE_ENV === "production" || process.env.VERCEL_ENV === "production";
+  const allowDevFallback = fallbackEnabledByFlag && !isProductionEnvironment;
 
   if (!hasValidSecret) {
      if (allowDevFallback) {
