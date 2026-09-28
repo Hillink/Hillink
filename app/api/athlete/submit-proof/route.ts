@@ -23,7 +23,12 @@ export async function POST(req: NextRequest) {
   }
   const userId = access.userId;
 
-  const body = (await req.json()) as SubmitBody;
+  let body: SubmitBody;
+  try {
+    body = (await req.json()) as SubmitBody;
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+  }
   const applicationId = body.applicationId?.trim();
   const proofUrl = body.proofUrl?.trim();
 
