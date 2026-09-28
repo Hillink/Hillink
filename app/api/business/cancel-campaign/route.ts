@@ -5,6 +5,8 @@ import { requireRoleAccess } from "@/lib/auth/requireRoleAccess";
 import { getStripe } from "@/lib/stripe/config";
 import { refundPaymentIfFunded } from "@/lib/payments/server";
 
+const CANCELLABLE_STATUSES = ["draft", "open", "active", "paused"];
+
 type CancelBody = {
   campaignId?: string;
 };
@@ -38,8 +40,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  if (campaign.status !== "open") {
-    return NextResponse.json({ error: "Only open campaigns can be cancelled" }, { status: 400 });
+  // New campaigns are created as "active"; older ones may still say "open".
+  if (!CANCELLABLE_STATUSES.includes(campaign.status)) {
+    return NextResponse.json({ error: "This campaign has already ended, so it can't be cancelled." }, { status: 400 });
   }
 
   const { data: appRows, error: appError } = await admin

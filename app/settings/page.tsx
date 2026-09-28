@@ -22,6 +22,7 @@ function SettingsContent() {
   const [savingProfile, setSavingProfile] = useState(false);
   const [changingEmail, setChangingEmail] = useState(false);
   const [startingCheckout, setStartingCheckout] = useState(false);
+  const [openingBillingPortal, setOpeningBillingPortal] = useState(false);
   const [startingOnboarding, setStartingOnboarding] = useState(false);
   const [terminatingAccount, setTerminatingAccount] = useState(false);
   const [connectingInstagram, setConnectingInstagram] = useState(false);
@@ -90,7 +91,7 @@ function SettingsContent() {
   });
 
   const [athletePayout, setAthletePayout] = useState({
-    payoutMethod: "stripe_connect" as "stripe_connect" | "bank_transfer" | "paypal" | "venmo" | "cashapp",
+    payoutMethod: "stripe_connect" as "stripe_connect" | "bank_transfer",
     recipientName: "",
     recipientEmail: "",
     payoutHandle: "",
@@ -176,7 +177,8 @@ function SettingsContent() {
 
         if (payoutData) {
           setAthletePayout({
-            payoutMethod: payoutData.payout_method || "stripe_connect",
+            // Payouts only go through Stripe; older PayPal, Venmo and Cash App choices fall back to it.
+            payoutMethod: payoutData.payout_method === "bank_transfer" ? "bank_transfer" : "stripe_connect",
             recipientName: payoutData.recipient_name || "",
             recipientEmail: payoutData.recipient_email || "",
             payoutHandle: payoutData.payout_handle || "",
@@ -523,6 +525,27 @@ function SettingsContent() {
     }
 
     window.location.href = data.url;
+  };
+
+  // Stripe's billing portal: cancel the plan, update the card, see invoices.
+  const handleOpenBillingPortal = async () => {
+    if (role !== "business") return;
+    setError("");
+    setSuccessMessage("");
+    setOpeningBillingPortal(true);
+    try {
+      const res = await fetch("/api/stripe/billing-portal", { method: "POST" });
+      const data = await res.json();
+      if (!res.ok || !data.url) {
+        setError(data.error || "Couldn't open Stripe billing.");
+        return;
+      }
+      window.location.href = data.url;
+    } catch {
+      setError("Couldn't reach HILLink. Check your connection.");
+    } finally {
+      setOpeningBillingPortal(false);
+    }
   };
 
   const handleStartAthleteOnboarding = async () => {
@@ -951,15 +974,12 @@ function SettingsContent() {
                   onChange={(e) =>
                     setAthletePayout({
                       ...athletePayout,
-                      payoutMethod: e.target.value as "stripe_connect" | "bank_transfer" | "paypal" | "venmo" | "cashapp",
+                      payoutMethod: e.target.value as "stripe_connect" | "bank_transfer",
                     })
                   }
                 >
                   <option value="stripe_connect">Stripe Connect (recommended)</option>
                   <option value="bank_transfer">Bank transfer</option>
-                  <option value="paypal">PayPal</option>
-                  <option value="venmo">Venmo</option>
-                  <option value="cashapp">Cash App</option>
                 </select>
               </label>
               <label>
@@ -974,15 +994,7 @@ function SettingsContent() {
                 <input
                   value={athletePayout.recipientEmail}
                   onChange={(e) => setAthletePayout({ ...athletePayout, recipientEmail: e.target.value })}
-                  placeholder="For Stripe/PayPal"
-                />
-              </label>
-              <label>
-                Handle / username
-                <input
-                  value={athletePayout.payoutHandle}
-                  onChange={(e) => setAthletePayout({ ...athletePayout, payoutHandle: e.target.value })}
-                  placeholder="@username"
+                  placeholder="For Stripe"
                 />
               </label>
               <label>
@@ -1316,7 +1328,7 @@ function SettingsContent() {
                 />
               </label>
             </div>
-            <div style={{ marginTop: 12 }}>
+            <div style={{ marginTop: 12, display: "flex", gap: 8, flexWrap: "wrap" }}>
               <button
                 className="secondary-button"
                 type="button"
@@ -1325,7 +1337,18 @@ function SettingsContent() {
               >
                 {startingCheckout ? "Redirecting..." : "Pay and Activate Tier (Stripe)"}
               </button>
+              <button
+                className="secondary-button"
+                type="button"
+                onClick={handleOpenBillingPortal}
+                disabled={openingBillingPortal}
+              >
+                {openingBillingPortal ? "Opening..." : "Manage billing or cancel plan"}
+              </button>
             </div>
+            <p style={{ margin: "8px 0 0", fontSize: 13, color: "var(--muted)" }}>
+              To switch plans, pick a new tier above and choose Pay and Activate Tier. Stripe charges or credits the difference.
+            </p>
           </>
         )}
 

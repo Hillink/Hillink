@@ -115,13 +115,15 @@ export async function POST(req: NextRequest) {
     if (event.type === "customer.subscription.updated" || event.type === "customer.subscription.deleted") {
       const sub = event.data.object;
       const status = sub.status;
+      // Cancelled from Stripe's billing portal, or ended for non-payment.
+      const ended = event.type === "customer.subscription.deleted" || status === "canceled" || status === "incomplete_expired";
       const customerId = typeof sub.customer === "string" ? sub.customer : sub.customer?.id;
       const currentPriceId = sub.items?.data?.[0]?.price?.id;
       const tier = getBillingTierFromPriceId(currentPriceId);
       const tierConfig = tier ? getTierConfig(tier) : null;
 
       if (customerId) {
-        await adminClient
+        let billingUpdate = adminClient
           .from("business_billing_profiles")
           .update({
             ...(tierConfig
@@ -134,10 +136,15 @@ export async function POST(req: NextRequest) {
                 }
               : {}),
             stripe_subscription_status: status,
-            subscription_status: status === "active" || status === "trialing" ? "active" : "past_due",
+            subscription_status: status === "active" || status === "trialing" ? "active" : ended ? "cancelled" : "past_due",
             billing_ready: status === "active" || status === "trialing",
+            // Forget an ended subscription so choosing a tier again starts a fresh checkout.
+            ...(ended ? { stripe_subscription_id: null } : {}),
           })
           .eq("stripe_customer_id", customerId);
+        // An old subscription ending must not undo a newer one on the same customer.
+        if (ended) billingUpdate = billingUpdate.eq("stripe_subscription_id", sub.id);
+        await billingUpdate;
 
         await logFinanceEvent({
           source: "stripe_webhook",

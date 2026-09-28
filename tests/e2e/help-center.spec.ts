@@ -56,6 +56,7 @@ test.describe("Help Center", () => {
     expect(slugs).not.toContain("business-plans");
     expect((await page.request.get("/api/help/articles/paying-athletes")).status()).toBe(404);
     expect((await page.request.get("/api/help/articles/when-do-i-get-paid")).status()).toBe(200);
+    expect((await page.request.get("/api/help/articles/cancelling-a-campaign")).status()).toBe(404);
 
     // The one welcome-email link goes to the athlete guide.
     await page.goto("/help/start-here");
@@ -75,6 +76,7 @@ test.describe("Help Center", () => {
     await expectNotFound(page, "/help/payments/when-do-i-get-paid");
     await expectNotFound(page, "/help/internal/managing-help-articles");
     expect((await page.request.get("/api/help/articles/when-do-i-get-paid")).status()).toBe(404);
+    expect((await page.request.get("/api/help/articles/cancelling-a-campaign")).status()).toBe(200);
 
     await page.goto("/help/start-here");
     await expect(page).toHaveURL(/\/help\/getting-started\/business-start-here$/);

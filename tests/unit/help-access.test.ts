@@ -3,7 +3,8 @@ import assert from "node:assert/strict";
 import { canRead, effectiveScope, safeHelpReturnPath, scopeForRole } from "../../lib/help/access.ts";
 import { validateArticleInput, slugify } from "../../lib/help/validate.ts";
 import { HELP_CATEGORIES, RESERVED_HELP_SEGMENTS, START_HERE_SLUGS, articlePath } from "../../lib/help/categories.ts";
-import { SEED_ARTICLES } from "../../lib/help/seed-content.ts";
+import { SEED_ARTICLES, SEED_UPDATED_SLUGS, SEED_VERIFIED_AT } from "../../lib/help/seed-content.ts";
+import { TEMPLATE_PROOF_REQUIREMENTS } from "../../lib/campaignTemplates.ts";
 
 const article = (audience: string, status: string) => ({ audience, status });
 
@@ -91,4 +92,19 @@ test("starter content is valid, and nothing unreleased or internal is published 
   }
   const store = SEED_ARTICLES.find((a) => a.slug === "rewards-store");
   assert.equal(store?.status, "planned");
+});
+
+test("rewritten articles are known and marked as re-checked", () => {
+  for (const slug of SEED_UPDATED_SLUGS) {
+    const a = SEED_ARTICLES.find((x) => x.slug === slug);
+    assert.ok(a, slug);
+    assert.ok(a.verified_at && a.verified_at > SEED_VERIFIED_AT, `${slug} needs a newer verified_at`);
+  }
+});
+
+test("proof checklists only ask for what a post link can show", () => {
+  for (const [key, items] of Object.entries(TEMPLATE_PROOF_REQUIREMENTS)) {
+    for (const item of items) assert.ok(!/screenshot/i.test(item), `${key}: ${item}`);
+    assert.ok(items.some((item) => item.includes("#ad")), `${key} is missing the #ad item`);
+  }
 });

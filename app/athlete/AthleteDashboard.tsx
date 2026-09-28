@@ -186,7 +186,7 @@ function rowLabel(status: Application["status"]): string {
   if (status === "submitted") return "Proof submitted - waiting business review";
   if (status === "approved") return "Approved";
   if (status === "declined") return "Declined";
-  if (status === "rejected") return "Rejected";
+  if (status === "rejected") return "Needs changes - fix your post and submit it again";
   if (status === "withdrawn") return "Withdrawn";
   return "Applied";
 }
@@ -1561,7 +1561,7 @@ export default function AthleteDashboard({ initialXp = 0 }: AthleteDashboardProp
                       </button>
                     </p>
 
-                    {(app.status === "accepted" || app.status === "submitted") && campaign?.status !== "cancelled" && (
+                    {(app.status === "accepted" || app.status === "submitted" || app.status === "rejected") && campaign?.status !== "cancelled" && (
                       <>
                         <label style={{ display: "block", marginTop: 8 }}>
                           Proof URL (post/story/reel link)
@@ -1592,9 +1592,9 @@ export default function AthleteDashboard({ initialXp = 0 }: AthleteDashboardProp
                       </>
                     )}
 
-                    {(app.status === "accepted" || app.status === "submitted") && (
+                    {(app.status === "accepted" || app.status === "submitted" || app.status === "rejected") && (
                       <p style={{ margin: "10px 0 0", fontSize: 13, color: "var(--muted)" }}>
-                        FTC rule: your post must say <strong>#ad</strong> or use Instagram&apos;s <strong>Paid partnership</strong> label, and your proof screenshot should show it.
+                        FTC rule: your post must say <strong>#ad</strong> or use Instagram&apos;s <strong>Paid partnership</strong> label. The business checks your post for it.
                       </p>
                     )}
 
@@ -1615,10 +1615,10 @@ export default function AthleteDashboard({ initialXp = 0 }: AthleteDashboardProp
                     <div style={{ marginTop: 10, display: "flex", gap: 8, flexWrap: "wrap" }}>
                       <button
                         className="cta-button"
-                        disabled={app.status !== "accepted" || submittingAppId === app.id || campaign?.status === "cancelled"}
+                        disabled={(app.status !== "accepted" && app.status !== "rejected") || submittingAppId === app.id || campaign?.status === "cancelled"}
                         onClick={() => submitProof(app)}
                       >
-                        {submittingAppId === app.id ? "Submitting..." : "Submit Proof"}
+                        {submittingAppId === app.id ? "Submitting..." : app.status === "rejected" ? "Submit Again" : "Submit Proof"}
                       </button>
 
                       {(app.status === "accepted" || app.status === "submitted" || app.status === "approved" || (app.status as string) === "completed") && !promoByAppId[app.id] && (
@@ -1857,7 +1857,7 @@ export default function AthleteDashboard({ initialXp = 0 }: AthleteDashboardProp
                   <div><strong>Claim method:</strong> {selectedCampaign.claim_method ? CLAIM_METHOD_LABELS[selectedCampaign.claim_method] : "Business selects"}</div>
                   <div><strong>Tier eligibility:</strong> {(selectedCampaign.eligible_athlete_tiers && selectedCampaign.eligible_athlete_tiers.length > 0) ? selectedCampaign.eligible_athlete_tiers.join(", ") : selectedCampaign.preferred_tier}</div>
                   <div><strong>Directions:</strong> {selectedCampaign.deliverables || "Not provided"}</div>
-                  <div><strong>Proof required:</strong> {(selectedCampaign.proof_requirements && selectedCampaign.proof_requirements.length > 0) ? selectedCampaign.proof_requirements.join(" • ") : "Live post URL and screenshot"}</div>
+                  <div><strong>Proof required:</strong> {(selectedCampaign.proof_requirements && selectedCampaign.proof_requirements.length > 0) ? selectedCampaign.proof_requirements.join(" • ") : "Live post URL"}</div>
                   <div><strong>Location / fulfillment:</strong> {selectedCampaign.location_type || "local_only"} • {selectedCampaign.location_text || [selectedBusiness?.city, selectedBusiness?.state].filter(Boolean).join(", ") || "Not provided"}</div>
                   <div><strong>Additional compensation:</strong> {selectedCampaign.additional_compensation || "None listed"}</div>
                   <div><strong>Business:</strong> {selectedBusiness?.business_name || "Business"}</div>
