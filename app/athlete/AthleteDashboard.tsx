@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import {
+  countJoinedCampaigns,
   getNextTierGoal,
   getTierFromXp,
   getTierRewards,
@@ -884,13 +885,13 @@ export default function AthleteDashboard({ initialXp = 0 }: AthleteDashboardProp
   const unlockedTierRewards = getTierRewards(currentTier);
   const verifiedDiagnosticsCount = Object.values(diagnosticsByApplicationId).filter((d) => d.diagnostics_status === "verified").length;
   const submittedCount = applications.filter((a) => a.status === "submitted" || a.status === "approved" || a.status === "rejected").length;
-  const activeCampaignParticipation = applications.filter((a) => a.status !== "withdrawn" && a.status !== "declined").length;
+  const activeCampaignParticipation = countJoinedCampaigns(applications);
 
   const challenges = [
     {
       id: "apply-3",
       title: "Campaign Starter",
-      description: "Join 3 campaigns",
+      description: "Get accepted into 3 campaigns",
       progress: activeCampaignParticipation,
       target: 3,
       reward: 75,

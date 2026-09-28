@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createNotification } from "@/lib/notifications";
 import { requireRoleAccess } from "@/lib/auth/requireRoleAccess";
+import { countJoinedCampaigns } from "@/lib/xp";
 
 type ChallengeDef = {
   id: string;
@@ -49,9 +50,7 @@ export async function POST() {
     return NextResponse.json({ error: challengeEventsError.message }, { status: 500 });
   }
 
-  const activeCampaignParticipation = (applications || []).filter(
-    (a) => a.status !== "withdrawn" && a.status !== "declined"
-  ).length;
+  const activeCampaignParticipation = countJoinedCampaigns(applications || []);
   const submittedCount = (applications || []).filter(
     (a) => a.status === "submitted" || a.status === "approved" || a.status === "rejected"
   ).length;
