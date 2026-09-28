@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireRole } from "@/lib/rbac";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { notifyUser } from "@/lib/notifications";
+import { unfundedWorkBlock } from "@/lib/payments/workFunding";
 
 type SubmitBody = {
   applicationId?: string;
@@ -82,6 +83,18 @@ export async function POST(req: NextRequest) {
       { error: "Application must be accepted or completed for deliverable submission" },
       { status: 422 }
     );
+  }
+
+  // The business pays when it accepts; nobody works on a campaign spot that isn't paid for.
+  if (!force) {
+    const fundingBlock = await unfundedWorkBlock(admin, {
+      applicationId: application.id,
+      campaignId: application.campaign_id,
+      athleteId: application.athlete_id,
+    });
+    if (fundingBlock) {
+      return NextResponse.json(fundingBlock, { status: 409 });
+    }
   }
 
   const { data: requirement, error: requirementError } = await admin

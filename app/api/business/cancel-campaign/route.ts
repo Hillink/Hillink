@@ -4,6 +4,7 @@ import { notifyUser } from "@/lib/notifications";
 import { requireRoleAccess } from "@/lib/auth/requireRoleAccess";
 import { getStripe } from "@/lib/stripe/config";
 import { refundPaymentIfFunded } from "@/lib/payments/server";
+import { PROOF_IN_MESSAGE } from "@/lib/campaigns/lifecycle";
 
 type CancelBody = {
   campaignId?: string;
@@ -38,7 +39,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  if (campaign.status !== "open") {
+  if (campaign.status !== "open" && campaign.status !== "cancelled") {
     return NextResponse.json({ error: "Only open campaigns can be cancelled" }, { status: 400 });
   }
 
@@ -52,22 +53,42 @@ export async function POST(req: NextRequest) {
   }
 
   const applications = appRows || [];
-  const hasCompletedPost = applications.some((app: { status: string }) => app.status === "approved" || app.status === "completed");
-  if (hasCompletedPost) {
-    return NextResponse.json(
-      { error: "This campaign cannot be cancelled because an athlete has already completed and been approved." },
-      { status: 400 }
-    );
+
+  // Nothing is deleted: the campaign, its applications, payments, XP and finance history stay as records.
+  // The database closes the applications and cancels the campaign under one lock, and refuses once any
+  // athlete has sent proof (D4: from then on only a Hillink admin can cancel).
+  const { data: cancelResult, error: cancelError } = await admin.rpc("cancel_campaign_keep_records", {
+    p_campaign_id: campaignId,
+    p_actor: userId,
+    p_reason: "Cancelled by business",
+    p_allow_after_proof: false,
+  });
+  if (cancelError) {
+    return NextResponse.json({ error: cancelError.message }, { status: 500 });
+  }
+  const outcome = (cancelResult ?? {}) as { reason?: string | null; applications?: string[] };
+  if (outcome.reason === "proof_submitted") {
+    return NextResponse.json({ error: PROOF_IN_MESSAGE, code: "proof_submitted" }, { status: 409 });
+  }
+  if (outcome.reason) {
+    return NextResponse.json({ error: "This campaign can't be cancelled." }, { status: 400 });
   }
 
-  const applicationIds = applications.map((app: { id: string }) => app.id);
-
-  // Refund every funded athlete payment first: deleting the applications below also deletes their payments.
-  for (const applicationId of applicationIds) {
+  // Refund every funded athlete payment on the closed applications. Safe to retry: cancelling an
+  // already-cancelled campaign comes back here and refunds whatever is still held.
+  for (const applicationId of outcome.applications ?? []) {
     const refund = await refundPaymentIfFunded(getStripe, admin, applicationId);
     if (refund.error) {
-      return NextResponse.json({ error: `Refund failed, campaign not cancelled: ${refund.error}` }, { status: 502 });
+      return NextResponse.json(
+        { error: `The campaign is cancelled, but a refund failed: ${refund.error}. Try cancelling again to retry it.` },
+        { status: 502 }
+      );
     }
+  }
+
+  // A retry after a failed refund doesn't notify athletes again.
+  if (campaign.status === "cancelled") {
+    return NextResponse.json({ success: true });
   }
 
   const notifyAthleteIds = Array.from(
@@ -103,64 +124,6 @@ export async function POST(req: NextRequest) {
       })
     })
   );
-
-  if (applicationIds.length > 0) {
-    const { error: diagnosticsDeleteError } = await admin
-      .from("instagram_post_diagnostics")
-      .delete()
-      .in("application_id", applicationIds);
-    if (diagnosticsDeleteError) {
-      return NextResponse.json({ error: diagnosticsDeleteError.message }, { status: 500 });
-    }
-
-    const { error: xpDeleteByAppError } = await admin
-      .from("athlete_xp_events")
-      .delete()
-      .in("application_id", applicationIds);
-    if (xpDeleteByAppError) {
-      return NextResponse.json({ error: xpDeleteByAppError.message }, { status: 500 });
-    }
-
-    const { error: financeDeleteByAppError } = await admin
-      .from("finance_events")
-      .delete()
-      .in("application_id", applicationIds);
-    if (financeDeleteByAppError) {
-      return NextResponse.json({ error: financeDeleteByAppError.message }, { status: 500 });
-    }
-  }
-
-  const { error: xpDeleteByCampaignError } = await admin
-    .from("athlete_xp_events")
-    .delete()
-    .eq("campaign_id", campaignId);
-  if (xpDeleteByCampaignError) {
-    return NextResponse.json({ error: xpDeleteByCampaignError.message }, { status: 500 });
-  }
-
-  const { error: financeDeleteByCampaignError } = await admin
-    .from("finance_events")
-    .delete()
-    .eq("campaign_id", campaignId);
-  if (financeDeleteByCampaignError) {
-    return NextResponse.json({ error: financeDeleteByCampaignError.message }, { status: 500 });
-  }
-
-  const { error: applicationsDeleteError } = await admin
-    .from("campaign_applications")
-    .delete()
-    .eq("campaign_id", campaignId);
-  if (applicationsDeleteError) {
-    return NextResponse.json({ error: applicationsDeleteError.message }, { status: 500 });
-  }
-
-  const { error: campaignDeleteError } = await admin
-    .from("campaigns")
-    .delete()
-    .eq("id", campaignId);
-  if (campaignDeleteError) {
-    return NextResponse.json({ error: campaignDeleteError.message }, { status: 500 });
-  }
 
   return NextResponse.json({ success: true });
 }

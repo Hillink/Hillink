@@ -3,6 +3,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getBillingTierFromPriceId, getStripe, getTierConfig, type BillingTier } from "@/lib/stripe/config";
 import { isValidStripeWebhookSecret } from "@/lib/env/validation";
 import { markPaymentFunded } from "@/lib/payments/server";
+import { createNotification } from "@/lib/notifications";
 
 // AUTH_EXEMPT: Stripe signed webhook endpoint; auth is verified by signature.
 
@@ -44,6 +45,28 @@ export async function POST(req: NextRequest) {
     ) {
       const session = event.data.object;
       const result = await markPaymentFunded(getStripe(), adminClient, session);
+      // The athlete couldn't post until this was paid; tell them they can start.
+      if (result.applied && session.metadata?.application_id) {
+        const { data: appRow } = await adminClient
+          .from("campaign_applications")
+          .select("athlete_id, campaign_id")
+          .eq("id", session.metadata.application_id)
+          .maybeSingle();
+        if (appRow?.athlete_id) {
+          try {
+            await createNotification({
+              userId: appRow.athlete_id,
+              type: "application_accepted",
+              title: "You're funded. Time to post!",
+              body: "The business has paid for your campaign spot. You can send your proof now.",
+              ctaUrl: "/athlete",
+              ctaLabel: "Open campaign",
+            });
+          } catch (error) {
+            console.error("Failed to notify athlete of funding", error);
+          }
+        }
+      }
       await logFinanceEvent({
         source: "stripe_webhook",
         event_type: event.type,
