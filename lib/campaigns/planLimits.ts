@@ -4,6 +4,9 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 // campaigns_enforce_plan_limits trigger lets through. Each runs as one database function
 // (supabase/migrations/20260929000300_security_hardening.sql) so the check and the change are atomic.
 
+/** Application statuses that keep a campaign slot (same set as set_campaign_total_slots counts). */
+export const SLOT_HOLDING_STATUSES = ["accepted", "in_progress", "submitted", "approved", "completed"] as const;
+
 export type PlanBlock = "subscription_required" | "plan_slot_limit" | "plan_tier_limit" | "plan_campaign_limit";
 
 export const PLAN_BLOCK_MESSAGES: Record<PlanBlock, string> = {
@@ -38,17 +41,18 @@ export async function setCampaignTotalSlots(
 /**
  * Makes a business's campaign live if its plan allows it. The count and the status change run in one
  * database transaction (activate_campaign_within_plan), so parallel requests can't both pass.
- * Returns null on success, "stale" if the campaign's status changed meanwhile, or the plan block.
+ * Returns null on success, "stale" if the campaign's status changed meanwhile, "no_open_slots" or
+ * "no_start_date" if it isn't ready, or the plan block.
  */
 export async function activateCampaignWithinPlan(
   admin: SupabaseClient,
   campaignId: string,
   fromStatus: string
-): Promise<PlanBlock | "stale" | null> {
+): Promise<PlanBlock | "stale" | "no_open_slots" | "no_start_date" | null> {
   const { data, error } = await admin.rpc("activate_campaign_within_plan", {
     p_campaign_id: campaignId,
     p_from_status: fromStatus,
   });
   if (error) throw new Error(error.message);
-  return (data as PlanBlock | "stale" | null) ?? null;
+  return (data as PlanBlock | "stale" | "no_open_slots" | "no_start_date" | null) ?? null;
 }

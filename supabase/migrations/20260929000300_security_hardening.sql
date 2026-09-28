@@ -336,7 +336,8 @@ execute function public.enforce_campaign_plan_limits();
 -- business, it goes live through this function instead: every plan check and the status change share
 -- one transaction and the same per-business lock, so two parallel requests can't both pass the count,
 -- and a draft made on a bigger plan can't go live after a downgrade.
--- Returns null when the campaign went live, 'stale' when its status changed meanwhile, or a plan block.
+-- Returns null when the campaign went live, 'stale' when its status changed meanwhile, 'no_open_slots' or
+-- 'no_start_date' when it isn't ready, or a plan block.
 create or replace function public.activate_campaign_within_plan(
   p_campaign_id uuid,
   p_from_status text
@@ -359,13 +360,21 @@ begin
 
   perform pg_advisory_xact_lock(hashtextextended('campaign-plan:' || c.business_id::text, 0));
 
-  select business_id, status, slots, preferred_tier, min_athlete_tier, eligible_athlete_tiers
+  select business_id, status, slots, open_slots, start_date, preferred_tier, min_athlete_tier, eligible_athlete_tiers
     into c
     from public.campaigns
     where id = p_campaign_id
     for update;
   if c.status is distinct from p_from_status then
     return 'stale';
+  end if;
+
+  -- Same prerequisites the status API checks, rechecked under the lock.
+  if coalesce(c.open_slots, 0) < 1 then
+    return 'no_open_slots';
+  end if;
+  if c.start_date is null then
+    return 'no_start_date';
   end if;
 
   select subscription_status, billing_ready, max_open_campaigns, max_slots_per_campaign, max_athlete_tier

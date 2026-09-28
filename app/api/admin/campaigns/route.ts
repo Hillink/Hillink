@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAdminAccess } from "@/lib/auth/requireAdminAccess";
+import { SLOT_HOLDING_STATUSES } from "@/lib/campaigns/planLimits";
 
 type BulkCancelBody = {
   campaignIds?: string[];
@@ -39,7 +40,7 @@ export async function GET(req: NextRequest) {
       .from("campaign_applications")
       .select("campaign_id")
       .in("campaign_id", campaignIds)
-      .eq("status", "accepted");
+      .in("status", [...SLOT_HOLDING_STATUSES]);
 
     if (acceptedError) {
       return NextResponse.json({ error: acceptedError.message }, { status: 500 });

@@ -151,6 +151,12 @@ export async function PATCH(
     if (outcome === "stale") {
       return NextResponse.json({ error: "Campaign status changed. Refresh and try again." }, { status: 409 });
     }
+    if (outcome === "no_open_slots") {
+      return NextResponse.json({ error: "Campaign must have at least one open slot to activate" }, { status: 422 });
+    }
+    if (outcome === "no_start_date") {
+      return NextResponse.json({ error: "Campaign must have a start date to activate" }, { status: 422 });
+    }
     if (outcome) {
       return NextResponse.json({ error: PLAN_BLOCK_MESSAGES[outcome], reason: outcome }, { status: 422 });
     }

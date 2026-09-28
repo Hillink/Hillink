@@ -57,7 +57,7 @@ insert into public.campaigns(business_id,title,deliverables,preferred_tier,payou
 \echo '3rd live campaign (expect plan_campaign_limit):'
 insert into public.campaigns(business_id,title,deliverables,preferred_tier,payout_cents,slots,open_slots,status) values (auth.uid(),'X','d','Any',0,1,1,'active');
 \echo 'draft is fine, then activating it fails:'
-insert into public.campaigns(id,business_id,title,deliverables,preferred_tier,payout_cents,slots,open_slots,status) values ('22222222-2222-2222-2222-222222222222',auth.uid(),'D','d','Any',0,1,1,'draft');
+insert into public.campaigns(id,business_id,title,deliverables,preferred_tier,payout_cents,slots,open_slots,status,start_date) values ('22222222-2222-2222-2222-222222222222',auth.uid(),'D','d','Any',0,1,1,'draft',now()+interval '5 days');
 update public.campaigns set status='active' where id='22222222-2222-2222-2222-222222222222';
 \echo 'min_athlete_tier over plan (expect plan_tier_limit):'
 update public.campaigns set min_athlete_tier = 'gold' where title = 'OK';
@@ -87,7 +87,7 @@ select public.activate_campaign_within_plan('22222222-2222-2222-2222-22222222222
 reset role;
 \echo '--- Draft made before a downgrade (plan now: 3 slots, Silver)'
 update public.campaigns set status = 'paused' where id = '11111111-1111-1111-1111-111111111111';
-insert into public.campaigns(id,business_id,title,deliverables,preferred_tier,payout_cents,slots,open_slots,status) values ('33333333-3333-3333-3333-333333333333','00000000-0000-0000-0000-00000000000b','Big','d','Any',0,5,5,'draft');
+insert into public.campaigns(id,business_id,title,deliverables,preferred_tier,payout_cents,slots,open_slots,status,start_date) values ('33333333-3333-3333-3333-333333333333','00000000-0000-0000-0000-00000000000b','Big','d','Any',0,5,5,'draft',now()+interval '5 days');
 set role service_role;
 \echo 'too many slots (expect plan_slot_limit):'
 select public.activate_campaign_within_plan('33333333-3333-3333-3333-333333333333', 'draft');
@@ -98,6 +98,10 @@ reset role; update public.campaigns set preferred_tier = 'Any', min_athlete_tier
 \echo 'min tier above plan (expect plan_tier_limit):'
 select public.activate_campaign_within_plan('33333333-3333-3333-3333-333333333333', 'draft');
 reset role; update public.campaigns set min_athlete_tier = 'bronze', eligible_athlete_tiers = array['Bronze','Gold'] where id = '33333333-3333-3333-3333-333333333333'; set role service_role;
+reset role; update public.campaigns set min_athlete_tier = 'bronze', eligible_athlete_tiers = array['Bronze','Gold'], open_slots = 0 where id = '33333333-3333-3333-3333-333333333333'; set role service_role;
+\echo 'no open slot left (expect no_open_slots):'
+select public.activate_campaign_within_plan('33333333-3333-3333-3333-333333333333', 'draft');
+reset role; update public.campaigns set open_slots = 2 where id = '33333333-3333-3333-3333-333333333333'; set role service_role;
 \echo 'within plan (expect empty, then active / {Bronze}):'
 select public.activate_campaign_within_plan('33333333-3333-3333-3333-333333333333', 'draft');
 select status, eligible_athlete_tiers from public.campaigns where id = '33333333-3333-3333-3333-333333333333';
