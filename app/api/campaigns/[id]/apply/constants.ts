@@ -7,6 +7,7 @@ export const REASON_MESSAGES: Record<string, string> = {
   athlete_profile_not_found: "Athlete profile not found",
   not_verified: "Your account must be verified to apply",
   flagged: "Your account is not eligible to apply",
+  low_rating: "Your average rating is below 1.5 stars, so you can't join new campaigns right now.",
   tier_insufficient: "You do not meet the minimum tier for this campaign",
   outside_radius: "You are outside the campaign's acceptance radius",
   already_applied: "You have already applied to this campaign",

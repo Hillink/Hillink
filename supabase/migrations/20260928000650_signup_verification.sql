@@ -1,5 +1,5 @@
--- Signup verification. Must run before 20260928000700_product_answers.sql (PR #10), which redefines
--- athlete_join_block again and has to keep the Instagram check added here.
+-- Signup verification. PR #10 (20260929000200_product_answers.sql) redefines athlete_join_block too; both
+-- versions carry both checks (Instagram login and the 1.5-star floor), so either can run last.
 -- 1. Users can't make themselves admin or approve themselves. Before this, the "update own profile" policy only
 --    locked the role, so anyone could set their own athlete_verification_status to 'approved' through the API,
 --    and a brand new user could insert their own profile row with any role.
@@ -79,13 +79,16 @@ begin
   if auth.uid() is not null and auth.uid() <> p_athlete_id then
     raise exception 'not allowed' using errcode = '42501';
   end if;
-  select confirmed_adult, visa_status, school_disclosure_ack, school_conflict_categories
+  select confirmed_adult, visa_status, school_disclosure_ack, school_conflict_categories, average_rating
     into a from public.athlete_profiles where id = p_athlete_id;
   if not found or not a.confirmed_adult or a.visa_status is null or not a.school_disclosure_ack then
     return 'compliance_required';
   end if;
   if a.visa_status = 'international_not_cleared' then
     return 'visa_not_cleared';
+  end if;
+  if a.average_rating is not null and a.average_rating < 1.5 then
+    return 'low_rating';
   end if;
   select bp.category_key into category
     from public.campaigns c join public.business_profiles bp on bp.id = c.business_id
