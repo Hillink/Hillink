@@ -14,7 +14,8 @@ export function isStripeDevFallbackAllowed({
 } = {}) {
   const normalizedFlag = (fallbackFlag || "").trim().toLowerCase();
   const explicitlyEnabled = ["true", "1", "yes"].includes(normalizedFlag);
-  const isProductionEnvironment =\n    vercelEnv === "production" || (!vercelEnv && nodeEnv === "production");
+  const isProductionEnvironment =
+    vercelEnv === "production" || (nodeEnv === "production" && vercelEnv !== "preview");
   return explicitlyEnabled && !isProductionEnvironment;
 }
 
