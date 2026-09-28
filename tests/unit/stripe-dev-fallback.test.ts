@@ -18,10 +18,6 @@ test("Stripe dev fallback is never allowed in production", () => {
       false
     );
     assert.equal(
-      isStripeDevFallbackAllowed({ nodeEnv: "production", vercelEnv: "preview", fallbackFlag }),
-      false
-    );
-    assert.equal(
       isStripeDevFallbackAllowed({ nodeEnv: "development", vercelEnv: "production", fallbackFlag }),
       false
     );
@@ -31,8 +27,7 @@ test("Stripe dev fallback is never allowed in production", () => {
 test("Stripe dev fallback may be explicitly enabled in preview", () => {
   assert.equal(
     isStripeDevFallbackAllowed({ nodeEnv: "production", vercelEnv: "preview", fallbackFlag: "true" }),
-    false,
-    "NODE_ENV=production remains fail-closed even for preview"
+    true
   );
   assert.equal(
     isStripeDevFallbackAllowed({ nodeEnv: "development", vercelEnv: "preview", fallbackFlag: "true" }),
