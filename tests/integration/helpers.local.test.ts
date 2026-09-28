@@ -241,3 +241,20 @@ test("joining needs an Instagram account connected through Instagram login", { s
   const blocked = await admin.rpc("athlete_join_block", { p_athlete_id: a.id, p_campaign_id: campaignId });
   assert.equal(blocked.data, "instagram_not_verified");
 });
+
+test("athletes who signed up before the Instagram rule can still join", { skip }, async () => {
+  const a = await eligibleAthlete();
+  await admin.from("athlete_instagram_connections").delete().eq("athlete_id", a.id);
+  const campaignId = await makeCampaign();
+  const blocked = await admin.rpc("athlete_join_block", { p_athlete_id: a.id, p_campaign_id: campaignId });
+  assert.equal(blocked.data, "instagram_not_verified");
+  await admin.from("profiles").update({ instagram_login_required: false }).eq("id", a.id);
+  const grandfathered = await admin.rpc("athlete_join_block", { p_athlete_id: a.id, p_campaign_id: campaignId });
+  assert.equal(grandfathered.data, null);
+
+  // An athlete can't switch the rule off for themselves.
+  await admin.from("profiles").update({ instagram_login_required: true }).eq("id", a.id);
+  const c = await signedIn(a.email);
+  const { error } = await c.from("profiles").update({ instagram_login_required: false }).eq("id", a.id);
+  assert.match(error?.message || "", /instagram_rule_change_not_allowed/);
+});

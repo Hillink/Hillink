@@ -5,7 +5,12 @@
 -- 2. New businesses start 'pending' and wait for an admin, like athletes.
 -- 3. Athlete accounts need a .edu email (the signup form already asked; now the database checks it too).
 -- 4. Joining a campaign needs an Instagram account connected through Instagram login (verified = true).
+--    Only accounts created after this migration: existing athletes keep joining as before.
 -- Admins and Hillink's server (service role and the SQL editor, which have no auth.uid()) are exempt.
+
+-- Existing rows get false (grandfathered); every profile created from now on gets true.
+alter table public.profiles add column if not exists instagram_login_required boolean not null default false;
+alter table public.profiles alter column instagram_login_required set default true;
 
 create or replace function public.guard_profile_privileges()
 returns trigger
@@ -26,6 +31,7 @@ begin
       raise exception 'HILLINK:role_not_allowed' using errcode = '42501';
     end if;
     new.athlete_verification_status := 'pending';
+    new.instagram_login_required := true;
     if new.role = 'athlete' then
       select u.email into user_email from auth.users u where u.id = new.id;
       if user_email is null or lower(btrim(user_email)) not like '%.edu' then
@@ -37,6 +43,9 @@ begin
 
   if new.role is distinct from old.role then
     raise exception 'HILLINK:role_change_not_allowed' using errcode = '42501';
+  end if;
+  if new.instagram_login_required is distinct from old.instagram_login_required then
+    raise exception 'HILLINK:instagram_rule_change_not_allowed' using errcode = '42501';
   end if;
   -- Users may send themselves back to review (re-applying after a rejection); only admins approve or reject.
   if new.athlete_verification_status is distinct from old.athlete_verification_status
@@ -53,8 +62,8 @@ before insert or update on public.profiles
 for each row
 execute function public.guard_profile_privileges();
 
--- Joining a campaign now also needs a verified Instagram connection. Same function as
--- 20260928000300_compliance_and_automation.sql with one more check at the end.
+-- Joining a campaign now also needs a verified Instagram connection for athletes who signed up after this
+-- migration. Same function as 20260928000300_compliance_and_automation.sql with one more check at the end.
 create or replace function public.athlete_join_block(p_athlete_id uuid, p_campaign_id uuid)
 returns text
 language plpgsql
@@ -83,10 +92,11 @@ begin
   if category is not null and category = any (a.school_conflict_categories) then
     return 'school_conflict';
   end if;
-  if not exists (
-    select 1 from public.athlete_instagram_connections ic
-    where ic.athlete_id = p_athlete_id and ic.verified
-  ) then
+  if exists (select 1 from public.profiles p where p.id = p_athlete_id and p.instagram_login_required)
+     and not exists (
+       select 1 from public.athlete_instagram_connections ic
+       where ic.athlete_id = p_athlete_id and ic.verified
+     ) then
     return 'instagram_not_verified';
   end if;
   return null;
