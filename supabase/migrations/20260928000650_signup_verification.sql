@@ -1,4 +1,5 @@
--- Signup verification.
+-- Signup verification. Must run before 20260928000700_product_answers.sql (PR #10), which redefines
+-- athlete_join_block again and has to keep the Instagram check added here.
 -- 1. Users can't make themselves admin or approve themselves. Before this, the "update own profile" policy only
 --    locked the role, so anyone could set their own athlete_verification_status to 'approved' through the API,
 --    and a brand new user could insert their own profile row with any role.
