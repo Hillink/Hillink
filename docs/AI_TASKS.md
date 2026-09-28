@@ -10,6 +10,7 @@ This file is coordination, not a substitute for checking `git branch -r`, curren
 | Help center | Claude | `claude/help-center`, `claude/help-answers-fixes` | Unmerged branches seen; owner status unconfirmed | Inspect branch diffs before touching help features |
 | Signup verification | Claude | `claude/signup-verification` | Unmerged branch seen; owner status unconfirmed | Inspect branch diff before touching signup |
 | Live test fixes | Claude | `claude/live-test-fixes` | Unmerged branch seen; owner status unconfirmed | Inspect branch diff before touching tests |
+| PAY-001: trim env settings (fees, cron secret, Stripe) | Claude | `claude/fee-settings-parsing` | Draft PR #15; Codex review round 1 addressed | `lib/payments/fees.ts`, `lib/env/read.ts`, cron/payout/webhook routes, `lib/stripe/config.ts` |
 
 ## Next decisions and checks
 

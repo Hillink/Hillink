@@ -29,16 +29,21 @@ export const DEFAULT_FEE_SETTINGS: FeeSettings = {
 
 function parseBps(raw: string | undefined, fallback: number): number {
   if (raw === undefined || raw.trim() === "") return fallback;
-  const value = Number(raw);
+  const value = Number(raw.trim());
   if (!Number.isInteger(value) || value < 0 || value > 10000) return fallback;
   return value;
 }
 
+// Dashboard-pasted env values can carry stray whitespace or capitals ("false ", "Included").
+function normalized(raw: string | undefined): string {
+  return (raw ?? "").trim().toLowerCase();
+}
+
 export function readFeeSettings(env: Record<string, string | undefined> = process.env): FeeSettings {
-  const mode = env.ATHLETE_PAY_MODE === "included" ? "included" : "on_top";
+  const mode = normalized(env.ATHLETE_PAY_MODE) === "included" ? "included" : "on_top";
   return {
     platformFeeBps: parseBps(env.PLATFORM_FEE_BPS, DEFAULT_FEE_SETTINGS.platformFeeBps),
-    passCardFees: env.PASS_CARD_FEES_TO_BUSINESS !== "false",
+    passCardFees: normalized(env.PASS_CARD_FEES_TO_BUSINESS) !== "false",
     athletePayMode: mode,
     includedCreditBps: parseBps(env.INCLUDED_ATHLETE_CREDIT_BPS, DEFAULT_FEE_SETTINGS.includedCreditBps),
   };
