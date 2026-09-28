@@ -41,6 +41,7 @@ async function eligibleAthlete(extra: Record<string, unknown> = {}) {
     id: u.id, first_name: "Test", confirmed_adult: true, visa_status: "us_citizen_or_resident",
     school_disclosure_ack: true, compliance_confirmed_at: new Date().toISOString(), ...extra,
   });
+  await admin.from("athlete_instagram_connections").upsert({ athlete_id: u.id, ig_user_id: `ig-${u.id}`, verified: true });
   return u;
 }
 
@@ -229,4 +230,31 @@ test("new campaigns auto-approve after 72 hours, and a payout that throws doesn'
   assert.equal(await status(at50), "submitted", "inside the 72h window");
   assert.equal(await status(at80), "approved");
   assert.ok(summary.errors.some((e) => e.includes(at80) && e.includes("STRIPE")), "payout failure recorded, not thrown");
+});
+
+test("joining needs an Instagram account connected through Instagram login", { skip }, async () => {
+  const a = await eligibleAthlete();
+  const campaignId = await makeCampaign();
+  const ok = await admin.rpc("athlete_join_block", { p_athlete_id: a.id, p_campaign_id: campaignId });
+  assert.equal(ok.data, null);
+  await admin.from("athlete_instagram_connections").update({ verified: false }).eq("athlete_id", a.id);
+  const blocked = await admin.rpc("athlete_join_block", { p_athlete_id: a.id, p_campaign_id: campaignId });
+  assert.equal(blocked.data, "instagram_not_verified");
+});
+
+test("athletes who signed up before the Instagram rule can still join", { skip }, async () => {
+  const a = await eligibleAthlete();
+  await admin.from("athlete_instagram_connections").delete().eq("athlete_id", a.id);
+  const campaignId = await makeCampaign();
+  const blocked = await admin.rpc("athlete_join_block", { p_athlete_id: a.id, p_campaign_id: campaignId });
+  assert.equal(blocked.data, "instagram_not_verified");
+  await admin.from("profiles").update({ instagram_login_required: false }).eq("id", a.id);
+  const grandfathered = await admin.rpc("athlete_join_block", { p_athlete_id: a.id, p_campaign_id: campaignId });
+  assert.equal(grandfathered.data, null);
+
+  // An athlete can't switch the rule off for themselves.
+  await admin.from("profiles").update({ instagram_login_required: true }).eq("id", a.id);
+  const c = await signedIn(a.email);
+  const { error } = await c.from("profiles").update({ instagram_login_required: false }).eq("id", a.id);
+  assert.match(error?.message || "", /instagram_rule_change_not_allowed/);
 });

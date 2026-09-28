@@ -46,18 +46,24 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Rejection reason is required" }, { status: 400 });
   }
 
+  // Athletes and businesses both go through admin approval.
   const { data: currentAthlete } = await access.admin
     .from("profiles")
-    .select("athlete_verification_status")
+    .select("role, athlete_verification_status")
     .eq("id", userId)
-    .eq("role", "athlete")
+    .in("role", ["athlete", "business"])
     .single();
+
+  if (!currentAthlete) {
+    return NextResponse.json({ error: "Athlete or business account not found" }, { status: 404 });
+  }
+  const accountRole = currentAthlete.role as "athlete" | "business";
 
   const { error: updateError } = await access.admin
     .from("profiles")
     .update({ athlete_verification_status: status })
     .eq("id", userId)
-    .eq("role", "athlete");
+    .eq("role", accountRole);
 
   if (updateError) {
     return NextResponse.json({ error: updateError.message }, { status: 500 });
@@ -86,6 +92,7 @@ export async function POST(req: NextRequest) {
         to: authUserData.user.email,
         status,
         reason: trimmedReason || undefined,
+        role: accountRole,
       });
       if (!emailRes.sent) {
         emailWarning = emailRes.reason || "Email not sent";
