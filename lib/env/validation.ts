@@ -3,6 +3,21 @@ export function isPlaceholder(value?: string) {
   return value.trim().includes("PASTE");
 }
 
+export function isStripeDevFallbackAllowed({
+  fallbackFlag = process.env.STRIPE_DEV_FALLBACK,
+  nodeEnv = process.env.NODE_ENV,
+  vercelEnv = process.env.VERCEL_ENV,
+}: {
+  fallbackFlag?: string;
+  nodeEnv?: string;
+  vercelEnv?: string;
+} = {}) {
+  const normalizedFlag = (fallbackFlag || "").trim().toLowerCase();
+  const explicitlyEnabled = ["true", "1", "yes"].includes(normalizedFlag);
+  const isProductionEnvironment = nodeEnv === "production" || vercelEnv === "production";
+  return explicitlyEnabled && !isProductionEnvironment;
+}
+
 export function isValidStripeSecretKey(value?: string) {
   if (!value || isPlaceholder(value)) return false;
   return value.trim().startsWith("sk_");
