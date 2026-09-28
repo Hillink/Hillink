@@ -10,8 +10,6 @@ export async function GET() {
     }
     return NextResponse.redirect(new URL("/settings?instagram=forbidden", process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"));
   }
-  const userId = access.userId;
-
   try {
     const config = getMetaOAuthConfig();
     const state = crypto.randomUUID();
