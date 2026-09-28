@@ -50,7 +50,11 @@ export async function POST() {
   }
 
   const activeCampaignParticipation = (applications || []).filter(
-    (a) => a.status !== "withdrawn" && a.status !== "declined"
+    (a) =>
+      a.status === "accepted" ||
+      a.status === "submitted" ||
+      a.status === "approved" ||
+      a.status === "rejected"
   ).length;
   const submittedCount = (applications || []).filter(
     (a) => a.status === "submitted" || a.status === "approved" || a.status === "rejected"
