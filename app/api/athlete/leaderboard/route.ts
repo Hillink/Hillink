@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requireRoleAccess } from "@/lib/auth/requireRoleAccess";
+import { getTierFromXp } from "@/lib/xp";
 
 export type LeaderboardEntry = {
   rank: number;
@@ -12,21 +13,6 @@ export type LeaderboardEntry = {
   total_xp: number;
   tier: string;
 };
-
-const TIER_THRESHOLDS: { tier: string; min: number }[] = [
-  { tier: "Diamond", min: 5000 },
-  { tier: "Platinum", min: 2500 },
-  { tier: "Gold", min: 1000 },
-  { tier: "Silver", min: 400 },
-  { tier: "Bronze", min: 0 },
-];
-
-function tierFromXp(xp: number): string {
-  for (const { tier, min } of TIER_THRESHOLDS) {
-    if (xp >= min) return tier;
-  }
-  return "Bronze";
-}
 
 export async function GET() {
   const access = await requireRoleAccess(["athlete"]);
@@ -86,7 +72,7 @@ export async function GET() {
       school: profile?.school ?? null,
       sport: profile?.sport ?? null,
       total_xp,
-      tier: tierFromXp(total_xp),
+      tier: getTierFromXp(total_xp),
     };
   });
 

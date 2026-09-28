@@ -23,7 +23,12 @@ export async function POST(req: NextRequest) {
   }
   const userId = access.userId;
 
-  const body = (await req.json()) as SubmitBody;
+  let body: SubmitBody;
+  try {
+    body = (await req.json()) as SubmitBody;
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+  }
   const applicationId = body.applicationId?.trim();
   const proofUrl = body.proofUrl?.trim();
 
@@ -33,6 +38,21 @@ export async function POST(req: NextRequest) {
 
   if (!proofUrl) {
     return NextResponse.json({ error: "Proof URL is required" }, { status: 400 });
+  }
+
+  if (proofUrl.length > 2048) {
+    return NextResponse.json({ error: "Proof URL is too long" }, { status: 400 });
+  }
+
+  let parsedProofUrl: URL;
+  try {
+    parsedProofUrl = new URL(proofUrl);
+  } catch {
+    return NextResponse.json({ error: "Proof URL must be a valid HTTPS URL" }, { status: 400 });
+  }
+
+  if (parsedProofUrl.protocol !== "https:") {
+    return NextResponse.json({ error: "Proof URL must use HTTPS" }, { status: 400 });
   }
 
   const adminClient = createAdminClient();

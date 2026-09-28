@@ -1,7 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requireRoleAccess } from "@/lib/auth/requireRoleAccess";
-import { decodeOAuthState, getMetaOAuthConfig } from "@/lib/instagram/oauth";
+import { getMetaOAuthConfig } from "@/lib/instagram/oauth";
+
+const OAUTH_STATE_COOKIE = "hillink_instagram_oauth_state";
+
+function redirectAndClearOAuthState(url: URL) {
+  const response = NextResponse.redirect(url);
+  response.cookies.set(OAUTH_STATE_COOKIE, "", {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+    path: "/api/instagram/oauth/callback",
+    maxAge: 0,
+  });
+  return response;
+}
 
 async function fetchJson<T>(url: string) {
   const res = await fetch(url, { method: "GET", cache: "no-store" });
@@ -23,7 +37,7 @@ export async function GET(req: NextRequest) {
         return NextResponse.redirect(new URL("/login", appUrl));
       }
       redirect.searchParams.set("instagram", "forbidden");
-      return NextResponse.redirect(redirect);
+      return redirectAndClearOAuthState(redirect);
     }
     const userId = access.userId;
 
@@ -33,14 +47,14 @@ export async function GET(req: NextRequest) {
     if (!code || !state) {
       redirect.searchParams.set("instagram", "error");
       redirect.searchParams.set("instagram_message", "Missing OAuth code or state");
-      return NextResponse.redirect(redirect);
+      return redirectAndClearOAuthState(redirect);
     }
 
-    const parsedState = decodeOAuthState(state);
-    if (parsedState.userId !== userId) {
+    const expectedState = req.cookies.get(OAUTH_STATE_COOKIE)?.value;
+    if (!expectedState || state !== expectedState) {
       redirect.searchParams.set("instagram", "error");
-      redirect.searchParams.set("instagram_message", "OAuth state mismatch");
-      return NextResponse.redirect(redirect);
+      redirect.searchParams.set("instagram_message", "OAuth state mismatch or expired");
+      return redirectAndClearOAuthState(redirect);
     }
 
     const config = getMetaOAuthConfig();
@@ -110,7 +124,7 @@ export async function GET(req: NextRequest) {
         "instagram_message",
         "No Instagram professional account found. Ensure your Instagram is Business/Creator and linked to a Facebook Page."
       );
-      return NextResponse.redirect(redirect);
+      return redirectAndClearOAuthState(redirect);
     }
 
     const expiresAt = longLived.expires_in
@@ -136,17 +150,17 @@ export async function GET(req: NextRequest) {
     if (upsertError) {
       redirect.searchParams.set("instagram", "error");
       redirect.searchParams.set("instagram_message", upsertError.message);
-      return NextResponse.redirect(redirect);
+      return redirectAndClearOAuthState(redirect);
     }
 
     redirect.searchParams.set("instagram", "connected");
-    return NextResponse.redirect(redirect);
+    return redirectAndClearOAuthState(redirect);
   } catch (error) {
     redirect.searchParams.set("instagram", "error");
     redirect.searchParams.set(
       "instagram_message",
       error instanceof Error ? error.message.slice(0, 180) : "Instagram connection failed"
     );
-    return NextResponse.redirect(redirect);
+    return redirectAndClearOAuthState(redirect);
   }
 }

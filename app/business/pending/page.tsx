@@ -24,6 +24,17 @@ export default async function BusinessPendingPage() {
     redirect("/business");
   }
 
+  // New signups land here before they've filled in their profile, so send them to onboarding first.
+  const { data: businessProfile } = await supabase
+    .from("business_profiles")
+    .select("id")
+    .eq("id", userData.user.id)
+    .maybeSingle();
+
+  if (!businessProfile) {
+    redirect("/onboarding/business");
+  }
+
   const isRejected = profile.athlete_verification_status === "rejected";
 
   return (

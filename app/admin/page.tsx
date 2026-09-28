@@ -482,14 +482,14 @@ export default function AdminPage() {
 
     const data = await res.json();
     if (!res.ok) {
-      setError(data.error || "Failed to update athlete verification.");
+      setError(data.error || "Failed to update verification.");
       return;
     }
 
     if (data.emailWarning) {
-      setSuccess(`Athlete verification status set to ${status}. Email warning: ${data.emailWarning}`);
+      setSuccess(`Verification status set to ${status}. Email warning: ${data.emailWarning}`);
     } else {
-      setSuccess(`Athlete verification status set to ${status}. Email notification sent.`);
+      setSuccess(`Verification status set to ${status}. Email notification sent.`);
     }
     await loadAdminData();
   };
@@ -640,7 +640,7 @@ export default function AdminPage() {
                           ? <span style={{ background: "#e53e3e", color: "white", padding: "2px 8px", borderRadius: 4, fontSize: 12 }}>Suspended</span>
                           : <span style={{ color: "#38a169", fontSize: 13 }}>Active</span>
                         }
-                        {profile.role === "athlete" && (
+                        {(profile.role === "athlete" || profile.role === "business") && (
                           <span
                             style={{
                               background:
@@ -674,14 +674,14 @@ export default function AdminPage() {
                         </button>
                         {profile.id !== currentAdminId && (
                           <>
-                            {profile.role === "athlete" && (
+                            {(profile.role === "athlete" || profile.role === "business") && (
                               <>
                                 <button
                                   className="secondary-button"
                                   style={{ padding: "2px 10px", fontSize: 12 }}
                                   onClick={() => handleSetAthleteVerification(profile.id, "approved")}
                                 >
-                                  Approve Athlete
+                                  {profile.role === "business" ? "Approve Business" : "Approve Athlete"}
                                 </button>
                                 <button
                                   className="secondary-button"
@@ -695,7 +695,7 @@ export default function AdminPage() {
                                     handleSetAthleteVerification(profile.id, "rejected", reason.trim());
                                   }}
                                 >
-                                  Reject Athlete
+                                  {profile.role === "business" ? "Reject Business" : "Reject Athlete"}
                                 </button>
                               </>
                             )}
