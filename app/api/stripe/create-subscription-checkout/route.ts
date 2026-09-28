@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getAppUrl, getStripe, getTierConfig, type BillingTier } from "@/lib/stripe/config";
-import { isValidStripePriceId, isValidStripeSecretKey } from "@/lib/env/validation";
+import { isStripeDevFallbackAllowed, isValidStripePriceId, isValidStripeSecretKey } from "@/lib/env/validation";
 import { requireRoleAccess } from "@/lib/auth/requireRoleAccess";
 
 export async function POST(req: NextRequest) {
@@ -25,13 +25,7 @@ export async function POST(req: NextRequest) {
   const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
   const hasValidSecret = isValidStripeSecretKey(stripeSecretKey);
   const hasValidPrice = isValidStripePriceId(tierConfig.envPriceId);
-  const fallbackFlag = (process.env.STRIPE_DEV_FALLBACK || "").trim().toLowerCase();
-  const fallbackEnabledByFlag =
-    fallbackFlag === "" || fallbackFlag === "true" || fallbackFlag === "1" || fallbackFlag === "yes";
-  const allowDevFallback =
-    fallbackEnabledByFlag ||
-    process.env.NODE_ENV !== "production" ||
-    process.env.VERCEL_ENV === "preview";
+  const allowDevFallback = isStripeDevFallbackAllowed();
 
   console.log("[stripe/create-subscription-checkout] request", {
     userId,
