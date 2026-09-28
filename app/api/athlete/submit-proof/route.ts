@@ -35,6 +35,21 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Proof URL is required" }, { status: 400 });
   }
 
+  if (proofUrl.length > 2048) {
+    return NextResponse.json({ error: "Proof URL is too long" }, { status: 400 });
+  }
+
+  let parsedProofUrl: URL;
+  try {
+    parsedProofUrl = new URL(proofUrl);
+  } catch {
+    return NextResponse.json({ error: "Proof URL must be a valid HTTPS URL" }, { status: 400 });
+  }
+
+  if (parsedProofUrl.protocol !== "https:") {
+    return NextResponse.json({ error: "Proof URL must use HTTPS" }, { status: 400 });
+  }
+
   const adminClient = createAdminClient();
 
   const { data: appRow, error: appError } = await adminClient
