@@ -246,3 +246,176 @@ A task is done only when:
 3. Fix legitimate issues in PR #11 or explain with evidence why no change is needed.
 4. Update the task board and current-state document to match confirmed branch status.
 5. Return the baton with a recommended next owned task.
+
+
+## Concurrent portal QA mode — ChatGPT athlete × Claude business
+
+This mode is used when Kyle explicitly asks both agents to test HILLink at the same time. It supplements the normal alternating-agent workflow above; it does not remove the branch, claim, review, or safety rules.
+
+### Fixed ownership during a concurrent QA session
+
+**ChatGPT / Codex owns the athlete portal**
+- athlete signup, login, verification, and onboarding
+- athlete profile creation/editing and public/private visibility
+- discovery/search surfaces available to athletes
+- campaign/opportunity discovery and applications
+- offer/application state from the athlete perspective
+- proof/deliverable submission
+- athlete-facing payments/earnings/payout state
+- rewards, score, redemptions, notifications, Help Center, and settings
+- athlete permissions, validation, mobile/responsive behavior, refresh/back navigation, and edge cases
+
+**Claude owns the business portal**
+- business signup, login, verification, and onboarding
+- business/company profile creation/editing and visibility
+- athlete discovery/search/filtering
+- campaign/opportunity creation and management
+- applications/offers from the business perspective
+- proof/deliverable review and approval/rejection
+- campaign funding, billing/refund state, and business-facing payment state
+- business notifications, Help Center, subscription/settings, permissions, validation, mobile/responsive behavior, and edge cases
+
+Admin behavior and shared backend systems have **no automatic owner**. The first agent that finds a problem there must coordinate in issue #12 before editing shared behavior.
+
+### Branch isolation
+
+For each concurrent QA run:
+- ChatGPT uses a branch named like `qa/athlete-chatgpt-YYYYMMDD`.
+- Claude uses a branch named like `qa/business-claude-YYYYMMDD`.
+- Neither agent edits directly on `main`.
+- Each branch starts from the same confirmed `main` commit whenever possible.
+- Agents may test simultaneously, but they must not knowingly edit the same file, migration, API contract, table policy, or shared library at the same time.
+
+If a bug can be fixed entirely inside the owning portal, the owning agent may implement it on its branch. If the fix touches shared code, auth, RLS, payments, migrations, shared APIs, or behavior used by both portals, post a CROSS-PORTAL finding in issue #12 before editing.
+
+### Issue #12 is the live agent conversation
+
+During concurrent work, issue #12 acts as the persistent conversation between ChatGPT and Claude. Both agents must read new messages before beginning a new fix and after completing a test cluster.
+
+Use these message types:
+
+**CLAIM**
+- agent
+- portal
+- branch/base commit
+- test cluster being run
+- expected files/services touched
+
+**FINDING**
+- ID, e.g. `ATH-014` or `BUS-009`
+- severity: blocker / high / medium / low
+- exact reproduction steps
+- expected behavior
+- observed behavior
+- screenshots/logs/test evidence when available
+- suspected ownership: athlete / business / shared / unknown
+
+**CROSS-PORTAL**
+- finding ID
+- what happened on the discovering side
+- what state the other portal should observe
+- shared API/table/event involved, if known
+- explicit question or verification requested from the other agent
+- no shared-code fix until the other agent acknowledges, unless it is an urgent security/data-loss issue
+
+**ACK / RESPONSE**
+- finding being answered
+- reproduced: yes/no/not yet
+- observed state
+- agreement/disagreement with suspected cause
+- files/API/table likely involved
+- who should own the fix
+
+**FIX**
+- finding ID
+- branch/commit
+- behavior changed
+- files/migrations changed
+- checks run
+- explicit request for cross-portal retest when applicable
+
+**RETEST**
+- finding ID
+- exact commit/PR tested
+- pass/fail
+- portal tested
+- remaining discrepancy
+
+**HANDOFF**
+- completed test clusters
+- open findings
+- commits/PRs
+- checks run
+- areas not tested
+- exact next action requested from the other agent
+
+### Cross-portal handshake tests
+
+The portals must not be treated as independent products. For workflows involving both roles, use paired tests:
+
+1. Business creates/changes state.
+2. Claude records the expected athlete-visible result in issue #12.
+3. ChatGPT verifies the athlete side and posts RETEST/RESPONSE.
+4. Athlete performs the next action.
+5. ChatGPT records the expected business-visible result.
+6. Claude verifies the business side.
+7. A cross-portal workflow is only marked PASS when both agents observe consistent state.
+
+Paired flows include at minimum:
+- campaign/opportunity creation → athlete discovery
+- athlete application → business receives application
+- business accept/reject/offer → athlete sees correct state
+- athlete acceptance/decline where applicable → business sees correct state
+- proof submission → business review
+- approval/rejection/revision → athlete receives correct state
+- funding/payment/payout/refund state transitions
+- notifications generated by the other role
+- profile/status changes that affect eligibility or discovery
+- account/approval/role restrictions
+
+### Conflict-prevention protocol
+
+Before modifying shared code:
+1. Search issue #12 and `docs/AI_TASKS.md` for active ownership.
+2. Post CROSS-PORTAL with the intended shared scope.
+3. The other agent replies ACK / RESPONSE.
+4. Assign one agent as the sole builder for that shared fix.
+5. The other agent becomes the verifier and does not implement a competing fix.
+6. Builder posts FIX with commit.
+7. Verifier retests from its portal and posts RETEST.
+
+If both agents independently discover the same root cause, they do not create two fixes. The first acknowledged owner keeps implementation ownership.
+
+### Test matrix and evidence
+
+Each agent should maintain reproducible evidence rather than only saying a feature “works.” Every meaningful test should capture:
+- role/persona
+- starting state
+- action
+- expected result
+- observed result
+- pass/fail
+- finding ID if failed
+- commit/environment tested
+
+Automated Playwright/integration coverage should be added for important reproducible bugs when practical. Manual browser success does not replace authorization, RLS, payment, or database tests.
+
+### Safety boundaries
+
+Concurrent QA must use isolated/dev/test accounts and non-production payment/test data unless Kyle explicitly authorizes a production-safe check. Neither agent may reset, seed, migrate, delete, refund, pay out, deploy, or alter production data merely to complete QA.
+
+Never commit credentials, tokens, cookies, personal customer information, or screenshots containing secrets.
+
+### Session completion
+
+The concurrent session is complete only when:
+- both portal matrices have been worked through for the agreed scope
+- every failure has a finding ID
+- cross-portal failures have responses from both agents
+- fixes are isolated in branches/PRs
+- affected workflows are retested from both sides
+- unresolved blockers are clearly recorded
+- `docs/AI_TASKS.md` and `docs/CURRENT_STATE.md` are updated with verified status
+- Kyle can see what passed, failed, was fixed, and remains untested
+
+The goal is not for two agents to generate twice as much code. The goal is for two independent agents to exercise both halves of the marketplace simultaneously, communicate through GitHub, and catch integration failures that a single-sided test would miss.
