@@ -174,14 +174,6 @@ export async function PATCH(
     );
   }
 
-  // A business can't raise slots past its plan.
-  if (role === "business") {
-    const block = await slotPlanBlock(admin, campaign.business_id, openSlots);
-    if (block) {
-      return NextResponse.json({ error: PLAN_BLOCK_MESSAGES[block], reason: block }, { status: 422 });
-    }
-  }
-
   // Count current accepted applications.
   const { count: rawCount, error: countError } = await admin
     .from("campaign_applications")
@@ -208,6 +200,15 @@ export async function PATCH(
       },
       { status: 422 }
     );
+  }
+
+  // A business can't raise slots past its plan. Auto-accept spends open_slots, so athletes already
+  // accepted count on top of the open slots.
+  if (role === "business") {
+    const block = await slotPlanBlock(admin, campaign.business_id, acceptedCount + openSlots);
+    if (block) {
+      return NextResponse.json({ error: PLAN_BLOCK_MESSAGES[block], reason: block }, { status: 422 });
+    }
   }
 
   // Admin bypasses lock window check, but not below_filled_count check.

@@ -29,6 +29,9 @@ set role authenticated;
 \echo 'H7 payout self-set (expect null / false / false):'
 insert into public.athlete_payout_profiles(athlete_id,payout_method,recipient_name,stripe_account_id,stripe_onboarding_complete,payout_ready) values (auth.uid(),'stripe_connect','A','acct_evil',true,true);
 reset role; select stripe_account_id, stripe_onboarding_complete, payout_ready from public.athlete_payout_profiles; set role authenticated;
+\echo 'H7 non-Stripe method cannot mark itself ready (expect paypal / false):'
+update public.athlete_payout_profiles set payout_method = 'paypal', payout_ready = true where athlete_id = auth.uid();
+reset role; select payout_method, payout_ready from public.athlete_payout_profiles; set role authenticated;
 \echo 'H8 dispute direct insert (expect RLS violation):'
 insert into public.disputes(application_id, opened_by, opened_by_role, reason) select gen_random_uuid(), auth.uid(), 'athlete', 'long enough reason';
 \echo 'auto-accept as someone else (expect forbidden):'
@@ -56,6 +59,12 @@ insert into public.campaigns(business_id,title,deliverables,preferred_tier,payou
 \echo 'draft is fine, then activating it fails:'
 insert into public.campaigns(id,business_id,title,deliverables,preferred_tier,payout_cents,slots,open_slots,status) values ('22222222-2222-2222-2222-222222222222',auth.uid(),'D','d','Any',0,1,1,'draft');
 update public.campaigns set status='active' where id='22222222-2222-2222-2222-222222222222';
+\echo 'min_athlete_tier over plan (expect plan_tier_limit):'
+update public.campaigns set min_athlete_tier = 'gold' where title = 'OK';
+\echo 'eligible tiers above plan are dropped (expect {Bronze,Silver}):'
+update public.campaigns set eligible_athlete_tiers = array['Bronze','Silver','Gold','Diamond'] where title = 'OK' returning eligible_athlete_tiers;
+\echo 'go-live function is server-only (expect permission denied):'
+select public.activate_campaign_within_plan('22222222-2222-2222-2222-222222222222', 'draft');
 \echo 'slot edit ignored (expect 2):'
 update public.campaigns set open_slots = 999, title='renamed' where id='11111111-1111-1111-1111-111111111111' returning open_slots, title;
 reset role;
@@ -63,4 +72,15 @@ reset role;
 reset request.jwt.claim.sub; reset request.jwt.claims;
 select (public.transition_campaign_status('11111111-1111-1111-1111-111111111111','paused','00000000-0000-0000-0000-00000000000a','test')->'campaign'->>'status');
 select changed_by from public.campaign_status_log;
+\echo 'server go-live at the limit (expect plan_campaign_limit):'
+update public.campaigns set status = 'active' where id = '11111111-1111-1111-1111-111111111111';
+set role service_role;
+select public.activate_campaign_within_plan('22222222-2222-2222-2222-222222222222', 'draft');
+\echo 'server go-live with room after pausing one (expect empty, then active):'
+update public.campaigns set status = 'paused' where title = 'OK';
+select public.activate_campaign_within_plan('22222222-2222-2222-2222-222222222222', 'draft');
+select status from public.campaigns where id = '22222222-2222-2222-2222-222222222222';
+\echo 'stale from-status (expect stale):'
+select public.activate_campaign_within_plan('22222222-2222-2222-2222-222222222222', 'draft');
+reset role;
 rollback;

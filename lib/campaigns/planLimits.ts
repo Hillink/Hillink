@@ -2,7 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 // Server-side copy of the plan checks that the campaigns_enforce_plan_limits trigger runs for direct
 // inserts (supabase/migrations/20260929000300_security_hardening.sql). Routes that change campaigns
-// with the service role bypass that trigger, so they call this instead.
+// with the service role bypass that trigger, so they use these instead.
 
 export type PlanBlock = "subscription_required" | "plan_slot_limit" | "plan_campaign_limit";
 
@@ -32,7 +32,7 @@ function activeSubscription(billing: Billing | null): billing is Billing {
   return !!billing && billing.subscription_status === "active" && !!billing.billing_ready;
 }
 
-/** Why a business can't set this many slots on a campaign, or null. */
+/** Why a business can't have this many athletes on one campaign (accepted plus open), or null. */
 export async function slotPlanBlock(admin: SupabaseClient, businessId: string, slots: number): Promise<PlanBlock | null> {
   const billing = await loadBilling(admin, businessId);
   if (!activeSubscription(billing)) return "subscription_required";
@@ -40,16 +40,20 @@ export async function slotPlanBlock(admin: SupabaseClient, businessId: string, s
   return null;
 }
 
-/** Why a business can't make this campaign live (active), or null. */
-export async function activationPlanBlock(admin: SupabaseClient, businessId: string, campaignId: string): Promise<PlanBlock | null> {
-  const billing = await loadBilling(admin, businessId);
-  if (!activeSubscription(billing)) return "subscription_required";
-  const { count } = await admin
-    .from("campaigns")
-    .select("id", { count: "exact", head: true })
-    .eq("business_id", businessId)
-    .in("status", ["active", "open"])
-    .neq("id", campaignId);
-  if (Number(count ?? 0) >= Number(billing.max_open_campaigns ?? 0)) return "plan_campaign_limit";
-  return null;
+/**
+ * Makes a business's campaign live if its plan allows it. The count and the status change run in one
+ * database transaction (activate_campaign_within_plan), so parallel requests can't both pass.
+ * Returns null on success, "stale" if the campaign's status changed meanwhile, or the plan block.
+ */
+export async function activateCampaignWithinPlan(
+  admin: SupabaseClient,
+  campaignId: string,
+  fromStatus: string
+): Promise<PlanBlock | "stale" | null> {
+  const { data, error } = await admin.rpc("activate_campaign_within_plan", {
+    p_campaign_id: campaignId,
+    p_from_status: fromStatus,
+  });
+  if (error) throw new Error(error.message);
+  return (data as PlanBlock | "stale" | null) ?? null;
 }

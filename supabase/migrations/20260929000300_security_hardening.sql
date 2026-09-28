@@ -267,7 +267,10 @@ begin
   goes_live := coalesce(new.status, 'open') in ('active', 'open')
     and (tg_op = 'INSERT' or coalesce(old.status, '') not in ('active', 'open'));
 
-  if tg_op = 'UPDATE' and not goes_live and new.preferred_tier is not distinct from old.preferred_tier then
+  if tg_op = 'UPDATE' and not goes_live
+     and new.preferred_tier is not distinct from old.preferred_tier
+     and new.min_athlete_tier is not distinct from old.min_athlete_tier
+     and new.eligible_athlete_tiers is not distinct from old.eligible_athlete_tiers then
     return new;
   end if;
 
@@ -283,6 +286,22 @@ begin
   if new.preferred_tier is not null and new.preferred_tier <> 'Any'
      and public.athlete_tier_level(new.preferred_tier) > public.athlete_tier_level(b.max_athlete_tier) then
     raise exception 'HILLINK:plan_tier_limit' using errcode = 'P0001';
+  end if;
+
+  -- Auto-accept enforces min_athlete_tier, so it can't sit above the plan either.
+  if public.athlete_tier_level(new.min_athlete_tier) > public.athlete_tier_level(b.max_athlete_tier) then
+    raise exception 'HILLINK:plan_tier_limit' using errcode = 'P0001';
+  end if;
+
+  -- The column defaults to every tier, so drop the ones above the plan instead of refusing the row.
+  if new.eligible_athlete_tiers is not null then
+    new.eligible_athlete_tiers := array(
+      select t from unnest(new.eligible_athlete_tiers) as t
+      where public.athlete_tier_level(t) <= public.athlete_tier_level(b.max_athlete_tier)
+    );
+    if cardinality(new.eligible_athlete_tiers) = 0 then
+      raise exception 'HILLINK:plan_tier_limit' using errcode = 'P0001';
+    end if;
   end if;
 
   if tg_op = 'INSERT' then
@@ -313,9 +332,63 @@ before insert or update on public.campaigns
 for each row
 execute function public.enforce_campaign_plan_limits();
 
+-- The status API changes campaigns with the service role, which the trigger above lets through. For a
+-- business, it goes live through this function instead: the plan check and the status change share
+-- one transaction and the same per-business lock, so two parallel requests can't both pass the count.
+-- Returns null when the campaign went live, 'stale' when its status changed meanwhile, or a plan block.
+create or replace function public.activate_campaign_within_plan(
+  p_campaign_id uuid,
+  p_from_status text
+)
+returns text
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_business_id uuid;
+  b record;
+  open_count integer;
+begin
+  select business_id into v_business_id from public.campaigns where id = p_campaign_id;
+  if not found then
+    return 'stale';
+  end if;
+
+  perform pg_advisory_xact_lock(hashtextextended('campaign-plan:' || v_business_id::text, 0));
+
+  select subscription_status, billing_ready, max_open_campaigns
+    into b
+    from public.business_billing_profiles
+    where business_id = v_business_id;
+  if not found or b.subscription_status <> 'active' or not b.billing_ready then
+    return 'subscription_required';
+  end if;
+
+  select count(*) into open_count
+    from public.campaigns
+    where business_id = v_business_id and status in ('active', 'open') and id <> p_campaign_id;
+  if open_count >= b.max_open_campaigns then
+    return 'plan_campaign_limit';
+  end if;
+
+  update public.campaigns
+    set status = 'active'
+    where id = p_campaign_id and status = p_from_status;
+  if not found then
+    return 'stale';
+  end if;
+
+  return null;
+end;
+$$;
+
+revoke all on function public.activate_campaign_within_plan(uuid, text) from public, anon, authenticated;
+grant execute on function public.activate_campaign_within_plan(uuid, text) to service_role;
+
 -- H7. Athletes could write their own Stripe account id and mark Stripe onboarding complete, and payouts
 -- go to whatever id is stored. Those come only from Connect onboarding and Stripe's account.updated
--- webhook. For Stripe Connect, "ready" also comes only from Stripe.
+-- webhook. "Ready" also comes only from Stripe, whatever payout method the athlete picks.
 create or replace function public.guard_athlete_payout_columns()
 returns trigger
 language plpgsql
@@ -330,9 +403,8 @@ begin
       new.stripe_account_id := old.stripe_account_id;
       new.stripe_onboarding_complete := old.stripe_onboarding_complete;
     end if;
-    if new.payout_method = 'stripe_connect' then
-      new.payout_ready := new.stripe_onboarding_complete;
-    end if;
+    -- Stripe is the only payout method, so "ready" means Stripe said so, whatever method is picked.
+    new.payout_ready := new.stripe_onboarding_complete;
   end if;
   return new;
 end;

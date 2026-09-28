@@ -44,11 +44,11 @@ async function payIfReady(
   if (!payment || payment.stripe_transfer_id || payment.amount_cents <= 0) return;
   const { data: profile } = await admin
     .from("athlete_payout_profiles")
-    .select("stripe_account_id, payout_ready")
+    .select("stripe_account_id, payout_ready, stripe_onboarding_complete")
     .eq("athlete_id", athleteId)
     .maybeSingle();
   // No payout account yet: the payment stays held and the business's "Pay athlete" button retries later.
-  if (!profile?.stripe_account_id || !profile.payout_ready) return;
+  if (!profile?.stripe_account_id || !profile.payout_ready || !profile.stripe_onboarding_complete) return;
   // A failed payout (Stripe down, missing key) is logged and left for the "Pay athlete" retry, so it
   // can't stop the rest of the run.
   try {
