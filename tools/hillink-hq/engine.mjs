@@ -118,15 +118,18 @@ export class Engine {
     if (!Array.isArray(agent.capabilities) || agent.capabilities.some(c => !text(c, 80))) throw Error('Capabilities required');
     this.emit('AGENT_REGISTERED', agent);
   }
-  createTask(input) {
+  // requestedBy is internal only (the orchestrator's tools set it; the HTTP API cannot): which agent and
+  // task asked for this one, so delegations are traceable and the requester can be shown waiting on it.
+  createTask(input, { requestedBy = null } = {}) {
     if (!text(input.title, 200) || !text(input.description, 2000)) throw Error('Title and description required');
+    if (requestedBy && (!this.state.agents[requestedBy.agentId] || !this.state.tasks[requestedBy.taskId])) throw Error('Unknown requesting agent or task');
     if (!Object.hasOwn(operations, input.operation)) throw Error('Operation is not allowlisted');
     if (!['local-read-only', 'owner-required'].includes(input.safety)) throw Error('Explicit safety classification required');
     if (input.safety === 'owner-required' && !text(input.ownerAction)) throw Error('Exact owner action required');
     if (!Number.isInteger(input.priority) || input.priority < 0 || input.priority > 100) throw Error('Priority must be 0–100');
     if (input.preferredAgentId && !this.state.agents[input.preferredAgentId]?.capabilities.includes(operations[input.operation].capability)) throw Error('Selected worker cannot perform this operation');
     const id = randomUUID();
-    this.emit('TASK_CREATED', { id, title: input.title, description: input.description, operation: input.operation, capability: operations[input.operation].capability, safety: input.safety, ownerAction: input.ownerAction || null, priority: input.priority, preferredAgentId: input.preferredAgentId || null });
+    this.emit('TASK_CREATED', { id, title: input.title, description: input.description, operation: input.operation, capability: operations[input.operation].capability, safety: input.safety, ownerAction: input.ownerAction || null, priority: input.priority, preferredAgentId: input.preferredAgentId || null, ...(requestedBy ? { requestedBy: { agentId: requestedBy.agentId, taskId: requestedBy.taskId } } : {}) });
     if (this.state.alerts['cycle:complete']?.active) this.emit('ALERT_RESOLVED', { key: 'cycle:complete' });
     return id;
   }
@@ -175,8 +178,12 @@ export class Engine {
       await this.recover();
       for (const task of this.runnable()) {
         if (task.notBefore > this.now()) continue;
-        const active = Object.values(this.state.runs).filter(r => !r.endedAt);
-        if (active.length >= this.config.maxLocalWorkers) break;
+        // The local concurrency limit is for local processes. A remote API adapter (the orchestrator) takes no
+        // local slot, so a question to ChatGPT never queues behind a long local run, nor blocks one.
+        const local = r => !this.adapters[this.state.agents[r.agentId]?.executionAdapter]?.remote;
+        const active = Object.values(this.state.runs).filter(r => !r.endedAt && local(r));
+        const remoteTask = Object.values(this.state.agents).some(a => a.capabilities.includes(task.capability) && this.adapters[a.executionAdapter]?.remote);
+        if (!remoteTask && active.length >= this.config.maxLocalWorkers) continue;
         const agent = Object.values(this.state.agents).sort((a, b) => (a.routingPriority ?? 0) - (b.routingPriority ?? 0)).find(a => (!task.preferredAgentId || a.id === task.preferredAgentId) && a.capabilities.includes(task.capability) && !a.assignment && this.status(a) === 'IDLE' && this.adapters[a.executionAdapter]);
         if (!agent) continue;
         const runId = randomUUID();
