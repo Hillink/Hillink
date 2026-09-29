@@ -99,7 +99,7 @@ test('world server: trims HQ data and serves the feed only to its own loopback o
   const trimmed = trimSnapshot({ seq: 1, now: 1, health: { controller: 'ONLINE', ollama: 'x' }, agents: [{ id: 'a', name: 'A', role: 'r', status: 'IDLE', usage: { cost: 1 }, capabilities: [] }], tasks: [{ id: 't', title: 'T', description: 'secret-ish', stage: 'READY', evidence: [{ summary: 's' }] }], runs: {}, alerts: {}, events: [{ seq: 1, id: 'e', at: 1, type: 'TASK_CREATED', data: { id: 't', title: 'T', description: 'long' } }] });
   assert.equal(trimmed.agents[0].usage, undefined);
   assert.equal(trimmed.tasks[0].description, undefined);
-  assert.equal(trimmed.tasks[0].evidence, undefined);
+  assert.deepEqual(trimmed.tasks[0].evidence, [{ kind: '', summary: 's', at: null }], 'only kind, a short summary and time survive');
   assert.equal(trimmed.events[0].data.description, undefined);
   const server = createServer({ hq: async () => ({ seq: 1 }) });
   await new Promise(r => server.listen(0, '127.0.0.1', r));

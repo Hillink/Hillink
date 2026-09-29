@@ -26,7 +26,11 @@ export function trimSnapshot(s) {
     seq: s.seq, now: s.now,
     health: { controller: s.health?.controller ?? null, lastError: s.health?.lastError ?? null },
     agents: (s.agents ?? []).map(a => pick(a, ['id', 'name', 'role', 'real', 'fantasy', 'status', 'assignment', 'detail', 'retryAt'])),
-    tasks: (s.tasks ?? []).map(t => pick(t, ['id', 'title', 'stage', 'agentId', 'runId', 'capability', 'operation', 'blocker', 'ownerAction', 'createdAt', 'endedAt'])),
+    tasks: (s.tasks ?? []).map(t => ({
+      ...pick(t, ['id', 'title', 'stage', 'agentId', 'runId', 'capability', 'operation', 'blocker', 'ownerAction', 'createdAt', 'claimedAt', 'endedAt']),
+      // The last few evidence lines (kind, short summary, time) so a reload keeps the task's story; raw payloads stay in HQ.
+      ...(Array.isArray(t.evidence) && t.evidence.length ? { evidence: t.evidence.slice(-6).map(e => ({ kind: String(e.kind ?? ''), summary: typeof e.summary === 'string' ? e.summary.slice(0, 200) : null, at: e.at ?? null })) } : {}),
+    })),
     runs: Object.fromEntries(Object.entries(s.runs ?? {}).map(([id, r]) => [id, pick(r, ['taskId', 'agentId', 'endedAt'])])),
     alerts: Object.fromEntries(Object.entries(s.alerts ?? {}).map(([k, a]) => [k, pick(a, ['key', 'kind', 'agentId', 'taskId', 'ownerMustAct', 'ownerAction', 'detail', 'active', 'openedAt'])])),
     events: (s.events ?? []).map(e => ({ seq: e.seq, id: e.id, at: e.at, type: e.type, data: data(e) })),

@@ -3,6 +3,7 @@
 //   idle, react, stand, sit, walk, carry, work, type, inspect, read, talk, meeting, blocked, waiting, celebrate, offline.
 // Truth rule: work/type/inspect/read play only for a productive activity, at the assigned station, after arriving.
 import { WorldView } from './world-view.mjs';
+import { LAYERS } from './scene.mjs';
 import { startPath } from './motion.mjs';
 import { hash } from './ambience.mjs';
 
@@ -41,10 +42,50 @@ export function resolveState(e, now) {
   }
 }
 
+// What the body is doing, in words (never the job: "coding" is not shown while walking to the desk).
+const PRODUCTIVE_WORDS = { coding: 'Typing', thinking: 'Thinking at desk', reviewing: 'Inspecting', testing: 'Running checks', researching: 'Reading' };
+export function actionText(e, layout) {
+  const st = e.anim?.state ?? 'idle', a = e.agent;
+  const where = e.dest?.location ? layout?.locationById?.[e.dest.location]?.name : null;
+  switch (st) {
+    case 'walk': return e.ride ? 'Walking to the elevator' : where ? `Walking to ${where}` : 'Walking';
+    case 'carry': return e.errand ? 'Carrying a handoff' : where ? `Carrying to ${where}` : 'Carrying';
+    case 'react': return 'Noticed new work';
+    case 'stand': return 'Getting up';
+    case 'sit': return 'Sitting down';
+    case 'type': case 'work': case 'inspect': case 'read': return PRODUCTIVE_WORDS[a?.activity] ?? 'Working';
+    case 'talk': return e.errand ? 'Handing off' : e.receiving ? 'Receiving a handoff' : 'Talking';
+    case 'meeting': return 'In a meeting';
+    case 'blocked': return 'Blocked';
+    case 'waiting': return 'Waiting';
+    case 'celebrate': return 'Finished';
+    case 'offline': return 'Offline';
+    default:
+      if (e.gait === 'ride') return 'Riding the elevator';
+      if (e.gait === 'wait-lift') return 'Waiting for the elevator';
+      return 'Idle';
+  }
+}
+
 export class IsoWorldView extends WorldView {
   constructor(scene, effects, layout, scenery) {
     super(scene, effects, layout, scenery);
     for (const l of Object.values(this.lifts)) { l.ambient = false; l.floors = layout.lifts[l.id]?.floors; l.speed = scenery?.liftSpeed ?? l.speed; }
+  }
+  sync(world, changed, now) {
+    super.sync(world, changed, now);
+    if (changed.has('*') || changed.has('meetings')) this.syncMeetings(world);
+  }
+  // A live meeting is a clickable object at the meeting table (topic, participants, decision, evidence, outcome).
+  syncMeetings(world) {
+    const table = this.layout.def?.FURNITURE?.find(f => f.id === 'table');
+    for (const [id, e] of this.scene.entities) if (e.kind === 'meeting' && !world.meetings?.[e.ref.id]) this.scene.remove(id);
+    if (!table) return;
+    const [x, y] = this.layout.P.at(table.x, table.z, table.floor, table.h + 14);
+    for (const m of Object.values(world.meetings ?? {})) {
+      const e = this.scene.get(`meeting:${m.id}`) ?? this.scene.add({ id: `meeting:${m.id}`, kind: 'meeting', layer: LAYERS.effect, x, y, w: 26, h: 22, selectable: true, ref: { type: 'meeting', id: m.id } });
+      e.meeting = m;
+    }
   }
   syncAgents(world, now, rebuild) {
     super.syncAgents(world, now, rebuild);

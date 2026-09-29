@@ -22,10 +22,37 @@ const SYSTEMS = [
 export class Simulator {
   constructor(store, { now = () => Date.now(), schedule = (fn, ms) => setTimeout(fn, ms), cancel = id => clearTimeout(id) } = {}) {
     Object.assign(this, { store, now, schedule, cancel }); this.timers = new Set(); this.n = 0;
+    this.scenarios = new Map(); this.current = null; this.sn = 0;
   }
   emit(type, fields) { this.store.dispatch(makeEvent(type, fields, { source: 'sim', at: this.now() })); }
-  later(ms, fn) { const id = this.schedule(() => { this.timers.delete(id); fn(); }, ms); this.timers.add(id); }
-  stop() { for (const id of this.timers) this.cancel(id); this.timers.clear(); }
+  // Timers belong to the scenario that scheduled them, so a newer scenario can cancel an older one's future events.
+  later(ms, fn) {
+    const sc = this.current;
+    const id = this.schedule(() => {
+      this.timers.delete(id); sc?.timers.delete(id);
+      const prev = this.current; this.current = sc;
+      try { fn(); } finally { this.current = prev; }
+      if (sc && !sc.timers.size) this.scenarios.delete(sc.id);
+    }, ms);
+    this.timers.add(id); sc?.timers.add(id);
+  }
+  stop() { for (const id of this.timers) this.cancel(id); this.timers.clear(); this.scenarios.clear(); }
+  // Scenario ownership: starting a scenario cancels the pending events of any running scenario that drives
+  // the same agents, so an older script can never silently overwrite a newer one. Returns what was cancelled.
+  run(key) {
+    const agents = new Set(scenarioAgents(key, this.store.world)), cancelled = [];
+    for (const [id, sc] of this.scenarios) {
+      if (![...sc.agents].some(a => agents.has(a))) continue;
+      for (const t of sc.timers) { this.cancel(t); this.timers.delete(t); }
+      this.scenarios.delete(id); cancelled.push(sc.label);
+    }
+    const sc = { id: ++this.sn, key, label: SCENARIOS.find(([k]) => k === key)?.[1] ?? key, agents, timers: new Set() };
+    this.scenarios.set(sc.id, sc); this.current = sc;
+    try { this[key](); } finally { this.current = null; }
+    if (!sc.timers.size) this.scenarios.delete(sc.id);
+    return cancelled;
+  }
+  running() { return [...this.scenarios.values()].map(sc => sc.label); }
   id(prefix) { this.n += 1; return `${prefix}-${this.now().toString(36)}-${this.n}`; }
   activeTask(agentId) { return this.store.world.agents[agentId]?.taskId ?? null; }
 
@@ -40,36 +67,46 @@ export class Simulator {
     this.later(600, () => this.emit('TASK_STARTED', { taskId, agentId: 'claude', activity: 'coding', progress: { kind: 'stage', stage: 'Implementing' } }));
   }
   codexTests() {
-    const runId = this.id('tests');
-    this.emit('AGENT_TESTING', { agentId: 'codex' });
-    this.emit('TESTS_STARTED', { runId, agentId: 'codex', suite: 'unit' });
+    const runId = this.id('tests'), taskId = this.id('task');
+    this.emit('TASK_CREATED', { taskId, title: 'Run the unit suite (simulated)' });
+    this.emit('TASK_STARTED', { taskId, agentId: 'codex', activity: 'testing', progress: { kind: 'stage', stage: 'Testing' } });
+    this.emit('TESTS_STARTED', { runId, agentId: 'codex', taskId, suite: 'unit' });
     this.emit('SYSTEM_STATUS', { systemId: 'test-runner', state: 'busy' });
     return runId;
   }
-  claudeMessagesCodex() { this.emit('AGENT_MESSAGE', { agentId: 'claude', toAgentId: 'codex', summary: 'Implementation ready for review' }); this.later(400, () => this.emit('AGENT_REVIEWING', { agentId: 'codex' })); }
+  claudeMessagesCodex() {
+    const taskId = this.activeTask('claude') ?? undefined;
+    this.emit('AGENT_MESSAGE', { agentId: 'claude', toAgentId: 'codex', taskId, summary: 'Implementation ready for review' });
+    const prId = Object.values(this.store.world.prs).find(p => p.taskId === taskId && p.state === 'open')?.id;
+    this.later(400, () => this.emit('AGENT_REVIEWING', { agentId: 'codex', prId, detail: 'Reviewing Claude\'s handoff' }));
+  }
   testFails() {
     const runId = Object.values(this.store.world.testRuns).find(r => r.state === 'running')?.id ?? this.codexTests();
     this.later(300, () => {
-      this.emit('TESTS_FINISHED', { runId, passed: 69, failed: 2 });
+      const taskId = this.store.world.testRuns[runId]?.taskId ?? undefined;
+      const failing = ['payouts › partial refund keeps fee (simulated)', 'payouts › retry after Stripe timeout (simulated)'];
+      this.emit('TESTS_FINISHED', { runId, taskId, agentId: 'codex', passed: 69, failed: 2, failing });
       this.emit('SYSTEM_STATUS', { systemId: 'test-runner', state: 'degraded', detail: '2 failing tests' });
-      this.emit('ISSUE_FOUND', { issueId: this.id('issue'), title: '2 unit tests failing', severity: 'high', location: 'testing', agentId: 'codex' });
-      this.emit('AGENT_ERROR', { agentId: 'codex', detail: 'Tests failed' });
+      this.emit('ISSUE_FOUND', { issueId: this.id('issue'), title: '2 unit tests failing', severity: 'high', location: 'testing', agentId: 'codex', taskId, runId, nextAction: 'Fix the 2 failing payout checks, then re-run the unit suite' });
+      this.emit('AGENT_ERROR', { agentId: 'codex', taskId, detail: `Tests failed: ${failing[0]}` });
     });
   }
   testPasses() {
     const runId = Object.values(this.store.world.testRuns).find(r => r.state === 'running')?.id ?? this.codexTests();
     this.later(300, () => {
-      this.emit('TESTS_FINISHED', { runId, passed: 71, failed: 0 });
+      const taskId = this.store.world.testRuns[runId]?.taskId ?? undefined;
+      this.emit('TESTS_FINISHED', { runId, taskId, agentId: 'codex', passed: 71, failed: 0 });
       this.emit('SYSTEM_STATUS', { systemId: 'test-runner', state: 'ok' });
       for (const issue of Object.values(this.store.world.issues)) if (issue.open && issue.location === 'testing') this.emit('ISSUE_RESOLVED', { issueId: issue.id });
+      if (taskId && this.store.world.tasks[taskId]?.status === 'active') this.emit('TASK_COMPLETED', { taskId, detail: '71 passed, 0 failed' });
       this.emit('AGENT_IDLE', { agentId: 'codex' });
     });
   }
   taskCompletes() {
     const taskId = this.activeTask('claude') ?? Object.values(this.store.world.tasks).find(t => t.status === 'active')?.id;
     if (!taskId) return this.claudeCodes();
+    this.emit('PR_CREATED', { prId: this.id('pr'), title: 'Payment edge-case fix (simulated)', agentId: 'claude', taskId });
     this.emit('TASK_COMPLETED', { taskId, progress: { kind: 'stage', stage: 'Done' } });
-    this.emit('PR_CREATED', { prId: this.id('pr'), title: 'Payment edge-case fix' });
   }
   deployBegins() { this.emit('DEPLOY_STARTED', { deployId: this.id('deploy'), target: 'preview' }); this.emit('SYSTEM_STATUS', { systemId: 'vercel', state: 'busy' }); }
   deploySucceeds() {
@@ -91,9 +128,10 @@ export class Simulator {
   teamMeeting() {
     const ids = Object.keys(this.store.world.agents).slice(0, 4);
     this.meeting = this.id('meeting');
-    this.emit('MEETING_STARTED', { meetingId: this.meeting, agentIds: ids, topic: 'Planning (simulated)' });
+    const pr = Object.values(this.store.world.prs).at(-1);
+    this.emit('MEETING_STARTED', { meetingId: this.meeting, agentIds: ids, topic: 'Plan the payout retry fix (simulated)', decision: 'Retry in the webhook, or in a scheduled job?', evidence: pr ? [{ kind: 'pr', ref: pr.id, summary: pr.title }] : [], taskId: pr?.taskId ?? undefined });
   }
-  endMeeting() { if (this.meeting) this.emit('MEETING_ENDED', { meetingId: this.meeting }); this.meeting = null; }
+  endMeeting() { if (this.meeting) this.emit('MEETING_ENDED', { meetingId: this.meeting, outcome: 'Retry in a scheduled job (simulated decision)' }); this.meeting = null; }
   ownerNeeded() { this.emit('ISSUE_FOUND', { issueId: this.id('issue'), title: 'Approve production SQL (simulated)', severity: 'high', location: 'command', agentId: 'codex', owner: true }); this.emit('AGENT_WAITING', { agentId: 'codex', detail: 'Waiting for Kyle' }); }
   queueWork(count = 5) { for (let i = 0; i < count; i++) this.emit('TASK_CREATED', { taskId: this.id('task'), title: `Queued task ${this.n}` }); }
   allIdle() { for (const a of Object.values(this.store.world.agents)) this.emit('AGENT_IDLE', { agentId: a.id }); }
@@ -113,12 +151,15 @@ export class Simulator {
     const taskId = this.id('task'), prId = this.id('pr'), title = 'Athlete payout edge case (simulated)';
     this.emit('TASK_CREATED', { taskId, title });
     this.later(1500, () => this.emit('TASK_STARTED', { taskId, agentId: 'claude', activity: 'coding', progress: { kind: 'stage', stage: 'Implementing' } }));
+    // Simulated commits: evidence the task moved, not a percentage.
+    this.later(Math.round(work * 0.5), () => this.emit('TASK_PROGRESS', { taskId, detail: 'Guard partial refunds (simulated commit)', evidence: { kind: 'commit', ref: 'sim-1a2b3c' } }));
+    this.later(Math.round(work * 0.8), () => this.emit('TASK_PROGRESS', { taskId, progress: { kind: 'stage', stage: 'Tests passing locally' }, detail: 'Add payout edge-case tests (simulated commit)', evidence: { kind: 'commit', ref: 'sim-4d5e6f' } }));
     this.later(work, () => {
-      this.emit('TASK_COMPLETED', { taskId, progress: { kind: 'stage', stage: 'Review required' } });
-      this.emit('PR_CREATED', { prId, title, agentId: 'claude', taskId });
-      this.emit('AGENT_REVIEWING', { agentId: 'codex', detail: `Reviewing: ${title}` });
+      this.emit('PR_CREATED', { prId, title, agentId: 'claude', taskId, reviewerId: 'codex' });
+      this.emit('TASK_COMPLETED', { taskId, progress: { kind: 'stage', stage: 'Review required' }, detail: 'Handed to Codex for review' });
+      this.emit('AGENT_REVIEWING', { agentId: 'codex', prId, detail: `Reviewing: ${title}` });
     });
-    this.later(work + review, () => { this.emit('PR_REVIEWED', { prId, verdict: 'approved' }); this.emit('AGENT_IDLE', { agentId: 'codex' }); });
+    this.later(work + review, () => { this.emit('PR_REVIEWED', { prId, verdict: 'approved', summary: 'no blocking findings (simulated)' }); this.emit('AGENT_IDLE', { agentId: 'codex' }); });
     this.later(work + review + 5000, () => this.emit('AGENT_IDLE', { agentId: 'claude' }));
   }
   // A scripted walkthrough of the whole loop.
@@ -127,6 +168,16 @@ export class Simulator {
       () => this.testPasses(), () => this.taskCompletes(), () => this.deployBegins(), () => this.deploySucceeds(), () => this.allIdle()];
     steps.forEach((fn, i) => this.later(i * 3000, fn));
   }
+}
+
+// Which agents a scenario drives (for scenario ownership).
+function scenarioAgents(key, world) {
+  const all = Object.keys(world.agents);
+  return {
+    reviewJourney: ['claude', 'codex'], claudeCodes: ['claude'], codexTests: ['codex'], claudeMessagesCodex: ['claude', 'codex'],
+    testFails: ['codex'], testPasses: ['codex'], taskCompletes: ['claude'], ownerNeeded: ['codex'], tour: ['claude', 'codex'],
+    teamMeeting: all.slice(0, 4), manyAgents: EXTRA_AGENTS.map(a => a.agentId), allIdle: all,
+  }[key] ?? [];
 }
 
 export const SCENARIOS = [

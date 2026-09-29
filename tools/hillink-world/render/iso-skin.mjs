@@ -8,14 +8,25 @@ import { drawFigure } from './figure.mjs';
 import { PROPS, DECOR, prism, poly, glow, shade, INK } from './props.mjs';
 import { MATERIALS, lookFor } from './looks.mjs';
 import { vehiclesAt, hash } from '../engine/ambience.mjs';
-import { PRODUCTIVE_STATES } from '../engine/iso-view.mjs';
+import { PRODUCTIVE_STATES, actionText } from '../engine/iso-view.mjs';
+import { jobOf } from '../core/job.mjs';
 
 const TAU = Math.PI * 2;
 const STATUS = { coding: '#34d27b', thinking: '#34d27b', researching: '#34d27b', testing: '#34d27b', reviewing: '#34d27b', communicating: '#34d27b', waiting: '#f4a23b', idle: '#8aa0b8', completed: '#5cc98a', error: '#ef4b4b', offline: '#59616d' };
 const SYSTEM_COLOR = { ok: '#3ddc84', busy: '#4aa3ff', degraded: '#ffb020', down: '#ff4d4d', unknown: '#7c8594' };
 const font = (px, weight = 600) => `${weight} ${px}px ui-sans-serif, system-ui, sans-serif`;
 const WORKING = new Set(['coding', 'thinking', 'reviewing', 'testing', 'researching', 'communicating']);
-const activityText = a => (a.activity === 'completed' ? 'finished' : a.activity);
+// Status dot: green only while the body is actually doing the work; blue while on the way to it.
+function dotColor(e, a) {
+  if (PRODUCTIVE_STATES.has(e.anim?.state)) return STATUS.coding;
+  if (WORKING.has(a.activity)) return e.moving || e.ride ? '#4aa3ff' : STATUS.idle;
+  return STATUS[a.activity] ?? STATUS.idle;
+}
+// The label's second line: what the body is doing, then the job's stage ("Walking to Engineering · Implementing").
+export function statusLine(e, world, layout) {
+  const job = jobOf(world, e.agent), action = actionText(e, layout);
+  return job?.stage ? `${action} · ${job.stage}` : action;
+}
 
 function text(ctx, str, x, y, px, color, { align = 'center', weight = 600 } = {}) { ctx.font = font(px, weight); ctx.fillStyle = color; ctx.textAlign = align; ctx.textBaseline = 'middle'; ctx.fillText(str, x, y); }
 function pill(ctx, x, y, lines, { dot, px = 9, pad = 5, bg = '#0b1018e6', border = '#ffffff22' } = {}) {
@@ -233,7 +244,7 @@ export function createIsoSkin(layout, skinId = 'real') {
   }
   function badge(d, e, a, x, top, hovered, selected) {
     const { ctx, env } = d, zoom = env.zoom, k = Math.min(1.8, Math.max(0.7, 1 / zoom)), time = d.now;
-    const ring = STATUS[a.activity] ?? STATUS.idle, cy = top - 4 * k;
+    const ring = dotColor(e, a), cy = top - 4 * k;
     const pulse = d.reduced ? 1 : 0.75 + 0.25 * Math.sin(time / 380);
     const owner = Object.values(env.world?.issues ?? {}).some(i => i.open && i.agentId === a.id && i.owner);
     if (owner) { ctx.beginPath(); ctx.roundRect(x - 16 * k, cy - 14 * k, 32 * k, 11 * k, 5 * k); ctx.fillStyle = '#7b3fe4'; ctx.globalAlpha = pulse; ctx.fill(); ctx.globalAlpha = 1; text(ctx, 'Needs you', x, cy - 8.5 * k, 6 * k, '#fff', { weight: 800 }); }
@@ -241,9 +252,12 @@ export function createIsoSkin(layout, skinId = 'real') {
     else if (a.activity === 'waiting') { ctx.beginPath(); ctx.arc(x, cy - 8 * k, 5 * k, 0, TAU); ctx.fillStyle = '#f4a23b'; ctx.fill(); ctx.strokeStyle = '#fff'; ctx.lineWidth = k; ctx.beginPath(); ctx.moveTo(x, cy - 11 * k); ctx.lineTo(x, cy - 8 * k); ctx.lineTo(x + 2 * k, cy - 7 * k); ctx.stroke(); }
     else if (a.activity === 'offline' && !d.reduced) text(ctx, 'z', x + 5, cy - 6 - ((time / 900) % 1) * 6, 7 * k, '#dfe7f2', { weight: 700 });
     if (zoom < 0.7 && !(hovered || selected)) return;
-    const lines = zoom > 1.3 || hovered || selected ? [a.name, activityText(a)] : [a.name];
+    // Compact by default (dot + name); the action and stage show on hover or selection.
+    const lines = hovered || selected ? [a.name, statusLine(e, env.world, layout)] : [a.name];
     const ly = cy - 16 * k - lines.length * 11;
-    if (env.claimLabel(x, ly + lines.length * 5, (a.name.length * 6 + 24) * k, lines.length * 12 + 6, hovered || selected)) pill(ctx, x, ly, lines, { dot: ring, px: 8 });
+    ctx.font = font(8, 700); const w0 = ctx.measureText(lines[0]).width; ctx.font = font(6.5, 500);
+    const w = Math.max(w0, lines[1] ? ctx.measureText(lines[1]).width : 0) + 19;
+    if (env.claimLabel(x, ly + lines.length * 5.5, w, lines.length * 11 + 5, hovered || selected)) pill(ctx, x, ly, lines, { dot: ring, px: 8 });
   }
   function drawNpc(d, e) {
     drawFigure(d.ctx, { x: e.x, y: e.y, h: e.h, dir: e.moving === false ? 'front' : e.facing < 0 ? 'left' : 'right', state: e.pose === 'walk' ? 'walk' : 'idle', t: 0, time: d.reduced ? 0 : d.T + e.index, stride: e.stride ?? 0, look: PEDESTRIANS[e.index % PEDESTRIANS.length], moving: e.pose === 'walk', alpha: 0.95 });
@@ -320,6 +334,16 @@ export function createIsoSkin(layout, skinId = 'real') {
     for (const id of [env.hoverId, env.selectedId]) {
       const room = id?.startsWith('room:') ? layout.locationById[id.slice(5)] : null;
       if (room) d.late.push(() => { poly(ctx, room.poly, id === env.selectedId ? 'rgba(226,27,35,0.07)' : 'rgba(255,255,255,0.05)', id === env.selectedId ? '#e21b23' : '#ffffffaa', 1.5); pill(ctx, room.x + room.w / 2, room.y + 4, [room.name], { px: 10 }); });
+    }
+    // Live meetings: a speech marker over the meeting table; click it for topic, decision and evidence.
+    for (const e of env.scene.entities.values()) if (e.kind === 'meeting' && e.meeting) {
+      const { x: mx, y: my } = e, hot = env.hoverId === e.id || env.selectedId === e.id, bob = d.reduced ? 0 : Math.sin(now / 420) * 1.5;
+      d.late.push(() => {
+        ctx.beginPath(); ctx.roundRect(mx - 11, my - 9 + bob, 22, 14, 5); ctx.fillStyle = hot ? '#e21b23' : '#2f6fd6'; ctx.fill(); ctx.lineWidth = 1.2; ctx.strokeStyle = '#fff'; ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(mx - 3, my + 5 + bob); ctx.lineTo(mx, my + 10 + bob); ctx.lineTo(mx + 3, my + 5 + bob); ctx.fillStyle = hot ? '#e21b23' : '#2f6fd6'; ctx.fill();
+        for (let i = -1; i <= 1; i++) { ctx.beginPath(); ctx.arc(mx + i * 5, my - 2 + bob, 1.6, 0, TAU); ctx.fillStyle = '#fff'; ctx.fill(); }
+        if (hot) pill(ctx, mx, my - 30, [e.meeting.topic ?? 'Meeting', e.meeting.decision ? `Decide: ${e.meeting.decision}` : `${e.meeting.agentIds.length} agents`], { px: 8.5 });
+      });
     }
     // Open issues: a warning sign in the room they belong to.
     for (const e of env.scene.entities.values()) if (e.kind === 'issue' && e.issue) {

@@ -6,7 +6,8 @@
 import { SCHEMA_VERSION } from '../core/events.mjs';
 
 const clip = (s, max = 480) => (typeof s === 'string' && s.length > max ? `${s.slice(0, max - 1)}…` : s ?? null);
-const make = (id, type, at, fields) => ({ v: SCHEMA_VERSION, id, type, at, source: 'hq', ...fields });
+const makeEvent = (id, type, at, fields) => ({ v: SCHEMA_VERSION, id, type, at, source: 'hq', ...fields });
+const make = makeEvent;
 
 // What an agent visibly does for a task, from the HQ operation's capability.
 export function activityForCapability(capability = '') {
@@ -42,6 +43,8 @@ function issueFor(alert) {
     severity: alert.kind === 'ADAPTER_UNAVAILABLE' ? 'low' : alert.ownerMustAct ? 'high' : 'medium',
     location: alert.kind === 'VERIFICATION_FAILED' ? 'testing' : 'command',
     agentId: alert.agentId ?? undefined,
+    taskId: alert.taskId ?? undefined,
+    nextAction: clip(alert.ownerAction, 200) ?? undefined, // HQ's own required action, never a guess
     owner: alert.ownerMustAct === true || undefined, // needs Kyle, not just an agent
   };
 }
@@ -72,6 +75,9 @@ export class HqTranslator {
 
   fromSnapshot(snap) {
     const at = snap.now ?? Date.now(), id = (...p) => `hq-s${snap.seq}-${p.join('-')}`, out = [];
+    // Every event here restates HQ's current state; none of them happened now. `snapshot` keeps them out of the
+    // activity feed, and HQ's own timestamps are used wherever HQ has them.
+    const make = (eid, type, t, fields) => makeEvent(eid, type, t, { ...fields, snapshot: true });
     this.runs = {}; this.tasks = {};
     for (const [runId, r] of Object.entries(snap.runs ?? {})) this.runs[runId] = { taskId: r.taskId, agentId: r.agentId };
     for (const t of snap.tasks ?? []) this.tasks[t.id] = { capability: t.capability, operation: t.operation };
@@ -86,7 +92,9 @@ export class HqTranslator {
     for (const t of snap.tasks ?? []) {
       out.push(make(id('task', t.id), 'TASK_CREATED', t.createdAt ?? at, { taskId: t.id, title: clip(t.title, 200), kind: t.operation }));
       const run = snap.runs?.[t.runId];
-      if (LIVE.has(t.stage) && t.agentId && run && !run.endedAt) out.push(make(id('start', t.id), 'TASK_STARTED', at, { taskId: t.id, agentId: t.agentId, activity: stageActivity(t), progress: { kind: 'stage', stage: t.stage.toLowerCase() } }));
+      const EV = { COMMIT: 'commit', PR: 'pr', TEST_RESULT: 'tests', REVIEW: 'review', HANDOFF: 'handoff', FINDING: 'finding' };
+      (t.evidence ?? []).forEach((ev, i) => { if (EV[ev.kind]) out.push(make(id('ev', t.id, i), 'TASK_PROGRESS', ev.at ?? at, { taskId: t.id, detail: clip(ev.summary, 200), evidence: { kind: EV[ev.kind] } })); });
+      if (LIVE.has(t.stage) && t.agentId && run && !run.endedAt) out.push(make(id('start', t.id), 'TASK_STARTED', t.claimedAt ?? at, { taskId: t.id, agentId: t.agentId, activity: stageActivity(t), progress: { kind: 'stage', stage: t.stage.toLowerCase() } }));
       else if (t.stage === 'DONE') out.push(make(id('done', t.id), 'TASK_COMPLETED', t.endedAt ?? at, { taskId: t.id }));
       else if (t.stage === 'BLOCKED') out.push(make(id('blocked', t.id), 'TASK_BLOCKED', t.endedAt ?? at, { taskId: t.id, detail: clip(t.blocker ?? t.ownerAction) }));
     }
@@ -136,25 +144,27 @@ export class HqTranslator {
     switch (d.kind) {
       case 'ACK': {
         const activity = activityForCapability(task.capability);
-        push(ACTIVITY_EVENT[activity], { agentId, detail: summary });
+        push(ACTIVITY_EVENT[activity], { agentId, taskId, detail: summary });
         push('TASK_PROGRESS', { taskId, progress: { kind: 'stage', stage: 'working' }, detail: summary });
         break;
       }
-      case 'TEST_STARTED': push('AGENT_TESTING', { agentId, detail: summary }); push('TESTS_STARTED', { runId: `hq-${d.runId}`, agentId, suite: task.operation }); break;
+      case 'TEST_STARTED': push('AGENT_TESTING', { agentId, taskId, detail: summary }); push('TESTS_STARTED', { runId: `hq-${d.runId}`, agentId, taskId, suite: task.operation }); break;
       case 'TEST_PROGRESS': push('TASK_PROGRESS', { taskId, progress: { kind: 'stage', stage: `${d.completedTests} tests run` }, detail: summary }); break;
       case 'TEST_RESULT': {
         const counts = parseTestCounts(d.summary);
         // Without counts HQ still knows pass/fail; report 0/1 failing rather than invent totals.
-        push('TESTS_FINISHED', { runId: `hq-${d.runId}`, passed: counts?.passed ?? 0, failed: counts?.failed ?? (d.result === 'failed' ? 1 : 0), agentId });
+        push('TESTS_FINISHED', { runId: `hq-${d.runId}`, passed: counts?.passed ?? 0, failed: counts?.failed ?? (d.result === 'failed' ? 1 : 0), agentId, taskId, failing: d.result === 'failed' && summary ? [summary] : undefined });
         break;
       }
-      case 'REVIEW': push('AGENT_REVIEWING', { agentId, detail: summary }); break;
-      case 'PR': push('PR_CREATED', { prId: d.url ?? `hq-pr-${d.runId}`, title: summary ?? 'Pull request', url: d.url ?? undefined }); break;
+      case 'REVIEW': push('AGENT_REVIEWING', { agentId, taskId, detail: summary }); push('TASK_PROGRESS', { taskId, detail: summary, evidence: { kind: 'review' } }); break;
+      case 'PR': push('PR_CREATED', { prId: d.url ?? `hq-pr-${d.runId}`, title: summary ?? 'Pull request', url: d.url ?? undefined, agentId, taskId }); break;
       case 'HANDOFF':
-        if (d.toAgentId) push('AGENT_MESSAGE', { agentId, toAgentId: d.toAgentId, summary });
-        else push('TASK_PROGRESS', { taskId, detail: summary });
+        if (d.toAgentId) push('AGENT_MESSAGE', { agentId, toAgentId: d.toAgentId, taskId, summary });
+        else push('TASK_PROGRESS', { taskId, detail: summary, evidence: { kind: 'handoff' } });
         break;
-      case 'COMMIT': case 'FINDING': case 'MODEL_OUTPUT': push('TASK_PROGRESS', { taskId, detail: summary }); break;
+      case 'COMMIT': push('TASK_PROGRESS', { taskId, detail: summary, evidence: { kind: 'commit', ref: clip(d.sha ?? d.url, 80) ?? undefined } }); break;
+      case 'FINDING': push('TASK_PROGRESS', { taskId, detail: summary, evidence: { kind: 'finding' } }); break;
+      case 'MODEL_OUTPUT': push('TASK_PROGRESS', { taskId, detail: summary }); break;
       case 'MODEL_RESULT': push('TASK_PROGRESS', { taskId, progress: { kind: 'stage', stage: 'answer ready' }, detail: clip(d.summary, 200) }); break;
       case 'COMPLETED': push('TASK_COMPLETED', { taskId, detail: summary }); break;
       case 'FAILED': case 'CANCELLED': push('TASK_FAILED', { taskId, detail: summary }); break;
@@ -163,7 +173,7 @@ export class HqTranslator {
         push('TASK_BLOCKED', { taskId, detail: summary });
         push('AGENT_WAITING', { agentId, detail: clip(`Rate limited${d.retryAt ? ` until ${new Date(d.retryAt).toISOString()}` : ''}`) });
         break;
-      case 'UNCERTAIN': push('TASK_BLOCKED', { taskId, detail: summary }); push('AGENT_ERROR', { agentId, detail: summary }); break;
+      case 'UNCERTAIN': push('TASK_BLOCKED', { taskId, detail: summary }); push('AGENT_ERROR', { agentId, taskId, detail: summary }); break;
       default: break; // HEARTBEAT, USAGE: liveness and counters, not visible activity
     }
   }

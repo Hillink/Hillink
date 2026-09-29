@@ -3,7 +3,9 @@ import { WorldStore, emptyWorld } from './core/state.mjs';
 import { Camera } from './engine/camera.mjs';
 import { Scene } from './engine/scene.mjs';
 import { Effects, stepPath } from './engine/motion.mjs';
-import { IsoWorldView } from './engine/iso-view.mjs';
+import { IsoWorldView, actionText, PRODUCTIVE_STATES } from './engine/iso-view.mjs';
+import { statusLine } from './render/iso-skin.mjs';
+import { jobOf, lastJobOf, issuesFor } from './core/job.mjs';
 import { createCanvasRenderer } from './render/canvas2d.mjs';
 import { loadTheme, THEME_ORDER, THEME_NAMES } from './themes/index.mjs';
 import { Simulator, SCENARIOS } from './sim/simulator.mjs';
@@ -119,7 +121,7 @@ canvas.addEventListener('pointermove', e => {
   const hit = scene.pick(wx, wy, pickSlop());
   if (hit?.id !== hover?.id) { hover = hit; canvas.style.cursor = hit ? 'pointer' : 'grab'; invalidate(); }
   const tip = $('tooltip');
-  const text = hit ? hoverText(hit.ref.type === 'room' ? { ...hit.ref, name: hit.location.name } : hit.ref, store.world) : '';
+  const text = hit ? hoverText(hit.ref.type === 'room' ? { ...hit.ref, name: hit.location.name } : hit.ref, store.world, { status: hit.kind === 'agent' ? statusLine(hit, store.world, theme.layout) : undefined }) : '';
   tip.hidden = !text; tip.textContent = text; tip.style.transform = `translate(${e.offsetX + 14}px, ${e.offsetY + 14}px)`;
 });
 canvas.addEventListener('pointerup', e => {
@@ -146,10 +148,32 @@ function select(entity) {
 }
 function showInspect(entity) {
   const panel = $('inspect'), current = scene.get(entity.id);
-  if (!current) { panel.hidden = true; selected = null; $('side').hidden = false; return; }
-  panel.innerHTML = `<button class="close" aria-label="Close">×</button>${inspectHTML(current.ref, store.world, Date.now(), current.location, view.places)}`;
-  panel.hidden = false;
+  if (!current) {
+    if (entity.ref?.type === 'meeting') return showInspectRef(entity.ref, null); // ended meetings stay readable
+    panel.hidden = true; selected = null; $('side').hidden = false; return;
+  }
+  showInspectRef(current.ref, current);
 }
+// The inspector reads World state plus what the view knows about the body (action) for agents.
+function inspectExtra(ref, entity) {
+  const world = store.world, a = ref.type === 'agent' ? world.agents[ref.id] : null;
+  return {
+    status: entity?.kind === 'agent' ? actionText(entity, theme.layout) : undefined,
+    job: a ? jobOf(world, a) : null, lastJob: a ? lastJobOf(world, a) : null, issues: a ? issuesFor(world, a) : [],
+    meetingRoomId: theme.layout.locationById.comms?.id,
+  };
+}
+function showInspectRef(ref, entity) {
+  const panel = $('inspect');
+  panel.innerHTML = `<button class="close" aria-label="Close">×</button>${inspectHTML(ref, store.world, Date.now(), entity?.location, view.places, inspectExtra(ref, entity))}`;
+  panel.hidden = false; $('side').hidden = true;
+}
+// Links inside the inspector that open another record (an ended meeting has no scene object to click).
+$('inspect').addEventListener('click', e => {
+  const target = e.target.closest('[data-inspect]')?.dataset.inspect; if (!target) return;
+  const [type, ...rest] = target.split(':'), id = rest.join(':'), entity = scene.get(target);
+  if (entity) select(entity); else { selected = { id: target, ref: { type, id } }; showInspectRef({ type, id }, null); }
+});
 // Any overlay element with data-focus moves the camera (inspect links, attention items, roster cards).
 for (const id of ['inspect', 'side', 'roster']) $(id).addEventListener('click', e => {
   if (e.target.closest('.close')) return select(null);
@@ -185,16 +209,21 @@ $('nav-toggle').onclick = toggle('nav-toggle', 'nav', { btn: 'sim-toggle', panel
 $('sim-toggle').onclick = toggle('sim-toggle', 'sim-panel', { btn: 'nav-toggle', panel: 'nav' });
 
 // HUD: counts, attention, recent activity and roster, all derived from World state.
-let hudQueued = false;
+let hudQueued = false, hudSig = '';
+// The roster shows what bodies are doing, which changes without a World event (arriving, sitting down).
+const bodySignature = () => [...(scene?.entities.values() ?? [])].filter(e => e.kind === 'agent').map(e => `${e.id}:${e.anim?.state}:${e.dest?.location ?? ''}`).join('|');
+setInterval(() => { if (!document.hidden && theme && bodySignature() !== hudSig) renderHud(); }, 500);
 function renderHud() {
   if (hudQueued || !theme) return; hudQueued = true;
   requestAnimationFrame(() => {
     hudQueued = false;
-    const world = store.world, s = summarize(world);
-    $('stats').innerHTML = `<span class="n-total"><b>${s.total}</b>Agents</span><span class="n-working"><b>${s.working}</b>Working</span><span class="n-waiting"><b>${s.waiting}</b>Waiting</span><span class="n-idle"><b>${s.idle}</b>Idle</span><span class="n-attention"><b>${s.attention.length}</b>Attention</span>`;
+    const world = store.world, s = summarize(world, a => PRODUCTIVE_STATES.has(scene.get(`agent:${a.id}`)?.anim?.state));
+    $('stats').innerHTML = `<span class="n-total"><b>${s.total}</b>Agents</span><span class="n-working" title="${s.assigned} assigned; ${s.working} at their work right now"><b>${s.working}</b>Working</span><span class="n-waiting"><b>${s.waiting}</b>Waiting</span><span class="n-idle"><b>${s.idle}</b>Idle</span><span class="n-attention"><b>${s.attention.length}</b>Attention</span>`;
     $('attention').innerHTML = `<h2>Attention needed (${s.attention.length})</h2>${attentionHTML(s.attention)}`;
     $('feed').innerHTML = `<h2>Recent activity</h2>${feedHTML(world, Date.now())}`;
-    $('roster').innerHTML = rosterHTML(world); paintFaces($('roster'), theme, world); updateInsets();
+    const statusOf = a => { const e = scene.get(`agent:${a.id}`); return e ? actionText(e, theme.layout) : a.activity; };
+    hudSig = bodySignature();
+    $('roster').innerHTML = rosterHTML(world, statusOf); paintFaces($('roster'), theme, world); updateInsets();
   });
 }
 function tickClock() { $('clock').textContent = new Date().toLocaleString([], { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }); }
@@ -210,9 +239,12 @@ $('scenarios').innerHTML = SCENARIOS.map(([key, text]) => `<button data-sim="${k
 $('scenarios').addEventListener('click', e => {
   const key = e.target.closest('[data-sim]')?.dataset.sim; if (!key) return;
   if (key === 'reset') { sim.stop(); storage.set('hlw:sim-world', null); location.reload(); return; }
-  sim[key](); invalidate();
+  const cancelled = sim.run(key);
+  $('sim-note').textContent = cancelled.length ? `Stopped “${cancelled.join('”, “')}” so it can't overwrite this scenario.` : '';
+  invalidate();
 });
-setInterval(() => { if (mode === 'sim') storage.set('hlw:sim-world', { v: 1, world: store.world }); }, 2000);
+// v2: worlds saved by older builds (v1) are discarded rather than replayed into the new state shape.
+setInterval(() => { if (mode === 'sim') storage.set('hlw:sim-world', { v: 2, world: store.world }); }, 2000);
 
 function savePrefs() { cameraTouched = true; clearTimeout(savePrefs.t); savePrefs.t = setTimeout(() => storage.set(`hlw:camera:${theme.id}`, camera.toJSON()), 300); }
 
@@ -228,7 +260,7 @@ if (mode === 'hq') {
 } else {
   showMode('sim');
   const saved = storage.get('hlw:sim-world');
-  if (saved?.v === 1) store.replace(saved.world); else sim.seed();
+  if (saved?.v === 2) store.replace(saved.world); else sim.seed();
 }
 $('empty').hidden = Object.keys(store.world.agents).length > 0;
 invalidate();
