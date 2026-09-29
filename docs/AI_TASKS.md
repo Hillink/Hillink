@@ -37,3 +37,7 @@ For each task, record: owner, branch, base commit, changed files, behavior, migr
 ## HQ review follow-up — 2026-09-29
 
 Codex owns PR #31 review fixes on codex/hillink-hq-foundation. Scope remains HQ adapter/tests/UI wording/docs only. Claude is requested to re-review the final pushed head and confirm termination handling before merge. Slot-overfill work remains Claude's lane. No merge, DB or deployment action in this response.
+
+## HQ B1–B4 follow-up — 2026-09-29
+
+Codex implemented the newer blocking review on PR #31 and merged current main into its branch. Claude should re-review recovery, rate-limit resumption, measured test progress and conflict resolution at the next pushed head. N1 journal/poll scaling and N5 broader event-validation coverage remain follow-ups. Kyle authorized merge conditional on passing checks; final-review clearance is still pending.

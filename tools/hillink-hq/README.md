@@ -75,3 +75,11 @@ The local adapter is useful now for actual verification. It does not prove that 
 Cancellation sends SIGTERM, waits up to one second, then sends SIGKILL and waits up to one more second. Only a process close event confirms termination. Missing close evidence retains the lease even if a signal was accepted. Windows may terminate immediately on SIGTERM; deterministic tests exercise ignored-signal escalation independently of OS behavior.
 
 Any local process running as the same user can acquire the session token; this is a single-user local control surface, not isolation from local processes. Alert details (including time since progress, queue size and recovery) are snapshots captured when the episode opens, not live counters. Node 24+ remains the supported minimum tested here; passing tests on Node 22 does not expand the supported runtime contract.
+
+## Recovery review follow-up
+
+Terminal worker failures enter diagnosis before cycle completion is allowed. A confirmed failed worker is quarantined for 60 seconds; recovery uses a different capable worker within the two-attempt budget, or parks exact repair/split instructions. Quarantine persists through replay and needs a fresh health observation after cooldown. A rate-limited task with a retry time stays queued until that time; missing retry information or repeated rejection parks an explicit capacity blocker.
+
+Completed verification can be DONE with Tests: failed: the check completed, but the tested code did not pass. A VERIFICATION_FAILED alert requests repair. Worker crashes remain FAILED and use recovery. Actual completed-test counts emit throttled TEST_PROGRESS evidence; repeated counts are rejected. Heartbeats alone still do not reset progress: a single test producing no result for the progress timeout remains subject to the watchdog. This is a deliberate limit, not a claim that heartbeat proves useful work.
+
+Known follow-ups from review: idle health journal growth, bounded state/event pagination, and replay snapshots are not implemented in this foundation slice.

@@ -53,8 +53,10 @@ test('uncertain termination retains lease, parks exact blocker, and never falsel
 test('confirmed stop parks when no different worker is available, then continues safe queue', async () => {
   const s = setup(); const first = s.task(); const second = s.task(); await s.engine.tick();
   s.advance(101); await s.engine.tick();
-  assert.equal(s.engine.state.tasks[first].stage, 'BLOCKED'); assert.equal(s.started[1].task.id, second);
+  assert.equal(s.engine.state.tasks[first].stage, 'BLOCKED'); assert.equal(s.started.length, 1);
   assert.match(s.engine.state.tasks[first].blocker, /no alternate/);
+  s.advance(s.engine.config.quarantineMs + 1); await s.engine.tick();
+  assert.equal(s.started[1].task.id, second);
 });
 test('watchdog hands off to a different capable worker without overlapping execution', async () => {
   const s = setup();
@@ -148,4 +150,61 @@ test('intentional serial local execution does not raise idle alerts for spare wo
   const s = setup(); s.engine.register({ ...s.engine.state.agents['hq-verifier'], id: 'spare', name: 'Spare' });
   s.task(); s.task(); await s.engine.tick(); s.started[0].emit({ kind: 'ACK', summary: 'Started' }); s.engine.watchdog();
   assert.equal(s.engine.snapshot().counts.ready, 1); assert.equal(Object.values(s.engine.state.alerts).filter(a => a.active).length, 0);
+});
+
+test('worker failure cannot complete the cycle before diagnosed alternate retry and bounded parking', async () => {
+  const s = setup(); s.engine.register({ ...s.engine.state.agents['hq-verifier'], id: 'alternate', name: 'Alternate' });
+  const id = s.task(); await s.engine.tick();
+  s.started[0].emit({ kind: 'ACK', summary: 'Started' }); s.started[0].emit({ kind: 'FAILED', summary: 'Worker exited unexpectedly' });
+  s.engine.watchdog(); assert.equal(s.engine.snapshot().cycleComplete, false);
+  await s.engine.tick(); assert.equal(s.engine.state.tasks[id].agentId, 'alternate');
+  s.started[1].emit({ kind: 'FAILED', summary: 'Alternate failed before ACK' });
+  await s.engine.tick(); assert.equal(s.engine.state.tasks[id].stage, 'BLOCKED');
+  assert.match(s.engine.state.tasks[id].blocker, /attempt budget/);
+  assert.ok(s.engine.state.tasks[id].ownerAction);
+  assert.equal(s.started.length, 2);
+  assert.deepEqual(s.store.read().reduce(reduce, emptyState()), s.engine.state);
+});
+
+test('rate limited task waits until retry time and resumes itself, then parks repeated rejection', async () => {
+  const s = setup(); const id = s.task(); await s.engine.tick();
+  s.started[0].emit({ kind: 'RATE_LIMITED', summary: 'Rejected without execution', retryAt: 2000 });
+  assert.equal(s.engine.snapshot().cycleComplete, false);
+  await s.engine.tick(); assert.equal(s.engine.state.tasks[id].stage, 'READY');
+  s.advance(999); await s.engine.tick(); assert.equal(s.started.length, 1);
+  s.advance(2); await s.engine.tick(); assert.equal(s.started[1].task.id, id);
+  s.started[1].emit({ kind: 'RATE_LIMITED', summary: 'Rejected again', retryAt: 3000 });
+  await s.engine.tick(); assert.equal(s.engine.state.tasks[id].stage, 'BLOCKED');
+  assert.match(s.engine.state.tasks[id].blocker, /budget/);
+});
+
+test('measured test progress keeps long verification alive; heartbeats alone eventually stall', async () => {
+  const s = setup(); s.task(); await s.engine.tick(); const run = s.started[0];
+  run.emit({ kind: 'ACK', summary: 'Started' }); run.emit({ kind: 'TEST_STARTED', summary: 'Test suite running' });
+  for (let n = 1; n <= 20; n++) {
+    s.advance(90); run.emit({ kind: 'HEARTBEAT', summary: 'Alive' });
+    run.emit({ kind: 'TEST_PROGRESS', completedTests: n, summary: `${n} tests completed` });
+    await s.engine.tick(); assert.equal(s.engine.snapshot().agents.find(a => a.id === 'hq-verifier').status, 'RUNNING');
+  }
+  assert.throws(() => run.emit({ kind: 'TEST_PROGRESS', completedTests: 20, summary: 'Repeated count' }), /Increasing/);
+  for (let n = 0; n < 6; n++) { s.advance(90); run.emit({ kind: 'HEARTBEAT', summary: 'Alive without results' }); }
+  assert.equal(s.engine.snapshot().agents.find(a => a.id === 'hq-verifier').status, 'STALLED');
+});
+
+test('quarantine survives health polls and replay until cooldown then fresh health', async () => {
+  const s = setup(); s.task(); await s.engine.tick(); s.started[0].emit({ kind: 'FAILED', summary: 'Process crashed' });
+  await s.engine.tick(); s.task(); await s.engine.tick(); assert.equal(s.started.length, 1);
+  const restored = new Engine({ store: s.store, adapters: { 'local-checks': s.adapter }, now: s.engine.now, config: s.engine.config });
+  restored.initialize(); await restored.tick(); assert.equal(s.started.length, 1);
+  s.advance(s.engine.config.quarantineMs + 1); await restored.tick(); assert.equal(s.started.length, 2);
+});
+
+test('completed verification may contain failed assertions without retrying the worker', async () => {
+  const s = setup(); const id = s.task(); await s.engine.tick(); const run = s.started[0];
+  run.emit({ kind: 'ACK', summary: 'Started' }); run.emit({ kind: 'TEST_RESULT', result: 'failed', summary: 'One assertion failed' });
+  run.emit({ kind: 'COMPLETED', summary: 'Verification finished; inspect failing assertions' });
+  await s.engine.tick(); assert.equal(s.engine.state.tasks[id].stage, 'DONE'); assert.equal(s.started.length, 1);
+  assert.equal(s.engine.state.tasks[id].evidence.find(e => e.kind === 'TEST_RESULT').result, 'failed');
+  assert.equal(s.engine.state.alerts[`verification:${id}`].kind, 'VERIFICATION_FAILED');
+  assert.equal(s.engine.state.tasks[id].verificationResult, 'failed');
 });

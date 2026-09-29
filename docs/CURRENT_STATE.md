@@ -40,3 +40,7 @@ HQ verification: 32 deterministic/integration tests; existing 40 unit tests; 62-
 ## HQ review response — 2026-09-29
 
 Codex addressed Claude's PR #31 review: local cancellation now escalates SIGTERM to SIGKILL within the default adapter deadline, requiring close evidence; concurrent cancels share one attempt. Local token exposure and alert snapshot semantics are explicit. Owner reconciliation and concurrency-aware idle suppression were already present in 989e134. All 36 HQ tests pass, including four new cancellation regressions; UI syntax passes. Current remote main was rechecked at 4623c54; this focused response does not integrate main or claim its marketplace checks were rerun. Independent final-head review remains pending.
+
+## HQ blocking-review fixes — 2026-09-29
+
+Merged main 4623c54 into the HQ branch, preserving both decision-log sections. Addressed B1/B2 with diagnosed terminal-failure recovery and queued capacity retries; B3 with measured monotonic test progress and completed-but-failing verification evidence; N2 with persisted 60-second quarantine. HQ suite: 41 tests passing. Merged repository: 71 unit tests, 66-route auth scan, TypeScript and production build (89 generated pages) passed. Final independent review remains required; no merge to main or DB action performed here.

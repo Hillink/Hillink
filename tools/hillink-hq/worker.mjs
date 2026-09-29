@@ -25,13 +25,19 @@ try {
     send({ kind: 'TEST_STARTED', summary: `Running ${files.length} test files with Node's test runner.` });
     // No child test processes: cancellation can be confirmed without an orphaned tree.
     const stream = run({ files, isolation: 'none', concurrency: false });
-    let passed = 0, failures = 0;
+    let passed = 0, failures = 0, lastProgressAt = 0;
     for await (const event of stream) {
       if (event.type === 'test:pass') passed++;
       if (event.type === 'test:fail') { failures++; send({ kind: 'FINDING', summary: `Test failed: ${event.data.name}` }); }
+      if (['test:pass', 'test:fail'].includes(event.type) && Date.now() - lastProgressAt >= 1000) {
+        send({ kind: 'TEST_PROGRESS', completedTests: passed + failures, summary: `${passed} tests passed; ${failures} tests failed so far.` });
+        lastProgressAt = Date.now();
+      }
     }
-    failed = failures > 0 || passed === 0;
-    send({ kind: 'TEST_RESULT', result: failed ? 'failed' : 'passed', summary: `${passed} passed; ${failures} failed.`, files: files.map(file => path.relative(root, file).replaceAll('\\', '/')) });
+    if (passed + failures === 0) throw Error('Test runner produced no test results');
+    send({ kind: 'TEST_RESULT', result: failures > 0 ? 'failed' : 'passed', summary: `${passed} passed; ${failures} failed.`, files: files.map(file => path.relative(root, file).replaceAll('\\', '/')) });
+    // A completed verification with failing assertions is useful evidence, not a worker crash.
+    process.exitCode = 0;
   } else throw Error('Operation is not allowlisted');
 } catch (error) {
   failed = true;
