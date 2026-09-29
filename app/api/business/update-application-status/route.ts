@@ -142,19 +142,41 @@ export async function POST(req: NextRequest) {
     updatePayload.accepted_at = updatePayload.decided_at;
   }
 
-  // Only update if nobody changed the status in the meantime (e.g. a double click).
-  const { data: updatedRows, error: updateError } = await admin
-    .from("campaign_applications")
-    .update(updatePayload)
-    .eq("id", body.applicationId)
-    .eq("status", appRow.status)
-    .select("id");
+  if (nextStatus === "accepted") {
+    // Accepting takes a campaign slot. The status change and the slot happen in one database
+    // transaction under the campaign lock (accept_application_with_slot), so a full campaign can't be
+    // overfilled and a slot change running at the same time can't count this athlete twice.
+    const { data: acceptBlock, error: acceptError } = await admin.rpc("accept_application_with_slot", {
+      p_application_id: body.applicationId,
+      p_from_status: appRow.status,
+    });
+    if (acceptError) {
+      return NextResponse.json({ error: acceptError.message }, { status: 500 });
+    }
+    if (acceptBlock === "stale") {
+      return NextResponse.json({ error: "This application was already updated." }, { status: 409 });
+    }
+    if (acceptBlock === "no_open_slots") {
+      return NextResponse.json(
+        { error: "This campaign has no open slots left. Add a slot before accepting.", code: "no_open_slots" },
+        { status: 409 }
+      );
+    }
+  } else {
+    // Only update if nobody changed the status in the meantime (e.g. a double click).
+    const { data: updatedRows, error: updateError } = await admin
+      .from("campaign_applications")
+      .update(updatePayload)
+      .eq("id", body.applicationId)
+      .eq("status", appRow.status)
+      .select("id");
 
-  if (updateError) {
-    return NextResponse.json({ error: updateError.message }, { status: 500 });
-  }
-  if (!updatedRows || updatedRows.length === 0) {
-    return NextResponse.json({ error: "This application was already updated." }, { status: 409 });
+    if (updateError) {
+      return NextResponse.json({ error: updateError.message }, { status: 500 });
+    }
+    if (!updatedRows || updatedRows.length === 0) {
+      return NextResponse.json({ error: "This application was already updated." }, { status: 409 });
+    }
   }
 
   let paymentInfo: { paymentId: string; needsFunding: boolean; businessChargeCents: number } | null = null;
@@ -174,14 +196,6 @@ export async function POST(req: NextRequest) {
     } catch (err) {
       console.error("[update-application-status] failed to create payment", err);
     }
-  }
-
-  // Decrement open_slots on accept
-  if (nextStatus === "accepted" && (campaign.open_slots ?? 0) > 0) {
-    await admin
-      .from("campaigns")
-      .update({ open_slots: Math.max(0, (campaign.open_slots ?? 1) - 1) })
-      .eq("id", campaign.id);
   }
 
   // Notify athlete

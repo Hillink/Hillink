@@ -56,11 +56,11 @@ export async function POST(req: NextRequest) {
 
   const { data: payoutProfile } = await adminClient
     .from("athlete_payout_profiles")
-    .select("stripe_account_id, payout_ready")
+    .select("stripe_account_id, payout_ready, stripe_onboarding_complete")
     .eq("athlete_id", appRow.athlete_id)
     .single();
 
-  if (!payoutProfile?.stripe_account_id || !payoutProfile.payout_ready) {
+  if (!payoutProfile?.stripe_account_id || !payoutProfile.payout_ready || !payoutProfile.stripe_onboarding_complete) {
     return NextResponse.json({ error: "Athlete payout account is not ready" }, { status: 400 });
   }
 

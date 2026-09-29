@@ -15,6 +15,11 @@ type CampaignRow = {
 
 const STATUS_OPTIONS = ["", "draft", "active", "paused", "completed", "cancelled"];
 
+// The slots API takes total capacity (accepted plus open), not the open count.
+function totalSlotsOf(campaign: CampaignRow) {
+  return Number(campaign.accepted_count || 0) + Number(campaign.open_slots || 0);
+}
+
 export default function AdminCampaignsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -107,7 +112,7 @@ export default function AdminCampaignsPage() {
   };
 
   const setSlots = async (campaign: CampaignRow) => {
-    const nextSlots = Number(slotDrafts[campaign.id] ?? campaign.open_slots);
+    const nextSlots = Number(slotDrafts[campaign.id] ?? totalSlotsOf(campaign));
     if (!Number.isFinite(nextSlots) || nextSlots < 0) {
       setError("openSlots must be >= 0.");
       return;
@@ -204,7 +209,7 @@ export default function AdminCampaignsPage() {
                   <th style={{ textAlign: "left", borderBottom: "1px solid #e5e7eb", padding: 8 }}>Status</th>
                   <th style={{ textAlign: "left", borderBottom: "1px solid #e5e7eb", padding: 8 }}>Open Slots</th>
                   <th style={{ textAlign: "left", borderBottom: "1px solid #e5e7eb", padding: 8 }}>Utilization</th>
-                  <th style={{ textAlign: "left", borderBottom: "1px solid #e5e7eb", padding: 8 }}>Override Slots</th>
+                  <th style={{ textAlign: "left", borderBottom: "1px solid #e5e7eb", padding: 8 }}>Override Total Slots</th>
                   <th style={{ textAlign: "left", borderBottom: "1px solid #e5e7eb", padding: 8 }}>Start Date</th>
                   <th style={{ textAlign: "left", borderBottom: "1px solid #e5e7eb", padding: 8 }}>Campaign ID</th>
                 </tr>
@@ -245,12 +250,12 @@ export default function AdminCampaignsPage() {
                         <input
                           type="number"
                           min={0}
-                          value={slotDrafts[campaign.id] ?? campaign.open_slots}
+                          value={slotDrafts[campaign.id] ?? totalSlotsOf(campaign)}
                           onChange={(e) => {
                             const next = Number(e.target.value);
                             setSlotDrafts((prev) => ({
                               ...prev,
-                              [campaign.id]: Number.isFinite(next) ? next : campaign.open_slots,
+                              [campaign.id]: Number.isFinite(next) ? next : totalSlotsOf(campaign),
                             }));
                           }}
                           style={{ width: 80 }}

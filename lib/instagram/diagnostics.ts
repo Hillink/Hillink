@@ -7,7 +7,7 @@ export type InstagramConnection = {
 
 export type InstagramDiagnosticsSnapshot = {
   status: "verified" | "mock" | "missing_connection" | "unverified" | "error";
-  source: "graph_api" | "mock";
+  source: "graph_api" | "none";
   igMediaId: string | null;
   permalink: string;
   mediaType: string | null;
@@ -50,30 +50,25 @@ function asNumber(value: unknown) {
   return parsed;
 }
 
-function calculateMockDiagnostics(permalink: string): InstagramDiagnosticsSnapshot {
-  const seed = Array.from(permalink).reduce((sum, char) => sum + char.charCodeAt(0), 0);
-  const likes = 40 + (seed % 260);
-  const comments = 4 + (seed % 50);
-  const saves = 3 + (seed % 35);
-  const reach = 800 + (seed % 5000);
-  const impressions = reach + (seed % 1200);
-  const videoViews = 200 + (seed % 2500);
-
+// When Hillink can't read the post from the athlete's own connected account, it records no metrics.
+// (It used to invent numbers from the URL, which then showed up as reach in business reports and
+// could earn XP.)
+function emptyDiagnostics(permalink: string): InstagramDiagnosticsSnapshot {
   return {
-    status: "mock",
-    source: "mock",
+    status: "unverified",
+    source: "none",
     igMediaId: null,
     permalink,
     mediaType: null,
     caption: null,
     postedAt: null,
-    likes,
-    comments,
-    saves,
-    reach,
-    impressions,
-    videoViews,
-    diagnosticsNotes: "Mock diagnostics used because Instagram account is not connected.",
+    likes: 0,
+    comments: 0,
+    saves: 0,
+    reach: 0,
+    impressions: 0,
+    videoViews: 0,
+    diagnosticsNotes: null,
   };
 }
 
@@ -94,16 +89,16 @@ export async function fetchInstagramDiagnostics(params: {
 
   if (!params.connection?.ig_user_id || !params.connection?.access_token) {
     return {
-      ...calculateMockDiagnostics(permalink),
+      ...emptyDiagnostics(permalink),
       status: "missing_connection",
-      diagnosticsNotes: "Instagram account not connected. Using mock diagnostics.",
+      diagnosticsNotes: "Instagram account not connected, so this post couldn't be verified.",
     };
   }
 
   const shortcode = extractShortcode(permalink);
   if (!shortcode) {
     return {
-      ...calculateMockDiagnostics(permalink),
+      ...emptyDiagnostics(permalink),
       status: "unverified",
       diagnosticsNotes: "Could not parse Instagram shortcode from proof URL.",
     };
@@ -134,7 +129,7 @@ export async function fetchInstagramDiagnostics(params: {
 
     if (!match?.id) {
       return {
-        ...calculateMockDiagnostics(permalink),
+        ...emptyDiagnostics(permalink),
         status: "unverified",
         diagnosticsNotes: "Connected Instagram account could not verify this post URL.",
       };
@@ -168,7 +163,7 @@ export async function fetchInstagramDiagnostics(params: {
     };
   } catch (error) {
     return {
-      ...calculateMockDiagnostics(permalink),
+      ...emptyDiagnostics(permalink),
       status: "error",
       diagnosticsNotes: error instanceof Error ? error.message : "Instagram diagnostics fetch failed",
     };
@@ -176,6 +171,8 @@ export async function fetchInstagramDiagnostics(params: {
 }
 
 export function shouldAwardPerformanceBonus(snapshot: InstagramDiagnosticsSnapshot) {
+  // Only numbers read from the athlete's own Instagram account count.
+  if (snapshot.status !== "verified") return false;
   const engagement = snapshot.likes + snapshot.comments + snapshot.saves;
   const highReach = snapshot.reach >= 4000;
   const strongEngagement = engagement >= 180;
