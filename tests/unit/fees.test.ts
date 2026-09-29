@@ -66,6 +66,17 @@ test("settings come from env with safe fallbacks", () => {
   assert.equal(readFeeSettings({ ATHLETE_PAY_MODE: "weird" }).athletePayMode, "on_top");
 });
 
+test("settings ignore stray whitespace and capitals from the hosting dashboard", () => {
+  const s = readFeeSettings({
+    PLATFORM_FEE_BPS: " 1500\n",
+    PASS_CARD_FEES_TO_BUSINESS: "FALSE ",
+    ATHLETE_PAY_MODE: " Included",
+    INCLUDED_ATHLETE_CREDIT_BPS: "5000 ",
+  });
+  assert.deepEqual(s, { platformFeeBps: 1500, passCardFees: false, athletePayMode: "included", includedCreditBps: 5000 });
+  assert.equal(readFeeSettings({ PASS_CARD_FEES_TO_BUSINESS: " true " }).passCardFees, true);
+});
+
 test("included mode gives 60% of the tier price as athlete credit; on-top gives none", () => {
   const included = { ...DEFAULT_FEE_SETTINGS, athletePayMode: "included" as const };
   assert.equal(includedCreditCents(40000, included), 24000);

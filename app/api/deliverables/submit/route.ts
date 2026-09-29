@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireRole } from "@/lib/rbac";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { notifyUser } from "@/lib/notifications";
+import { checkProofUrl } from "@/lib/validation/proofUrl";
 
 type SubmitBody = {
   applicationId?: string;
@@ -58,6 +59,13 @@ export async function POST(req: NextRequest) {
       { error: "applicationId and requirementId are required" },
       { status: 400 }
     );
+  }
+
+  if (submissionUrl) {
+    const submissionUrlCheck = checkProofUrl(submissionUrl);
+    if (!submissionUrlCheck.ok) {
+      return NextResponse.json({ error: submissionUrlCheck.error }, { status: 400 });
+    }
   }
 
   const admin = createAdminClient();
