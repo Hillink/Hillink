@@ -53,7 +53,22 @@ Set `HQ_AGENTS_ENABLED=1` before starting the server (PowerShell: `$env:HQ_AGENT
 
 Queue **Ask Claude or Codex to review the repo (read-only)** and optionally pick the worker. The task description is sent over stdin, never on a command line. The child gets only PATH, profile/home and proxy variables plus that provider's own credential variable (`ANTHROPIC_API_KEY`/`CLAUDE_CONFIG_DIR` or `OPENAI_API_KEY`/`CODEX_HOME`); Supabase, Stripe and other secrets are not inherited.
 
-Evidence is real: the CLI's session start is the ACK, the live process sends heartbeats, and each agent step (tool use, message) is progress. The final answer, the token counts the CLI reports and exit status close the run. A missing CLI shows OFFLINE. A CLI that exits before starting a session fails with a sign-in hint. A usage limit becomes RATE_LIMITED with the reported reset time. Runs are stopped after 20 minutes. Cancellation needs observed process close (SIGTERM then SIGKILL; `taskkill /T` then `/T /F` on Windows, where the npm shim runs through a shell). Answers are model output, not verified implementation. Edit-capable runs are not implemented; that needs an owner decision on worktrees and review gates. ChatGPT has no local runner and stays UNKNOWN.
+Evidence is real: the CLI's session start is the ACK, the live process sends heartbeats, and each agent step (tool use, message) is progress. The final answer, the token counts the CLI reports and exit status close the run. A missing CLI shows OFFLINE. A CLI that exits before starting a session fails with a sign-in hint. A usage limit becomes RATE_LIMITED with the reported reset time. Runs are stopped after 20 minutes. Cancellation needs observed process close (SIGTERM then SIGKILL; `taskkill /T` then `/T /F` on Windows, where the npm shim runs through a shell). Answers are model output, not verified implementation. Edit-capable runs are not implemented; that needs an owner decision on worktrees and review gates.
+
+## ChatGPT orchestrator (OpenAI)
+
+With `HQ_AGENTS_ENABLED=1` (or `HQ_ORCHESTRATOR_ENABLED=1`) and `OPENAI_API_KEY` in HQ's environment, ChatGPT becomes a real HQ agent: the orchestrator. Queue **Ask ChatGPT, the orchestrator** (operation `orchestrate`). Without a key it stays not connected, with the reason "OpenAI runtime not configured". A rejected key or unavailable model shows OFFLINE with the reason.
+
+- **Runtime:** OpenAI Responses API over REST with streaming (`orchestrator-adapter.mjs`). There's no SDK, so HQ keeps zero dependencies. The model is `OPENAI_ORCHESTRATOR_MODEL`, default `gpt-6.1-sol`. The instructions live in `prompts/orchestrator.md`.
+- **Tools:** `orchestrator-tools.mjs` is the complete list:
+  - `get_hq_state` and `get_task` read HQ.
+  - `request_repo_review` queues a read-only review for Claude or Codex. It's refused when the agent is not connected, offline or rate limited.
+  - `request_kyle_approval` creates an owner-required task, which HQ never runs.
+  - There is no shell, file, network or configuration tool. Arguments are validated in HQ before anything happens, and delegated tasks record `requestedBy`, which the HTTP API cannot set.
+- **Evidence:** the ACK is OpenAI's `response.created`. Heartbeats come only while a request is in flight. Tool calls are `MODEL_OUTPUT` or `HANDOFF` evidence (a handoff carries `delegatedTaskId`). The answer is `MODEL_RESULT`, with OpenAI's token counts as `USAGE`. A rejected key, an OpenAI outage, a timeout (60 s), a rate limit or more than 6 tool rounds becomes a truthful FAILED or RATE_LIMITED outcome.
+- **Context:** one OpenAI Conversation per HQ. Its ID is in `.state/orchestrator.json`, which holds no secrets. HQ, not the conversation, is the source of truth.
+- **Scheduling:** it's a remote adapter, so it takes no local-process slot. A question to ChatGPT never waits behind a local run.
+- **The key:** read from HQ's environment and sent only to api.openai.com. It is never journaled, logged or returned, and OpenAI error text is redacted.
 
 ## Notifications
 
