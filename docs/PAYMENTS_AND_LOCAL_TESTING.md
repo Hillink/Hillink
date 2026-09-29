@@ -59,7 +59,7 @@ The migrations folder is moved aside during `supabase start` because the repo's 
   - "Print / save PDF" prints a clean copy.
 - Migration: `supabase/migrations/20260928000200_customer_redemptions.sql`.
 
-`npm run test:payments:local` runs every local-database test, payments and customer codes. Set `LOCAL_SUPABASE_ANON_KEY` too to include the row-security check.
+`npm run test:payments:local` runs every local-database test, payments and customer codes. Set `LOCAL_SUPABASE_ANON_KEY` too to include the row-security check. The test files run one at a time (`--test-concurrency=1`) because they share one database: the score tests recompute every athlete's score, which used to reset the rewards test's Pro athlete mid-test when the files ran in parallel.
 
 ## Eligibility, restricted categories and auto-approve
 

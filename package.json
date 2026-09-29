@@ -23,7 +23,7 @@
     "test:all": "npm run security:api-auth ; npm run test:seed ; npm run test:e2e",
     "security:api-auth": "node scripts/assert-api-auth-guards.mjs",
     "test:unit": "node --test --experimental-strip-types --no-warnings tests/unit/*.test.ts",
-    "test:payments:local": "node --test --experimental-strip-types --no-warnings --import ./tests/integration/register.mjs tests/integration/*.test.ts"
+    "test:payments:local": "node --test --test-concurrency=1 --experimental-strip-types --no-warnings --import ./tests/integration/register.mjs tests/integration/*.test.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.9.0",
