@@ -369,7 +369,7 @@ After approval, the business may also [rate your work](/help/ratings/how-athlete
     category: "completing-campaigns",
     title: "Can I drop a campaign after joining?",
     short_answer:
-      "Yes. Choose Drop Campaign in My Campaigns any time before your proof is approved. Your spot opens up again and the business gets back the money it set aside for you.",
+      "Yes, while your application is still active: after you apply, after you're accepted, or while your proof is waiting for review. Choose Drop Campaign in My Campaigns. Your spot opens up again and the business gets back the money it set aside for you. Once your proof is approved or rejected, you can't drop the campaign.",
     body: `Only drop a campaign if you really can't do it. Finishing campaigns you join, on time, is part of your [Hillink Score](/help/hillink-score/hillink-score-for-athletes).`,
     audience: "athlete",
     status: "live",
@@ -921,10 +921,10 @@ If a campaign pays $0 (for example, a free meal), there's nothing to fund.`,
     category: "campaign-problems",
     title: "Can I remove an athlete from my campaign?",
     short_answer:
-      "Yes, any time before you approve their work. Choose Remove Athlete (or Remove Applicant) on the campaign. If you funded their pay, it's refunded.",
+      "Yes, while their application is still active, before you approve or reject their work. Choose Remove Athlete (or Remove Applicant) on the campaign. If you funded their pay, it's refunded.",
     body: `- Removing an applicant declines them.
 - Removing an accepted athlete takes them off the campaign and refunds their funded pay.
-- You can't remove an athlete whose work you've already approved.
+- You can't remove an athlete whose work you've already approved or rejected.
 
 If an athlete didn't follow the campaign or you think something is wrong, [contact HILLink](/help/disputes/disputes-and-problems).`,
     audience: "business",

@@ -10,6 +10,10 @@ The middleware checks portal roles and approval status for page routes. API rout
 
 The repository has baseline SQL in `supabase/*.sql`, an initial migration that does not contain the full schema, and newer feature migrations in `supabase/migrations/`. Local integration setup is explained in `docs/PAYMENTS_AND_LOCAL_TESTING.md`. Do not assume `supabase db reset` alone reconstructs the entire database.
 
+## Help Center (PR #9, 2026-09-29)
+
+Signed-in Help Center at `/help`, with an admin editor at `/admin/help`. Articles live in the `help_articles` table and are filtered by row security from the reader's own profile. Athletes and businesses see only live articles for their audience or `both`; admins see everything. Details are in `docs/HELP_CENTER.md`. Kyle ran `20260928000600_help_center.sql` and `20260928000610_help_center_seed.sql` in production on 2026-09-29, and a read-only check confirmed the table and articles exist. Re-running the seed updates articles that haven't been edited in `/admin/help` and leaves edited ones alone.
+
 ## Verification at this snapshot
 
 - `npm ci`: passed.

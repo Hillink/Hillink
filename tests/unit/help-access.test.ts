@@ -66,6 +66,14 @@ test("article input is checked before it's saved", () => {
   assert.equal(slugify("  What's Gold level?? "), "what-s-gold-level");
 });
 
+test("a long title never produces a slug ending in a dash", () => {
+  const slug = slugify("word ".repeat(17));
+  assert.ok(slug.length <= 80);
+  assert.ok(!slug.endsWith("-"), slug);
+  const res = validateArticleInput({ title: "word ".repeat(17), category: "getting-started", audience: "athlete", status: "draft" });
+  assert.ok(res.ok, res.ok ? "" : res.error);
+});
+
 test("category keys never collide with Help Center pages", () => {
   for (const c of HELP_CATEGORIES) assert.ok(!RESERVED_HELP_SEGMENTS.includes(c.key), c.key);
   assert.equal(articlePath({ category: "payments", slug: "when-do-i-get-paid" }), "/help/payments/when-do-i-get-paid");
