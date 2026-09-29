@@ -28,5 +28,5 @@ For each task, record: owner, branch, base commit, changed files, behavior, migr
 - Owner: Codex, `codex/hillink-hq-foundation`, base `cecec51992042d0e25cec38942d721821c43b38f`.
 - Authority: #12 locked HQ = World spec and Codex baton; ACK/CLAIM comment 5878266249.
 - Scope: isolated `tools/hillink-hq/`, HQ docs, dated coordination notes. No shared DB/migrations/Stripe or cleanup-route edits.
-- First slice: truthful dispatcher + journal/reducer + registry + real local verification adapter + watchdog + outbox + Command Center + Real/Fantasy state views/replay.
-- Pending: independent review; runtime-specific cloud/Ollama bridges; remaining full World interactions. Missing adapters are not treated as connected workers.
+- First slice in draft PR #31: truthful dispatcher + journal/reducer + registry + real local verification adapter + watchdog + outbox + Command Center + Real/Fantasy state views/replay, plus opt-in Ollama text-summary bridge (actual Gemma request verified).
+- Pending: independent review; runtime-specific cloud execution/heartbeats and general local-agent tools; remaining full World interactions. Missing adapters are not treated as connected workers. External notifications need an owner-controlled endpoint. Kyle requested wrapping up this implementation pass; continuation should start from the PR handoff.

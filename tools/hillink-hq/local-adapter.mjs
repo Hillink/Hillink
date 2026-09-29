@@ -1,13 +1,12 @@
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { operations } from './registry.mjs';
 
 const workerPath = fileURLToPath(new URL('./worker.mjs', import.meta.url));
 export class LocalAdapter {
   constructor() { this.children = new Map(); }
   async health() { return { status: 'IDLE', detail: 'Local Node worker launcher available; no model credits source.' }; }
   async start({ task, runId, emit }) {
-    if (!Object.hasOwn(operations, task.operation) || task.safety !== 'local-read-only') throw Error('Unsafe or unsupported operation');
+    if (!['inspect-repo', 'verify-hq', 'verify-unit'].includes(task.operation) || task.safety !== 'local-read-only') throw Error('Unsafe or unsupported operation');
     // No inherited .env, provider tokens, Supabase credentials or arbitrary shell.
     const env = Object.fromEntries(['SystemRoot', 'WINDIR', 'TEMP', 'TMP', 'PATH'].filter(k => process.env[k]).map(k => [k, process.env[k]]));
     const child = spawn(process.execPath, [workerPath, task.operation], { env, windowsHide: true, stdio: ['ignore', 'ignore', 'pipe', 'ipc'] });

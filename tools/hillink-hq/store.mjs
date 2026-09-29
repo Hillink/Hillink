@@ -35,7 +35,13 @@ export class FileStore {
     });
   }
   append(event) {
-    fs.writeSync(this.fd, JSON.stringify(event) + '\n');
+    const bytes = Buffer.from(JSON.stringify(event) + '\n');
+    let offset = 0;
+    while (offset < bytes.length) {
+      const written = fs.writeSync(this.fd, bytes, offset, bytes.length - offset);
+      if (!written) throw Error('Event journal write made no progress');
+      offset += written;
+    }
     fs.fsyncSync(this.fd);
   }
   close() {

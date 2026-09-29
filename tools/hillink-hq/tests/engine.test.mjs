@@ -17,8 +17,11 @@ function setup(overrides = {}) {
 test('assignment is UNKNOWN until ACK; heartbeat renews execution but not meaningful progress', async () => {
   const s = setup(); s.task(); await s.engine.tick();
   assert.equal(s.engine.snapshot().agents.find(a => a.id === 'hq-verifier').status, 'UNKNOWN');
+  assert.equal(s.engine.snapshot().counts.working, 0);
+  assert.equal(s.engine.snapshot().counts.assigned, 1);
   const run = s.started[0]; run.emit({ kind: 'ACK', summary: 'Process started' });
   assert.equal(s.engine.snapshot().agents.find(a => a.id === 'hq-verifier').status, 'RUNNING');
+  assert.equal(s.engine.snapshot().counts.working, 1);
   s.advance(501); run.emit({ kind: 'HEARTBEAT', summary: 'Still alive' });
   assert.equal(s.engine.snapshot().agents.find(a => a.id === 'hq-verifier').status, 'STALLED');
   assert.equal(s.engine.state.agents['hq-verifier'].lastMeaningfulAt, null);
@@ -105,4 +108,44 @@ test('partially launched adapter failure does not release an unconfirmed worker 
   assert.equal(s.engine.state.tasks[id].stage, 'BLOCKED');
   assert.equal(s.engine.snapshot().unresolvedRuns, 1);
   assert.equal(s.engine.snapshot().counts.ready, 1);
+});
+test('hung health adapter cannot stop a different capable worker', async () => {
+  const s = setup({ health: () => new Promise(() => {}) }); s.engine.config.adapterTimeoutMs = 15;
+  s.engine.adapters.healthy = { health: async () => ({ status: 'IDLE' }), start: async r => s.started.push(r), cancel: async () => true };
+  s.engine.register({ ...s.engine.state.agents['hq-verifier'], id: 'healthy', name: 'Healthy', executionAdapter: 'healthy' });
+  s.task(); await s.engine.tick();
+  assert.equal(s.started.length, 1); assert.equal(s.engine.snapshot().agents.find(a => a.id === 'hq-verifier').status, 'UNKNOWN');
+  assert.equal(s.started[0].task.agentId, 'healthy');
+});
+test('hung launch/cancellation are bounded and retain the uncertain lease', async () => {
+  const s = setup({ start: () => new Promise(() => {}), cancel: () => new Promise(() => {}) });
+  s.engine.config.adapterTimeoutMs = 15; const id = s.task(); await s.engine.tick();
+  assert.equal(s.engine.state.tasks[id].stage, 'BLOCKED'); assert.equal(s.engine.snapshot().unresolvedRuns, 1);
+});
+test('completion elapsed time is frozen at the terminal event', async () => {
+  const s = setup(); const id = s.task(); await s.engine.tick(); s.started[0].emit({ kind: 'ACK', summary: 'Started' });
+  s.advance(25); s.started[0].emit({ kind: 'COMPLETED', summary: 'Finished' }); s.advance(1000);
+  assert.equal(s.engine.state.tasks[id].endedAt - s.engine.state.tasks[id].claimedAt, 25);
+});
+test('owner reconciliation requires exact evidence and never marks unfinished work DONE', async () => {
+  const s = setup({ cancel: async () => false }); const id = s.task(); await s.engine.tick(); s.advance(101); await s.engine.tick();
+  const runId = s.engine.state.tasks[id].runId;
+  assert.throws(() => s.engine.reconcileStoppedRun(runId, false, 'Stopped'), /confirmation/);
+  assert.throws(() => s.engine.reconcileStoppedRun(runId, true, ''), /evidence/);
+  s.engine.reconcileStoppedRun(runId, true, 'Verified process 123 is no longer running in Task Manager.');
+  assert.equal(s.engine.state.tasks[id].stage, 'BLOCKED'); assert.equal(s.engine.snapshot().unresolvedRuns, 0);
+  assert.throws(() => s.engine.workerEvent(runId, { kind: 'ACK', summary: 'Late' }), /Stale/);
+});
+test('unknown journal event types fail replay instead of dropping state silently', () => {
+  assert.throws(() => new Engine({ store: new MemoryStore([{ seq: 1, id: 'bad', at: 1, type: 'FUTURE_EVENT', data: {} }]) }), /Unsupported/);
+});
+test('new work immediately resolves the old handoff-ready notification', async () => {
+  const s = setup(); s.task(); await s.engine.tick(); s.started[0].emit({ kind: 'ACK', summary: 'Started' }); s.started[0].emit({ kind: 'COMPLETED', summary: 'Finished' });
+  s.engine.watchdog(); assert.equal(s.engine.state.alerts['cycle:complete'].active, true);
+  s.task(); assert.equal(s.engine.state.alerts['cycle:complete'].active, false);
+});
+test('intentional serial local execution does not raise idle alerts for spare workers', async () => {
+  const s = setup(); s.engine.register({ ...s.engine.state.agents['hq-verifier'], id: 'spare', name: 'Spare' });
+  s.task(); s.task(); await s.engine.tick(); s.started[0].emit({ kind: 'ACK', summary: 'Started' }); s.engine.watchdog();
+  assert.equal(s.engine.snapshot().counts.ready, 1); assert.equal(Object.values(s.engine.state.alerts).filter(a => a.active).length, 0);
 });
