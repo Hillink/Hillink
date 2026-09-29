@@ -51,7 +51,8 @@ export class Camera {
     this.animateTo({ ...this.centerFor(rect.x + rect.w / 2, rect.y + rect.h / 2, zoom), zoom }, duration);
   }
   focusPoint(x, y, { zoom = 1.6, duration } = {}) { const z = Math.min(this.maxZoom, Math.max(this.minZoom, zoom)); this.animateTo({ ...this.centerFor(x, y, z), zoom: z }, duration); }
-  overview(opts) { this.focusRect(this.bounds, { padding: 30, maxZoom: 10, ...opts }); }
+  // The overview frames the home rect (the building) when the theme has one, else the whole world.
+  overview(opts) { this.focusRect(this.home ?? this.bounds, { padding: 24, maxZoom: 10, ...opts }); }
   // Advances an active transition; returns true while moving.
   step(now) {
     if (!this.tween) return false;

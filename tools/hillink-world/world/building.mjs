@@ -137,9 +137,10 @@ export const POINTS = [
   { id: 'desk4', room: 'development', x: 40, z: 22, pose: 'sit', facing: 'back', use: 'work', desk: 'desk4', via: 'ef40' },
   { id: 'desk5', room: 'development', x: 116, z: 22, pose: 'sit', facing: 'back', use: 'work', desk: 'desk5', via: 'ef116' },
   { id: 'desk6', room: 'development', x: 192, z: 22, pose: 'sit', facing: 'back', use: 'work', desk: 'desk6', via: 'ef192' },
-  { id: 'review', room: 'development', x: 346, z: 70, pose: 'stand', facing: 'back', use: 'inspect', desk: 'console', via: 'erv' },
-  { id: 'review2', room: 'development', x: 316, z: 70, pose: 'stand', facing: 'back', use: 'inspect', desk: 'console', via: 'erv' },
-  { id: 'rig', room: 'development', x: 368, z: 64, pose: 'stand', facing: 'back', use: 'inspect', desk: 'console', via: 'erv' },
+  // Review spots sit left of x 320 so the partition's cut end (x 380 to 400) never hides the reviewer (Pass 2).
+  { id: 'review', room: 'development', x: 312, z: 70, pose: 'stand', facing: 'back', use: 'inspect', desk: 'console', via: 'erv' },
+  { id: 'review2', room: 'development', x: 290, z: 64, pose: 'stand', facing: 'back', use: 'inspect', desk: 'console', via: 'erv' },
+  { id: 'rig', room: 'development', x: 334, z: 56, pose: 'stand', facing: 'back', use: 'inspect', desk: 'console', via: 'erv' },
   { id: 'shelf', room: 'development', x: 282, z: 76, pose: 'stand', facing: 'back', use: 'read', via: 'ea276' },
   // Plaza: where builders stand to work on a construction site east of the entrance (Pass 2's annex).
   { id: 'site1', room: 'plaza', x: 716, z: 26, pose: 'stand', facing: 'back', use: 'build', via: 'p2' },

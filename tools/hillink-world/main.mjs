@@ -38,7 +38,7 @@ function applyTheme(id) {
   theme = loadTheme(THEME_ORDER.includes(id) ? id : 'real');
   const places = view?.places ?? {}; // Semantic places (room + station ids) carry across themes.
   scene = new Scene(); view = new IsoWorldView(scene, effects, theme.layout, theme.scenery); view.places = places;
-  Object.assign(camera, { bounds: theme.layout.bounds, minZoom: theme.camera.minZoom, maxZoom: theme.camera.maxZoom });
+  Object.assign(camera, { bounds: theme.layout.bounds, home: theme.layout.home ?? null, minZoom: theme.camera.minZoom, maxZoom: theme.camera.maxZoom });
   view.sync(store.world, new Set(['*']), performance.now());
   // Agents start at their stations instead of walking in from the entrance.
   for (const e of scene.entities.values()) if (e.kind === 'agent') { const p = e.path?.at(-1); if (p) { e.x = p[0]; e.y = p[1]; e.path = []; e.moving = false; scene.moved(e); } }
@@ -56,10 +56,14 @@ $('themes').addEventListener('click', e => { const id = e.target.closest('[data-
 
 // The header and roster are fixed over the canvas; the camera frames the world between them.
 let cameraTouched = false;
+// The right-hand panel (activity, or the inspector) is measured from the DOM so framing never puts the
+// subject under it; on narrow screens the panels float over the world instead.
 function updateInsets() {
   const roster = $('roster'), bottom = roster.childElementCount ? roster.offsetHeight + 16 : 0, top = 50;
-  if (camera.insets.bottom === bottom && camera.insets.top === top) return;
-  camera.insets = { top, right: 0, bottom, left: 0 };
+  const host = canvas.parentElement.getBoundingClientRect(), panel = !$('inspect').hidden ? $('inspect') : !$('side').hidden ? $('side') : null;
+  const right = panel && host.width > 760 && !document.body.classList.contains('ui-hidden') ? Math.round(Math.min(host.width * 0.4, host.right - panel.getBoundingClientRect().left + 8)) : 0;
+  if (camera.insets.bottom === bottom && camera.insets.top === top && camera.insets.right === right) return;
+  camera.insets = { top, right, bottom, left: 0 };
   if (cameraTouched || storage.get(`hlw:camera:${theme?.id}`)) camera.clamp(); else camera.overview({ duration: 0 });
   invalidate();
 }
@@ -136,7 +140,7 @@ canvas.addEventListener('wheel', e => { e.preventDefault(); camera.zoomAt(Math.e
 addEventListener('keydown', e => {
   if (e.target.closest('input,textarea,select')) return;
   const step = 80;
-  if (e.key === 'h' || e.key === 'H') { document.body.classList.toggle('ui-hidden'); return; } // hide overlays: the world on its own
+  if (e.key === 'h' || e.key === 'H') { document.body.classList.toggle('ui-hidden'); updateInsets(); return; } // hide overlays: the world on its own
   const actions = { ArrowLeft: () => camera.pan(step, 0), ArrowRight: () => camera.pan(-step, 0), ArrowUp: () => camera.pan(0, step), ArrowDown: () => camera.pan(0, -step), '+': () => camera.zoomAt(1.2), '=': () => camera.zoomAt(1.2), '-': () => camera.zoomAt(1 / 1.2), Escape: () => { select(null); follow = null; camera.overview(); } };
   if (actions[e.key]) { e.preventDefault(); actions[e.key](); savePrefs(); invalidate(); }
 });
@@ -145,7 +149,7 @@ function select(entity) {
   selected = entity; follow = null;
   if (entity) showInspect(entity); else $('inspect').hidden = true;
   $('side').hidden = !!entity;
-  invalidate();
+  updateInsets(); invalidate();
 }
 function showInspect(entity) {
   const panel = $('inspect'), current = scene.get(entity.id);
@@ -189,9 +193,9 @@ export function focus(target) {
   if (kind === 'room') { const l = theme.layout.locationById[id]; follow = null; camera.focusRect({ x: l.x, y: l.y, w: l.w, h: l.h }, { maxZoom: theme.camera.maxZoom * 0.75 }); }
   else {
     const e = scene.get(target); if (!e) return;
+    select(e); // first, so the inspector's width is part of the framing
     camera.focusPoint(e.x, e.y - e.h / 2, { zoom: theme.camera.maxZoom * 0.6 });
     if (kind === 'agent') setTimeout(() => { follow = target; invalidate(); }, 720);
-    select(e);
   }
   invalidate();
 }
@@ -201,7 +205,11 @@ function renderNav() {
   const agents = Object.values(store.world.agents);
   $('nav').innerHTML = `<button data-go="overview">Whole company</button>${theme.layout.locations.map(l => `<button data-go="room:${l.id}">${l.name}</button>`).join('')}${agents.length ? '<hr>' : ''}${agents.map(a => `<button data-go="agent:${a.id}">${a.name}</button>`).join('')}`;
 }
-$('nav').addEventListener('click', e => { const go = e.target.closest('[data-go]')?.dataset.go; if (go) focus(go); });
+$('nav').addEventListener('click', e => {
+  const go = e.target.closest('[data-go]')?.dataset.go; if (!go) return;
+  $('nav').hidden = true; $('nav-toggle').setAttribute('aria-expanded', 'false'); // a pick closes the menu
+  focus(go);
+});
 const toggle = (btn, panel, other) => () => {
   const open = $(panel).hidden; $(panel).hidden = !open; $(btn).setAttribute('aria-expanded', String(open));
   if (open) { $(other.panel).hidden = true; $(other.btn).setAttribute('aria-expanded', 'false'); }
@@ -224,7 +232,9 @@ function renderHud() {
     $('feed').innerHTML = `<h2>Recent activity</h2>${feedHTML(world, Date.now())}`;
     const statusOf = a => { const e = scene.get(`agent:${a.id}`); return e ? actionText(e, theme.layout) : a.activity; };
     hudSig = bodySignature();
-    $('roster').innerHTML = rosterHTML(world, statusOf); paintFaces($('roster'), theme, world); updateInsets();
+    // Roster dot follows the body like the in-world dot: green only while the work is actually happening.
+    const toneOf = a => { const e = scene.get(`agent:${a.id}`); return !e || PRODUCTIVE_STATES.has(e.anim?.state) || ['talk', 'meeting'].includes(e.anim?.state) || !['coding', 'thinking', 'reviewing', 'testing', 'researching', 'communicating'].includes(a.activity) ? a.activity : 'moving'; };
+    $('roster').innerHTML = rosterHTML(world, statusOf, toneOf); paintFaces($('roster'), theme, world); updateInsets();
   });
 }
 function tickClock() { $('clock').textContent = new Date().toLocaleString([], { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }); }

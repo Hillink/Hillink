@@ -56,11 +56,16 @@ canvas { display: block; width: 100%; height: 100%; cursor: grab; touch-action: 
 .roster .card { flex: 0 0 150px; display: grid; grid-template-columns: 44px 1fr; grid-template-rows: auto auto auto; column-gap: 8px; align-items: center; padding: 7px 9px; border-radius: 12px; background: var(--panel); }
 .roster .face { grid-row: 1 / span 3; width: 44px; height: 44px; border-radius: 10px; display: grid; place-items: center; font-style: normal; font-weight: 800; background-color: #1b2433; }
 .roster b { font-size: 13px; line-height: 1.2; } .roster small { font-size: 10.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* Status and task wrap to two lines instead of cutting mid-word; the full text is in the card's title. */
+.roster .card { flex-basis: 190px; } .roster .st { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; line-height: 1.25; }
+.roster .st::before { display: inline-block; margin-right: 5px; vertical-align: 1px; }
+.roster small.task { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; line-height: 1.3; }
 .roster .task { grid-column: 1 / span 2; margin-top: 3px; }
 .st { font-size: 11px; font-weight: 600; display: inline-flex; align-items: center; gap: 5px; }
 .st::before { content: ""; width: 7px; height: 7px; border-radius: 4px; background: var(--muted); }
 .st-coding, .st-thinking, .st-researching, .st-testing, .st-reviewing, .st-communicating { color: var(--green); }
 .st-coding::before, .st-thinking::before, .st-researching::before, .st-testing::before, .st-reviewing::before, .st-communicating::before { background: var(--green); }
+.st-moving { color: #7cb8ff; } .st-moving::before { background: #4aa3ff; }
 .st-waiting { color: var(--amber); } .st-waiting::before { background: var(--amber); }
 .st-error { color: #ff5a5f; } .st-error::before { background: #ff5a5f; }
 .st-completed { color: var(--green); } .st-completed::before { background: var(--green); }

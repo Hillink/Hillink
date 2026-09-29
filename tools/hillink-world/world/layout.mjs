@@ -113,8 +113,12 @@ export function createIsoLayout(def = B) {
   const [bx, by] = P.at(board.x0 + 8, D, board.floor, board.h1 - 10), [sx, sy] = P.at(shelf.x - shelf.w / 2 + 3, shelf.z - shelf.d / 2, shelf.floor, shelf.h - 10);
   const spot = id => { const f = def.FURNITURE.find(o => o.id === id); return P.at(f.x, f.z - f.d / 2, f.floor, f.h + 10); };
 
+  // Home framing: the building and the plaza beside it (where construction happens), not the whole street.
+  const homePts = [[-10, 0, 0, 0], [830, 0, 0, 0], [-10, 0, 2, 60], [830, D, 2, 60], [830, 0, 0, -10]].map(([x, z, f, h]) => P.at(x, z, f, h));
+  const hx = homePts.map(q => q[0]), hy = homePts.map(q => q[1]);
+  const home = { x: Math.min(...hx), y: Math.min(...hy), w: Math.max(...hx) - Math.min(...hx), h: Math.max(...hy) - Math.min(...hy) };
   return {
-    id: 'hq', kind: 'iso', P, g, def,
+    id: 'hq', kind: 'iso', P, g, def, home,
     bounds: { x: -150, y: 90, w: 1180, h: 520 },
     entityScale: 0.5, overflowStep: 16, walkSpeed: 64, characterHeight: 50,
     spawn: 'plaza',

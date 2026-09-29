@@ -102,14 +102,14 @@ export function attentionHTML(items, limit = 4) {
 
 // Roster portraits are drawn by the same figure code as the world (no image files), in the active skin.
 // statusOf (optional): what the agent's body is doing, from the view ("Walking to Engineering").
-export function rosterHTML(world, statusOf = a => (a.activity === 'completed' ? 'finished' : a.activity)) {
+export function rosterHTML(world, statusOf = a => (a.activity === 'completed' ? 'finished' : a.activity), toneOf = a => a.activity) {
   const agents = Object.values(world.agents);
   if (!agents.length) return '';
   return agents.map(a => {
     const job = jobOf(world, a), last = !job ? lastJobOf(world, a) : null;
     const task = job ? `${job.stage ? `${job.stage}: ` : ''}${job.title}` : last ? `Last: ${last.title} (${last.outcome})` : a.lastEvent?.detail;
     const status = statusOf(a);
-    return `<button class="card" data-focus="agent:${esc(a.id)}" title="${esc(`${a.name}, ${a.role ?? ''}\n${status}${task ? `\n${task}` : ''}`)}"><canvas class="face" width="88" height="88" data-agent="${esc(a.id)}"></canvas><b>${esc(a.name)}</b><small>${esc(a.role ?? '')}</small><span class="st st-${esc(a.activity)}">${esc(status)}</span>${task ? `<small class="task">${esc(task)}</small>` : ''}</button>`;
+    return `<button class="card" data-focus="agent:${esc(a.id)}" title="${esc(`${a.name}, ${a.role ?? ''}\n${status}${task ? `\n${task}` : ''}`)}"><canvas class="face" width="88" height="88" data-agent="${esc(a.id)}"></canvas><b>${esc(a.name)}</b><small>${esc(a.role ?? '')}</small><span class="st st-${esc(toneOf(a))}">${esc(status)}</span>${task ? `<small class="task">${esc(task)}</small>` : ''}</button>`;
   }).join('');
 }
 

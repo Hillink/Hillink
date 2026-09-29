@@ -13,6 +13,7 @@ import { jobOf } from '../core/job.mjs';
 import { drawSite, siteBox } from './construction.mjs';
 
 const TAU = Math.PI * 2;
+const LABEL_PX = 11; // on-screen size of agent name labels
 const STATUS = { coding: '#34d27b', thinking: '#34d27b', researching: '#34d27b', testing: '#34d27b', reviewing: '#34d27b', communicating: '#34d27b', waiting: '#f4a23b', idle: '#8aa0b8', completed: '#5cc98a', error: '#ef4b4b', offline: '#59616d' };
 const SYSTEM_COLOR = { ok: '#3ddc84', busy: '#4aa3ff', degraded: '#ffb020', down: '#ff4d4d', unknown: '#7c8594' };
 const font = (px, weight = 600) => `${weight} ${px}px ui-sans-serif, system-ui, sans-serif`;
@@ -38,6 +39,15 @@ function pill(ctx, x, y, lines, { dot, px = 9, pad = 5, bg = '#0b1018e6', border
   if (dot) { ctx.beginPath(); ctx.arc(x - w / 2 + pad + 3, y + pad / 2 + (px + 3) / 2, 3, 0, TAU); ctx.fillStyle = dot; ctx.fill(); }
   lines.forEach((l, i) => text(ctx, l, left, y + pad / 2 + (px + 3) * (i + 0.5), i ? px - 1.5 : px, i ? '#b9c3d1' : '#f3f6fa', { align: 'left', weight: i ? 500 : 700 }));
   return { w, h };
+}
+
+// Where a label goes: its own spot, or stepped up above labels already placed this frame (never hidden).
+export function placeLabel(claim, x, base, w, h, force = false, gap = 2) {
+  for (let i = 0; i < 4; i++) {
+    const ly = base - i * (h + gap);
+    if (claim(x, ly + h / 2, w, h, force || i === 3)) return ly;
+  }
+  return base;
 }
 
 const PEDESTRIANS = [
@@ -240,7 +250,11 @@ export function createIsoSkin(layout, skinId = 'real') {
     const x = e.x + dx, y = e.y;
     const hovered = env.hoverId === e.id, selected = env.selectedId === e.id;
     if (hovered || selected) { ctx.beginPath(); ctx.ellipse(x, y + 0.5, e.h * 0.34, e.h * 0.1, 0, 0, TAU); ctx.lineWidth = 2; ctx.strokeStyle = selected ? '#e21b23' : '#ffffff'; ctx.stroke(); }
-    const head = drawFigure(ctx, { x, y, h: e.h, dir: e.moving || e.ride ? e.dir ?? 'front' : e.dir ?? 'front', posture: e.posture, state: st, t, time: d.reduced ? 0 : T + hash(e.id.length), stride: e.stride ?? 0, look, use: e.spotInfo?.use, moving: e.moving, alpha: a.activity === 'offline' ? 0.82 : 1 });
+    const fig = { x, y, h: e.h, dir: e.moving || e.ride ? e.dir ?? 'front' : e.dir ?? 'front', posture: e.posture, state: st, t, time: d.reduced ? 0 : T + hash(e.id.length), stride: e.stride ?? 0, look, use: e.spotInfo?.use, moving: e.moving, alpha: a.activity === 'offline' ? 0.82 : 1 };
+    const head = drawFigure(ctx, fig);
+    // X-ray: a selected agent, or one doing real work, stays readable through glass, walls and furniture in
+    // front of it: a faint copy drawn above the scene (invisible where nothing covers it).
+    if (selected || hovered || PRODUCTIVE_STATES.has(st) || st === 'assemble' || st === 'survey') d.late.unshift(() => drawFigure(ctx, { ...fig, alpha: selected ? 0.45 : 0.3 }));
     d.late.push(() => badge(d, e, a, x, head.top, hovered, selected));
   }
   function badge(d, e, a, x, top, hovered, selected) {
@@ -255,10 +269,15 @@ export function createIsoSkin(layout, skinId = 'real') {
     if (zoom < 0.7 && !(hovered || selected)) return;
     // Compact by default (dot + name); the action and stage show on hover or selection.
     const lines = hovered || selected ? [a.name, statusLine(e, env.world, layout)] : [a.name];
-    const ly = cy - 16 * k - lines.length * 11;
+    // Labels keep a constant size on screen (about 11px) at any zoom. When two would overlap, the later one
+    // steps up above the other (with a thin leader line) instead of disappearing.
+    const s = LABEL_PX / 8 / zoom;
     ctx.font = font(8, 700); const w0 = ctx.measureText(lines[0]).width; ctx.font = font(6.5, 500);
-    const w = Math.max(w0, lines[1] ? ctx.measureText(lines[1]).width : 0) + 19;
-    if (env.claimLabel(x, ly + lines.length * 5.5, w, lines.length * 11 + 5, hovered || selected)) pill(ctx, x, ly, lines, { dot: ring, px: 8 });
+    const w = (Math.max(w0, lines[1] ? ctx.measureText(lines[1]).width : 0) + 19) * s, h = (lines.length * 11 + 5) * s;
+    const base = cy - 16 * k - lines.length * 11 * s;
+    const ly = placeLabel(env.claimLabel, x, base, w, h, hovered || selected, 2 * s);
+    if (ly !== base) { ctx.strokeStyle = '#ffffff66'; ctx.lineWidth = 0.8 / zoom; ctx.beginPath(); ctx.moveTo(x, ly + h); ctx.lineTo(x, base + h * 0.4); ctx.stroke(); }
+    ctx.save(); ctx.translate(x, ly); ctx.scale(s, s); pill(ctx, 0, 0, lines, { dot: ring, px: 8 }); ctx.restore();
   }
   function drawNpc(d, e) {
     drawFigure(d.ctx, { x: e.x, y: e.y, h: e.h, dir: e.moving === false ? 'front' : e.facing < 0 ? 'left' : 'right', state: e.pose === 'walk' ? 'walk' : 'idle', t: 0, time: d.reduced ? 0 : d.T + e.index, stride: e.stride ?? 0, look: PEDESTRIANS[e.index % PEDESTRIANS.length], moving: e.pose === 'walk', alpha: 0.95 });
@@ -297,7 +316,7 @@ export function createIsoSkin(layout, skinId = 'real') {
       modeLabel: (env.modeLabel ?? '').split(':')[0], modeColor: env.modeLabel?.startsWith('LIVE') ? '#3ddc84' : '#ffb020',
     };
     // Construction: in LIVE only real passes (git/GitHub evidence); in simulation only simulated ones.
-    const live = env.modeLabel?.startsWith('LIVE');
+    const live = !env.modeLabel?.startsWith('SIMULATION'); // LIVE, or HQ offline showing the last known state
     const passes = Object.values(world.passes ?? {}).filter(p => (live ? p.source !== 'sim' : p.source === 'sim') && p.structures?.length);
     d.passCounts = { accepted: passes.filter(p => p.stage === 'accepted').length, active: passes.filter(p => p.stage !== 'accepted').length };
     if (debug) return blueprint(d, agents);
