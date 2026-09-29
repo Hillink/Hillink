@@ -47,17 +47,38 @@ export async function POST(req: NextRequest) {
 
   const status = appRow.status as AthleteStatus;
 
+  // Withdrawing again retries a refund that failed the first time.
+  if (status === "withdrawn") {
+    const retry = await refundPaymentIfFunded(getStripe, adminClient, appRow.id);
+    if (retry.error) {
+      return NextResponse.json({ error: `Refund failed: ${retry.error}` }, { status: 502 });
+    }
+    return NextResponse.json({ success: true });
+  }
+
   if (status !== "applied" && status !== "accepted" && status !== "submitted") {
     return NextResponse.json({ error: "Only active applications can be withdrawn" }, { status: 400 });
   }
 
-  if (status === "accepted" || status === "submitted") {
-    // Give the business its money back before the athlete leaves the campaign.
-    const refund = await refundPaymentIfFunded(getStripe, adminClient, appRow.id);
-    if (refund.error) {
-      return NextResponse.json({ error: `Couldn't withdraw yet: ${refund.error}` }, { status: 409 });
-    }
+  // Close the application first, and only if it's still in the status we checked, so a concurrent change
+  // isn't overwritten and the slot and refund below happen once. It's kept as a record, marked withdrawn,
+  // instead of deleted (with its payment).
+  const { data: withdrawn, error: withdrawError } = await adminClient
+    .from("campaign_applications")
+    .update({ status: "withdrawn", decided_at: new Date().toISOString() })
+    .eq("id", appRow.id)
+    .eq("athlete_id", userId)
+    .eq("status", status)
+    .select("id");
 
+  if (withdrawError) {
+    return NextResponse.json({ error: withdrawError.message }, { status: 500 });
+  }
+  if (!withdrawn || withdrawn.length === 0) {
+    return NextResponse.json({ error: "This application just changed. Refresh and try again." }, { status: 409 });
+  }
+
+  if (status === "accepted" || status === "submitted") {
     const { data: campaign, error: campaignError } = await adminClient
       .from("campaigns")
       .select("id, open_slots, slots")
@@ -77,23 +98,15 @@ export async function POST(req: NextRequest) {
     if (slotError) {
       return NextResponse.json({ error: slotError.message }, { status: 500 });
     }
-  }
 
-  // Keep the application as a record, marked withdrawn, instead of deleting it (and its payment).
-  // Only if it's still in the status we checked, so a concurrent change isn't overwritten.
-  const { data: withdrawn, error: withdrawError } = await adminClient
-    .from("campaign_applications")
-    .update({ status: "withdrawn", decided_at: new Date().toISOString() })
-    .eq("id", appRow.id)
-    .eq("athlete_id", userId)
-    .eq("status", status)
-    .select("id");
-
-  if (withdrawError) {
-    return NextResponse.json({ error: withdrawError.message }, { status: 500 });
-  }
-  if (!withdrawn || withdrawn.length === 0) {
-    return NextResponse.json({ error: "This application just changed. Refresh and try again." }, { status: 409 });
+    // Then give the business its money back. If it fails, withdrawing again retries it.
+    const refund = await refundPaymentIfFunded(getStripe, adminClient, appRow.id);
+    if (refund.error) {
+      return NextResponse.json(
+        { error: `You've withdrawn, but the business's refund failed: ${refund.error}. Withdraw again to retry.` },
+        { status: 502 }
+      );
+    }
   }
 
   return NextResponse.json({ success: true });

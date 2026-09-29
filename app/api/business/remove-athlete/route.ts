@@ -76,23 +76,23 @@ export async function POST(req: NextRequest) {
   }
 
   const nextStatus: ManagedStatus = status === "applied" ? "declined" : "withdrawn";
-  const nowIso = new Date().toISOString();
 
-  const { data: updatedRows, error: updateError } = await adminClient
-    .from("campaign_applications")
-    .update({
-      status: nextStatus,
-      decided_at: nowIso,
-      reviewed_at: nextStatus === "declined" ? nowIso : null,
-    })
-    .eq("id", appRow.id)
-    .eq("status", status)
-    .select("id");
+  // Under the application's row lock: still in the status we read, and no deliverable sent meanwhile.
+  const { data: closed, error: closeError } = await adminClient.rpc("close_application_keep_record", {
+    p_application_id: appRow.id,
+    p_expected_status: status,
+    p_next_status: nextStatus,
+    p_allow_after_proof: false,
+  });
 
-  if (updateError) {
-    return NextResponse.json({ error: updateError.message }, { status: 500 });
+  if (closeError) {
+    return NextResponse.json({ error: closeError.message }, { status: 500 });
   }
-  if (!updatedRows || updatedRows.length === 0) {
+  const reason = (closed as { reason?: string | null } | null)?.reason ?? null;
+  if (reason === "proof_submitted") {
+    return NextResponse.json({ error: PROOF_IN_MESSAGE, code: "proof_submitted" }, { status: 409 });
+  }
+  if (reason) {
     return NextResponse.json({ error: "This athlete's status just changed. Refresh and try again." }, { status: 409 });
   }
 

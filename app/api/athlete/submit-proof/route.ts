@@ -79,7 +79,7 @@ export async function POST(req: NextRequest) {
 
   const nowIso = new Date().toISOString();
 
-  const { error: updateError } = await adminClient
+  const { data: submitted, error: updateError } = await adminClient
     .from("campaign_applications")
     .update({
       status: "submitted",
@@ -89,10 +89,17 @@ export async function POST(req: NextRequest) {
     })
     .eq("id", applicationId)
     // Not if the application was closed meanwhile (withdrawn, removed, campaign cancelled).
-    .eq("status", appRow.status);
+    .eq("status", appRow.status)
+    .select("id");
 
   if (updateError) {
     return NextResponse.json({ error: updateError.message }, { status: 500 });
+  }
+  if (!submitted || submitted.length === 0) {
+    return NextResponse.json(
+      { error: "This application just changed, so your proof wasn't saved. Refresh and check its status." },
+      { status: 409 }
+    );
   }
 
   // Notify the business that proof has been submitted

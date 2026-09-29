@@ -18,7 +18,7 @@ export async function POST() {
   // Don't let that happen while there's live work or money in flight: finish or cancel it first.
   const openWork = await openObligations(admin, access.role, userId);
   if (openWork) {
-    return NextResponse.json({ error: openWork, code: "open_obligations" }, { status: 409 });
+    return NextResponse.json({ error: openWork.message, code: "open_obligations" }, { status: openWork.status });
   }
 
   if (access.role === "business") {
@@ -61,47 +61,57 @@ export async function POST() {
 const LIVE_APPLICATION_STATUSES = ["accepted", "submitted"];
 const OPEN_PAYMENT_STATUSES = ["uncommitted", "held", "disputed"];
 
-/** A message saying why this account can't be deleted yet, or null. */
+const OBLIGATIONS_UNCHECKED =
+  "We couldn't check your open campaigns and payments right now, so your account wasn't deleted. Please try again.";
+
+/** A message saying why this account can't be deleted yet, or null. Fails closed if a check errors. */
 async function openObligations(
   admin: ReturnType<typeof createAdminClient>,
   role: string,
   userId: string
-): Promise<string | null> {
+): Promise<{ message: string; status: number } | null> {
+  const blocked = (message: string) => ({ message, status: 409 });
+  const unchecked = { message: OBLIGATIONS_UNCHECKED, status: 503 };
+
   if (role === "athlete") {
-    const { count: liveApps } = await admin
+    const { count: liveApps, error: appsError } = await admin
       .from("campaign_applications")
       .select("id", { count: "exact", head: true })
       .eq("athlete_id", userId)
       .in("status", LIVE_APPLICATION_STATUSES);
+    if (appsError) return unchecked;
     if (Number(liveApps ?? 0) > 0) {
-      return "You're still on a campaign. Finish it or withdraw before deleting your account.";
+      return blocked("You're still on a campaign. Finish it or withdraw before deleting your account.");
     }
-    const { count: unpaid } = await admin
+    const { count: unpaid, error: unpaidError } = await admin
       .from("payments")
       .select("id", { count: "exact", head: true })
       .eq("athlete_id", userId)
       .in("hold_status", OPEN_PAYMENT_STATUSES);
+    if (unpaidError) return unchecked;
     if (Number(unpaid ?? 0) > 0) {
-      return "You have pay that hasn't been sent yet. Contact HILLink before deleting your account.";
+      return blocked("You have pay that hasn't been sent yet. Contact HILLink before deleting your account.");
     }
     return null;
   }
 
-  const { count: liveCampaigns } = await admin
+  const { count: liveCampaigns, error: campaignsError } = await admin
     .from("campaigns")
     .select("id", { count: "exact", head: true })
     .eq("business_id", userId)
     .in("status", ["open", "active", "paused"]);
+  if (campaignsError) return unchecked;
   if (Number(liveCampaigns ?? 0) > 0) {
-    return "You still have running campaigns. Finish or cancel them before deleting your account.";
+    return blocked("You still have running campaigns. Finish or cancel them before deleting your account.");
   }
-  const { count: openPayments } = await admin
+  const { count: openPayments, error: paymentsError } = await admin
     .from("payments")
     .select("id", { count: "exact", head: true })
     .eq("business_id", userId)
     .in("hold_status", OPEN_PAYMENT_STATUSES);
+  if (paymentsError) return unchecked;
   if (Number(openPayments ?? 0) > 0) {
-    return "Some athlete payments are still open. Contact HILLink before deleting your account.";
+    return blocked("Some athlete payments are still open. Contact HILLink before deleting your account.");
   }
   return null;
 }

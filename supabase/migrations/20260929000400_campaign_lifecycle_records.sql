@@ -5,19 +5,131 @@
 -- their payments, XP and finance history. Cancelling now marks things cancelled instead.
 -- Once any athlete has sent proof, only a Hillink admin can cancel.
 
--- Statuses that mean an athlete has sent proof for the campaign.
+-- True once any athlete has sent proof for the campaign: an application moved to a proof status, or a
+-- deliverable submitted through the deliverables flow (which leaves the application "accepted").
 create or replace function public.campaign_has_proof(p_campaign_id uuid)
 returns boolean
-language sql
+language plpgsql
 stable
 set search_path = public
 as $$
-  select exists (
+begin
+  if exists (
     select 1 from public.campaign_applications
     where campaign_id = p_campaign_id
       and status in ('submitted', 'rejected', 'approved', 'completed')
-  );
+  ) then
+    return true;
+  end if;
+  if to_regclass('public.deliverable_submissions') is not null then
+    return exists (
+      select 1
+      from public.deliverable_submissions ds
+      join public.campaign_applications a on a.id = ds.application_id
+      where a.campaign_id = p_campaign_id
+    );
+  end if;
+  return false;
+end;
 $$;
+
+-- The same for one application.
+create or replace function public.application_has_proof(p_application_id uuid)
+returns boolean
+language plpgsql
+stable
+set search_path = public
+as $$
+begin
+  if exists (
+    select 1 from public.campaign_applications
+    where id = p_application_id
+      and status in ('submitted', 'rejected', 'approved', 'completed')
+  ) then
+    return true;
+  end if;
+  if to_regclass('public.deliverable_submissions') is not null then
+    return exists (select 1 from public.deliverable_submissions where application_id = p_application_id);
+  end if;
+  return false;
+end;
+$$;
+
+-- A deliverable can only be sent while the athlete is still on the campaign. Locking the application row
+-- lines this up with cancel/remove: whichever commits first wins, and the other sees it.
+create or replace function public.guard_deliverable_submission()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_status text;
+begin
+  select status into v_status from public.campaign_applications where id = new.application_id for update;
+  if v_status is null or v_status not in ('accepted', 'submitted', 'approved', 'completed') then
+    raise exception 'HILLINK:application_closed' using errcode = 'P0001';
+  end if;
+  return new;
+end;
+$$;
+
+do $$
+begin
+  if to_regclass('public.deliverable_submissions') is not null then
+    drop trigger if exists deliverable_submissions_guard_open on public.deliverable_submissions;
+    create trigger deliverable_submissions_guard_open
+    before insert on public.deliverable_submissions
+    for each row
+    execute function public.guard_deliverable_submission();
+  end if;
+end $$;
+
+-- A business taking one athlete off its campaign, keeping the record. Under the application row lock:
+-- refuses with 'stale' if the status changed since the caller read it, or 'proof_submitted' once the
+-- athlete has sent proof (unless p_allow_after_proof). Returns {"reason": null | ...}.
+create or replace function public.close_application_keep_record(
+  p_application_id uuid,
+  p_expected_status text,
+  p_next_status text,
+  p_allow_after_proof boolean default false
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_status text;
+  v_now timestamptz := now();
+begin
+  if p_next_status not in ('declined', 'withdrawn') then
+    raise exception 'invalid next status %', p_next_status;
+  end if;
+
+  select status into v_status from public.campaign_applications where id = p_application_id for update;
+  if not found then
+    return jsonb_build_object('reason', 'not_found');
+  end if;
+  if v_status is distinct from p_expected_status then
+    return jsonb_build_object('reason', 'stale');
+  end if;
+  if not p_allow_after_proof and public.application_has_proof(p_application_id) then
+    return jsonb_build_object('reason', 'proof_submitted');
+  end if;
+
+  update public.campaign_applications
+    set status = p_next_status,
+        decided_at = v_now,
+        reviewed_at = case when p_next_status = 'declined' then v_now else null end
+    where id = p_application_id;
+
+  return jsonb_build_object('reason', null);
+end;
+$$;
+
+revoke all on function public.close_application_keep_record(uuid, text, text, boolean) from public, anon, authenticated;
+grant execute on function public.close_application_keep_record(uuid, text, text, boolean) to service_role;
 
 -- A business cancelling its campaign. Everything happens under the campaign row lock with the
 -- applications locked too, so an athlete can't send proof halfway through:
@@ -75,7 +187,10 @@ begin
   )
   select coalesce(array_agg(id), '{}') into v_ids from closed;
 
+  -- Lets the proof guard below through for an admin cancel.
+  perform set_config('app.allow_cancel_after_proof', case when p_allow_after_proof then 'true' else 'false' end, true);
   update public.campaigns set status = 'cancelled', open_slots = 0 where id = p_campaign_id;
+  perform set_config('app.allow_cancel_after_proof', 'false', true);
 
   insert into public.campaign_status_log (campaign_id, from_status, to_status, changed_by, reason)
   values (p_campaign_id, c.status, 'cancelled', p_actor, p_reason);
@@ -87,18 +202,23 @@ $$;
 revoke all on function public.cancel_campaign_keep_records(uuid, uuid, text, boolean) from public, anon, authenticated;
 grant execute on function public.cancel_campaign_keep_records(uuid, uuid, text, boolean) to service_role;
 
--- Businesses can update their own campaigns directly (RLS), which included setting status = 'cancelled'.
--- A signed-in caller can't cancel once proof is in. Hillink's server and admins go through the functions
--- above or the service role, which this doesn't block.
+-- Businesses can update their own campaigns directly (RLS), which included setting status = 'cancelled',
+-- and could also cancel through transition_campaign_status (SECURITY DEFINER, so it runs as the function
+-- owner, not "authenticated"). Once proof is in, cancelling is refused unless it comes from Hillink's
+-- server (service role, which checks the caller itself) or an admin override: transition_campaign_status
+-- with p_force, or cancel_campaign_keep_records with p_allow_after_proof. In the SQL editor, run
+-- `set local app.is_admin_override = 'true'` first.
 create or replace function public.guard_campaign_cancel_after_proof()
 returns trigger
 language plpgsql
 set search_path = public
 as $$
 begin
-  if current_user in ('authenticated', 'anon')
-     and new.status = 'cancelled'
+  if new.status = 'cancelled'
      and old.status is distinct from 'cancelled'
+     and current_user <> 'service_role'
+     and coalesce(current_setting('app.is_admin_override', true), '') <> 'true'
+     and coalesce(current_setting('app.allow_cancel_after_proof', true), '') <> 'true'
      and public.campaign_has_proof(new.id) then
     raise exception 'HILLINK:proof_submitted' using errcode = 'P0001';
   end if;

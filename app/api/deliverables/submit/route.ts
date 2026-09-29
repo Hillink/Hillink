@@ -157,6 +157,12 @@ export async function POST(req: NextRequest) {
     .select("id, application_id, requirement_id, athlete_id, submission_url, notes, status, rejection_reason, version, submitted_at, reviewed_at, reviewed_by, due_at")
     .single();
 
+  if (insertError?.message?.includes("HILLINK:application_closed")) {
+    return NextResponse.json(
+      { error: "You're no longer on this campaign, so this can't be submitted.", code: "application_closed" },
+      { status: 409 }
+    );
+  }
   if (insertError || !inserted) {
     return NextResponse.json({ error: insertError?.message || "Failed to submit deliverable" }, { status: 500 });
   }
