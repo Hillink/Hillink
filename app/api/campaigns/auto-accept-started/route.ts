@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createNotification } from "@/lib/notifications";
 import { requireRoleAccess } from "@/lib/auth/requireRoleAccess";
+import { askBusinessToFund, isFunded, paymentForWork } from "@/lib/payments/workFunding";
 
 export async function POST() {
   const access = await requireRoleAccess(["business"]);
@@ -91,8 +92,32 @@ export async function POST() {
     }
   }
 
-  // Send notifications (fire-and-forget per athlete)
+  // The business pays when it accepts (D5): set up each athlete's payment now. If it isn't funded yet,
+  // the athlete is told to wait and the business is asked to pay, once per campaign.
   const campaignById = Object.fromEntries(startedCampaigns.map((c) => [c.id, c]));
+  const needsFunding = new Set<string>();
+  const funded = new Map<string, boolean>();
+  for (const app of toAccept) {
+    try {
+      const payment = await paymentForWork(admin, {
+        applicationId: app.id,
+        campaignId: app.campaign_id,
+        athleteId: app.athlete_id,
+      });
+      funded.set(app.id, isFunded(payment));
+    } catch (error) {
+      console.error("[auto-accept-started] failed to create payment", error);
+      funded.set(app.id, false);
+    }
+    if (!funded.get(app.id)) needsFunding.add(app.campaign_id);
+  }
+  await Promise.allSettled(
+    Array.from(needsFunding).map((campaignId) =>
+      askBusinessToFund({ businessId: userId, campaignId, campaignTitle: campaignById[campaignId]?.title })
+    )
+  );
+
+  // Send notifications (fire-and-forget per athlete)
   await Promise.allSettled(
     toAccept.map((app) => {
       const campaignTitle = campaignById[app.campaign_id]?.title ?? "your campaign";
@@ -100,7 +125,9 @@ export async function POST() {
         userId: app.athlete_id,
         type: "application_accepted",
         title: "You've been accepted!",
-        body: `You were automatically accepted into "${campaignTitle}" — upload your proof when you're ready.`,
+        body: funded.get(app.id)
+          ? `You were automatically accepted into "${campaignTitle}". Upload your proof when you're ready.`
+          : `You were automatically accepted into "${campaignTitle}". You can send proof once the business has paid for your spot. We'll let you know.`,
         metadata: { applicationId: app.id, campaignId: app.campaign_id, campaignTitle },
       });
     })

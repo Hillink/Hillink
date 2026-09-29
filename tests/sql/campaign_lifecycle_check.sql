@@ -28,8 +28,10 @@ set session_replication_role = origin;
 set role authenticated;
 set request.jwt.claim.sub = '00000000-0000-0000-0000-00000000000b';
 set request.jwt.claims = '{"sub":"00000000-0000-0000-0000-00000000000b","role":"authenticated"}';
-\echo 'direct cancel after proof (expect HILLINK:proof_submitted):'
+\echo 'direct cancel after proof (expect HILLINK:use_cancel_flow):'
 update public.campaigns set status = 'cancelled' where id = '22222222-2222-2222-2222-222222222222';
+\echo 'direct cancel with no proof either (expect HILLINK:use_cancel_flow):'
+update public.campaigns set status = 'cancelled' where id = '11111111-1111-1111-1111-111111111111';
 \echo 'cancel function is server-only (expect permission denied):'
 select public.cancel_campaign_keep_records('11111111-1111-1111-1111-111111111111', auth.uid(), 'x', false);
 reset role;
@@ -49,7 +51,7 @@ select count(*) from public.campaign_status_log where campaign_id = '11111111-11
 \echo 'retry on cancelled campaign (expect reason null, same 3 applications, still 1 log row):'
 select public.cancel_campaign_keep_records('11111111-1111-1111-1111-111111111111', '00000000-0000-0000-0000-00000000000b', 'Cancelled by business', false);
 select count(*) from public.campaign_status_log where campaign_id = '11111111-1111-1111-1111-111111111111';
-\echo 'admin cancel after proof (expect reason null; submitted application untouched):'
+\echo 'admin cancel after proof (expect reason null and the submitted application, which is withdrawn):'
 select public.cancel_campaign_keep_records('22222222-2222-2222-2222-222222222222', null, 'Admin', true);
 select status from public.campaign_applications where id = 'a2222222-0000-0000-0000-000000000001';
 reset role;
@@ -58,7 +60,7 @@ set role authenticated;
 set request.jwt.claim.sub = '00000000-0000-0000-0000-00000000000b';
 set request.jwt.claims = '{"sub":"00000000-0000-0000-0000-00000000000b","role":"authenticated"}';
 \echo 'lower pay with an athlete still in (expect HILLINK:payout_locked):'
-update public.campaigns set payout_cents = 0 where id = '22222222-2222-2222-2222-222222222222';
+update public.campaigns set payout_cents = 0 where id = '33333333-3333-3333-3333-333333333333';
 \echo 'raise pay (expect UPDATE 1 and 1500):'
 update public.campaigns set payout_cents = 1500 where id = '22222222-2222-2222-2222-222222222222';
 select payout_cents from public.campaigns where id = '22222222-2222-2222-2222-222222222222';
@@ -77,7 +79,7 @@ update public.campaign_applications set offered_payout_cents = 0 where id = 'a22
 select offered_payout_cents from public.campaign_applications where id = 'a2222222-0000-0000-0000-000000000002';
 reset role;
 \echo '--- DELIVERABLES COUNT AS PROOF'
-\echo 'business cancels through transition_campaign_status (definer) after a deliverable (expect HILLINK:proof_submitted, or permission denied once #14's migration revokes it):'
+\echo 'business cancels through transition_campaign_status (definer) after a deliverable (expect HILLINK:use_cancel_flow, or permission denied once #14's migration revokes it):'
 set role authenticated;
 set request.jwt.claim.sub = '00000000-0000-0000-0000-00000000000b';
 select public.transition_campaign_status('33333333-3333-3333-3333-333333333333', 'cancelled', '00000000-0000-0000-0000-00000000000b', 'x', false);
@@ -104,6 +106,10 @@ set request.jwt.claim.sub = '00000000-0000-0000-0000-00000000000e';
 set request.jwt.claim.role = 'authenticated';
 insert into public.deliverable_submissions(application_id,requirement_id,athlete_id,submission_url)
   values ('a3333333-0000-0000-0000-000000000001','d3333333-0000-0000-0000-000000000001','00000000-0000-0000-0000-00000000000e','https://instagram.com/p/z');
+\echo 'athlete sends a deliverable on another athlete application (expect HILLINK:not_your_application):'
+set request.jwt.claim.sub = '00000000-0000-0000-0000-00000000000c';
+insert into public.deliverable_submissions(application_id,requirement_id,athlete_id,submission_url)
+  values ('a3333333-0000-0000-0000-000000000001','d3333333-0000-0000-0000-000000000001','00000000-0000-0000-0000-00000000000c','https://instagram.com/p/w');
 reset role;
 reset request.jwt.claim.sub; reset request.jwt.claim.role;
 set role service_role;

@@ -59,7 +59,9 @@ export async function POST() {
 }
 
 const LIVE_APPLICATION_STATUSES = ["accepted", "submitted"];
-const OPEN_PAYMENT_STATUSES = ["uncommitted", "held", "disputed"];
+// Open money: not yet funded, held, disputed, or released but the athlete's transfer hasn't been sent.
+const OPEN_PAYMENT_FILTER =
+  "hold_status.in.(uncommitted,held,disputed),and(hold_status.eq.released,stripe_transfer_id.is.null)";
 
 const OBLIGATIONS_UNCHECKED =
   "We couldn't check your open campaigns and payments right now, so your account wasn't deleted. Please try again.";
@@ -87,7 +89,7 @@ async function openObligations(
       .from("payments")
       .select("id", { count: "exact", head: true })
       .eq("athlete_id", userId)
-      .in("hold_status", OPEN_PAYMENT_STATUSES);
+      .or(OPEN_PAYMENT_FILTER);
     if (unpaidError) return unchecked;
     if (Number(unpaid ?? 0) > 0) {
       return blocked("You have pay that hasn't been sent yet. Contact HILLink before deleting your account.");
@@ -108,7 +110,7 @@ async function openObligations(
     .from("payments")
     .select("id", { count: "exact", head: true })
     .eq("business_id", userId)
-    .in("hold_status", OPEN_PAYMENT_STATUSES);
+    .or(OPEN_PAYMENT_FILTER);
   if (paymentsError) return unchecked;
   if (Number(openPayments ?? 0) > 0) {
     return blocked("Some athlete payments are still open. Contact HILLink before deleting your account.");

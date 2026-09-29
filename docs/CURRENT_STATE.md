@@ -23,6 +23,10 @@ The repository has baseline SQL in `supabase/*.sql`, an initial migration that d
 
 `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `WAITLIST_SUPABASE_URL`, `WAITLIST_SUPABASE_SERVICE_ROLE_KEY`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_STARTER`, `STRIPE_PRICE_GROWTH`, `STRIPE_PRICE_SCALE`, `STRIPE_PRICE_DOMINATION`, `CRON_SECRET`, `NEXT_PUBLIC_APP_URL`, `RESEND_API_KEY`, `NOTIFICATIONS_FROM_EMAIL`, `META_APP_ID`, `META_APP_SECRET`, `META_REDIRECT_URI`, `INSTAGRAM_APP_ID`, `INSTAGRAM_APP_SECRET`, `INSTAGRAM_REDIRECT_URI`, `ENABLE_INSTAGRAM_OAUTH_VALIDATION`, `STRIPE_DEV_FALLBACK`, `PRELAUNCH_MODE`. `CRON_SECRET`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, the `STRIPE_PRICE_*` IDs and the fee settings are read with surrounding whitespace removed (PR #15). Other settings are described in the payment document. Presence in code does not mean each value is required in every environment.
 
+## Pending lifecycle changes (PR #32, not merged)
+
+Cancelling a campaign, removing an athlete and withdrawing keep the rows and change status; refunds can be retried by repeating the action. Only an admin can cancel after proof (D4). Proof and deliverables need a held payment (D5). Pay can't be lowered once athletes apply. Account deletion is refused (409) while live work or open money exists, and 503 if that can't be checked. Requires migration `20260929000400_campaign_lifecycle_records.sql`, which Kyle runs.
+
 ## Known limits
 
 Production migrations, Stripe state, row security behavior in the deployed database, Vercel configuration, and actual user flows were not independently verified. The README previously described only the starter; this branch updates its introduction. Review open Claude branches before overlapping help center, signup, or live test work.

@@ -11,6 +11,7 @@ Updated 2026-09-28 by Claude. Merged to `main`: #7, #8, #11, #16–#20, and (aft
 | ATH-001 athletes can read `active` campaigns | Claude | `claude/ath001-live-campaign-visibility` / #29 | Draft; migration not run | Yes: read-only policy check, then run migration |
 | Hillink HQ / World foundation | Codex | `codex/hillink-hq-foundation` / #31 | Draft, in progress | No |
 | P0 security hardening | Claude | `claude/p0-security-hardening` / #14 | Draft; migration not run | Yes: run migration |
+| P0 lifecycle and money (D4, D5, keep records, BUS-001) | Claude | `claude/p0-lifecycle-money` / #32 | Draft; Codex reviewing; migration `20260929000400` not run | Yes: run migration |
 | Product spec | Claude | `claude/product-spec-context` / #13 | Draft | Review |
 | Help center | Claude | `claude/help-center` / #9, `claude/help-answers-fixes` / #10 | Draft | SQL before merge |
 

@@ -68,10 +68,17 @@ set search_path = public
 as $$
 declare
   v_status text;
+  v_athlete uuid;
 begin
-  select status into v_status from public.campaign_applications where id = new.application_id for update;
+  select status, athlete_id into v_status, v_athlete
+    from public.campaign_applications where id = new.application_id for update;
   if v_status is null or v_status not in ('accepted', 'submitted', 'approved', 'completed') then
     raise exception 'HILLINK:application_closed' using errcode = 'P0001';
+  end if;
+  -- The deliverable belongs to the application's own athlete, and a signed-in athlete can only send their own.
+  if new.athlete_id is distinct from v_athlete
+     or (coalesce(auth.role(), '') in ('authenticated', 'anon') and auth.uid() is distinct from v_athlete) then
+    raise exception 'HILLINK:not_your_application' using errcode = '42501';
   end if;
   if coalesce(auth.role(), '') in ('authenticated', 'anon')
      and not exists (
@@ -205,15 +212,16 @@ begin
       set status = case when status in ('pending', 'applied') then 'declined' else 'withdrawn' end,
           decided_at = v_now
       where campaign_id = p_campaign_id
-        and status in ('pending', 'applied', 'accepted')
+        and (status in ('pending', 'applied', 'accepted')
+             or (p_allow_after_proof and status = 'submitted'))
       returning id
   )
   select coalesce(array_agg(id), '{}') into v_ids from closed;
 
-  -- Lets the proof guard below through for an admin cancel.
-  perform set_config('app.allow_cancel_after_proof', case when p_allow_after_proof then 'true' else 'false' end, true);
+  -- Marks this as the lifecycle cancel for the guard below (the proof check already ran above).
+  perform set_config('app.lifecycle_cancel', 'true', true);
   update public.campaigns set status = 'cancelled', open_slots = 0 where id = p_campaign_id;
-  perform set_config('app.allow_cancel_after_proof', 'false', true);
+  perform set_config('app.lifecycle_cancel', 'false', true);
 
   insert into public.campaign_status_log (campaign_id, from_status, to_status, changed_by, reason)
   values (p_campaign_id, c.status, 'cancelled', p_actor, p_reason);
@@ -225,12 +233,13 @@ $$;
 revoke all on function public.cancel_campaign_keep_records(uuid, uuid, text, boolean) from public, anon, authenticated;
 grant execute on function public.cancel_campaign_keep_records(uuid, uuid, text, boolean) to service_role;
 
--- Businesses can update their own campaigns directly (RLS), which included setting status = 'cancelled',
--- and could also cancel through transition_campaign_status (SECURITY DEFINER, so it runs as the function
--- owner, not "authenticated"). Once proof is in, cancelling is refused unless it comes from Hillink's
--- server (service role, which checks the caller itself) or an admin override: transition_campaign_status
--- with p_force, or cancel_campaign_keep_records with p_allow_after_proof. In the SQL editor, run
--- `set local app.is_admin_override = 'true'` first.
+-- Businesses could cancel their own campaign by updating status directly (RLS) or through
+-- transition_campaign_status (SECURITY DEFINER, so it runs as the function owner). Either way the
+-- applications, slots and payments were left open. A campaign can now only become cancelled through:
+--   * cancel_campaign_keep_records (closes applications; refuses after proof unless an admin),
+--   * transition_campaign_status with p_force (admin override), or
+--   * Hillink's server (service role), which cancels through cancel_campaign_keep_records.
+-- In the SQL editor, run `set local app.is_admin_override = 'true'` first.
 create or replace function public.guard_campaign_cancel_after_proof()
 returns trigger
 language plpgsql
@@ -241,9 +250,8 @@ begin
      and old.status is distinct from 'cancelled'
      and current_user <> 'service_role'
      and coalesce(current_setting('app.is_admin_override', true), '') <> 'true'
-     and coalesce(current_setting('app.allow_cancel_after_proof', true), '') <> 'true'
-     and public.campaign_has_proof(new.id) then
-    raise exception 'HILLINK:proof_submitted' using errcode = 'P0001';
+     and coalesce(current_setting('app.lifecycle_cancel', true), '') <> 'true' then
+    raise exception 'HILLINK:use_cancel_flow' using errcode = 'P0001';
   end if;
   return new;
 end;
