@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireRole } from "@/lib/rbac";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { createNotification } from "@/lib/notifications";
 import { VALID_TRANSITIONS } from "./constants";
-import { PROOF_IN_MESSAGE, campaignHasProof } from "@/lib/campaigns/lifecycle";
+import { cancelCampaignKeepingRecords } from "@/lib/campaigns/cancel";
 
 type Body = {
   toStatus?: string;
@@ -123,9 +122,20 @@ export async function PATCH(
     );
   }
 
-  // Once an athlete has sent proof, only a Hillink admin can cancel (D4).
-  if (toStatus === "cancelled" && role === "business" && (await campaignHasProof(admin, campaign.id))) {
-    return NextResponse.json({ error: PROOF_IN_MESSAGE, code: "proof_submitted" }, { status: 409 });
+  // Cancelling closes the athletes' applications and refunds their payments, the same as the cancel
+  // button, instead of only flipping the status.
+  if (toStatus === "cancelled") {
+    const result = await cancelCampaignKeepingRecords(admin, {
+      campaignId,
+      actorId: userId,
+      reason: reason?.trim() || (role === "admin" ? "Cancelled by admin" : "Cancelled by business"),
+      allowAfterProof: role === "admin",
+    });
+    if (!result.ok) {
+      return NextResponse.json(result.body, { status: result.status });
+    }
+    const { data: cancelled } = await admin.from("campaigns").select("*").eq("id", campaignId).single();
+    return NextResponse.json(cancelled, { status: 200 });
   }
 
   // If transitioning to active, validate constraints.
@@ -187,33 +197,6 @@ export async function PATCH(
       { error: "Failed to fetch updated campaign" },
       { status: 500 }
     );
-  }
-
-  if (toStatus === "cancelled") {
-    const { data: acceptedAthletes } = await admin
-      .from("campaign_applications")
-      .select("athlete_id")
-      .eq("campaign_id", campaignId)
-      .eq("status", "accepted");
-
-    for (const athlete of acceptedAthletes ?? []) {
-      if (!athlete?.athlete_id) {
-        continue;
-      }
-
-      try {
-        await createNotification({
-          userId: athlete.athlete_id,
-          type: "campaign_cancelled",
-          title: "Campaign cancelled",
-          body: "A campaign you were accepted into has been cancelled.",
-          ctaUrl: "/athlete/campaigns",
-          ctaLabel: "Browse Campaigns",
-        });
-      } catch (error) {
-        console.error("Failed to create campaign cancelled notification", error);
-      }
-    }
   }
 
   return NextResponse.json(updated, { status: 200 });

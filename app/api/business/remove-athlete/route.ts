@@ -77,7 +77,8 @@ export async function POST(req: NextRequest) {
 
   const nextStatus: ManagedStatus = status === "applied" ? "declined" : "withdrawn";
 
-  // Under the application's row lock: still in the status we read, and no deliverable sent meanwhile.
+  // Under the campaign and application row locks: still in the status we read, and no deliverable sent
+  // meanwhile. The slot comes back in the same transaction.
   const { data: closed, error: closeError } = await adminClient.rpc("close_application_keep_record", {
     p_application_id: appRow.id,
     p_expected_status: status,
@@ -94,18 +95,6 @@ export async function POST(req: NextRequest) {
   }
   if (reason) {
     return NextResponse.json({ error: "This athlete's status just changed. Refresh and try again." }, { status: 409 });
-  }
-
-  if (status === "accepted") {
-    const nextOpenSlots = Math.min(campaign.slots, (campaign.open_slots || 0) + 1);
-    const { error: slotError } = await adminClient
-      .from("campaigns")
-      .update({ open_slots: nextOpenSlots })
-      .eq("id", campaign.id);
-
-    if (slotError) {
-      return NextResponse.json({ error: slotError.message }, { status: 500 });
-    }
   }
 
   // Then give the business its money back. The athlete is off the campaign first, so they can't send

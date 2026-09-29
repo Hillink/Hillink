@@ -90,12 +90,23 @@ select public.campaign_has_proof('33333333-3333-3333-3333-333333333333');
 select public.close_application_keep_record('a3333333-0000-0000-0000-000000000001', 'accepted', 'withdrawn', false);
 \echo 'remove with a stale status (expect stale):'
 select public.close_application_keep_record('a3333333-0000-0000-0000-000000000002', 'applied', 'withdrawn', false);
-\echo 'remove the athlete with no proof (expect reason null, then withdrawn):'
+\echo 'remove the athlete with no proof (expect reason null, then withdrawn, and open slots 1 -> 2):'
 select public.close_application_keep_record('a3333333-0000-0000-0000-000000000002', 'accepted', 'withdrawn', false);
 select status from public.campaign_applications where id = 'a3333333-0000-0000-0000-000000000002';
+select open_slots from public.campaigns where id = '33333333-3333-3333-3333-333333333333';
 \echo 'deliverable after removal (expect HILLINK:application_closed):'
 insert into public.deliverable_submissions(application_id,requirement_id,athlete_id,submission_url)
   values ('a3333333-0000-0000-0000-000000000002','d3333333-0000-0000-0000-000000000001','00000000-0000-0000-0000-00000000000d','https://instagram.com/p/y');
+reset role;
+\echo 'athlete inserts a deliverable directly without funding (expect HILLINK:payment_not_funded):'
+set role authenticated;
+set request.jwt.claim.sub = '00000000-0000-0000-0000-00000000000e';
+set request.jwt.claim.role = 'authenticated';
+insert into public.deliverable_submissions(application_id,requirement_id,athlete_id,submission_url)
+  values ('a3333333-0000-0000-0000-000000000001','d3333333-0000-0000-0000-000000000001','00000000-0000-0000-0000-00000000000e','https://instagram.com/p/z');
+reset role;
+reset request.jwt.claim.sub; reset request.jwt.claim.role;
+set role service_role;
 \echo 'admin force cancel through transition_campaign_status (expect cancelled):'
 select public.transition_campaign_status('33333333-3333-3333-3333-333333333333', 'cancelled', '00000000-0000-0000-0000-00000000000a', 'Admin', true) is not null as ok;
 select status from public.campaigns where id = '33333333-3333-3333-3333-333333333333';

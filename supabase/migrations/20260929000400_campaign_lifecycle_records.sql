@@ -57,6 +57,9 @@ $$;
 
 -- A deliverable can only be sent while the athlete is still on the campaign. Locking the application row
 -- lines this up with cancel/remove: whichever commits first wins, and the other sees it.
+-- Athletes can also insert deliverables directly (RLS); for them the spot must be paid for first (D5),
+-- the same rule the API enforces. Hillink's server (service role) checks funding itself, and an admin
+-- may force a submission.
 create or replace function public.guard_deliverable_submission()
 returns trigger
 language plpgsql
@@ -69,6 +72,14 @@ begin
   select status into v_status from public.campaign_applications where id = new.application_id for update;
   if v_status is null or v_status not in ('accepted', 'submitted', 'approved', 'completed') then
     raise exception 'HILLINK:application_closed' using errcode = 'P0001';
+  end if;
+  if coalesce(auth.role(), '') in ('authenticated', 'anon')
+     and not exists (
+       select 1 from public.payments p
+       where p.application_id = new.application_id
+         and p.hold_status in ('held', 'released')
+     ) then
+    raise exception 'HILLINK:payment_not_funded' using errcode = 'P0001';
   end if;
   return new;
 end;
@@ -85,8 +96,9 @@ begin
   end if;
 end $$;
 
--- A business taking one athlete off its campaign, keeping the record. Under the application row lock:
--- refuses with 'stale' if the status changed since the caller read it, or 'proof_submitted' once the
+-- Takes one athlete off a campaign (a business removing them, or the athlete withdrawing), keeping the
+-- record, and gives their slot back in the same transaction. Locks the campaign, then the application.
+-- Refuses with 'stale' if the status changed since the caller read it, or 'proof_submitted' once the
 -- athlete has sent proof (unless p_allow_after_proof). Returns {"reason": null | ...}.
 create or replace function public.close_application_keep_record(
   p_application_id uuid,
@@ -100,6 +112,7 @@ security definer
 set search_path = public
 as $$
 declare
+  v_campaign_id uuid;
   v_status text;
   v_now timestamptz := now();
 begin
@@ -107,10 +120,13 @@ begin
     raise exception 'invalid next status %', p_next_status;
   end if;
 
-  select status into v_status from public.campaign_applications where id = p_application_id for update;
+  select campaign_id into v_campaign_id from public.campaign_applications where id = p_application_id;
   if not found then
     return jsonb_build_object('reason', 'not_found');
   end if;
+  perform 1 from public.campaigns where id = v_campaign_id for update;
+
+  select status into v_status from public.campaign_applications where id = p_application_id for update;
   if v_status is distinct from p_expected_status then
     return jsonb_build_object('reason', 'stale');
   end if;
@@ -123,6 +139,13 @@ begin
         decided_at = v_now,
         reviewed_at = case when p_next_status = 'declined' then v_now else null end
     where id = p_application_id;
+
+  -- The athlete held a slot: give it back, never above the campaign's total.
+  if v_status in ('accepted', 'submitted') then
+    update public.campaigns
+      set open_slots = least(coalesce(slots, 0), coalesce(open_slots, 0) + 1)
+      where id = v_campaign_id;
+  end if;
 
   return jsonb_build_object('reason', null);
 end;

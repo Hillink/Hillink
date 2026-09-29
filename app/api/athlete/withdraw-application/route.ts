@@ -60,45 +60,24 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Only active applications can be withdrawn" }, { status: 400 });
   }
 
-  // Close the application first, and only if it's still in the status we checked, so a concurrent change
-  // isn't overwritten and the slot and refund below happen once. It's kept as a record, marked withdrawn,
-  // instead of deleted (with its payment).
-  const { data: withdrawn, error: withdrawError } = await adminClient
-    .from("campaign_applications")
-    .update({ status: "withdrawn", decided_at: new Date().toISOString() })
-    .eq("id", appRow.id)
-    .eq("athlete_id", userId)
-    .eq("status", status)
-    .select("id");
+  // Close the application and give its slot back in one database transaction, only if it's still in the
+  // status we checked, so a concurrent change isn't overwritten and the refund below happens once. It's
+  // kept as a record, marked withdrawn, instead of deleted (with its payment).
+  const { data: closed, error: closeError } = await adminClient.rpc("close_application_keep_record", {
+    p_application_id: appRow.id,
+    p_expected_status: status,
+    p_next_status: "withdrawn",
+    p_allow_after_proof: true,
+  });
 
-  if (withdrawError) {
-    return NextResponse.json({ error: withdrawError.message }, { status: 500 });
+  if (closeError) {
+    return NextResponse.json({ error: closeError.message }, { status: 500 });
   }
-  if (!withdrawn || withdrawn.length === 0) {
+  if ((closed as { reason?: string | null } | null)?.reason) {
     return NextResponse.json({ error: "This application just changed. Refresh and try again." }, { status: 409 });
   }
 
   if (status === "accepted" || status === "submitted") {
-    const { data: campaign, error: campaignError } = await adminClient
-      .from("campaigns")
-      .select("id, open_slots, slots")
-      .eq("id", appRow.campaign_id)
-      .single();
-
-    if (campaignError || !campaign) {
-      return NextResponse.json({ error: campaignError?.message || "Campaign not found" }, { status: 404 });
-    }
-
-    const nextOpenSlots = Math.min(campaign.slots, (campaign.open_slots || 0) + 1);
-    const { error: slotError } = await adminClient
-      .from("campaigns")
-      .update({ open_slots: nextOpenSlots })
-      .eq("id", campaign.id);
-
-    if (slotError) {
-      return NextResponse.json({ error: slotError.message }, { status: 500 });
-    }
-
     // Then give the business its money back. If it fails, withdrawing again retries it.
     const refund = await refundPaymentIfFunded(getStripe, adminClient, appRow.id);
     if (refund.error) {
