@@ -69,3 +69,9 @@ Real/Fantasy views consume the identical snapshot; skin changes never call execu
 Still pending from the full locked spec: authenticated cloud execution bridges and general local-agent tool execution; GitHub evidence ingestion; checkpoint-aware multi-agent Meeting Room and real action-item dispatch; richer traversable spaces/characters; real cross-agent package animations; milestone-driven buildings; local hardware routing/model resource budget; cost intelligence; movable Kyle avatar. The current workstations are navigation/inspection surfaces, **not claims of unlocked capabilities**. No agent is depicted building an unimplemented feature.
 
 The local adapter is useful now for actual verification. It does not prove that this Codex UI session or Claude Code is alive. Connecting those runtimes requires supported execution/heartbeat interfaces and credentials; that integration must preserve their ownership and safety boundaries.
+
+## Review clarifications
+
+Cancellation sends SIGTERM, waits up to one second, then sends SIGKILL and waits up to one more second. Only a process close event confirms termination. Missing close evidence retains the lease even if a signal was accepted. Windows may terminate immediately on SIGTERM; deterministic tests exercise ignored-signal escalation independently of OS behavior.
+
+Any local process running as the same user can acquire the session token; this is a single-user local control surface, not isolation from local processes. Alert details (including time since progress, queue size and recovery) are snapshots captured when the episode opens, not live counters. Node 24+ remains the supported minimum tested here; passing tests on Node 22 does not expand the supported runtime contract.

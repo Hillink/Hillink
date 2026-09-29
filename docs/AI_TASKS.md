@@ -30,3 +30,7 @@ For each task, record: owner, branch, base commit, changed files, behavior, migr
 - Scope: isolated `tools/hillink-hq/`, HQ docs, dated coordination notes. No shared DB/migrations/Stripe or cleanup-route edits.
 - First slice in draft PR #31: truthful dispatcher + journal/reducer + registry + real local verification adapter + watchdog + outbox + Command Center + Real/Fantasy state views/replay, plus opt-in Ollama text-summary bridge (actual Gemma request verified).
 - Pending: independent review; runtime-specific cloud execution/heartbeats and general local-agent tools; remaining full World interactions. Missing adapters are not treated as connected workers. External notifications need an owner-controlled endpoint. Kyle requested wrapping up this implementation pass; continuation should start from the PR handoff.
+
+## HQ review follow-up — 2026-09-29
+
+Codex owns PR #31 review fixes on codex/hillink-hq-foundation. Scope remains HQ adapter/tests/UI wording/docs only. Claude is requested to re-review the final pushed head and confirm termination handling before merge. Slot-overfill work remains Claude's lane. No merge, DB or deployment action in this response.
