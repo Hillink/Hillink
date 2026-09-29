@@ -45,7 +45,7 @@ const NOTIFICATION_MAP: Record<ValidStatus, NotificationDef> = {
     type: "proof_rejected",
     title: "Proof Needs Revision",
     body: (c) =>
-      `Your proof submission for "${c}" was not approved. Please check the campaign requirements.`,
+      `Your proof for "${c}" was not approved yet. Check the campaign requirements, fix your post, and submit the new link from My Campaigns.`,
   },
 };
 

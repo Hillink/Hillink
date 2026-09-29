@@ -62,7 +62,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Not allowed for this application" }, { status: 403 });
   }
 
-  if (appRow.status !== "accepted" && appRow.status !== "submitted") {
+  // "rejected" means the business asked for changes: the athlete can fix the post and send it again.
+  const resubmitting = appRow.status === "rejected";
+  if (appRow.status !== "accepted" && appRow.status !== "submitted" && !resubmitting) {
     return NextResponse.json({ error: "Proof can only be submitted for accepted applications" }, { status: 400 });
   }
 
@@ -75,8 +77,11 @@ export async function POST(req: NextRequest) {
       proof_url: proofUrl,
       proof_notes: body.proofNotes?.trim() || null,
       submitted_at: nowIso,
+      // A resubmission starts a new review, including a new auto-approve window.
+      ...(resubmitting ? { reviewed_at: null } : {}),
     })
-    .eq("id", applicationId);
+    .eq("id", applicationId)
+    .eq("status", appRow.status);
 
   if (updateError) {
     return NextResponse.json({ error: updateError.message }, { status: 500 });
@@ -102,8 +107,8 @@ export async function POST(req: NextRequest) {
     await createNotification({
       userId: campaignRow.business_id,
       type: "proof_submitted",
-      title: "New Proof Submission",
-      body: `${athleteName} submitted proof for "${campaignRow.title}". Review it in your campaign dashboard.`,
+      title: resubmitting ? "Updated Proof Submission" : "New Proof Submission",
+      body: `${athleteName} ${resubmitting ? "sent updated proof" : "submitted proof"} for "${campaignRow.title}". Review it in your campaign dashboard.`,
       metadata: { applicationId, campaignId: appRow.campaign_id, athleteId: userId },
     });
   }

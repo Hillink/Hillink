@@ -930,7 +930,8 @@ export default function BusinessDashboard() {
     await loadData();
   };
 
-  const updateApplicationStatus = async (application: Application, nextStatus: Application["status"]) => {
+  // athleteName: when approving, ask the business to rate the athlete right away.
+  const updateApplicationStatus = async (application: Application, nextStatus: Application["status"], athleteName?: string) => {
     setStatusUpdatingId(application.id);
     setError("");
 
@@ -967,12 +968,16 @@ export default function BusinessDashboard() {
         setStatusUpdatingId(null);
         setError(payoutData.error || "Application approved but payout transfer failed.");
         await loadData();
+        if (athleteName) setRatingModal({ applicationId: application.id, athleteName });
         return;
       }
     }
 
     setStatusUpdatingId(null);
     await loadData();
+    if (nextStatus === "approved" && athleteName) {
+      setRatingModal({ applicationId: application.id, athleteName });
+    }
   };
 
   const syncDiagnostics = async (applicationId: string) => {
@@ -1829,9 +1834,12 @@ export default function BusinessDashboard() {
                                         {payingId === app.id ? "Paying…" : "Pay athlete"}
                                       </button>
                                     )}
+                                    {(app.status === "approved" || app.status === "completed") && (
+                                      <button className="small-button" onClick={() => setRatingModal({ applicationId: app.id, athleteName: fullName(athlete) })}>Rate Athlete</button>
+                                    )}
                                     {app.status === "submitted" && (
                                       <>
-                                        <button className="small-button" disabled={statusUpdatingId === app.id} onClick={() => updateApplicationStatus(app, "approved")}>Approve</button>
+                                        <button className="small-button" disabled={statusUpdatingId === app.id} onClick={() => updateApplicationStatus(app, "approved", fullName(athlete))}>Approve</button>
                                         <button className="small-button" disabled={statusUpdatingId === app.id} onClick={() => updateApplicationStatus(app, "rejected")}>Reject</button>
                                       </>
                                     )}

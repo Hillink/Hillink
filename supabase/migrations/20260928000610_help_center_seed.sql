@@ -106,17 +106,21 @@ If none of these fit, contact HILLink with the campaign name.$h$, '{}'::text[], 
 Every campaign requires #ad or Instagram's Paid partnership label. [Why #ad is required](/help/safety-rules/ad-disclosure-rules)$h$, '{}'::text[], $h$athlete$h$, $h$live$h$, $h$campaign_requirements$h$, array[$h$requirements$h$, $h$deliverables$h$, $h$directions$h$, $h$instructions$h$, $h$deadline$h$, $h$what do i post$h$, $h$checklist$h$]::text[], array[$h$What do I have to post?$h$, $h$How long do I have to post?$h$]::text[], array[$h$how-to-submit-proof$h$, $h$ad-disclosure-rules$h$]::text[], false, false, 1, '2026-09-27T00:00:00.000Z'::timestamptz),
   ($h$how-to-submit-proof$h$, $h$proof-approval$h$, $h$How do I submit proof?$h$, $h$In My Campaigns, paste the link to your live post in the Proof URL box, add any notes, and choose Submit Proof.$h$, $h$You can submit proof once the business has accepted you. Double-check your link before you submit.
 
-If you post on Instagram and your account is connected, HILLink also pulls your post's stats (likes, comments, reach). Use **Sync Diagnostics** to refresh them.$h$, array[$h$Publish your post, including #ad or the Paid partnership label.$h$, $h$Copy the link to the live post.$h$, $h$Open My Campaigns on your dashboard and find the campaign.$h$, $h$Paste the link in Proof URL and add notes if helpful.$h$, $h$Choose Submit Proof.$h$]::text[], $h$athlete$h$, $h$live$h$, $h$proof_submission$h$, array[$h$proof$h$, $h$submit$h$, $h$link$h$, $h$url$h$, $h$upload$h$, $h$post link$h$, $h$screenshot$h$]::text[], array[$h$Where do I upload my post?$h$, $h$How do I show I posted?$h$, $h$How do I send my post link?$h$]::text[], array[$h$what-happens-after-i-submit-proof$h$, $h$campaign-requirements-explained$h$]::text[], true, false, 1, '2026-09-27T00:00:00.000Z'::timestamptz),
+There's no screenshot upload. The business checks your live post through the link, so make sure it's public and shows everything the campaign asks for, including #ad.
+
+If the business asks for changes, fix your post, paste the new link, and choose **Submit Again**.
+
+If you post on Instagram and your account is connected, HILLink also pulls your post's stats (likes, comments, reach). Use **Sync Diagnostics** to refresh them.$h$, array[$h$Publish your post, including #ad or the Paid partnership label.$h$, $h$Copy the link to the live post.$h$, $h$Open My Campaigns on your dashboard and find the campaign.$h$, $h$Paste the link in Proof URL and add notes if helpful.$h$, $h$Choose Submit Proof.$h$]::text[], $h$athlete$h$, $h$live$h$, $h$proof_submission$h$, array[$h$proof$h$, $h$submit$h$, $h$link$h$, $h$url$h$, $h$upload$h$, $h$post link$h$, $h$screenshot$h$]::text[], array[$h$Where do I upload my post?$h$, $h$How do I show I posted?$h$, $h$How do I send my post link?$h$]::text[], array[$h$what-happens-after-i-submit-proof$h$, $h$campaign-requirements-explained$h$]::text[], true, false, 1, '2026-09-28T00:00:00.000Z'::timestamptz),
   ($h$what-happens-after-i-submit-proof$h$, $h$proof-approval$h$, $h$What happens after I submit proof?$h$, $h$The business reviews your proof. If they approve it, you're paid and earn XP. If they don't review it within the campaign's review window (72 hours by default), it's approved automatically once your pay is funded.$h$, $h$## If the business approves
 You get a notification, your pay is sent to your Stripe account, and you earn XP for completing the campaign. [When do I get paid?](/help/payments/when-do-i-get-paid)
 
 ## If the business doesn't respond
 Proof that waits longer than the campaign's review window is approved automatically. The window is 72 hours by default and never shorter than 24 hours. This only happens once the business has funded your pay, and not while a dispute is open.
 
-## If the business rejects it
-You'll get a notification. Check the campaign requirements. If you think the decision is wrong, [contact HILLink](/help/disputes/disputes-and-problems).
+## If the business asks for changes
+You'll get a notification and the campaign shows **Needs changes** in My Campaigns. Check the campaign requirements, fix your post, then paste the new link and choose **Submit Again**. The business reviews it again, with a new review window. If you think the decision is wrong, [contact HILLink](/help/disputes/disputes-and-problems).
 
-After approval, the business may also [rate your work](/help/ratings/how-athlete-ratings-work).$h$, '{}'::text[], $h$athlete$h$, $h$live$h$, $h$proof_review$h$, array[$h$approval$h$, $h$approved$h$, $h$rejected$h$, $h$review$h$, $h$waiting$h$, $h$auto approve$h$, $h$72 hours$h$, $h$pending proof$h$]::text[], array[$h$How long does approval take?$h$, $h$Why hasn't my proof been approved?$h$, $h$My proof was rejected$h$]::text[], array[$h$when-do-i-get-paid$h$, $h$how-athlete-ratings-work$h$, $h$disputes-and-problems$h$]::text[], true, false, 2, '2026-09-27T00:00:00.000Z'::timestamptz),
+After approval, the business may also [rate your work](/help/ratings/how-athlete-ratings-work).$h$, '{}'::text[], $h$athlete$h$, $h$live$h$, $h$proof_review$h$, array[$h$approval$h$, $h$approved$h$, $h$rejected$h$, $h$review$h$, $h$waiting$h$, $h$auto approve$h$, $h$72 hours$h$, $h$pending proof$h$, $h$resubmit$h$, $h$needs changes$h$, $h$fix$h$]::text[], array[$h$How long does approval take?$h$, $h$Why hasn't my proof been approved?$h$, $h$My proof was rejected$h$, $h$Can I resubmit my proof?$h$]::text[], array[$h$when-do-i-get-paid$h$, $h$how-athlete-ratings-work$h$, $h$disputes-and-problems$h$]::text[], true, false, 2, '2026-09-28T00:00:00.000Z'::timestamptz),
   ($h$dropping-a-campaign$h$, $h$completing-campaigns$h$, $h$Can I drop a campaign after joining?$h$, $h$Yes. Choose Drop Campaign in My Campaigns any time before your proof is approved. Your spot opens up again and the business gets back the money it set aside for you.$h$, $h$Only drop a campaign if you really can't do it. Finishing campaigns you join, on time, is part of your [Hillink Score](/help/hillink-score/hillink-score-for-athletes).$h$, '{}'::text[], $h$athlete$h$, $h$live$h$, $h$withdraw_application$h$, array[$h$drop$h$, $h$withdraw$h$, $h$leave$h$, $h$quit$h$, $h$cancel$h$, $h$can't do it$h$]::text[], array[$h$How do I cancel a campaign?$h$, $h$How do I withdraw my application?$h$]::text[], '{}'::text[], false, false, 1, '2026-09-27T00:00:00.000Z'::timestamptz),
   ($h$set-up-payouts$h$, $h$payments$h$, $h$How do I set up payouts?$h$, $h$Go to Settings and choose Connect Stripe Payout Account. HILLink pays athletes through Stripe, so you need a connected Stripe account before any pay can be sent.$h$, $h$Stripe handles your bank details. HILLink never sees your full bank account number.
 
@@ -242,16 +246,15 @@ You'll be asked to fund the athlete's pay. [Paying athletes](/help/payments/payi
 
 ## Finding athletes yourself
 Use **Find Athletes** on your dashboard to browse athletes, including their tier, rating and Hillink Score.$h$, '{}'::text[], $h$business$h$, $h$live$h$, $h$campaign_join$h$, array[$h$athletes join$h$, $h$accept$h$, $h$decline$h$, $h$applicants$h$, $h$auto accept$h$, $h$first come$h$, $h$choose athletes$h$, $h$select$h$]::text[], array[$h$How do I pick athletes?$h$, $h$Who can join my campaign?$h$, $h$What is auto-accept?$h$]::text[], array[$h$paying-athletes$h$, $h$athlete-tiers-for-businesses$h$]::text[], false, false, 0, '2026-09-27T00:00:00.000Z'::timestamptz),
-  ($h$choosing-proof-requirements$h$, $h$campaign-requirements$h$, $h$What should I ask athletes to submit as proof?$h$, $h$Each campaign type comes with a proof checklist, such as a live post link and a screenshot showing #ad. Keep the ones that let you confirm the work was done.$h$, $h$Examples from the built-in checklists:
+  ($h$choosing-proof-requirements$h$, $h$campaign-requirements$h$, $h$What should I ask athletes to submit as proof?$h$, $h$Each campaign type comes with a proof checklist, such as a live post link and a post that says #ad. Athletes send proof as a link to their live post, so ask for things you can check by opening that link.$h$, $h$Examples from the built-in checklists:
 - live post link
-- screenshot of the live content
-- screenshot showing required tags or mentions
-- screenshot showing #ad or the Paid partnership label (always included, because the FTC requires it)
-- visit confirmation (Dine and Post) or delivery confirmation (Product Review)
+- post includes the required tags or mentions
+- post says #ad or uses the Paid partnership label (always included, because the FTC requires it)
+- post shows the visit (Dine and Post) or the product (Product Review)
 
-Athletes send proof by pasting a link to their live post and adding notes.
+Athletes send proof by pasting a link to their live post and adding notes. There's no screenshot upload. For campaigns with several posts, athletes put the extra links in the notes.
 
-Clear directions get better posts. Say exactly what to mention, what to show and what customers should do.$h$, '{}'::text[], $h$business$h$, $h$live$h$, $h$campaign_requirements$h$, array[$h$proof$h$, $h$requirements$h$, $h$checklist$h$, $h$deliverables$h$, $h$what to ask$h$, $h$directions$h$]::text[], array[$h$What proof should I require?$h$, $h$How do I write good directions?$h$]::text[], array[$h$how-to-review-proof$h$, $h$how-to-create-a-campaign$h$]::text[], false, false, 0, '2026-09-27T00:00:00.000Z'::timestamptz),
+Clear directions get better posts. Say exactly what to mention, what to show and what customers should do.$h$, '{}'::text[], $h$business$h$, $h$live$h$, $h$campaign_requirements$h$, array[$h$proof$h$, $h$requirements$h$, $h$checklist$h$, $h$deliverables$h$, $h$what to ask$h$, $h$directions$h$]::text[], array[$h$What proof should I require?$h$, $h$How do I write good directions?$h$]::text[], array[$h$how-to-review-proof$h$, $h$how-to-create-a-campaign$h$]::text[], false, false, 0, '2026-09-28T00:00:00.000Z'::timestamptz),
   ($h$how-to-review-proof$h$, $h$proof-approval$h$, $h$How do I review campaign proof?$h$, $h$When an athlete submits proof, open the campaign on your dashboard, choose View Proof, then Approve or Reject. Approving pays the athlete from the money you funded.$h$, $h$## Before you can approve
 The athlete's pay must be funded. If it isn't, you'll see **Fund payment** first.
 
@@ -259,17 +262,21 @@ The athlete's pay must be funded. If it isn't, you'll see **Fund payment** first
 Proof you don't review within the campaign's review window (72 hours by default) is approved automatically and the athlete is paid. This only happens for funded work and never while a dispute is open. Unfunded work is never auto-approved; you'll get a reminder instead.
 
 ## Rejecting
-Reject proof that doesn't meet your requirements. The athlete is notified. If you're not sure, [contact HILLink](/help/disputes/disputes-and-problems) before rejecting.
+Reject proof that doesn't meet your requirements. The athlete is notified and can fix their post and send it again. Their funded pay stays held until you approve, and the review window starts over when they resubmit. If you're not sure, [contact HILLink](/help/disputes/disputes-and-problems).
+
+## After approving
+You're asked to rate the athlete right away. You can also rate them later with **Rate Athlete**. [Rating athletes](/help/ratings/rating-athletes)
 
 ## Post stats
-For Instagram posts, **Sync Diagnostics** shows likes, comments and reach when the athlete's account is connected.$h$, '{}'::text[], $h$business$h$, $h$live$h$, $h$proof_review$h$, array[$h$review$h$, $h$approve$h$, $h$reject$h$, $h$proof$h$, $h$view proof$h$, $h$auto approve$h$, $h$72 hours$h$, $h$submission$h$]::text[], array[$h$How do I approve a post?$h$, $h$What happens if I don't review proof?$h$]::text[], array[$h$paying-athletes$h$, $h$rating-athletes$h$, $h$after-an-athlete-is-approved$h$]::text[], true, false, 0, '2026-09-27T00:00:00.000Z'::timestamptz),
+For Instagram posts, **Sync Diagnostics** shows likes, comments and reach when the athlete's account is connected.$h$, '{}'::text[], $h$business$h$, $h$live$h$, $h$proof_review$h$, array[$h$review$h$, $h$approve$h$, $h$reject$h$, $h$proof$h$, $h$view proof$h$, $h$auto approve$h$, $h$72 hours$h$, $h$submission$h$, $h$resubmit$h$]::text[], array[$h$How do I approve a post?$h$, $h$What happens if I don't review proof?$h$]::text[], array[$h$paying-athletes$h$, $h$rating-athletes$h$, $h$after-an-athlete-is-approved$h$]::text[], true, false, 0, '2026-09-28T00:00:00.000Z'::timestamptz),
   ($h$after-an-athlete-is-approved$h$, $h$proof-approval$h$, $h$What happens when an athlete's work is approved?$h$, $h$The athlete is paid from the money you funded, earns XP, and their part of the campaign shows as completed. You can then rate them and track customers they bring in.$h$, $h$- **Payment**: the athlete's pay is sent to their Stripe account. If their payout account isn't set up yet, a **Pay athlete** button lets you send it later.
-- **Ratings**: rate the athlete from 1 to 5 stars. [Rating athletes](/help/ratings/rating-athletes)
-- **Results**: customers who use the athlete's code keep counting in your [monthly results](/help/results/monthly-results-report).$h$, '{}'::text[], $h$business$h$, $h$live$h$, $h$campaign_completion$h$, array[$h$completed$h$, $h$complete$h$, $h$done$h$, $h$finished$h$, $h$after approval$h$, $h$campaign completed$h$]::text[], array[$h$What happens when a campaign is completed?$h$, $h$What do I do after approving?$h$]::text[], array[$h$rating-athletes$h$, $h$monthly-results-report$h$]::text[], false, false, 1, '2026-09-27T00:00:00.000Z'::timestamptz),
-  ($h$rating-athletes$h$, $h$ratings$h$, $h$How do athlete ratings work?$h$, $h$After an athlete's work is approved, you can rate them from 1 to 5 stars and add a short review. Ratings help other businesses and shape the athlete's Hillink Score.$h$, $h$- Find the athlete in **Campaign History** and choose **Rate Athlete**.
+- **Ratings**: you're asked to rate the athlete from 1 to 5 stars as soon as you approve. [Rating athletes](/help/ratings/rating-athletes)
+- **Results**: customers who use the athlete's code keep counting in your [monthly results](/help/results/monthly-results-report).$h$, '{}'::text[], $h$business$h$, $h$live$h$, $h$campaign_completion$h$, array[$h$completed$h$, $h$complete$h$, $h$done$h$, $h$finished$h$, $h$after approval$h$, $h$campaign completed$h$]::text[], array[$h$What happens when a campaign is completed?$h$, $h$What do I do after approving?$h$]::text[], array[$h$rating-athletes$h$, $h$monthly-results-report$h$]::text[], false, false, 1, '2026-09-28T00:00:00.000Z'::timestamptz),
+  ($h$rating-athletes$h$, $h$ratings$h$, $h$How do athlete ratings work?$h$, $h$After an athlete's work is approved, you can rate them from 1 to 5 stars and add a short review. Ratings help other businesses and shape the athlete's Hillink Score.$h$, $h$- When you approve an athlete's work, a rating window opens right away.
+- To rate later, open the campaign on your dashboard (or in **Campaign History**), expand the athlete, and choose **Rate Athlete**.
 - You can rate each athlete once per campaign.
 - An athlete's average rating shows on their profile.
-- Athletes whose average falls below 1.5 stars can't apply to new campaigns.$h$, '{}'::text[], $h$business$h$, $h$live$h$, $h$ratings$h$, array[$h$rate$h$, $h$rating$h$, $h$stars$h$, $h$review athlete$h$, $h$feedback$h$]::text[], array[$h$How do I rate an athlete?$h$, $h$Where is the Rate Athlete button?$h$]::text[], array[$h$hillink-score-for-businesses$h$]::text[], false, false, 0, '2026-09-27T00:00:00.000Z'::timestamptz),
+- Athletes whose average falls below 1.5 stars can't apply to new campaigns.$h$, '{}'::text[], $h$business$h$, $h$live$h$, $h$ratings$h$, array[$h$rate$h$, $h$rating$h$, $h$stars$h$, $h$review athlete$h$, $h$feedback$h$]::text[], array[$h$How do I rate an athlete?$h$, $h$Where is the Rate Athlete button?$h$]::text[], array[$h$hillink-score-for-businesses$h$]::text[], false, false, 0, '2026-09-28T00:00:00.000Z'::timestamptz),
   ($h$athlete-tiers-for-businesses$h$, $h$xp-levels$h$, $h$What do athlete tiers mean?$h$, $h$Athletes move up from Bronze to Silver, Gold, Platinum and Diamond as they earn XP by completing campaigns. Higher tiers mean more completed, approved work on HILLink.$h$, $h$## Tiers
 - Bronze: new athletes
 - Silver: 1,000 XP
@@ -297,9 +304,19 @@ Athletes with fewer than 3 finished campaigns are marked **New**. In **Find Athl
 
 Choose your plan and billing details in **Settings**, then pay through Stripe's secure checkout. You need an active plan before you can post a campaign.
 
-Athlete pay is separate from your plan. [Paying athletes](/help/payments/paying-athletes)$h$, '{}'::text[], $h$business$h$, $h$live$h$, $h$subscriptions$h$, array[$h$plan$h$, $h$pricing$h$, $h$price$h$, $h$subscription$h$, $h$billing$h$, $h$starter$h$, $h$growth$h$, $h$scale$h$, $h$domination$h$, $h$cost$h$]::text[], array[$h$How much does HILLink cost?$h$, $h$What plan do I need?$h$, $h$How do I pay for HILLink?$h$]::text[], array[$h$paying-athletes$h$, $h$how-to-create-a-campaign$h$]::text[], true, false, 0, '2026-09-27T00:00:00.000Z'::timestamptz),
-  ($h$paying-athletes$h$, $h$payments$h$, $h$How do athlete payments work?$h$, $h$When you accept an athlete, you fund their pay through Stripe. HILLink holds the money and sends it to the athlete when you approve their work. If the athlete leaves or you remove them first, you're refunded.$h$, $h$## Funding
-After you accept an athlete, choose **Fund payment**. The button shows the exact total before you pay. It covers the athlete's pay, HILLink's platform fee and card processing.
+## Changing or cancelling your plan
+- **Switch plans:** in Settings, pick a new tier and choose **Pay and Activate Tier**. Stripe charges or credits the difference right away.
+- **Cancel, update your card or see invoices:** choose **Manage billing or cancel plan** in Settings. Without an active plan you can't post new campaigns.
+
+## Athlete pay
+Athlete pay isn't included in your plan. For each athlete you accept, you pay their campaign pay plus HILLink's 20% platform fee and card processing. [Paying athletes](/help/payments/paying-athletes)$h$, '{}'::text[], $h$business$h$, $h$live$h$, $h$subscriptions$h$, array[$h$plan$h$, $h$pricing$h$, $h$price$h$, $h$subscription$h$, $h$billing$h$, $h$starter$h$, $h$growth$h$, $h$scale$h$, $h$domination$h$, $h$cost$h$, $h$cancel$h$, $h$upgrade$h$, $h$downgrade$h$, $h$invoice$h$, $h$card$h$]::text[], array[$h$How much does HILLink cost?$h$, $h$What plan do I need?$h$, $h$How do I pay for HILLink?$h$, $h$How do I cancel my plan?$h$, $h$How do I change my plan?$h$]::text[], array[$h$paying-athletes$h$, $h$how-to-create-a-campaign$h$]::text[], true, false, 0, '2026-09-28T00:00:00.000Z'::timestamptz),
+  ($h$paying-athletes$h$, $h$payments$h$, $h$How do athlete payments work?$h$, $h$When you accept an athlete, you fund their pay plus HILLink's 20% platform fee through Stripe. HILLink holds the money and sends the athlete's pay to them when you approve their work. If the athlete leaves or you remove them first, you're refunded.$h$, $h$## Funding
+After you accept an athlete, choose **Fund payment**. The button shows the exact total before you pay. It covers:
+- the athlete's pay (the athlete receives all of it)
+- HILLink's platform fee: 20% of the athlete's pay
+- card processing
+
+For example, for a $100 athlete, you pay $100 plus a $20 fee, plus card processing. This is separate from your monthly plan.
 
 ## Paying out
 When you approve the athlete's proof, their pay is sent to them automatically. If their payout account isn't ready yet, use **Pay athlete** later.
@@ -309,7 +326,13 @@ When you approve the athlete's proof, their pay is sent to them automatically. I
 - Money that has already been paid out to an athlete is not refunded.
 
 ## In-kind campaigns
-If a campaign pays $0 (for example, a free meal), there's nothing to fund.$h$, '{}'::text[], $h$business$h$, $h$live$h$, $h$campaign_payments$h$, array[$h$pay athletes$h$, $h$fund$h$, $h$funding$h$, $h$payment$h$, $h$refund$h$, $h$held$h$, $h$stripe$h$, $h$checkout$h$, $h$fee$h$]::text[], array[$h$When do I pay athletes?$h$, $h$Do I get a refund if an athlete doesn't post?$h$, $h$What is Fund payment?$h$]::text[], array[$h$how-to-review-proof$h$, $h$removing-an-athlete$h$]::text[], true, true, 0, '2026-09-27T00:00:00.000Z'::timestamptz),
+If a campaign pays $0 (for example, a free meal), there's nothing to fund.$h$, '{}'::text[], $h$business$h$, $h$live$h$, $h$campaign_payments$h$, array[$h$pay athletes$h$, $h$fund$h$, $h$funding$h$, $h$payment$h$, $h$refund$h$, $h$held$h$, $h$stripe$h$, $h$checkout$h$, $h$fee$h$, $h$platform fee$h$, $h$20%$h$, $h$commission$h$]::text[], array[$h$When do I pay athletes?$h$, $h$Do I get a refund if an athlete doesn't post?$h$, $h$What is Fund payment?$h$, $h$How much is HILLink's fee?$h$]::text[], array[$h$how-to-review-proof$h$, $h$removing-an-athlete$h$]::text[], true, true, 0, '2026-09-28T00:00:00.000Z'::timestamptz),
+  ($h$cancelling-a-campaign$h$, $h$campaign-problems$h$, $h$Can I cancel a campaign?$h$, $h$Yes, as long as no athlete's work on it has been approved yet. Choose Cancel Campaign on your dashboard. Any athlete pay you funded is refunded and the athletes are notified.$h$, $h$- Cancelling removes the campaign and everyone who applied or joined it.
+- Athletes who applied, were accepted or had sent proof get a notification.
+- Money you funded for athletes is refunded to you through Stripe.
+- Once any athlete's work on the campaign has been approved, it can't be cancelled.
+
+To stop working with just one athlete, [remove them](/help/campaign-problems/removing-an-athlete) instead.$h$, '{}'::text[], $h$business$h$, $h$live$h$, $h$cancel_campaign$h$, array[$h$cancel$h$, $h$delete campaign$h$, $h$stop campaign$h$, $h$end campaign$h$, $h$remove campaign$h$, $h$refund$h$]::text[], array[$h$How do I cancel a campaign?$h$, $h$How do I delete a campaign?$h$, $h$Can I stop my campaign?$h$]::text[], array[$h$removing-an-athlete$h$, $h$paying-athletes$h$]::text[], false, false, 1, '2026-09-28T00:00:00.000Z'::timestamptz),
   ($h$removing-an-athlete$h$, $h$campaign-problems$h$, $h$Can I remove an athlete from my campaign?$h$, $h$Yes, any time before you approve their work. Choose Remove Athlete (or Remove Applicant) on the campaign. If you funded their pay, it's refunded.$h$, $h$- Removing an applicant declines them.
 - Removing an accepted athlete takes them off the campaign and refunds their funded pay.
 - You can't remove an athlete whose work you've already approved.

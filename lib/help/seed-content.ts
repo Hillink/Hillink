@@ -24,9 +24,25 @@ export type SeedArticle = {
   featured?: boolean;
   escalation_required?: boolean;
   sort_order?: number;
+  /** When this article was last checked against the app, if later than SEED_VERIFIED_AT. */
+  verified_at?: string;
 };
 
 export const SEED_VERIFIED_AT = "2026-09-27";
+
+// Articles rewritten after the first seed may already be in a database. The update migration
+// (20260928000710) rewrites these slugs there too, unless an admin has edited the article since.
+export const SEED_UPDATED_SLUGS = [
+  "how-to-submit-proof",
+  "what-happens-after-i-submit-proof",
+  "choosing-proof-requirements",
+  "how-to-review-proof",
+  "after-an-athlete-is-approved",
+  "rating-athletes",
+  "business-plans",
+  "paying-athletes",
+  "cancelling-a-campaign",
+];
 
 export const SEED_ARTICLES: SeedArticle[] = [
   // ---------------------------------------------------------------- Shared
@@ -329,9 +345,14 @@ Every campaign requires #ad or Instagram's Paid partnership label. [Why #ad is r
     ],
     body: `You can submit proof once the business has accepted you. Double-check your link before you submit.
 
+There's no screenshot upload. The business checks your live post through the link, so make sure it's public and shows everything the campaign asks for, including #ad.
+
+If the business asks for changes, fix your post, paste the new link, and choose **Submit Again**.
+
 If you post on Instagram and your account is connected, HILLink also pulls your post's stats (likes, comments, reach). Use **Sync Diagnostics** to refresh them.`,
     audience: "athlete",
     status: "live",
+    verified_at: "2026-09-28",
     feature: "proof_submission",
     keywords: ["proof", "submit", "link", "url", "upload", "post link", "screenshot"],
     question_variants: ["Where do I upload my post?", "How do I show I posted?", "How do I send my post link?"],
@@ -351,15 +372,16 @@ You get a notification, your pay is sent to your Stripe account, and you earn XP
 ## If the business doesn't respond
 Proof that waits longer than the campaign's review window is approved automatically. The window is 72 hours by default and never shorter than 24 hours. This only happens once the business has funded your pay, and not while a dispute is open.
 
-## If the business rejects it
-You'll get a notification. Check the campaign requirements. If you think the decision is wrong, [contact HILLink](/help/disputes/disputes-and-problems).
+## If the business asks for changes
+You'll get a notification and the campaign shows **Needs changes** in My Campaigns. Check the campaign requirements, fix your post, then paste the new link and choose **Submit Again**. The business reviews it again, with a new review window. If you think the decision is wrong, [contact HILLink](/help/disputes/disputes-and-problems).
 
 After approval, the business may also [rate your work](/help/ratings/how-athlete-ratings-work).`,
     audience: "athlete",
     status: "live",
+    verified_at: "2026-09-28",
     feature: "proof_review",
-    keywords: ["approval", "approved", "rejected", "review", "waiting", "auto approve", "72 hours", "pending proof"],
-    question_variants: ["How long does approval take?", "Why hasn't my proof been approved?", "My proof was rejected"],
+    keywords: ["approval", "approved", "rejected", "review", "waiting", "auto approve", "72 hours", "pending proof", "resubmit", "needs changes", "fix"],
+    question_variants: ["How long does approval take?", "Why hasn't my proof been approved?", "My proof was rejected", "Can I resubmit my proof?"],
     related_slugs: ["when-do-i-get-paid", "how-athlete-ratings-work", "disputes-and-problems"],
     featured: true,
     sort_order: 2,
@@ -737,19 +759,19 @@ Use **Find Athletes** on your dashboard to browse athletes, including their tier
     category: "campaign-requirements",
     title: "What should I ask athletes to submit as proof?",
     short_answer:
-      "Each campaign type comes with a proof checklist, such as a live post link and a screenshot showing #ad. Keep the ones that let you confirm the work was done.",
+      "Each campaign type comes with a proof checklist, such as a live post link and a post that says #ad. Athletes send proof as a link to their live post, so ask for things you can check by opening that link.",
     body: `Examples from the built-in checklists:
 - live post link
-- screenshot of the live content
-- screenshot showing required tags or mentions
-- screenshot showing #ad or the Paid partnership label (always included, because the FTC requires it)
-- visit confirmation (Dine and Post) or delivery confirmation (Product Review)
+- post includes the required tags or mentions
+- post says #ad or uses the Paid partnership label (always included, because the FTC requires it)
+- post shows the visit (Dine and Post) or the product (Product Review)
 
-Athletes send proof by pasting a link to their live post and adding notes.
+Athletes send proof by pasting a link to their live post and adding notes. There's no screenshot upload. For campaigns with several posts, athletes put the extra links in the notes.
 
 Clear directions get better posts. Say exactly what to mention, what to show and what customers should do.`,
     audience: "business",
     status: "live",
+    verified_at: "2026-09-28",
     feature: "campaign_requirements",
     keywords: ["proof", "requirements", "checklist", "deliverables", "what to ask", "directions"],
     question_variants: ["What proof should I require?", "How do I write good directions?"],
@@ -769,14 +791,18 @@ The athlete's pay must be funded. If it isn't, you'll see **Fund payment** first
 Proof you don't review within the campaign's review window (72 hours by default) is approved automatically and the athlete is paid. This only happens for funded work and never while a dispute is open. Unfunded work is never auto-approved; you'll get a reminder instead.
 
 ## Rejecting
-Reject proof that doesn't meet your requirements. The athlete is notified. If you're not sure, [contact HILLink](/help/disputes/disputes-and-problems) before rejecting.
+Reject proof that doesn't meet your requirements. The athlete is notified and can fix their post and send it again. Their funded pay stays held until you approve, and the review window starts over when they resubmit. If you're not sure, [contact HILLink](/help/disputes/disputes-and-problems).
+
+## After approving
+You're asked to rate the athlete right away. You can also rate them later with **Rate Athlete**. [Rating athletes](/help/ratings/rating-athletes)
 
 ## Post stats
 For Instagram posts, **Sync Diagnostics** shows likes, comments and reach when the athlete's account is connected.`,
     audience: "business",
     status: "live",
+    verified_at: "2026-09-28",
     feature: "proof_review",
-    keywords: ["review", "approve", "reject", "proof", "view proof", "auto approve", "72 hours", "submission"],
+    keywords: ["review", "approve", "reject", "proof", "view proof", "auto approve", "72 hours", "submission", "resubmit"],
     question_variants: ["How do I approve a post?", "What happens if I don't review proof?"],
     related_slugs: ["paying-athletes", "rating-athletes", "after-an-athlete-is-approved"],
     featured: true,
@@ -789,10 +815,11 @@ For Instagram posts, **Sync Diagnostics** shows likes, comments and reach when t
     short_answer:
       "The athlete is paid from the money you funded, earns XP, and their part of the campaign shows as completed. You can then rate them and track customers they bring in.",
     body: `- **Payment**: the athlete's pay is sent to their Stripe account. If their payout account isn't set up yet, a **Pay athlete** button lets you send it later.
-- **Ratings**: rate the athlete from 1 to 5 stars. [Rating athletes](/help/ratings/rating-athletes)
+- **Ratings**: you're asked to rate the athlete from 1 to 5 stars as soon as you approve. [Rating athletes](/help/ratings/rating-athletes)
 - **Results**: customers who use the athlete's code keep counting in your [monthly results](/help/results/monthly-results-report).`,
     audience: "business",
     status: "live",
+    verified_at: "2026-09-28",
     feature: "campaign_completion",
     keywords: ["completed", "complete", "done", "finished", "after approval", "campaign completed"],
     question_variants: ["What happens when a campaign is completed?", "What do I do after approving?"],
@@ -805,12 +832,14 @@ For Instagram posts, **Sync Diagnostics** shows likes, comments and reach when t
     title: "How do athlete ratings work?",
     short_answer:
       "After an athlete's work is approved, you can rate them from 1 to 5 stars and add a short review. Ratings help other businesses and shape the athlete's Hillink Score.",
-    body: `- Find the athlete in **Campaign History** and choose **Rate Athlete**.
+    body: `- When you approve an athlete's work, a rating window opens right away.
+- To rate later, open the campaign on your dashboard (or in **Campaign History**), expand the athlete, and choose **Rate Athlete**.
 - You can rate each athlete once per campaign.
 - An athlete's average rating shows on their profile.
 - Athletes whose average falls below 1.5 stars can't apply to new campaigns.`,
     audience: "business",
     status: "live",
+    verified_at: "2026-09-28",
     feature: "ratings",
     keywords: ["rate", "rating", "stars", "review athlete", "feedback"],
     question_variants: ["How do I rate an athlete?", "Where is the Rate Athlete button?"],
@@ -878,12 +907,18 @@ Athletes with fewer than 3 finished campaigns are marked **New**. In **Find Athl
 
 Choose your plan and billing details in **Settings**, then pay through Stripe's secure checkout. You need an active plan before you can post a campaign.
 
-Athlete pay is separate from your plan. [Paying athletes](/help/payments/paying-athletes)`,
+## Changing or cancelling your plan
+- **Switch plans:** in Settings, pick a new tier and choose **Pay and Activate Tier**. Stripe charges or credits the difference right away.
+- **Cancel, update your card or see invoices:** choose **Manage billing or cancel plan** in Settings. Without an active plan you can't post new campaigns.
+
+## Athlete pay
+Athlete pay isn't included in your plan. For each athlete you accept, you pay their campaign pay plus HILLink's 20% platform fee and card processing. [Paying athletes](/help/payments/paying-athletes)`,
     audience: "business",
     status: "live",
+    verified_at: "2026-09-28",
     feature: "subscriptions",
-    keywords: ["plan", "pricing", "price", "subscription", "billing", "starter", "growth", "scale", "domination", "cost"],
-    question_variants: ["How much does HILLink cost?", "What plan do I need?", "How do I pay for HILLink?"],
+    keywords: ["plan", "pricing", "price", "subscription", "billing", "starter", "growth", "scale", "domination", "cost", "cancel", "upgrade", "downgrade", "invoice", "card"],
+    question_variants: ["How much does HILLink cost?", "What plan do I need?", "How do I pay for HILLink?", "How do I cancel my plan?", "How do I change my plan?"],
     related_slugs: ["paying-athletes", "how-to-create-a-campaign"],
     featured: true,
     sort_order: 0,
@@ -893,9 +928,14 @@ Athlete pay is separate from your plan. [Paying athletes](/help/payments/paying-
     category: "payments",
     title: "How do athlete payments work?",
     short_answer:
-      "When you accept an athlete, you fund their pay through Stripe. HILLink holds the money and sends it to the athlete when you approve their work. If the athlete leaves or you remove them first, you're refunded.",
+      "When you accept an athlete, you fund their pay plus HILLink's 20% platform fee through Stripe. HILLink holds the money and sends the athlete's pay to them when you approve their work. If the athlete leaves or you remove them first, you're refunded.",
     body: `## Funding
-After you accept an athlete, choose **Fund payment**. The button shows the exact total before you pay. It covers the athlete's pay, HILLink's platform fee and card processing.
+After you accept an athlete, choose **Fund payment**. The button shows the exact total before you pay. It covers:
+- the athlete's pay (the athlete receives all of it)
+- HILLink's platform fee: 20% of the athlete's pay
+- card processing
+
+For example, for a $100 athlete, you pay $100 plus a $20 fee, plus card processing. This is separate from your monthly plan.
 
 ## Paying out
 When you approve the athlete's proof, their pay is sent to them automatically. If their payout account isn't ready yet, use **Pay athlete** later.
@@ -908,13 +948,35 @@ When you approve the athlete's proof, their pay is sent to them automatically. I
 If a campaign pays $0 (for example, a free meal), there's nothing to fund.`,
     audience: "business",
     status: "live",
+    verified_at: "2026-09-28",
     feature: "campaign_payments",
-    keywords: ["pay athletes", "fund", "funding", "payment", "refund", "held", "stripe", "checkout", "fee"],
-    question_variants: ["When do I pay athletes?", "Do I get a refund if an athlete doesn't post?", "What is Fund payment?"],
+    keywords: ["pay athletes", "fund", "funding", "payment", "refund", "held", "stripe", "checkout", "fee", "platform fee", "20%", "commission"],
+    question_variants: ["When do I pay athletes?", "Do I get a refund if an athlete doesn't post?", "What is Fund payment?", "How much is HILLink's fee?"],
     related_slugs: ["how-to-review-proof", "removing-an-athlete"],
     featured: true,
     escalation_required: true,
     sort_order: 0,
+  },
+  {
+    slug: "cancelling-a-campaign",
+    category: "campaign-problems",
+    title: "Can I cancel a campaign?",
+    short_answer:
+      "Yes, as long as no athlete's work on it has been approved yet. Choose Cancel Campaign on your dashboard. Any athlete pay you funded is refunded and the athletes are notified.",
+    body: `- Cancelling removes the campaign and everyone who applied or joined it.
+- Athletes who applied, were accepted or had sent proof get a notification.
+- Money you funded for athletes is refunded to you through Stripe.
+- Once any athlete's work on the campaign has been approved, it can't be cancelled.
+
+To stop working with just one athlete, [remove them](/help/campaign-problems/removing-an-athlete) instead.`,
+    audience: "business",
+    status: "live",
+    verified_at: "2026-09-28",
+    feature: "cancel_campaign",
+    keywords: ["cancel", "delete campaign", "stop campaign", "end campaign", "remove campaign", "refund"],
+    question_variants: ["How do I cancel a campaign?", "How do I delete a campaign?", "Can I stop my campaign?"],
+    related_slugs: ["removing-an-athlete", "paying-athletes"],
+    sort_order: 1,
   },
   {
     slug: "removing-an-athlete",

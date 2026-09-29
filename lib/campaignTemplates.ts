@@ -42,30 +42,28 @@ export const TEMPLATE_FORMAT_OPTIONS: Record<CampaignTemplateKey, CampaignConten
   monthly_ambassador: ["feed_post", "story", "reel", "carousel", "combo"],
 };
 
+// Athletes send proof as a link to the live post plus notes, so every item here must be something
+// the business can check by opening that link (there is no screenshot upload).
 export const TEMPLATE_PROOF_REQUIREMENTS: Record<CampaignTemplateKey, string[]> = {
   instagram_post: [
     "Live post URL",
-    "Screenshot of live content",
-    "Screenshot showing required tags or mentions",
-    "Screenshot showing #ad or the Paid partnership label (FTC rule)",
+    "Post includes the required tags or mentions",
+    "Post says #ad or uses the Paid partnership label (FTC rule)",
   ],
   dine_and_post: [
-    "Photo or screenshot of visit confirmation",
     "Live post URL",
-    "Screenshot of live content",
-    "Screenshot showing #ad or the Paid partnership label (FTC rule)",
+    "Post shows your visit (photo or location tag)",
+    "Post says #ad or uses the Paid partnership label (FTC rule)",
   ],
   product_review: [
-    "Delivery or pickup confirmation",
     "Live content URL",
-    "Screenshot of live content",
-    "Screenshot showing #ad or the Paid partnership label (FTC rule)",
+    "Post shows the product",
+    "Post says #ad or uses the Paid partnership label (FTC rule)",
   ],
   monthly_ambassador: [
-    "Live content URL for each deliverable",
-    "Screenshot for each deliverable",
-    "Screenshot showing #ad or the Paid partnership label (FTC rule)",
-    "Optional customer code usage screenshot",
+    "Live content URL for each deliverable (extra links go in the notes)",
+    "Each post says #ad or uses the Paid partnership label (FTC rule)",
+    "Customer code included in the post (optional)",
   ],
 };
 

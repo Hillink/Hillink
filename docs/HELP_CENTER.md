@@ -4,12 +4,13 @@ The Help Center is HILLink's signed-in help: `/help` for athletes and businesses
 
 ## Before deploying
 
-Run these two files in the Supabase SQL editor, in order:
+Run these files in the Supabase SQL editor, in order:
 
 1. `supabase/migrations/20260928000600_help_center.sql`: the `help_articles` table, access rules and search.
-2. `supabase/migrations/20260928000610_help_center_seed.sql`: 42 starter articles.
+2. `supabase/migrations/20260928000610_help_center_seed.sql`: the starter articles.
+3. `supabase/migrations/20260928000710_help_center_updates.sql`: rewrites articles that changed after the first seed.
 
-Both can be run again safely. The seed only adds articles whose URL name (slug) doesn't exist yet, so it never overwrites edits made in the admin editor.
+All three can be run again safely. The seed only adds articles whose URL name (slug) doesn't exist yet. The update file skips any article that was edited in the admin editor.
 
 Until the first file has run, `/help` shows "Help articles are on the way" instead of an error.
 
@@ -145,4 +146,4 @@ Edit `lib/help/seed-content.ts`, then run:
 node --experimental-strip-types --no-warnings scripts/generate-help-seed.ts
 ```
 
-This only affects databases that don't have those articles yet. For the live site, use the admin editor.
+If you changed an article that may already be in a database, add its slug to `SEED_UPDATED_SLUGS` and give it a newer `verified_at`, then regenerate. The script writes both the seed and the update file. For quick one-off fixes on the live site, use the admin editor instead.

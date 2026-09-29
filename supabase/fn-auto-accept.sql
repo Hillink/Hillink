@@ -12,7 +12,8 @@ as $$
     when 'bronze' then 1
     when 'silver' then 2
     when 'gold' then 3
-    when 'diamond' then 4
+    when 'platinum' then 4
+    when 'diamond' then 5
     else 0
   end;
 $$;
