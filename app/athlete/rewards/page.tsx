@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
+import HelpLink from "@/components/help/HelpLink";
 import { MAX_LEVEL, MILESTONE_EVERY, MILESTONE_LABELS, POINTS, PRO_MIN_SCORE } from "@/lib/rewards/road";
 
 type Item = { id: string; name: string; description: string | null; points_cost: number; stock: number | null; active: boolean };
@@ -77,6 +78,7 @@ export default function AthleteRewardsPage() {
       <div className="container" style={{ maxWidth: 760, padding: "28px 0 60px" }}>
         <Link href="/athlete" className="muted" style={{ fontWeight: 700 }}>← Dashboard</Link>
         <h1 className="page-title" style={{ fontSize: "2rem", marginTop: 6 }}>Rewards road</h1>
+        <HelpLink category="rewards" slug="rewards-road" label="How the rewards road works" />
 
         {error && <div className="error-message">{error}</div>}
         {notice && <div className="success-message">{notice}</div>}

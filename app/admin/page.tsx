@@ -590,6 +590,14 @@ export default function AdminPage() {
             >
               Waitlist Review
             </button>
+            <button
+              className="secondary-button"
+              type="button"
+              onClick={() => router.push("/admin/help")}
+              style={{ marginBottom: 0 }}
+            >
+              Help Center
+            </button>
           </div>
 
           {/* Users table */}

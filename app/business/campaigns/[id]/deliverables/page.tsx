@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import HelpLink from "@/components/help/HelpLink";
 
 type Requirement = {
   id: string;
@@ -267,6 +268,7 @@ export default function BusinessDeliverablesPage() {
         <h1 style={{ fontSize: 24, fontWeight: 700, margin: 0 }}>
           {campaign?.title} — Deliverables
         </h1>
+        <HelpLink category="proof-approval" slug="how-to-review-proof" label="How to review proof" />
         {pendingCount > 0 && (
           <span
             style={{

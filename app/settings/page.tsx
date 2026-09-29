@@ -4,6 +4,7 @@ import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { generateReferralCode } from "@/lib/referrals";
+import HelpLink from "@/components/help/HelpLink";
 
 type ProfileResult = {
   role?: "athlete" | "business";
@@ -941,6 +942,7 @@ function SettingsContent() {
             </div>
 
             <h2 style={{ marginTop: 24 }}>Payout Receiving Information</h2>
+            <HelpLink category="payments" slug="set-up-payouts" label="How payouts work" />
             <div className="form-grid" style={{ marginTop: 12 }}>
               <label>
                 Payout method
@@ -1228,6 +1230,7 @@ function SettingsContent() {
             </label>
 
             <h2 style={{ marginTop: 24 }}>Billing and Subscription Tier</h2>
+            <HelpLink category="plans-billing" slug="business-plans" label="How business plans work" />
             <div className="form-grid" style={{ marginTop: 12 }}>
               <label>
                 Subscription tier
