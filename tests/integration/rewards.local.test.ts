@@ -200,6 +200,8 @@ test("customer points are capped per campaign", { skip }, async () => {
   assert.equal(s.points - badgePoints, CUSTOMER_POINTS_CAP_PER_CAMPAIGN * POINTS.perCustomer);
 });
 
+// Needs the test files to run one at a time (see test:payments:local): score.local.test.ts recomputes every athlete's
+// score, which would reset this athlete's hand-set Pro score if the two files overlapped.
 test("Pro track pays only for levels reached while Pro", { skip }, async () => {
   const a = await makeUser("athlete");
   await giveXp(a.id, LEVEL_5_XP);
