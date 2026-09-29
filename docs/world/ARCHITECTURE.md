@@ -287,6 +287,29 @@ The same rule serves interiors, the plaza, the street (cars are plan boxes too) 
 
 **Not changed (Pass 3 and later):** real meetings, construction tied to real work, the Fantasy and Blueprint redesigns, command permissions, and more commandable agents.
 
+## Next-pass plan, Pass 2.5: ChatGPT as the real HQ orchestrator (built)
+
+The runtime lives in HQ (branch `claude/hq-orchestrator`, `tools/hillink-hq/orchestrator-*.mjs`, documented in HQ's README). ChatGPT is the existing HQ agent, now with an OpenAI Responses API adapter, four narrow HQ tools and central instructions (`tools/hillink-hq/prompts/orchestrator.md`). The World adds no second agent system. It reads ChatGPT like any other HQ agent, through the Pass 1 runtime path.
+
+**State (derived in `core/truth.mjs`):**
+
+| State | When |
+|---|---|
+| NOT_CONNECTED | HQ has no OpenAI runtime ("OpenAI runtime not configured") |
+| OFFLINE | HQ reports the key or model rejected |
+| STARTING | HQ has dispatched the turn, but OpenAI hasn't created the response yet |
+| WORKING | OpenAI is streaming, and HQ sees an acknowledged, heartbeating run |
+| WAITING | An HQ task it requested (`requestedBy`) is still open. The reason names the agent, task and stage. |
+| NEEDS_ATTENTION | An owner-required task it requested is waiting for Kyle |
+| FAILED | Its last run's terminal was FAILED, which HQ parks as BLOCKED |
+| UNKNOWN | HQ is unreachable |
+
+**Presentation:** coordinating is a productive activity that stays in place: the agent uses a tablet where it stands, with no walk for a few-second turn. When waiting, it goes to the Lobby, the operations stand-in where waiting agents already sit. A real delegation also plays the existing handoff: ChatGPT carries the package to Claude. The five copies of the "productive activities" list are now one (`PRODUCTIVE_ACTIVITIES`).
+
+**Command route:** `COMMANDABLE.chatgpt` maps to HQ's `orchestrate` operation. The World server refuses any command for an agent HQ reports as not connected, and the inspector shows "Not accepting requests" with the reason instead of a command box.
+
+**Evidence:** `docs/world/evidence/pass25-orchestrator/` has the live acceptance log (question, delegation, reading the result, the coding boundary, reload), the HQ chain for the delegation, and the Claude regression. `tests/pass25.test.mjs` covers the states above, in-place coordinating and the not-connected refusal. HQ's `tests/orchestrator.test.mjs` covers the runtime, tools, limits and secrets against a fake OpenAI.
+
 ## Phases (from the brief) and where this PR stops
 
 | Phase | State |
