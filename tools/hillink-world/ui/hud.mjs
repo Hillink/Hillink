@@ -33,6 +33,8 @@ export function describe(e, world) {
     case 'TASK_STARTED': return `${name(world, e.agentId)} started “${taskTitle(world, e.taskId)}”`;
     case 'TASK_COMPLETED': return `Finished “${taskTitle(world, e.taskId)}”`;
     case 'TASK_FAILED': return `Task failed: ${taskTitle(world, e.taskId)}`;
+    case 'TASK_BLOCKED': return `Blocked: ${taskTitle(world, e.taskId)}${e.detail ? ` (${e.detail})` : ''}`;
+    case 'TASK_QUEUED': return `Back in queue: ${taskTitle(world, e.taskId)}`;
     case 'AGENT_MESSAGE': return `${name(world, e.agentId)} → ${name(world, e.toAgentId)}: ${e.summary ?? 'message'}`;
     case 'AGENT_TESTING': return `${name(world, e.agentId)} is testing`;
     case 'AGENT_REVIEWING': return `${name(world, e.agentId)} is reviewing`;

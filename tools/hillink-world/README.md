@@ -7,7 +7,9 @@ npm run world          # http://127.0.0.1:4320 (WORLD_PORT to change)
 npm run test:world     # engine tests (node:test, no browser)
 ```
 
-Today it runs in **simulation mode only**. Open "Dev simulation" to play scenarios. Simulated events are tagged `sim` and never read or write Hillink data. The first real feed is the HQ adapter (Phase 4).
+**Live:** if Hillink HQ is running (`HQ_URL`, default http://127.0.0.1:4312), the World shows HQ's real agents and tasks. The badge reads LIVE: HQ. HQ is only read, never written. `WORLD_HQ=0` turns this off.
+
+**Simulation:** without HQ, or with `?source=sim`, the World uses the dev simulator. Open "Dev simulation" to play scenarios. Simulated events are tagged `sim`, never mix with live data, and never touch Hillink data.
 
 Styles: **Realistic**, **Fantasy** and **Blueprint** (toggle in the header, or `?theme=fantasy`). All three show the same World state.
 

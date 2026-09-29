@@ -28,7 +28,8 @@ export function placeAgents(agents, current, layout) {
   // Pass 1: agents that stay (completed/error) or keep an existing valid station.
   for (const a of ordered) {
     const rule = ruleFor(a.activity, layout);
-    const prev = current[a.id];
+    // A place from another theme's layout may not exist here (e.g. the Realistic break room).
+    const prev = layout.locationById[current[a.id]?.location]?.stations[current[a.id]?.station] ? current[a.id] : null;
     if (rule.stay && prev) { result[a.id] = { ...prev, clip: rule.clip }; taken.add(`${prev.location}:${prev.station}`); continue; }
     if (prev && prev.location === rule.location && rule.stations?.includes(prev.station) && !taken.has(`${prev.location}:${prev.station}`)) {
       result[a.id] = { location: prev.location, station: prev.station, clip: rule.clip }; taken.add(`${prev.location}:${prev.station}`);
@@ -62,7 +63,7 @@ export function taskPlacement(tasks, layout) {
   const queued = [], archived = [], out = {};
   for (const t of Object.values(tasks)) {
     if (t.status === 'active' && t.agentId) out[t.id] = { follow: t.agentId };
-    else if (t.status === 'queued') queued.push(t);
+    else if (t.status === 'queued' || t.status === 'blocked') queued.push(t);
     else archived.push(t);
   }
   const grid = (list, { x, y, cols, step }) => list.sort((a, b) => a.createdAt - b.createdAt).forEach((t, i) => { out[t.id] = { point: [x + (i % cols) * step, y + Math.floor(i / cols) * step] }; });

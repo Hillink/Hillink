@@ -17,6 +17,7 @@ export class WorldView {
     if (agentsChanged) this.syncAgents(world, now);
     if (all || [...changed].some(k => k.startsWith('task:')) || agentsChanged) this.syncTasks(world);
     for (const s of Object.values(world.systems)) if (all || changed.has(`system:${s.id}`)) this.syncSystem(s);
+    if (all) for (const [id, e] of this.scene.entities) if (e.kind === 'system' && !world.systems[e.ref.id]) this.scene.remove(id);
     if (all || [...changed].some(k => /^(tests|build|deploy|pr|issue):/.test(k))) this.syncActivityObjects(world);
     if (changed.has('messages') && !all) {
       const m = world.messages.at(-1);
@@ -33,13 +34,14 @@ export class WorldView {
     for (const a of agents) {
       let e = this.scene.get(`agent:${a.id}`);
       const place = next[a.id], target = stationPoint(place, layout);
+      const created = !e;
       if (!e) {
         // New agents walk in from the command center door rather than appearing mid-room.
         const door = layout.locationById[layout.spawn ?? 'command'].door;
         e = this.scene.add({ id: `agent:${a.id}`, kind: 'agent', layer: LAYERS.agent, x: door[0], y: door[1], w: this.size.agent[0], h: this.size.agent[1], selectable: true, ref: { type: 'agent', id: a.id }, facing: 1 });
       }
       const prev = this.places[a.id];
-      const placeChanged = !prev || prev.location !== place.location || prev.station !== place.station || prev.overflow !== place.overflow;
+      const placeChanged = created || !prev || prev.location !== place.location || prev.station !== place.station || prev.overflow !== place.overflow;
       if (placeChanged) startPath(e, layout.route([e.x, e.y], place.location, target), now);
       if (e.clip !== place.clip) e.clipStart = now;
       Object.assign(e, { clip: place.clip, agent: a });
@@ -49,6 +51,7 @@ export class WorldView {
   }
   syncTasks(world) {
     const placement = taskPlacement(world.tasks, this.layout);
+    for (const [id, e] of this.scene.entities) if (e.kind === 'task' && !world.tasks[e.ref.id]) this.scene.remove(id);
     for (const t of Object.values(world.tasks)) {
       let e = this.scene.get(`task:${t.id}`);
       if (!e) e = this.scene.add({ id: `task:${t.id}`, kind: 'task', layer: LAYERS.task, x: 0, y: 0, w: this.size.task, h: this.size.task, selectable: true, ref: { type: 'task', id: t.id } });

@@ -6,19 +6,20 @@ export const fantasyTheme = {
   name: 'Fantasy',
   art: { src: 'art/fantasy.jpg', origin: [152, 55], size: [1384, 969], portraits: 'art/fantasy-portraits.jpg',
     portraitIndex: { dwarf: 0, cyborg: 1, cupid: 2, ghost: 3, cyclops: 4, sentinel: 5, king: 6, oracle: 7, goblin: 8, marketing: 9 } },
-  // Proposed persona pairing (Claude builds, Codex inspects); personas without an agent stay unassigned.
-  avatars: { claude: 'dwarf', codex: 'cyborg', sales: 'cupid', support: 'ghost', research: 'cyclops', security: 'sentinel' },
+  // Proposed persona pairing (Claude builds, Codex inspects, HQ's verifier is the Oracle); a plaque shows the first
+  // listed agent that exists, and personas without an agent say so.
+  avatars: { claude: 'dwarf', codex: 'cyborg', chatgpt: 'king', gemma: 'cyclops', 'hq-verifier': 'oracle', qwen: 'goblin', sales: 'cupid', support: 'ghost', research: 'cyclops', security: 'sentinel' },
   plaques: [
-    { rect: [352, 166, 496, 207], title: 'Scout (Cupid)', agentId: 'sales' },
-    { rect: [793, 164, 932, 201], title: 'Orchestrator (King)', agentId: null },
-    { rect: [303, 445, 440, 487], title: 'Builder (Dwarf)', agentId: 'claude' },
-    { rect: [735, 450, 874, 490], title: 'Inspector (Cyborg)', agentId: 'codex' },
-    { rect: [1035, 458, 1172, 497], title: 'QA (Oracle)', agentId: null },
-    { rect: [1368, 423, 1497, 462], title: 'Analytics (Cyclops)', agentId: 'research' },
-    { rect: [463, 658, 602, 697], title: 'Support', agentId: 'support' },
-    { rect: [162, 696, 294, 735], title: 'Treasurer (Goblin)', agentId: null },
-    { rect: [1031, 740, 1172, 782], title: 'Security (Sentinel)', agentId: 'security' },
-    { rect: [1383, 701, 1524, 742], title: 'Marketing', agentId: null },
+    { rect: [352, 166, 496, 207], title: 'Scout (Cupid)', agentIds: ['sales'] },
+    { rect: [793, 164, 932, 201], title: 'Orchestrator (King)', agentIds: ['chatgpt'] },
+    { rect: [303, 445, 440, 487], title: 'Builder (Dwarf)', agentIds: ['claude'] },
+    { rect: [735, 450, 874, 490], title: 'Inspector (Cyborg)', agentIds: ['codex'] },
+    { rect: [1035, 458, 1172, 497], title: 'QA (Oracle)', agentIds: ['hq-verifier'] },
+    { rect: [1368, 423, 1497, 462], title: 'Analytics (Cyclops)', agentIds: ['gemma', 'research'] },
+    { rect: [463, 658, 602, 697], title: 'Support', agentIds: ['support'] },
+    { rect: [162, 696, 294, 735], title: 'Treasurer (Goblin)', agentIds: [] },
+    { rect: [1031, 740, 1172, 782], title: 'Security (Sentinel)', agentIds: ['security'] },
+    { rect: [1383, 701, 1524, 742], title: 'Marketing', agentIds: [] },
   ],
   camera: { minZoom: 0.3, maxZoom: 2.6 },
   layout: {

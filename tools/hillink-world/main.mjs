@@ -9,6 +9,7 @@ import { loadTheme, THEME_ORDER, THEME_NAMES } from './themes/index.mjs';
 import { Simulator, SCENARIOS } from './sim/simulator.mjs';
 import { hoverText, inspectHTML } from './ui/inspect.mjs';
 import { summarize, feedHTML, attentionHTML, rosterHTML, paintFaces } from './ui/hud.mjs';
+import { connectHq, hqAvailable } from './adapters/hq-client.mjs';
 
 const $ = id => document.getElementById(id);
 const storage = {
@@ -17,11 +18,12 @@ const storage = {
 };
 const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
 const params = new URLSearchParams(location.search);
-const mode = params.get('source') ?? 'sim'; // Only the simulator exists until the Phase 4 HQ adapter lands.
+// Source: live HQ when it answers (default), or the dev simulator. `?source=sim` forces the simulator.
+const requested = params.get('source') ?? 'auto';
+let mode = 'sim';
 
-// World state. In sim mode, the last simulated world survives refresh; a live source would replace it (backend truth wins).
-const saved = mode === 'sim' ? storage.get('hlw:sim-world') : null;
-const store = new WorldStore(saved?.v === 1 ? saved.world : emptyWorld());
+// World state starts empty; boot fills it from HQ (backend truth) or from the saved simulation.
+const store = new WorldStore(emptyWorld());
 const effects = new Effects();
 const camera = new Camera({ bounds: { x: 0, y: 0, w: 1, h: 1 } });
 const canvas = $('world'), renderer = createCanvasRenderer(canvas);
@@ -197,7 +199,10 @@ setInterval(() => { tickClock(); if (!document.hidden) renderHud(); }, 15000); t
 
 // Dev simulation panel.
 const sim = new Simulator(store);
-$('mode').textContent = mode === 'sim' ? 'SIMULATION: not real Hillink activity' : `SOURCE: ${mode}`;
+function showMode(state) {
+  const text = { sim: 'SIMULATION: not real Hillink activity', live: 'LIVE: HQ', down: 'HQ OFFLINE: showing last known state' }[state];
+  $('mode').textContent = text; $('mode').dataset.state = state;
+}
 $('scenarios').innerHTML = SCENARIOS.map(([key, text]) => `<button data-sim="${key}">${text}</button>`).join('') + '<button data-sim="reset" class="danger">Reset simulation</button>';
 $('scenarios').addEventListener('click', e => {
   const key = e.target.closest('[data-sim]')?.dataset.sim; if (!key) return;
@@ -211,7 +216,17 @@ function savePrefs() { cameraTouched = true; clearTimeout(savePrefs.t); savePref
 // Boot.
 resize();
 applyTheme(params.get('theme') ?? storage.get('hlw:theme') ?? 'real');
+mode = requested === 'sim' ? 'sim' : requested === 'hq' || await hqAvailable() ? 'hq' : 'sim';
+if (mode === 'hq') {
+  // Live: the simulator is hidden so simulated events can never mix with real ones.
+  $('sim-toggle').hidden = true; $('sim-panel').hidden = true;
+  showMode('live');
+  connectHq(store, { onStatus: ok => showMode(ok ? 'live' : 'down') });
+} else {
+  showMode('sim');
+  const saved = storage.get('hlw:sim-world');
+  if (saved?.v === 1) store.replace(saved.world); else sim.seed();
+}
 $('empty').hidden = Object.keys(store.world.agents).length > 0;
-if (mode === 'sim' && !Object.keys(store.world.agents).length) sim.seed();
 invalidate();
 window.hillinkWorld = { store, get scene() { return scene; }, get theme() { return theme; }, camera, sim, focus, setTheme: applyTheme }; // Dev handle for tests and console.

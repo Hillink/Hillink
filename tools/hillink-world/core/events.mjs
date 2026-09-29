@@ -20,6 +20,8 @@ export const EVENT_TYPES = {
   TASK_PROGRESS: ['taskId'],
   TASK_COMPLETED: ['taskId'],
   TASK_FAILED: ['taskId'],
+  TASK_BLOCKED: ['taskId'], // waiting on a person or a fix; not a failure of the agent
+  TASK_QUEUED: ['taskId'], // back in the queue (e.g. retry after a rate limit)
   // Agent activity.
   AGENT_STARTED_WORK: ['agentId'],
   AGENT_THINKING: ['agentId'],

@@ -9,7 +9,7 @@ export const realTheme = {
   art: { src: 'art/real.jpg', origin: [150, 55], size: [1386, 785], portraits: 'art/real-portraits.jpg',
     portraitIndex: { orchestrator: 0, claude: 1, codex: 2, maya: 3, scout: 4, riley: 5, finley: 6, sage: 7, nova: 8, atlas: 9, pixel: 10 } },
   // Proposed pairing of agents to the concept's portraits; unknown agents get a colored initial.
-  avatars: { claude: 'claude', codex: 'codex', sales: 'scout', support: 'riley', research: 'atlas', security: 'sage' },
+  avatars: { claude: 'claude', codex: 'codex', chatgpt: 'orchestrator', qwen: 'nova', gemma: 'atlas', sales: 'scout', support: 'riley', research: 'atlas', security: 'sage' },
   camera: { minZoom: 0.3, maxZoom: 2.6 },
   layout: {
     id: 'real',

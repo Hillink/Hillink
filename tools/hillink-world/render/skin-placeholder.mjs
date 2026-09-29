@@ -3,7 +3,7 @@
 const palette = ['#e2711d', '#3a86ff', '#8338ec', '#2a9d8f', '#e63946', '#f4a261', '#06d6a0', '#118ab2', '#ef476f', '#8d99ae'];
 const colorFor = id => { let h = 0; for (const c of id) h = (h * 31 + c.charCodeAt(0)) >>> 0; return palette[h % palette.length]; };
 const STATE_COLOR = { ok: '#5cc98a', busy: '#4aa3ff', degraded: '#f4b942', down: '#ef4b4b', unknown: '#7c8594', running: '#4aa3ff', success: '#5cc98a', passed: '#5cc98a', failed: '#ef4b4b' };
-const TASK_COLOR = { queued: '#aab4c3', active: '#4aa3ff', done: '#5cc98a', failed: '#ef4b4b' };
+const TASK_COLOR = { queued: '#aab4c3', active: '#4aa3ff', done: '#5cc98a', failed: '#ef4b4b', blocked: '#f4a23b' };
 const font = (px, weight = 600) => `${weight} ${px}px ui-sans-serif, system-ui, sans-serif`;
 
 function roundRect(ctx, x, y, w, h, r) { ctx.beginPath(); ctx.roundRect(x, y, w, h, r); }

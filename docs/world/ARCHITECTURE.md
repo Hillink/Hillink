@@ -138,6 +138,22 @@ Everything is plain ESM with no build step and no dependencies. It sits outside 
 5. **Renderer upgrade (only if needed):** implement `createPixiRenderer` with the same `resize` and `draw` contract, and choose the renderer at boot.
 6. **Room art:** layout rectangles and stations stay the coordinate system. Room art is drawn to match them, so art can land one room at a time.
 
+## Phase 4: live from HQ (built)
+
+- **Default decision** (proposed by Claude; Kyle hasn't decided): the World is a local HQ-side tool for now, not an `/admin/world` page in the app.
+- **Flow:** `serve.mjs` → `GET /api/hq` → `adapters/hq-client.mjs` → `adapters/hq.mjs` → WorldStore.
+  - The World server does HQ's local session handshake server-side and relays a trimmed snapshot. Task descriptions, evidence bodies and usage are dropped.
+  - The browser never holds the HQ token. The route is GET-only and needs an exact loopback Host; cross-site requests are refused.
+  - The page opens live when HQ answers (badge "LIVE: HQ", simulator hidden). Otherwise it falls back to simulation. `?source=sim` forces the simulator.
+- **Translation** (`adapters/hq.mjs`, pure, tested):
+  - The first poll, or any gap in HQ's sequence, rebuilds the World from HQ's snapshot. After that, each HQ journal event maps to World events with ids `hq-<event id>-<n>`, so redelivery is a no-op.
+  - Agent status: HQ UNKNOWN is shown as offline (no evidence the agent is present). RATE_LIMITED is shown as waiting.
+  - Tasks: DISPATCHED becomes started, and COMPLETED, FAILED and BLOCKED keep their meaning. RATE_LIMITED, PARKED and UNCERTAIN become blocked, and TASK_REQUEUED puts the task back in the queue.
+  - Test counts come from HQ's own `"N passed; M failed"` summary.
+  - HQ alerts become World issues. "Cycle complete" is not an issue.
+- **Schema:** added `TASK_BLOCKED` and `TASK_QUEUED`, because HQ distinguishes "waiting on a person" from "failed".
+- **Checked:** a real HQ from #34's branch was run in the container and a `verify-hq` task queued. The World showed the local verifier walk to the lab, test, and finish with 30 passed / 0 failed, with 0 rejected events and no console errors.
+
 ## Realistic and Fantasy themes (confirmed by Kyle: "We want a toggle for fantasy world or realistic world", 2026-09-29)
 
 - Kyle shared two concept images, a night-time HQ tower (Realistic) and a fantasy realm (Fantasy). The header toggle switches between Realistic, Fantasy and Blueprint (the primitives view). The choice is remembered per browser.
@@ -157,7 +173,7 @@ Everything is plain ESM with no build step and no dependencies. It sits outside 
 | 1. World state and event schema | Done |
 | 2. Rooms, navigation and camera | Done |
 | 3. Agents, placement, movement and clips | Done, with primitives |
-| 4. Real data adapter (HQ) | **Next.** Proposed above. |
+| 4. Real data adapter (HQ) | Done: live from HQ via a read-only feed |
 | 5. Interaction: inspect, focus and follow | Done |
 | 6. Art skin | Started: Realistic and Fantasy themes on Kyle's concept art, with live plaques and portrait tokens |
 | 7. Polish: sound, weather, day/night, ambient life | Not started |

@@ -93,6 +93,16 @@ export function applyEvent(world, event) {
       }
       break;
     }
+    case 'TASK_BLOCKED':
+    case 'TASK_QUEUED': {
+      const t = task(world, e.taskId, changed);
+      const owner = t.agentId && world.agents[t.agentId]?.taskId === t.id ? agent(world, t.agentId, changed) : null;
+      Object.assign(t, { status: e.type === 'TASK_BLOCKED' ? 'blocked' : 'queued', blocker: e.type === 'TASK_BLOCKED' ? e.detail ?? null : null });
+      if (e.type === 'TASK_QUEUED') t.agentId = null;
+      t.history.push({ type: e.type, at: e.at, detail: e.detail ?? null });
+      if (owner) { owner.taskId = null; setActivity(owner, 'idle', e); }
+      break;
+    }
     case 'AGENT_MESSAGE': {
       const from = agent(world, e.agentId, changed); agent(world, e.toAgentId, changed);
       setActivity(from, 'communicating', e);

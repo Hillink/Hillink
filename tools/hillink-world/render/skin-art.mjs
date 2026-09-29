@@ -5,7 +5,7 @@ const STATUS = {
   waiting: '#f4a23b', idle: '#8aa0b8', completed: '#5cc98a', error: '#ef4b4b', offline: '#59616d',
 };
 const STATE_COLOR = { ok: '#34d27b', busy: '#4aa3ff', degraded: '#f4b942', down: '#ef4b4b', unknown: '#7c8594', running: '#4aa3ff', success: '#34d27b', passed: '#34d27b', failed: '#ef4b4b' };
-const TASK_COLOR = { queued: '#d6dde8', active: '#4aa3ff', done: '#34d27b', failed: '#ef4b4b' };
+const TASK_COLOR = { queued: '#d6dde8', active: '#4aa3ff', done: '#34d27b', failed: '#ef4b4b', blocked: '#f4a23b' };
 const SYSTEM_GLYPH = { database: 'DB', tests: 'QA', deploy: 'CD', build: 'CI', platform: 'APP', hq: 'HQ' };
 const palette = ['#e2711d', '#3a86ff', '#8338ec', '#2a9d8f', '#e63946', '#f4a261', '#06d6a0', '#118ab2', '#ef476f', '#8d99ae'];
 const colorFor = id => { let h = 0; for (const c of id) h = (h * 31 + c.charCodeAt(0)) >>> 0; return palette[h % palette.length]; };
@@ -50,7 +50,7 @@ export function createArtSkin(theme, onLoaded = () => {}) {
       else { ctx.fillStyle = '#141a24'; ctx.fillRect(ox, oy, aw, ah); text(ctx, 'Loading art…', ox + aw / 2, oy + ah / 2, 24, '#9aa6b8'); }
       // Painted name cards become live plaques bound to real agents.
       for (const p of theme.plaques ?? []) {
-        const [x0, y0, x1, y1] = p.rect, a = p.agentId ? world?.agents?.[p.agentId] : null;
+        const [x0, y0, x1, y1] = p.rect, a = p.agentIds.map(id => world?.agents?.[id]).find(Boolean) ?? null;
         roundRect(ctx, x0 - 2, y0 - 2, x1 - x0 + 4, y1 - y0 + 4, 7); ctx.fillStyle = '#0b1018f2'; ctx.fill();
         ctx.lineWidth = 1; ctx.strokeStyle = a ? '#ffffff2a' : '#ffffff14'; ctx.stroke();
         const dot = a ? STATUS[a.activity] ?? STATUS.idle : '#59616d', h = y1 - y0;

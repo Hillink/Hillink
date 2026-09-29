@@ -121,6 +121,12 @@ test('behavior: a layout can re-home idle agents (realistic break room)', () => 
   assert.equal(placeAgents([{ id: 'a', activity: 'idle' }], {}, blueprint).a.location, 'command');
 });
 
+test('behavior: places carried over from another theme fall back when the room does not exist', () => {
+  const fantasy = LAYOUTS[2];
+  const p = placeAgents([{ id: 'a', activity: 'completed' }], { a: { location: 'lounge', station: 'lounge1' } }, fantasy).a;
+  assert.ok(fantasy.locationById[p.location].stations[p.station]);
+});
+
 test('camera: screen/world transforms invert and zoom keeps the cursor point fixed', () => {
   const c = new Camera({ bounds: { x: 0, y: 0, w: 2400, h: 1560 } });
   c.resize(1200, 800); c.animateTo({ x: 1000, y: 700, zoom: 1.2 }, 0);
