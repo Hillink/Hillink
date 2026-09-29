@@ -3,6 +3,7 @@ import { requireRole } from "@/lib/rbac";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createNotification } from "@/lib/notifications";
 import { VALID_TRANSITIONS } from "./constants";
+import { PLAN_BLOCK_MESSAGES, activateCampaignWithinPlan } from "@/lib/campaigns/planLimits";
 
 type Body = {
   toStatus?: string;
@@ -138,17 +139,39 @@ export async function PATCH(
     }
   }
 
-  // Update campaign status.
-  const { error: updateError } = await admin
-    .from("campaigns")
-    .update({ status: toStatus })
-    .eq("id", campaignId);
+  // Going live counts against the business's plan (admins can still override). For a business the
+  // check and the status change happen together in the database.
+  if (toStatus === "active" && role === "business") {
+    let outcome: Awaited<ReturnType<typeof activateCampaignWithinPlan>>;
+    try {
+      outcome = await activateCampaignWithinPlan(admin, campaign.id, campaign.status);
+    } catch {
+      return NextResponse.json({ error: "Failed to update campaign" }, { status: 500 });
+    }
+    if (outcome === "stale") {
+      return NextResponse.json({ error: "Campaign status changed. Refresh and try again." }, { status: 409 });
+    }
+    if (outcome === "no_open_slots") {
+      return NextResponse.json({ error: "Campaign must have at least one open slot to activate" }, { status: 422 });
+    }
+    if (outcome === "no_start_date") {
+      return NextResponse.json({ error: "Campaign must have a start date to activate" }, { status: 422 });
+    }
+    if (outcome) {
+      return NextResponse.json({ error: PLAN_BLOCK_MESSAGES[outcome], reason: outcome }, { status: 422 });
+    }
+  } else {
+    const { error: updateError } = await admin
+      .from("campaigns")
+      .update({ status: toStatus })
+      .eq("id", campaignId);
 
-  if (updateError) {
-    return NextResponse.json(
-      { error: "Failed to update campaign" },
-      { status: 500 }
-    );
+    if (updateError) {
+      return NextResponse.json(
+        { error: "Failed to update campaign" },
+        { status: 500 }
+      );
+    }
   }
 
   // Insert status log with reason field.

@@ -79,7 +79,12 @@ export async function middleware(req: NextRequest) {
 
   const { data: auth, error: authError } = await supabase.auth.getUser();
   if (authError || !auth.user) {
-    return NextResponse.redirect(new URL(unauthenticatedRedirectPath, req.url));
+    const loginUrl = new URL(unauthenticatedRedirectPath, req.url);
+    // Help links in emails bring people back to the article after they log in.
+    if (!prelaunchMode && (pathname === "/help" || pathname.startsWith("/help/"))) {
+      loginUrl.searchParams.set("next", pathname);
+    }
+    return NextResponse.redirect(loginUrl);
   }
 
   const expectedRole = expectedRoleForPath(pathname);

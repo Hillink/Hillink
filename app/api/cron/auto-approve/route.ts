@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireRole } from "@/lib/rbac";
+import { envValue } from "@/lib/env/read";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getStripe } from "@/lib/stripe/config";
 import { runAutoApprove } from "@/lib/automation/autoApprove";
@@ -8,7 +9,7 @@ import { runAutoApprove } from "@/lib/automation/autoApprove";
 // Called daily by Vercel Cron (GET with "Authorization: Bearer $CRON_SECRET"), or by an admin (POST).
 // AUTH_EXEMPT for GET: guarded by CRON_SECRET instead of a user session.
 function hasCronSecret(req: NextRequest): boolean {
-  const secret = process.env.CRON_SECRET;
+  const secret = envValue("CRON_SECRET");
   if (!secret) return false;
   return req.headers.get("authorization") === `Bearer ${secret}` || req.headers.get("x-cron-secret") === secret;
 }

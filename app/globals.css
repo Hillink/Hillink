@@ -3269,3 +3269,11 @@ label {
     display: none !important;
   }
 }
+
+/* Portal top bars wrap on small screens instead of pushing buttons off the edge. */
+@media (max-width: 1100px) {
+  .topbar,
+  .topbar-actions {
+    flex-wrap: wrap;
+  }
+}

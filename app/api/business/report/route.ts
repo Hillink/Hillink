@@ -55,7 +55,7 @@ export async function GET(req: NextRequest) {
 
   const appIds = (apps.data || []).map((a: { id: string }) => a.id);
   const reach = appIds.length
-    ? await admin.from("instagram_post_diagnostics").select("application_id, reach, impressions").in("application_id", appIds)
+    ? await admin.from("instagram_post_diagnostics").select("application_id, reach, impressions").in("application_id", appIds).eq("diagnostics_status", "verified")
     : empty;
 
   const subscriptionCents = billing.data?.subscription_status === "active" ? Number(billing.data.monthly_price_cents || 0) : 0;

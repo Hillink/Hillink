@@ -1,11 +1,12 @@
 import Stripe from "stripe";
+import { envValue } from "@/lib/env/read";
 
 export type BillingTier = "starter" | "growth" | "scale" | "domination";
 
 const BILLING_TIER_ORDER: BillingTier[] = ["starter", "growth", "scale", "domination"];
 
 export function getStripe() {
-  const key = process.env.STRIPE_SECRET_KEY;
+  const key = envValue("STRIPE_SECRET_KEY");
   if (!key) {
     throw new Error("Missing STRIPE_SECRET_KEY");
   }
@@ -21,7 +22,7 @@ export function getTierConfig(tier: BillingTier) {
       maxSlotsPerCampaign: 20,
       maxOpenCampaigns: 20,
       maxAthleteTier: "Diamond" as const,
-      envPriceId: process.env.STRIPE_PRICE_DOMINATION,
+      envPriceId: envValue("STRIPE_PRICE_DOMINATION"),
     };
   }
   if (tier === "scale") {
@@ -30,7 +31,7 @@ export function getTierConfig(tier: BillingTier) {
       maxSlotsPerCampaign: 12,
       maxOpenCampaigns: 10,
       maxAthleteTier: "Platinum" as const,
-      envPriceId: process.env.STRIPE_PRICE_SCALE,
+      envPriceId: envValue("STRIPE_PRICE_SCALE"),
     };
   }
   if (tier === "growth") {
@@ -39,7 +40,7 @@ export function getTierConfig(tier: BillingTier) {
       maxSlotsPerCampaign: 6,
       maxOpenCampaigns: 5,
       maxAthleteTier: "Gold" as const,
-      envPriceId: process.env.STRIPE_PRICE_GROWTH,
+      envPriceId: envValue("STRIPE_PRICE_GROWTH"),
     };
   }
   return {
@@ -47,7 +48,7 @@ export function getTierConfig(tier: BillingTier) {
     maxSlotsPerCampaign: 3,
     maxOpenCampaigns: 2,
     maxAthleteTier: "Silver" as const,
-    envPriceId: process.env.STRIPE_PRICE_STARTER,
+    envPriceId: envValue("STRIPE_PRICE_STARTER"),
   };
 }
 

@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { safeHelpReturnPath } from "@/lib/help/access";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -32,7 +33,9 @@ export default function LoginPage() {
       return;
     }
 
-    router.push("/role-redirect");
+    // Only Help Center paths are honored, so the login page can't be used to send people elsewhere.
+    const next = safeHelpReturnPath(new URLSearchParams(window.location.search).get("next"));
+    router.push(next || "/role-redirect");
   }
 
   return (

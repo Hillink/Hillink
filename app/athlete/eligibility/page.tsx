@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import HelpLink from "@/components/help/HelpLink";
 import { SCHOOL_CONFLICT_OPTIONS, type VisaStatus } from "@/lib/compliance/rules";
 
 // Athlete eligibility: required once before joining campaigns, editable any time.
@@ -66,6 +67,7 @@ export default function AthleteEligibilityPage() {
       <div className="container" style={{ maxWidth: 640, padding: "28px 0 60px" }}>
         <Link href="/athlete" className="muted" style={{ fontWeight: 700 }}>← Dashboard</Link>
         <h1 className="page-title" style={{ fontSize: "2rem", marginTop: 6 }}>Your eligibility</h1>
+        <HelpLink category="nil-compliance" slug="nil-school-rules" label="NIL and school rules" />
         <p className="muted">
           These protect you and your eligibility. You need to confirm them once before joining campaigns.
         </p>

@@ -3,7 +3,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { fetchAllPages } from "@/lib/supabase/paginate";
 import {
+  countJoinedCampaigns,
   getNextTierGoal,
   getTierFromXp,
   getTierRewards,
@@ -14,6 +16,7 @@ import NotificationBell from "@/components/NotificationBell";
 import type { LeaderboardEntry } from "@/app/api/athlete/leaderboard/route";
 import { TEMPLATE_LABELS, type CampaignTemplateKey, type ClaimMethod, type LocationType } from "@/lib/campaignTemplates";
 import { improvementTip, scoreLabel } from "@/lib/score/hillinkScore";
+import HelpLink from "@/components/help/HelpLink";
 
 const CAMPAIGN_TYPE_LABELS: Record<string, string> = {
   basic_post: "Instagram Post",
@@ -213,6 +216,18 @@ export default function AthleteDashboard({ initialXp = 0 }: AthleteDashboardProp
   const router = useRouter();
   const supabase = createClient();
 
+  // Every XP event, newest first: the total and tier are the sum of all of them (XP-002).
+  const fetchAllXpEvents = (athleteId: string) =>
+    fetchAllPages<XpEventRow>((from, to) =>
+      supabase
+        .from("athlete_xp_events")
+        .select("id, action, xp_delta, created_at, details_json")
+        .eq("athlete_id", athleteId)
+        .order("created_at", { ascending: false })
+        .order("id", { ascending: false })
+        .range(from, to)
+    );
+
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [authError, setAuthError] = useState("");
@@ -339,12 +354,7 @@ export default function AthleteDashboard({ initialXp = 0 }: AthleteDashboardProp
         .select("id, campaign_id, athlete_id, status, proof_url, proof_notes, applied_at, decided_at, submitted_at, reviewed_at")
         .eq("athlete_id", user.id)
         .order("applied_at", { ascending: false }),
-      supabase
-        .from("athlete_xp_events")
-        .select("id, action, xp_delta, created_at, details_json")
-        .eq("athlete_id", user.id)
-        .order("created_at", { ascending: false })
-        .limit(100),
+      fetchAllXpEvents(user.id),
       supabase
         .from("athlete_profiles")
         .select("first_name, last_name, school, sport, city, state, latitude, longitude, deal_types, bio, average_rating, total_ratings, profile_photo_url, minimum_payout, instagram, preferred_company_type")
@@ -504,12 +514,7 @@ export default function AthleteDashboard({ initialXp = 0 }: AthleteDashboardProp
       };
 
       if ((challengeSyncData.granted || 0) > 0) {
-        const { data: refreshedXpRows, error: refreshedXpError } = await supabase
-          .from("athlete_xp_events")
-          .select("id, action, xp_delta, created_at, details_json")
-          .eq("athlete_id", user.id)
-          .order("created_at", { ascending: false })
-          .limit(100);
+        const { data: refreshedXpRows, error: refreshedXpError } = await fetchAllXpEvents(user.id);
 
         if (!refreshedXpError) {
           hydrateXpRows((refreshedXpRows || []) as XpEventRow[]);
@@ -884,13 +889,13 @@ export default function AthleteDashboard({ initialXp = 0 }: AthleteDashboardProp
   const unlockedTierRewards = getTierRewards(currentTier);
   const verifiedDiagnosticsCount = Object.values(diagnosticsByApplicationId).filter((d) => d.diagnostics_status === "verified").length;
   const submittedCount = applications.filter((a) => a.status === "submitted" || a.status === "approved" || a.status === "rejected").length;
-  const activeCampaignParticipation = applications.filter((a) => a.status !== "withdrawn" && a.status !== "declined").length;
+  const activeCampaignParticipation = countJoinedCampaigns(applications);
 
   const challenges = [
     {
       id: "apply-3",
       title: "Campaign Starter",
-      description: "Join 3 campaigns",
+      description: "Get accepted into 3 campaigns",
       progress: activeCampaignParticipation,
       target: 3,
       reward: 75,
@@ -965,6 +970,10 @@ export default function AthleteDashboard({ initialXp = 0 }: AthleteDashboardProp
               <span className="sidebar-icon">⚙</span>
               <span>Settings</span>
             </button>
+            <button className="sidebar-link" onClick={() => router.push("/help")}>
+              <span className="sidebar-icon">?</span>
+              <span>Help</span>
+            </button>
           </nav>
         </div>
       </aside>
@@ -973,6 +982,7 @@ export default function AthleteDashboard({ initialXp = 0 }: AthleteDashboardProp
         <div className="topbar">
           <h1 className="page-title">Athlete Portal</h1>
           <div className="topbar-actions">
+            <a className="secondary-button" href="/help">Help</a>
             <NotificationBell />
             <button className="secondary-button" onClick={handleLogout} disabled={signOutLoading}>
               {signOutLoading ? "Signing out..." : "Log out"}
@@ -1051,6 +1061,7 @@ export default function AthleteDashboard({ initialXp = 0 }: AthleteDashboardProp
         <section className="panel" style={{ marginTop: 20 }}>
           <div className="panel-header">
             <h2>XP Progress</h2>
+            <HelpLink category="xp-levels" slug="xp-and-tiers" label="How XP and tiers work" />
           </div>
           <div className="progress-track">
             <div className="progress-fill" style={{ width: `${progressWithinTier}%` }} />
@@ -1523,6 +1534,7 @@ export default function AthleteDashboard({ initialXp = 0 }: AthleteDashboardProp
         <section id="active-deals" className="panel">
           <div className="panel-header">
             <h2>My Campaigns and Proof Upload</h2>
+            <HelpLink category="proof-approval" slug="what-happens-after-i-submit-proof" label="How proof approval works" />
           </div>
 
           {visibleApplications.length === 0 ? (

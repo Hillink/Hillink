@@ -12,6 +12,8 @@ export async function POST(req: NextRequest) {
 
   const userId = access.userId;
   const supabase = access.supabase;
+  // Plan and Stripe fields are server-only (security_hardening migration), so billing writes after the
+  // role check go through the service role.
   const adminClient = createAdminClient();
   const userEmail = access.authUser.email || undefined;
 
@@ -45,7 +47,7 @@ export async function POST(req: NextRequest) {
         hasValidPrice,
       });
 
-      const { error: billingError } = await supabase
+      const { error: billingError } = await adminClient
         .from("business_billing_profiles")
         .upsert(
           {
@@ -126,7 +128,7 @@ export async function POST(req: NextRequest) {
         return { customerId, subscriptionId: null as string | null };
       }
 
-      await supabase
+      await adminClient
         .from("business_billing_profiles")
         .upsert(
           {
@@ -199,7 +201,7 @@ export async function POST(req: NextRequest) {
         expand: ["items.data.price"],
       });
 
-      const { error: billingError } = await supabase
+      const { error: billingError } = await adminClient
         .from("business_billing_profiles")
         .update({
           subscription_tier: tier,
