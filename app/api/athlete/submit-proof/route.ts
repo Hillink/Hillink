@@ -9,6 +9,7 @@ import {
 } from "@/lib/instagram/diagnostics";
 import { maybeRefreshMetaUserToken } from "@/lib/instagram/oauth";
 import { createNotification } from "@/lib/notifications";
+import { unfundedWorkBlock } from "@/lib/payments/workFunding";
 import { checkProofUrl } from "@/lib/validation/proofUrl";
 
 type SubmitBody = {
@@ -66,6 +67,16 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Proof can only be submitted for accepted applications" }, { status: 400 });
   }
 
+  // The business pays when it accepts; nobody posts for a campaign spot that isn't paid for.
+  const fundingBlock = await unfundedWorkBlock(adminClient, {
+    applicationId: appRow.id,
+    campaignId: appRow.campaign_id,
+    athleteId: appRow.athlete_id,
+  });
+  if (fundingBlock) {
+    return NextResponse.json(fundingBlock, { status: 409 });
+  }
+
   const nowIso = new Date().toISOString();
 
   const { error: updateError } = await adminClient
@@ -76,7 +87,9 @@ export async function POST(req: NextRequest) {
       proof_notes: body.proofNotes?.trim() || null,
       submitted_at: nowIso,
     })
-    .eq("id", applicationId);
+    .eq("id", applicationId)
+    // Not if the application was closed meanwhile (withdrawn, removed, campaign cancelled).
+    .eq("status", appRow.status);
 
   if (updateError) {
     return NextResponse.json({ error: updateError.message }, { status: 500 });

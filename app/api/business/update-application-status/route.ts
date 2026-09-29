@@ -193,7 +193,10 @@ export async function POST(req: NextRequest) {
     email: athleteAuthData.user?.email ? { to: athleteAuthData.user.email } : undefined,
     type: notif.type,
     title: notif.title,
-    body: notif.body(campaign.title),
+    body:
+      nextStatus === "accepted" && (paymentInfo ? paymentInfo.needsFunding : true)
+        ? `Your application for "${campaign.title}" has been accepted. You can send proof once the business has paid for your spot. We'll let you know.`
+        : notif.body(campaign.title),
     metadata: {
       applicationId: body.applicationId,
       campaignId: campaign.id,

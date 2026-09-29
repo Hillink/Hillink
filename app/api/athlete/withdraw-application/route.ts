@@ -52,7 +52,7 @@ export async function POST(req: NextRequest) {
   }
 
   if (status === "accepted" || status === "submitted") {
-    // Give the business its money back before the application (and its payment row) is deleted.
+    // Give the business its money back before the athlete leaves the campaign.
     const refund = await refundPaymentIfFunded(getStripe, adminClient, appRow.id);
     if (refund.error) {
       return NextResponse.json({ error: `Couldn't withdraw yet: ${refund.error}` }, { status: 409 });
@@ -79,14 +79,21 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  const { error: deleteError } = await adminClient
+  // Keep the application as a record, marked withdrawn, instead of deleting it (and its payment).
+  // Only if it's still in the status we checked, so a concurrent change isn't overwritten.
+  const { data: withdrawn, error: withdrawError } = await adminClient
     .from("campaign_applications")
-    .delete()
+    .update({ status: "withdrawn", decided_at: new Date().toISOString() })
     .eq("id", appRow.id)
-    .eq("athlete_id", userId);
+    .eq("athlete_id", userId)
+    .eq("status", status)
+    .select("id");
 
-  if (deleteError) {
-    return NextResponse.json({ error: deleteError.message }, { status: 500 });
+  if (withdrawError) {
+    return NextResponse.json({ error: withdrawError.message }, { status: 500 });
+  }
+  if (!withdrawn || withdrawn.length === 0) {
+    return NextResponse.json({ error: "This application just changed. Refresh and try again." }, { status: 409 });
   }
 
   return NextResponse.json({ success: true });

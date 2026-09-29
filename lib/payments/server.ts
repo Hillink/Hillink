@@ -42,7 +42,8 @@ export async function getPaymentForApplication(admin: SupabaseClient, applicatio
 }
 
 /**
- * Creates the payment row for an accepted application (once), priced from the campaign payout.
+ * Creates the payment row for an accepted application (once), priced from the campaign payout or the
+ * pay offered when the athlete applied, whichever is higher.
  * In "included" mode the payment is funded from the business's monthly tier credit when enough is left.
  */
 export async function ensurePaymentForApplication(
@@ -51,6 +52,14 @@ export async function ensurePaymentForApplication(
 ): Promise<PaymentRow> {
   const existing = await getPaymentForApplication(admin, args.applicationId);
   if (existing) return existing;
+
+  // The athlete is paid at least what they were offered when they applied, even if pay was cut since.
+  const { data: application } = await admin
+    .from("campaign_applications")
+    .select("offered_payout_cents")
+    .eq("id", args.applicationId)
+    .maybeSingle<{ offered_payout_cents: number | null }>();
+  args = { ...args, payoutCents: Math.max(0, args.payoutCents, Number(application?.offered_payout_cents ?? 0)) };
 
   const settings = readFeeSettings();
   const quote = quoteFunding(args.payoutCents, settings);

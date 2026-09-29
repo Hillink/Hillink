@@ -3,6 +3,8 @@ import { requireRole } from "@/lib/rbac";
 import { createServerClient } from "@/lib/supabase-server";
 import { createNotification } from "@/lib/notifications";
 import { REASON_MESSAGES } from "./constants";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { askBusinessToFund, isFunded, paymentForWork } from "@/lib/payments/workFunding";
 
 type AttemptAutoAcceptResult = {
   success?: boolean;
@@ -159,17 +161,35 @@ export async function POST(
       .maybeSingle<{ business_id: string }>();
 
     if (campaign?.business_id) {
+      // The business pays when an athlete is accepted. An auto-accept happens without them, so set up the
+      // payment now (it may come out of their plan's included credit) and ask them to fund it if not.
+      let funded = false;
       try {
-        await createNotification({
-          userId: campaign.business_id,
-          type: "new_application",
-          title: "New athlete accepted",
-          body: "An athlete was auto-accepted into your campaign.",
-          ctaUrl: `/business/campaigns/${campaignId}`,
-          ctaLabel: "View Campaign",
+        const payment = await paymentForWork(createAdminClient(), {
+          applicationId: data.application_id,
+          campaignId,
+          athleteId: userId,
         });
+        funded = isFunded(payment);
       } catch (error) {
-        console.error("Failed to create business auto-accept notification", error);
+        console.error("Failed to create payment for auto-accepted athlete", error);
+      }
+
+      if (funded) {
+        try {
+          await createNotification({
+            userId: campaign.business_id,
+            type: "new_application",
+            title: "New athlete accepted",
+            body: "An athlete was auto-accepted into your campaign.",
+            ctaUrl: `/business/campaigns/${campaignId}`,
+            ctaLabel: "View Campaign",
+          });
+        } catch (error) {
+          console.error("Failed to create business auto-accept notification", error);
+        }
+      } else {
+        await askBusinessToFund({ businessId: campaign.business_id, campaignId });
       }
     }
 

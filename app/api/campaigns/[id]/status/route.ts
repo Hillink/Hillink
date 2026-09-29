@@ -3,6 +3,7 @@ import { requireRole } from "@/lib/rbac";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createNotification } from "@/lib/notifications";
 import { VALID_TRANSITIONS } from "./constants";
+import { PROOF_IN_MESSAGE, campaignHasProof } from "@/lib/campaigns/lifecycle";
 
 type Body = {
   toStatus?: string;
@@ -120,6 +121,11 @@ export async function PATCH(
       { error: `Invalid transition: ${campaign.status} -> ${toStatus}` },
       { status: 409 }
     );
+  }
+
+  // Once an athlete has sent proof, only a Hillink admin can cancel (D4).
+  if (toStatus === "cancelled" && role === "business" && (await campaignHasProof(admin, campaign.id))) {
+    return NextResponse.json({ error: PROOF_IN_MESSAGE, code: "proof_submitted" }, { status: 409 });
   }
 
   // If transitioning to active, validate constraints.
