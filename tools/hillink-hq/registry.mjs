@@ -10,6 +10,7 @@ export const initialAgents = [
 
 export const operations = {
   'orchestrate': { label: 'Ask ChatGPT, the orchestrator', capability: 'coordinate', description: 'OpenAI orchestrator: reads HQ state and may queue read-only reviews or ask Kyle to decide. No repository, shell, file or production access.' },
+  'implement-repo': { label: 'Ask Claude to implement a bounded change', capability: 'implement-repo', description: 'Claude Code edits only the task scope in an isolated git worktree branch; HQ checks the scope, runs the tests and commits. Never pushed or merged.' },
   'owner-decision': { label: 'A decision only Kyle can make', capability: 'owner-decision', description: 'Owner-required; never dispatched to any agent.' },
   'summarize-local': { label: 'Summarize text with a local model', capability: 'summarize', description: 'Opt-in Ollama bridge; summarizes only the task description, without tools or repository access.' },
   'review-repo': { label: 'Ask Claude or Codex to review the repo (read-only)', capability: 'review-repo', description: 'Opt-in local CLI bridge; the agent reads the repository and answers. No edits, shell writes, deploys or database access.' },

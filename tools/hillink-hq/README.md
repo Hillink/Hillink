@@ -70,6 +70,24 @@ With `HQ_AGENTS_ENABLED=1` (or `HQ_ORCHESTRATOR_ENABLED=1`) and `OPENAI_API_KEY`
 - **Scheduling:** it's a remote adapter, so it takes no local-process slot. A question to ChatGPT never waits behind a local run.
 - **The key:** read from HQ's environment and sent only to api.openai.com. It is never journaled, logged or returned, and OpenAI error text is redacted.
 
+## Claude implementation tasks (Pass 2.6)
+
+With `HQ_AGENTS_ENABLED=1` (or `HQ_IMPLEMENTATION_ENABLED=1`), Claude can take bounded implementation tasks, operation `implement-repo`. The safety class is `local-worktree-write`, which only this operation may use. ChatGPT asks through `request_implementation`, which can only go to Claude. The engine also refuses the operation for any agent without the `implement-repo` capability, which only Claude gets, so Codex can never be assigned one.
+
+- **Contract** (`implementation-policy.mjs`, validated in `engine.createTask` whichever way a task is created):
+  - objective, scope (1 to 5 repository-relative paths), acceptance criteria, constraints, and 1 to 3 `*.test.(mjs|js|ts)` files
+  - scope paths are refused if they are absolute or drive paths, use `..`, `~`, wildcards, backslashes or shell characters, or point at a directory less than two levels deep
+  - scope paths are also refused inside `.git`, `.github`, `.claude`, `.vscode`, `node_modules`, `tools/hillink-hq`, `supabase`, `.vercel` or `.next`, if they are package manifests or root config files, or if they look like secrets
+- **Run** (`implementation-runner.mjs`):
+  1. A fresh `git worktree` on a new branch `hq/impl/<task>` from `origin/main`, under `~/.hillink-hq/worktrees` (`HQ_WORKTREE_DIR` to move it).
+  2. Claude Code launched directly, with no shell. It gets `--tools Read,Grep,Glob,Edit,Write` (no Bash, no web), `--permission-mode dontAsk`, and `Edit(./<scope>)`/`Write(./<scope>)` as the only pre-approved edits. `--setting-sources user` stops project settings from widening that.
+  3. HQ lists what git says changed; anything outside the scope blocks the task.
+  4. HQ, not Claude, runs `node --test <tests>` in the worktree with a minimal environment.
+  5. Only if the tests pass does HQ commit the in-scope files to the task branch, with `HQ-Task`, `Requested-By` and `Verified-By` trailers. Nothing is pushed or merged.
+- **Evidence:** ACK (Claude's session and its tools), Claude's steps and answer, FINDING (changed files), TEST_STARTED and TEST_RESULT (HQ's counts), COMMIT (SHA), and COMPLETED with `implementation: { branch, base, worktree, commit, files, tests }`.
+- **Blocked outcomes:** failed tests, a scope violation, missing test files or no changes end BLOCKED with the reason and an owner action. Nothing is committed, and the worktree is kept for inspection.
+- **Permissions:** chosen per task by `ClaudeRouter`. Review tasks use the unchanged read-only adapter in the repository, so nothing carries over from one task to the next.
+
 ## Notifications
 
 Material alerts are durable and deduplicated per episode. They include agent/task, time since meaningful progress, evidence, recovery attempts, runnable count and exact owner action. Ordinary healthy progress does not alert. Acknowledgement and delivery are separate.
