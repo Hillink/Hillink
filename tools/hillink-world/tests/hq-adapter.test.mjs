@@ -110,6 +110,7 @@ test('world server: trims HQ data and serves the feed only to its own loopback o
     assert.equal((await fetch(`${base}/api/hq`, { headers: { origin: 'http://evil.test' } })).status, 403);
     assert.equal((await fetch(`${base}/api/hq`, { method: 'POST' })).status, 405);
     assert.equal((await fetch(`${base}/../serve.mjs`)).status, 404);
-    assert.equal((await fetch(`${base}/art/real.jpg`)).status, 200);
+    assert.equal((await fetch(`${base}/art/real.jpg`)).status, 404, 'no background art is served');
+    assert.equal((await fetch(`${base}/world/building.mjs`)).status, 200);
   } finally { server.close(); }
 });

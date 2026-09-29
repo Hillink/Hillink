@@ -82,9 +82,11 @@ Rules that keep it separable:
 
 ```
 tools/hillink-world/
-  core/        events.mjs, state.mjs, layout.mjs (rooms, stations, nav graph, routing), behavior.mjs (activity → place/clip)
-  engine/      camera.mjs, scene.mjs (entities + spatial grid), motion.mjs (paths, effects), world-view.mjs (state → scene)
-  render/      canvas2d.mjs (renderer), skin-placeholder.mjs (primitives, themes)
+  core/        events.mjs, state.mjs, behavior.mjs (activity → place/clip)
+  world/       building.mjs (the HQ as data: rooms, walls, furniture, points, nav, elevator), layout.mjs (building → layout interface)
+  engine/      camera.mjs, scene.mjs, motion.mjs, lift.mjs, ambience.mjs, iso.mjs (projection, depth sort), world-view.mjs, iso-view.mjs (character controller)
+  render/      canvas2d.mjs, iso-skin.mjs (scene renderer), props.mjs (furniture), figure.mjs (characters), looks.mjs (skins)
+  themes/      index.mjs (Realistic / Fantasy / Blueprint pick a skin over the same layout)
   ui/          inspect.mjs (hover + inspect content)
   sim/         simulator.mjs (dev scenarios, sim events only)
   adapters/    (Phase 4) hq.mjs: HQ state → World events
@@ -154,102 +156,41 @@ Everything is plain ESM with no build step and no dependencies. It sits outside 
 - **Schema:** added `TASK_BLOCKED` and `TASK_QUEUED`, because HQ distinguishes "waiting on a person" from "failed".
 - **Checked:** a real HQ from #34's branch was run in the container and a `verify-hq` task queued. The World showed the local verifier walk to the lab, test, and finish with 30 passed / 0 failed, with 0 rejected events and no console errors.
 
-## Realistic and Fantasy themes (confirmed by Kyle: "We want a toggle for fantasy world or realistic world", 2026-09-29)
+## Object-built World: full visual redesign (built, vertical slice)
 
-- Kyle shared two concept images, a night-time HQ tower (Realistic) and a fantasy realm (Fantasy). The header toggle switches between Realistic, Fantasy and Blueprint (the primitives view). The choice is remembered per browser.
-- **Themes are data.** `themes/real.mjs` and `themes/fantasy.mjs` place the same nine semantic locations (plus a Realistic-only Break Room for idle agents) onto rooms painted in each image. Each theme also defines its walkways, task slots, system beacons and signal badges. Tests check that every theme has every location, and that every station and route resolves.
-- **Interim art is Kyle's concept images** (`art/*.jpg`). They are cropped to remove the mock HUD, and any mock panel left inside the scene is hazed out. Portraits for agent tokens and the roster are cropped from the same images.
-- **Real activity only:**
-  - The Fantasy image's painted name cards ("Builder (Dwarf)…") are covered at runtime by live plaques. Each plaque shows the bound agent's real status, or "No agent connected".
-  - The painted people are scenery. Live agents are the portrait tokens.
-  - The HUD shows no cost or usage numbers, because no source reports them yet.
-- **Proposed:** which persona each agent gets (Claude = Builder (Dwarf) and the Claude portrait; Codex = Inspector (Cyborg) and the Codex portrait). These pairings are data in the theme files.
-- **Next for art:** replace the concept images with clean layered art (backdrop without baked labels, plus character sprite sheets with walk and work clips). The theme files keep their coordinates if the new art keeps the composition.
+Kyle's directive (2026-09-29, confirmed by Kyle): the concept images are reference only. Rebuild the presentation as a stylized 2.5D tycoon world made of independent scene objects, with no runtime background image. "Keep the brain, rebuild the body." Start with a vertical slice and do not expand until it proves the architecture.
 
-## Animation layer: "make the World actually alive" (built)
+What was kept (unchanged interfaces): events, `WorldStore`, the HQ adapter and LIVE vs DEV SIM separation, `behavior.mjs` placement, `WorldView` (state → places → paths), `motion.mjs`, `lift.mjs`, camera, scene, inspect, HUD. The only brain change: `PR_*` events keep `agentId` and `taskId` so the handoff folder knows whose work it is.
 
-Kyle's next-pass brief (2026-09-29, confirmed by Kyle): keep the live HQ state, registry, statuses, attention, feed, rooms, themes and placement; work only on animation, movement, scene composition, navigation and environmental life. The painted concept image stays as the base plate and an independent animation scene runs over it.
+What was removed: the painted base plates and portrait crops (`art/`), the image-pixel theme files, `render/skin-art.mjs`, `render/scenery.mjs`, `render/character.mjs`, and the old primitives layout (`core/layout.mjs`). Kyle's two concept images are kept under `docs/world/concept/` as reference only; the server does not serve them.
 
-Layers, bottom to top (`render/scenery.mjs`, `render/skin-art.mjs`):
+Three layers, cleanly separated:
 
-1. Base plate. On Realistic the painted crane jib, hook and helicopter rotor were inpainted out of `art/real.jpg` so they can be redrawn moving.
-2. Room light. A room brightens only while a real agent is doing real work in it.
-3. Environment and machinery. This covers the water wall, fountain, crane, fans, helicopter rotor, cars and trucks.
-4. Screens and lights. This covers monitors, server LEDs, sign glow, construction and helipad blinkers, and city twinkle.
-5. Characters. NPC staff, agents, the lift car and foreground occluders share one pass sorted by floor position, so depth works.
-6. Particles. Welding sparks, drifting motes and (Fantasy) magic.
-7. UI. Portrait badges, names and attention markers draw last, so nothing in the world hides them.
+1. **Simulation data** (`world/building.mjs`). Pure data in plan coordinates `(x, z depth, floor)`: floors, rooms, walls with doorways, furniture footprints, wall decor, interaction points (pose sit/stand, facing, use), the nav graph, the elevator and the street.
+2. **Layout** (`world/layout.mjs`). Projects the building into the layout interface the engine already used (locations, stations, doors, nav nodes, `route`, lifts, `locationAt`, task slots, system spots). Semantic rooms the slice has not built yet map through aliases (command → Lobby, comms → Break Room, archive/testing/servers → Engineering, deploy → roof).
+3. **Rendering** (`render/iso-skin.mjs`, `props.mjs`, `figure.mjs`, `looks.mjs`). Draws every object procedurally. A skin is materials plus a look per agent; Realistic and Fantasy are skins over the same simulation, Blueprint is the debug view (rooms, walls, doors, footprints, nav edges, points with pose and facing, lift state, agent paths and states).
 
-The brief's three levels map to code as follows:
+Decisions (proposed by Claude):
 
-- **Micro** runs constantly: water, screens, LEDs, fans, sign glow and breathing.
-- **Ambient** fires occasionally on independent, seeded timers (`engine/ambience.mjs`): cars and a construction truck, lift trips, crane slews and hook moves, rotor idle, and staff walks. Nothing is in sync.
-- **Semantic** comes only from World state (`WorldView.roomActivity`):
-  - rooms light up and workstations wake up;
-  - the Security & QA screens react when Codex tests or reviews;
-  - the construction site gets busier while a task is active or a build or deploy is running;
-  - the meeting displays switch on during a meeting.
+- **Projection: dollhouse cut-away oblique**, not true isometric: `screen x = x + 0.5z`, `screen y = base − floor·132 − 0.4z − h`. Stacked floors and the glass elevator stay readable, and every room's front is open like a tycoon game.
+- **Depth:** per floor, a topological sort of objects whose screen bounds overlap (`engine/iso.mjs`, `depthSort`). Characters, furniture, walls, the lift car and street life share one pass. The lift car is clipped behind the floor slabs and draws its riders inside it.
+- **Characters** (`render/figure.mjs`): procedural chibi figures with outlines, four facings, sitting and contact shadows. The same figure is dressed per skin: Claude engineer / dwarf builder, Codex inspector / cyborg, ChatGPT orchestrator / king, Qwen analyst / wizard, Gemma utility worker, Local Verifier (minor), Kyle (later). Unknown agents get a plain outfit in their registered colour.
+- **Character controller** (`engine/iso-view.mjs`): a semantic `play(entity, state)` with idle, react, stand, sit, walk, carry, work, type, inspect, read, talk, meeting, blocked, waiting, celebrate, offline. `resolveState` is pure. On a new assignment a character reacts, stands up if seated, walks (riding the elevator if needed), sits or stands at the point, then works.
+- **Truth rule (tested):** work, type, inspect and read play only for a productive activity, at the agent's assigned station, after arriving and not moving. Assigned is not working; riding the lift is not reviewing; idle, offline and unknown are never productive.
+- **Navigation:** nodes, doorways, landing nodes on each floor and interaction points. Routes follow the graph (tested: no walkway crosses solid furniture). Idle agents in the Break Room drift between free spots every 18–48 s.
+- **Elevator:** state is `currentFloor`, `targetFloor`, `doorState`, `occupants`, `moving`, `requestedFloors` (`Lift.status()`). The car holds its doors until the rider reports boarded or out, and never moves with doors open.
+- **Room reactions come only from real state:** desk monitors light for the working agent, the code wall follows Engineering activity, the review console shows the last test run and one folder per open PR (unreviewed, then checked), the lobby task board shows real queued and blocked tasks, the rack LEDs follow the database system, the shelf shows real archived counts, and the crane and scaffold animate only while construction is real.
+- **UI hidden:** press `h` to hide every panel and see only the world.
 
-Characters (`render/character.mjs`) are procedural placeholders, built for motion first as the brief asks.
+DEV SIM scenario "Claude builds, Codex reviews" (`sim/simulator.mjs`, `reviewJourney`): Claude, idle in the Break Room, is given a task, reacts, stands, walks, rides the elevator, sits at a workstation and types. A handoff folder appears on the review console, Codex rides up and inspects it, the review passes ("Review passed" chip, check-marked folder), and both go idle. A headless test drives this timeline and checks the state order.
 
-- **Anatomy.** They have legs, arms, a head and a contact shadow.
-- **Poses.** The poses are idle, walk, typing, think, inspecting, reading, carrying, meeting, blocked, waiting, celebrating, offline, ride and receive.
-- **Walking.** The walk cycle is driven by distance travelled, so a walking character visibly walks.
-- **Telling agents from staff.**
-  - Agents have a floor ring in their status color and a portrait badge.
-  - NPCs have neither and are never tied to Hillink data.
-- **Truthfulness (Test C).**
-  - A productive pose needs a productive activity, and the agent must have arrived at its station.
-  - Idle agents can sip coffee, stretch or glance around, but they never type.
+Checked (observed, 2026-09-29, headless Chromium in the container):
 
-Navigation and the lift:
+- Background independence: 35 requests on load, 0 images; `/art/*` returns 404.
+- LIVE HQ truth: against a local HQ test instance every agent HQ reports as UNKNOWN showed `offline`, the verifier `idle`, and none showed a productive state.
+- About 55 fps in headless Chromium; no console errors in Realistic, Fantasy or Blueprint.
 
-- **Lift legs.** Nav graphs can declare lifts (`nav.lifts`). `route()` marks the waypoint reached by lift, and consecutive stops collapse into one ride.
-- **The car** (`engine/lift.mjs`):
-  - It serves riders first, in the order call, board, ride, exit.
-  - Otherwise it makes ambient trips.
-  - It never moves with its doors open.
-- **Riders.** They wait at the shaft, board, ride inside the car (which is drawn in two halves around them) and step out. If an agent's destination changes mid-ride, it finishes the ride, then re-routes.
-- **Page load and HQ reconnect.** The World is rebuilt in one step (`WorldStore.reset`), so agents appear at their stations instead of replaying walks.
-
-Handoffs and meetings:
-
-- **Handoffs.** A real `AGENT_MESSAGE` becomes a handoff.
-  1. The sender picks up a package (a data box on Realistic, a scroll on Fantasy).
-  2. It walks, riding the lift if needed, to the receiver, following the receiver if the receiver moves.
-  3. It hands the package over, then walks back.
-  - The receiver's own work still comes only from its own events.
-  - A one-off message no longer sends the sender to the meeting room.
-- **Meetings.** New events `MEETING_STARTED { meetingId, agentIds }` and `MEETING_ENDED` gather agents in the Meeting Room and switch its displays on. When the meeting ends, each agent goes back to its previous activity.
-  - HQ has no meeting concept today, so only the simulator emits these.
-  - This is proposed and still needs a real source.
-
-Attention in the world uses restrained markers:
-
-- An amber clock means waiting.
-- A red "!" means an error, and the agent holds a hands-on-head pose.
-- A purple "You" badge appears only when HQ says the owner must act (`ownerMustAct` becomes `issue.owner`).
-
-Depth: each theme lists foreground occluders (plants, the sofa and the pool table on Realistic). Each occluder is redrawn from the base plate over anyone standing behind its baseline. The lift car's front glass is drawn over its riders.
-
-Realistic has the full first-milestone set:
-
-- the water wall;
-- the slewing crane with hook, load and sparks;
-- the elevator with riders;
-- road traffic plus a site truck;
-- Engineering and Security monitors;
-- Claude's Break Room to lift to Engineering walk, in the simulation.
-
-Fantasy has a lighter pass: fountain and jet, holograms, two ambient lifts, data-center LEDs, forge sparks, magic motes and staff.
-
-Proposed next steps (not built):
-
-- sprite-sheet characters to replace the procedural ones;
-- more occluders;
-- construction stages mapped to real task stages (claimed, implementing, testing, review, done);
-- lift batching when several riders queue;
-- day and night.
+Not in the slice yet (proposed next): the remaining semantic rooms as real rooms (Command, Testing lab, Server room, Archive, Deploy), Kyle's character, sprite-quality art, construction stages mapped to task stages, lift batching, and day/night.
 
 ## Phases (from the brief) and where this PR stops
 
@@ -260,12 +201,12 @@ Proposed next steps (not built):
 | 3. Agents, placement, movement and clips | Done: animated procedural characters, lift rides, handoffs and meetings |
 | 4. Real data adapter (HQ) | Done: live from HQ via a read-only feed |
 | 5. Interaction: inspect, focus and follow | Done |
-| 6. Art skin | Started: Realistic and Fantasy themes on Kyle's concept art, with live plaques and portrait tokens |
+| 6. Art skin | Rebuilt: object-built 2.5D vertical slice, Realistic and Fantasy skins over one simulation, no background image |
 | 7. Polish: sound, weather, day/night, ambient life | Ambient life and animation built (see Animation layer); sound, weather and day/night not started |
 | 8. In-app hosting | Not started. Unresolved question above. |
 
 ## Open questions
 
 - **Unresolved:** should the World be internal to HQ only, or also an `/admin/world` page in the app (Phase 8)?
-- **Unresolved:** is there a preferred art direction (pixel, isometric, flat) before Phase 6 starts? The engine doesn't depend on the answer.
+- **Confirmed by Kyle (2026-09-29):** art direction is a stylized 2.5D tycoon world built from objects, with Realistic and Fantasy skins.
 - **Proposed:** Phase 4 serves the World from HQ's origin with a read-only feed, rather than opening HQ to cross-origin reads.

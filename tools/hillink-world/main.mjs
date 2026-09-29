@@ -3,7 +3,7 @@ import { WorldStore, emptyWorld } from './core/state.mjs';
 import { Camera } from './engine/camera.mjs';
 import { Scene } from './engine/scene.mjs';
 import { Effects, stepPath } from './engine/motion.mjs';
-import { WorldView } from './engine/world-view.mjs';
+import { IsoWorldView } from './engine/iso-view.mjs';
 import { createCanvasRenderer } from './render/canvas2d.mjs';
 import { loadTheme, THEME_ORDER, THEME_NAMES } from './themes/index.mjs';
 import { Simulator, SCENARIOS } from './sim/simulator.mjs';
@@ -32,9 +32,9 @@ let hover = null, selected = null, follow = null, lastFrame = performance.now(),
 
 // Themes: same World state, different layout and art. Switching rebuilds only the view.
 function applyTheme(id) {
-  theme = loadTheme(THEME_ORDER.includes(id) ? id : 'real', { onArtLoaded: () => { invalidate(); renderHud(); } });
+  theme = loadTheme(THEME_ORDER.includes(id) ? id : 'real');
   const places = view?.places ?? {}; // Semantic places (room + station ids) carry across themes.
-  scene = new Scene(); view = new WorldView(scene, effects, theme.layout, theme.scenery); view.places = places;
+  scene = new Scene(); view = new IsoWorldView(scene, effects, theme.layout, theme.scenery); view.places = places;
   Object.assign(camera, { bounds: theme.layout.bounds, minZoom: theme.camera.minZoom, maxZoom: theme.camera.maxZoom });
   view.sync(store.world, new Set(['*']), performance.now());
   // Agents start at their stations instead of walking in from the entrance.
@@ -86,11 +86,11 @@ function frame(now) {
   const cameraMoving = camera.step(now);
   const fx = effects.active(now);
   // Art themes always have ambient life (water, machinery, staff); the blueprint only animates its agents.
-  const ambient = !instant && (theme.scenery || [...scene.entities.values()].some(e => e.kind === 'agent' && e.clip !== 'offline'));
-  renderer.draw({ camera, scene, skin: theme.skin, layout: theme.layout, world: store.world, entities: scene.query(camera.viewRect(80)), time: now, hoverId: hover?.id, selectedId: selected?.id, effects: fx, signals: view.roomSignals, activity: view.activity, reducedMotion: instant, theme: theme.palette });
+  const ambient = !instant; // the building always has quiet ambient life (street, lights, idle breathing)
+  renderer.draw({ camera, scene, skin: theme.skin, layout: theme.layout, world: store.world, entities: scene.query(camera.viewRect(80)), time: now, hoverId: hover?.id, selectedId: selected?.id, effects: fx, signals: view.roomSignals, activity: view.activity, reducedMotion: instant, theme: theme.palette, modeLabel: $('mode').textContent });
   if (document.hidden) { running = false; return; }
   if (moving || cameraMoving || fx.length || follow || store.pending.length) requestAnimationFrame(frame);
-  else if (ambient) setTimeout(() => requestAnimationFrame(frame), theme.scenery ? 28 : 50); // ~30 fps ambience (~20 on the blueprint)
+  else if (ambient) setTimeout(() => requestAnimationFrame(frame), theme.id === 'blueprint' ? 50 : 28); // ~30 fps ambience (~20 on the blueprint)
   else running = false;
 }
 document.addEventListener('visibilitychange', () => { if (!document.hidden) { lastFrame = performance.now(); invalidate(); } });
@@ -133,6 +133,7 @@ canvas.addEventListener('wheel', e => { e.preventDefault(); camera.zoomAt(Math.e
 addEventListener('keydown', e => {
   if (e.target.closest('input,textarea,select')) return;
   const step = 80;
+  if (e.key === 'h' || e.key === 'H') { document.body.classList.toggle('ui-hidden'); return; } // hide overlays: the world on its own
   const actions = { ArrowLeft: () => camera.pan(step, 0), ArrowRight: () => camera.pan(-step, 0), ArrowUp: () => camera.pan(0, step), ArrowDown: () => camera.pan(0, -step), '+': () => camera.zoomAt(1.2), '=': () => camera.zoomAt(1.2), '-': () => camera.zoomAt(1 / 1.2), Escape: () => { select(null); follow = null; camera.overview(); } };
   if (actions[e.key]) { e.preventDefault(); actions[e.key](); savePrefs(); invalidate(); }
 });
@@ -193,7 +194,7 @@ function renderHud() {
     $('stats').innerHTML = `<span class="n-total"><b>${s.total}</b>Agents</span><span class="n-working"><b>${s.working}</b>Working</span><span class="n-waiting"><b>${s.waiting}</b>Waiting</span><span class="n-idle"><b>${s.idle}</b>Idle</span><span class="n-attention"><b>${s.attention.length}</b>Attention</span>`;
     $('attention').innerHTML = `<h2>Attention needed (${s.attention.length})</h2>${attentionHTML(s.attention)}`;
     $('feed').innerHTML = `<h2>Recent activity</h2>${feedHTML(world, Date.now())}`;
-    $('roster').innerHTML = rosterHTML(world, theme); paintFaces($('roster'), theme); updateInsets();
+    $('roster').innerHTML = rosterHTML(world); paintFaces($('roster'), theme, world); updateInsets();
   });
 }
 function tickClock() { $('clock').textContent = new Date().toLocaleString([], { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }); }

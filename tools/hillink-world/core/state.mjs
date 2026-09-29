@@ -139,6 +139,8 @@ export function applyEvent(world, event) {
       const pr = world.prs[e.prId] ??= { id: e.prId, title: e.title ?? e.prId, url: e.url ?? null, createdAt: e.at };
       pr.state = { PR_CREATED: 'open', PR_REVIEWED: 'reviewed', PR_MERGED: 'merged' }[e.type];
       if (e.verdict) pr.verdict = e.verdict;
+      if (e.agentId) pr.agentId ??= e.agentId;
+      if (e.taskId) pr.taskId ??= e.taskId;
       pr.updatedAt = e.at;
       changed.add(`pr:${e.prId}`);
       break;

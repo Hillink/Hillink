@@ -1,3 +1,5 @@
+import { drawPortrait } from '../render/figure.mjs';
+import { lookFor } from '../render/looks.mjs';
 // HUD overlays: company counts, attention list, recent activity and the agent roster.
 // Everything here is derived from World state; nothing is invented (no usage or cost figures until a
 // real source reports them).
@@ -77,24 +79,19 @@ export function attentionHTML(items, limit = 4) {
   return `<ul>${items.slice(0, limit).map(i => `<li><button data-focus="${esc(i.focus)}">${esc(i.text)}</button></li>`).join('')}</ul>${items.length > limit ? `<p class="muted">+${items.length - limit} more</p>` : ''}`;
 }
 
-// Roster portraits come from the active theme's atlas; agents without a portrait get their color and initial.
-export function rosterHTML(world, theme) {
+// Roster portraits are drawn by the same figure code as the world (no image files), in the active skin.
+export function rosterHTML(world) {
   const agents = Object.values(world.agents);
   if (!agents.length) return '';
-  const art = theme.art;
   return agents.map(a => {
-    const key = theme.avatars?.[a.id], idx = key != null ? art?.portraitIndex[key] : undefined;
-    // Styles are applied by paintFaces (the page CSP forbids inline style attributes).
-    const face = idx !== undefined ? `<i class="face" data-idx="${idx}"></i>` : `<i class="face" data-color="${esc(a.appearance?.color ?? '#3a86ff')}">${esc(a.name[0].toUpperCase())}</i>`;
     const task = a.taskId ? world.tasks[a.taskId]?.title : a.lastEvent?.detail;
-    return `<button class="card" data-focus="agent:${esc(a.id)}">${face}<b>${esc(a.name)}</b><small>${esc(a.role ?? '')}</small><span class="st st-${esc(a.activity)}">${esc(a.activity === 'completed' ? 'finished' : a.activity)}</span>${task ? `<small class="task">${esc(task)}</small>` : ''}</button>`;
+    return `<button class="card" data-focus="agent:${esc(a.id)}"><canvas class="face" width="88" height="88" data-agent="${esc(a.id)}"></canvas><b>${esc(a.name)}</b><small>${esc(a.role ?? '')}</small><span class="st st-${esc(a.activity)}">${esc(a.activity === 'completed' ? 'finished' : a.activity)}</span>${task ? `<small class="task">${esc(task)}</small>` : ''}</button>`;
   }).join('');
 }
 
-export function paintFaces(root, theme, size = 44) {
-  const art = theme.art, n = art ? Object.keys(art.portraitIndex).length : 0;
-  for (const el of root.querySelectorAll('.face')) {
-    if (el.dataset.idx != null && art) Object.assign(el.style, { backgroundImage: `url(${art.portraits})`, backgroundSize: `${n * size}px ${size}px`, backgroundPosition: `-${el.dataset.idx * size}px 0` });
-    else if (el.dataset.color) el.style.background = el.dataset.color;
+export function paintFaces(root, theme, world) {
+  for (const el of root.querySelectorAll('canvas.face')) {
+    const a = world.agents[el.dataset.agent]; if (!a) continue;
+    drawPortrait(el.getContext('2d'), el.width, lookFor(theme.id, a));
   }
 }

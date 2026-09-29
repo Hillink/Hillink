@@ -15,6 +15,6 @@ Styles: **Realistic**, **Fantasy** and **Blueprint** (toggle in the header, or `
 
 Controls: drag to pan, scroll or pinch to zoom, click to inspect, arrow keys, `+`/`-`, and Esc for the overview. Use "Go to…" to focus a room or follow an agent.
 
-**Animation:** Realistic and Fantasy run an animation layer over the painted art. It includes water, the crane, lifts, traffic, screens, lights and staff. Agents are animated characters that walk and ride the lift to where their real work is. Rooms react only to real work. A theme's scenery lives in `themes/*-scenery.mjs`, in image pixels. See "Animation layer" in the architecture doc. With `prefers-reduced-motion`, the world holds still.
+**The world:** Hillink HQ is built from objects (no background image): a Break Room, Lobby, glass elevator, Engineering and the street outside, drawn in a 2.5D cut-away. The building is data in `world/building.mjs`; skins only change materials and outfits. Agents walk, ride the elevator, sit and work only where their real work is. See "Object-built World" in the architecture doc. With `prefers-reduced-motion`, the world holds still. Press `h` to hide the panels.
 
-Try it in simulation: in "Dev simulation", use Claude starts coding, Claude messages Codex (the handoff), Start a meeting, and Needs Kyle.
+Try it in simulation: in "Dev simulation", use Claude builds, Codex reviews, Claude starts coding, Claude messages Codex (the handoff), Start a meeting, and Needs Kyle.

@@ -2,31 +2,17 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { makeEvent } from '../core/events.mjs';
 import { WorldStore, applyEvent, emptyWorld } from '../core/state.mjs';
-import { createLayout } from '../core/layout.mjs';
 import { placeAgents } from '../core/behavior.mjs';
-import { realTheme } from '../themes/real.mjs';
-import { fantasyTheme } from '../themes/fantasy.mjs';
+import { loadTheme } from '../themes/index.mjs';
 import { Lift, seeded } from '../engine/lift.mjs';
 import { stepPath, startPath, Effects } from '../engine/motion.mjs';
 import { occasional, vehiclesAt, npcAt, polyLength } from '../engine/ambience.mjs';
 import { Scene } from '../engine/scene.mjs';
-import { WorldView } from '../engine/world-view.mjs';
-import { agentPose, PRODUCTIVE_POSES } from '../render/character.mjs';
+import { IsoWorldView, resolveState, PRODUCTIVE_STATES, STATES } from '../engine/iso-view.mjs';
+import { Simulator } from '../sim/simulator.mjs';
 
 const ev = (type, fields, at = 1000) => makeEvent(type, fields, { source: 'sim', at });
-const real = createLayout(realTheme.layout);
-
-test('layout: a route through the tower collapses consecutive stops into one lift ride', () => {
-  const from = real.locationById.lounge.stations.lounge1, to = real.locationById.development.stations.desk4;
-  const path = real.route(from, 'development', to);
-  const rides = path.filter(p => p.lift);
-  assert.equal(rides.length, 1, 'exactly one ride');
-  assert.equal(rides[0].lift, 'tower');
-  assert.equal(rides[0][1], real.navNodes.el3[1], 'rides from the break room floor up to the engineering floor');
-  assert.deepEqual(path.at(-1), to);
-  assert.deepEqual(Object.keys(real.lifts), ['tower']);
-  assert.equal(real.lifts.tower.stops.length, 5);
-});
+const theme = loadTheme('real'), L = theme.layout;
 
 test('lift: a call brings the car, opens the doors, rides and lets the rider out', () => {
   const lift = new Lift({ id: 'l', x: 0, stops: [100, 200, 300], speed: 100, rng: seeded(3) });
@@ -72,78 +58,86 @@ test('ambience: occasional, vehicles and staff are deterministic and stay on the
   for (let t = 0; t < 60; t += 0.3) { const s = npcAt(t, npc, 2); assert.ok(Math.hypot(s.x, s.y) <= len + 1e-6); if (!s.moving) assert.notEqual(s.pose, 'walk'); }
 });
 
-test('truth: productive poses only for real, arrived work; idle agents may look alive but never work', () => {
-  for (const activity of ['idle', 'offline', 'waiting', 'error', 'completed']) for (const arrived of [true, false]) {
-    assert.ok(!PRODUCTIVE_POSES.has(agentPose({ activity, arrived }, 'coffee')), `${activity} is never productive`);
-  }
-  assert.equal(agentPose({ activity: 'coding', arrived: true }), 'typing');
-  assert.equal(agentPose({ activity: 'coding', arrived: false }), 'idle', 'no typing before reaching the desk');
-  assert.equal(agentPose({ activity: 'coding', gait: 'walk' }), 'walk');
-  assert.equal(agentPose({ activity: 'reviewing', arrived: true }), 'inspecting');
-  assert.equal(agentPose({ activity: 'idle', carrying: true, gait: 'walk' }), 'carrying');
+test('truth: productive states only for real work, at the assigned station, after arriving', () => {
+  const at = (activity, extra = {}) => resolveState({ agent: { activity }, spot: 'development:desk5', placeKey: 'development:desk5', posture: 'sit', ...extra }, 10_000);
+  for (const activity of ['idle', 'offline', 'waiting', 'error', 'completed', 'communicating']) assert.ok(!PRODUCTIVE_STATES.has(at(activity)), `${activity} is never productive`);
+  assert.equal(at('coding'), 'type');
+  assert.equal(at('coding', { posture: 'stand' }), 'work');
+  assert.equal(at('reviewing', { posture: 'stand' }), 'inspect');
+  assert.equal(at('researching'), 'read');
+  assert.equal(at('coding', { spot: 'lounge:couchSeat1' }), 'idle', 'assigned is not working: not at the desk yet');
+  assert.equal(at('coding', { moving: true, gait: 'walk' }), 'walk');
+  assert.equal(at('reviewing', { moving: true, gait: 'ride', spot: null }), 'idle', 'riding the lift is not reviewing');
+  assert.equal(at('coding', { departAt: 20_000, reactEnd: 20_000 }), 'react');
+  assert.equal(at('offline'), 'offline');
+  assert.equal(at('error'), 'blocked');
+  for (const s of PRODUCTIVE_STATES) assert.ok(STATES.includes(s));
 });
 
-test('meetings: only a meeting sends agents to the meeting room; it restores what they were doing', () => {
+test('meetings: only a meeting gathers agents; it restores what they were doing', () => {
   const w = emptyWorld();
   for (const id of ['claude', 'codex']) applyEvent(w, ev('AGENT_REGISTERED', { agentId: id, name: id, role: 'r', activity: 'idle' }));
   applyEvent(w, ev('AGENT_REVIEWING', { agentId: 'codex' }));
-  const before = placeAgents(Object.values(w.agents), {}, real);
+  const before = placeAgents(Object.values(w.agents), {}, L);
   applyEvent(w, ev('AGENT_MESSAGE', { agentId: 'claude', toAgentId: 'codex' }));
-  assert.equal(placeAgents(Object.values(w.agents), before, real).claude.location, before.claude.location, 'a message sender stays put');
+  assert.equal(placeAgents(Object.values(w.agents), before, L).claude.location, before.claude.location, 'a message sender stays put');
   applyEvent(w, ev('MEETING_STARTED', { meetingId: 'm1', agentIds: ['claude', 'codex'] }));
-  const inMeeting = placeAgents(Object.values(w.agents), before, real);
-  assert.equal(inMeeting.claude.location, 'comms'); assert.equal(inMeeting.codex.location, 'comms');
+  const inMeeting = placeAgents(Object.values(w.agents), before, L);
+  assert.equal(L.locationById[inMeeting.claude.location].id, 'lounge'); assert.equal(L.locationById[inMeeting.codex.location].id, 'lounge');
   applyEvent(w, ev('MEETING_ENDED', { meetingId: 'm1' }));
   assert.equal(w.agents.codex.activity, 'reviewing'); assert.equal(w.agents.claude.activity, 'idle');
   assert.equal(w.meetings.m1, undefined);
 });
 
-function viewFor(theme) {
-  const store = new WorldStore(emptyWorld()), scene = new Scene(), layout = createLayout(theme.layout);
-  const view = new WorldView(scene, new Effects(), layout, theme.scenery);
-  store.subscribe((changed, world) => view.sync(world, changed, 0));
+function viewFor() {
+  const store = new WorldStore(emptyWorld()), scene = new Scene();
+  const view = new IsoWorldView(scene, new Effects(), L, theme.scenery);
+  store.subscribe((changed, world) => view.sync(world, changed, clock * 1000));
   let clock = 0; // seconds; keeps running across run() calls like a real frame loop
-  return { store, scene, view, run(seconds, dt = 0.05) { for (let t = 0; t < seconds; t += dt) { clock += dt; view.step(dt, clock * 1000, { instant: false }, stepPath); } } };
+  return { store, scene, view, now: () => clock * 1000, run(seconds, dt = 0.05, each) { for (let t = 0; t < seconds; t += dt) { clock += dt; view.step(dt, clock * 1000, { instant: false }, stepPath); for (const l of Object.values(view.lifts)) l.update?.(0); each?.(); } } };
 }
 
 test('view: rooms react only to real work, and a rebuild places agents without replaying walks', () => {
-  const { store, scene, view, run } = viewFor(realTheme);
+  const { store, scene, view, run } = viewFor();
   store.reset([ev('AGENT_REGISTERED', { agentId: 'claude', name: 'Claude', role: 'Builder', activity: 'idle' })]);
   const e = scene.get('agent:claude');
   assert.equal(e.moving ?? false, false, 'placed directly on rebuild');
-  assert.equal(real.locationAt(e.x, e.y).id, 'lounge');
+  assert.equal(L.locationAt(e.x, e.y).id, 'lounge');
   run(0.2); assert.deepEqual(view.activity.rooms, {}, 'idle agents light nothing');
+  assert.ok(!PRODUCTIVE_STATES.has(e.anim.state));
   store.dispatch(ev('TASK_CREATED', { taskId: 't', title: 'Fix' }, 2000)); store.dispatch(ev('TASK_STARTED', { taskId: 't', agentId: 'claude', activity: 'coding' }, 2001)); store.flush();
   run(0.5); assert.equal(view.activity.rooms.development, undefined, 'not while still walking');
-  run(90);
-  assert.equal(e.moving, false); assert.equal(real.locationAt(e.x, e.y).id, 'development');
+  run(120);
+  assert.equal(e.moving, false); assert.equal(L.locationAt(e.x, e.y).id, 'development');
+  assert.equal(e.anim.state, 'type', 'seated at the desk and typing');
   assert.ok(view.activity.rooms.development > 0);
-  assert.ok(view.activity.stations['development:desk4'], 'the monitor desk wakes up');
-  assert.equal(view.activity.construction, 1, 'active work drives the construction site');
-  assert.ok(scene.get('npc:0') && scene.get('lift:tower:back') && scene.get('occluder:0'), 'scenery adds staff, the lift car and occluders');
 });
 
-test('view: a handoff walks the package to the receiver and brings the sender back', () => {
-  const { store, scene, run } = viewFor(realTheme);
-  store.reset([
-    ev('AGENT_REGISTERED', { agentId: 'claude', name: 'Claude', role: 'Builder', activity: 'coding' }),
-    ev('AGENT_REGISTERED', { agentId: 'codex', name: 'Codex', role: 'QA', activity: 'idle' }),
-  ]);
-  const claude = scene.get('agent:claude'), home = [claude.x, claude.y];
-  store.dispatch(ev('AGENT_MESSAGE', { agentId: 'claude', toAgentId: 'codex', summary: 'ready' }, 3000)); store.flush();
-  assert.equal(claude.errand?.phase, 'go'); assert.equal(claude.carrying, true);
-  let gave = false;
-  for (let i = 0; i < 4000 && claude.errand; i++) { run(0.05); if (claude.errand?.phase === 'give') gave = true; }
-  assert.ok(gave, 'the package was handed over');
-  assert.equal(claude.errand, null); assert.equal(claude.carrying, false);
-  assert.deepEqual([Math.round(claude.x), Math.round(claude.y)], home.map(Math.round));
+test('DEV SIM journey: Claude leaves the Break Room, rides up, types; Codex inspects; review passes', () => {
+  const { store, scene, run, now } = viewFor();
+  const timers = [];
+  const sim = new Simulator(store, { now, schedule: (fn, ms) => (timers.push({ at: now() + ms, fn }), timers.length), cancel: () => {} });
+  sim.seed(); store.flush(); run(20);
+  const claude = scene.get('agent:claude'), codex = scene.get('agent:codex');
+  assert.equal(L.locationAt(claude.x, claude.y).id, 'lounge');
+  sim.reviewJourney({ work: 60000, review: 40000 }); store.flush();
+  const seen = { claude: [], codex: [] }, lifts = new Set();
+  run(130, 0.05, () => {
+    for (const t of timers.filter(t => !t.done && t.at <= now())) { t.done = true; t.fn(); }
+    store.flush();
+    for (const [id, e] of [['claude', claude], ['codex', codex]]) if (seen[id].at(-1) !== e.anim?.state) seen[id].push(e.anim?.state);
+    if (claude.ride) lifts.add(claude.ride.request.phase);
+  });
+  const order = (list, ...states) => { let i = -1; for (const s of states) { const j = list.indexOf(s, i + 1); assert.ok(j > i, `${s} after ${states.slice(0, states.indexOf(s)).join(',')} in ${list.join('>')}`); i = j; } };
+  order(seen.claude, 'react', 'walk', 'sit', 'type', 'celebrate');
+  order(seen.codex, 'walk', 'inspect');
+  assert.ok(lifts.has('ride'), 'Claude rode the elevator');
+  const pr = Object.values(store.world.prs ?? {})[0];
+  assert.equal(pr?.agentId, 'claude'); assert.equal(pr?.state, 'reviewed'); assert.equal(pr?.verdict, 'approved');
+  assert.equal(store.rejected.length, 0);
 });
 
-test('scenery: every themed character, NPC route and lift sits inside its art', () => {
-  for (const theme of [realTheme, fantasyTheme]) {
-    const b = theme.layout.bounds, inside = ([x, y]) => x >= b.x - 40 && x <= b.x + b.w + 40 && y >= b.y - 40 && y <= b.y + b.h + 40;
-    for (const n of theme.scenery.npcs) for (const pt of n.route) assert.ok(inside(pt), `${theme.id} npc ${pt}`);
-    for (const v of theme.scenery.vehicles) for (const pt of v.points) assert.ok(inside(pt), `${theme.id} vehicle ${pt}`);
-    for (const s of theme.scenery.screens) assert.ok(inside(s.rect) && theme.layout.locations.some(l => l.id === s.room), `${theme.id} screen ${s.room}`);
-  }
+test('scenery: street walkers stay on the ground-floor pavement (they may enter from off-screen)', () => {
+  const b = L.bounds, inside = ([x, y]) => x >= b.x - 120 && x <= b.x + b.w + 120 && y >= b.y && y <= b.y + b.h;
+  for (const n of theme.scenery.npcs) for (const pt of n.route) assert.ok(inside(pt), `npc ${pt}`);
 });

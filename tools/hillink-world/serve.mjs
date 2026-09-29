@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 const root = path.dirname(fileURLToPath(import.meta.url));
 const types = { '.html': 'text/html; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.jpg': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp' };
 const listed = (dir, exts) => { try { return fs.readdirSync(path.join(root, dir)).filter(f => exts.includes(path.extname(f))).map(f => `${dir}/${f}`); } catch { return []; } };
-const allowed = new Set(['index.html', 'style.css', 'main.mjs', ...['core', 'engine', 'render', 'ui', 'sim', 'adapters', 'themes'].flatMap(dir => listed(dir, ['.mjs'])), ...listed('art', ['.jpg', '.png', '.webp'])]);
+const allowed = new Set(['index.html', 'style.css', 'main.mjs', ...['core', 'engine', 'render', 'ui', 'sim', 'adapters', 'themes', 'world'].flatMap(dir => listed(dir, ['.mjs']))]);
 const headers = { 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer', 'Content-Security-Policy': "default-src 'self'; style-src 'self'; script-src 'self'; img-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'" };
 
 // Only what the World draws. Task descriptions, evidence bodies and usage stay in HQ.

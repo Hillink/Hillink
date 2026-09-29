@@ -107,7 +107,7 @@ export class WorldView {
     for (const [id, e] of this.scene.entities) if (e.kind === 'issue' && !world.issues[e.ref.id]?.open) this.scene.remove(id);
     for (const issue of Object.values(world.issues)) {
       if (!issue.open) continue;
-      const byId = this.layout.locationById, loc = byId[issue.location] ?? byId.command, s = this.size.issue;
+      const byId = this.layout.locationById, loc = byId[issue.location] ?? byId.command ?? this.layout.locations[0], s = this.size.issue;
       const id = `issue:${issue.id}`;
       if (!this.scene.get(id)) {
         const n = [...this.scene.entities.values()].filter(e => e.kind === 'issue' && e.issue?.location === issue.location).length;
@@ -170,7 +170,9 @@ export class WorldView {
     const t = now / 1000;
     for (const e of this.scene.entities.values()) {
       if (e.kind === 'agent') {
-        if (e.moving) { moving = stepPath(e, dt, { instant, speed: this.speed, lifts: this.lifts }) || moving; this.scene.moved(e); }
+        // A character that is still reacting or standing up has not set off yet (see engine/iso-view.mjs).
+        if (e.moving && e.departAt > now && !instant) moving = true;
+        else if (e.moving) { moving = stepPath(e, dt, { instant, speed: this.speed, lifts: this.lifts }) || moving; this.scene.moved(e); }
         if (e.repath && !e.ride && e.dest) { e.repath = false; startPath(e, this.layout.route([e.x, e.y], e.dest.location, e.dest.target), now); moving = true; }
         if (e.errand) { this.stepHandoff(e, now); moving = true; }
       } else if (e.kind === 'npc') {

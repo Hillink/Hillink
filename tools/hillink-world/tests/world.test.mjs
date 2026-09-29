@@ -2,13 +2,13 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { makeEvent, validateEvent, validProgress, EVENT_TYPES } from '../core/events.mjs';
 import { WorldStore, applyEvent, emptyWorld } from '../core/state.mjs';
-import { createLayout, blueprintLayout } from '../core/layout.mjs';
 import { placeAgents, stationPoint, taskPlacement, ACTIVITY_PLACE } from '../core/behavior.mjs';
-import { realTheme } from '../themes/real.mjs';
-import { fantasyTheme } from '../themes/fantasy.mjs';
+import { createIsoLayout } from '../world/layout.mjs';
+import * as B from '../world/building.mjs';
+import { segmentHitsRect, depthSort } from '../engine/iso.mjs';
+import { THEME_ORDER, loadTheme } from '../themes/index.mjs';
 
-const LAYOUTS = [blueprintLayout, realTheme.layout, fantasyTheme.layout].map(createLayout);
-const blueprint = LAYOUTS[0];
+const L = createIsoLayout();
 import { Camera } from '../engine/camera.mjs';
 import { Scene } from '../engine/scene.mjs';
 import { Simulator } from '../sim/simulator.mjs';
@@ -72,9 +72,10 @@ test('store: batches, orders by time, dedupes by id, and quarantines invalid eve
   assert.deepEqual(calls.at(-1), ['*']);
 });
 
-for (const layout of LAYOUTS) test(`layout ${layout.id}: every location is reachable and every activity has its stations`, () => {
-  const { locations, locationAt, route, bounds } = layout;
-  for (const a of locations) for (const b of locations) {
+test('layout: every room is reachable along the walkways and every activity has its stations', () => {
+  const { locations, locationAt, route, bounds } = L;
+  const rooms = locations.filter(l => Object.keys(l.stations).length);
+  for (const a of rooms) for (const b of rooms) {
     const start = a.stations[Object.keys(a.stations)[0]], end = b.stations[Object.keys(b.stations)[0]];
     const path = route(start, b.id, end);
     assert.deepEqual(path.at(-1), end);
@@ -86,45 +87,78 @@ for (const layout of LAYOUTS) test(`layout ${layout.id}: every location is reach
     assert.ok(x >= bounds.x && x <= bounds.x + bounds.w && y >= bounds.y && y <= bounds.y + bounds.h, `${l.id}.${name} is inside the world`);
   }
   for (const [activity, base] of Object.entries(ACTIVITY_PLACE)) {
-    const rule = { ...base, ...(layout.places?.[activity] ?? {}) };
+    const rule = { ...base, ...(L.places?.[activity] ?? {}) };
     if (rule.stay) continue;
-    const loc = layout.locationById[rule.location];
-    assert.ok(loc, `${activity} maps to a room in ${layout.id}`);
-    for (const s of rule.stations) assert.ok(loc.stations[s], `${layout.id}: ${rule.location} has station ${s}`);
+    const loc = L.locationById[rule.location];
+    assert.ok(loc, `${activity} maps to a room`);
+    for (const s of rule.stations) assert.ok(loc.stations[s], `${rule.location} has station ${s}`);
   }
-  for (const id of ['development', 'command', 'testing', 'deploy', 'operations', 'servers', 'queue', 'comms', 'archive']) assert.ok(layout.locationById[id], `${layout.id} has ${id}`);
+  // Semantic rooms the brain uses but the slice has not built yet resolve through aliases.
+  for (const id of ['development', 'command', 'testing', 'deploy', 'operations', 'servers', 'queue', 'comms', 'archive']) assert.ok(L.locationById[id], `has ${id}`);
+});
+
+test('layout: no walkway crosses solid furniture, and every point and node is on a real floor', () => {
+  const solids = B.FURNITURE.filter(f => f.solid);
+  for (const [a, b] of L.navEdges) {
+    const A = L.nodePlan[a], N = L.nodePlan[b];
+    if (A.floor !== N.floor) continue; // the lift
+    for (const f of solids) if (f.floor === A.floor) {
+      const r = { x0: f.x - f.w / 2, x1: f.x + f.w / 2, z0: f.z - f.d / 2, z1: f.z + f.d / 2 };
+      assert.ok(!segmentHitsRect([A.x, A.z], [N.x, N.z], r), `${a}-${b} crosses ${f.id}`);
+    }
+  }
+  for (const [id, n] of Object.entries(L.nodePlan)) assert.ok(B.FLOORS.some(f => f.floor === n.floor), id);
+});
+
+test('layout: a trip from the Break Room to Engineering takes the elevator exactly once', () => {
+  const from = L.locationById.lounge.stations.couchSeat1, to = L.locationById.development.stations.desk5;
+  const path = L.route(from, 'development', to);
+  const rides = path.filter(p => p.lift);
+  assert.equal(rides.length, 1);
+  assert.equal(rides[0].lift, 'tower');
+  assert.deepEqual([...rides[0]], L.navNodes.lift1, 'rides up to the Level 1 landing');
+  assert.deepEqual(path.at(-1), to);
+  assert.deepEqual(L.lifts.tower.floors, [0, 1]);
+  const same = L.route(from, 'lounge', L.locationById.lounge.stations.coffeeMachine);
+  assert.ok(!same.some(p => p.lift), 'no ride within a floor');
+});
+
+test('depth: a box nearer the viewer, or level and to the right, draws after the one behind it', () => {
+  const back = { id: 'back', x0: 0, x1: 50, z0: 60, z1: 90 }, front = { id: 'front', x0: 10, x1: 40, z0: 10, z1: 30 };
+  const right = { id: 'right', x0: 60, x1: 80, z0: 55, z1: 95 };
+  const order = depthSort([front, right, back]).map(i => i.id);
+  assert.ok(order.indexOf('back') < order.indexOf('front'));
+  assert.ok(order.indexOf('back') < order.indexOf('right'));
+});
+
+test('themes: every skin dresses the same building and loads no image', () => {
+  const ids = THEME_ORDER.map(id => loadTheme(id));
+  assert.deepEqual(ids.map(t => t.id), ['real', 'fantasy', 'blueprint']);
+  assert.ok(ids.every(t => t.layout === ids[0].layout), 'one simulation layout for every skin');
+  assert.ok(ids.every(t => !t.art && !t.background), 'no background image');
 });
 
 test('behavior: agents get distinct station points, even when a room overflows', () => {
   const agents = Array.from({ length: 12 }, (_, i) => ({ id: `a${i}`, activity: 'testing' }));
-  const places = placeAgents(agents, {}, blueprint);
-  const points = Object.values(places).map(p => stationPoint(p, blueprint).join(','));
+  const places = placeAgents(agents, {}, L);
+  const points = Object.values(places).map(p => stationPoint(p, L).join(','));
   assert.equal(new Set(points).size, agents.length);
-  assert.ok(Object.values(places).every(p => p.location === 'testing'));
-  const kept = placeAgents([{ id: 'a0', activity: 'error' }], { a0: places.a0 }, blueprint);
+  const kept = placeAgents([{ id: 'a0', activity: 'error' }], { a0: places.a0 }, L);
   assert.equal(kept.a0.station, places.a0.station, 'errors stay where the work happened');
   assert.equal(kept.a0.clip, 'error');
 });
 
-test('behavior: queued tasks sit in the queue, active tasks follow their agent', () => {
-  for (const layout of LAYOUTS) {
-    const out = taskPlacement({ q: { id: 'q', status: 'queued', createdAt: 1 }, a: { id: 'a', status: 'active', agentId: 'claude' }, d: { id: 'd', status: 'done', createdAt: 2 } }, layout);
-    assert.equal(layout.locationAt(...out.q.point)?.id, 'queue', layout.id);
-    assert.deepEqual(out.a, { follow: 'claude' });
-    assert.equal(layout.locationAt(...out.d.point)?.id, 'archive', layout.id);
-  }
+test('behavior: queued tasks sit on the lobby board, active tasks follow their agent, done ones are archived', () => {
+  const out = taskPlacement({ q: { id: 'q', status: 'queued', createdAt: 1 }, a: { id: 'a', status: 'active', agentId: 'claude' }, d: { id: 'd', status: 'done', createdAt: 2 } }, L);
+  assert.equal(L.locationAt(...out.q.point)?.id, 'queue');
+  assert.deepEqual(out.a, { follow: 'claude' });
+  assert.equal(L.locationAt(...out.d.point)?.id, 'development', 'the archive shelf is in Engineering');
 });
 
-test('behavior: a layout can re-home idle agents (realistic break room)', () => {
-  const real = LAYOUTS[1];
-  assert.equal(placeAgents([{ id: 'a', activity: 'idle' }], {}, real).a.location, 'lounge');
-  assert.equal(placeAgents([{ id: 'a', activity: 'idle' }], {}, blueprint).a.location, 'command');
-});
-
-test('behavior: places carried over from another theme fall back when the room does not exist', () => {
-  const fantasy = LAYOUTS[2];
-  const p = placeAgents([{ id: 'a', activity: 'completed' }], { a: { location: 'lounge', station: 'lounge1' } }, fantasy).a;
-  assert.ok(fantasy.locationById[p.location].stations[p.station]);
+test('behavior: idle agents live in the Break Room; stale places fall back to a real station', () => {
+  assert.equal(placeAgents([{ id: 'a', activity: 'idle' }], {}, L).a.location, 'lounge');
+  const p = placeAgents([{ id: 'a', activity: 'completed' }], { a: { location: 'gone', station: 'nope' } }, L).a;
+  assert.ok(L.locationById[p.location].stations[p.station]);
 });
 
 test('camera: screen/world transforms invert and zoom keeps the cursor point fixed', () => {

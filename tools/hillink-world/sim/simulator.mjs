@@ -105,6 +105,22 @@ export class Simulator {
     this.emit('SYSTEM_STATUS', { systemId: 'supabase', state: 'ok' });
     for (const issue of Object.values(this.store.world.issues)) if (issue.open && issue.location === 'servers') this.emit('ISSUE_RESOLVED', { issueId: issue.id });
   }
+  // Kyle's acceptance scenario (redesign directive §31): Claude is given a task in the Break Room, travels
+  // to Engineering by the elevator and works; the finished work becomes a pull request on the review
+  // tray; Codex is asked to review, travels there and inspects it; the review passes. Timings leave room
+  // for the walks, but nothing waits on the view: these are the same events a real source would send.
+  reviewJourney({ work = 42000, review = 36000 } = {}) {
+    const taskId = this.id('task'), prId = this.id('pr'), title = 'Athlete payout edge case (simulated)';
+    this.emit('TASK_CREATED', { taskId, title });
+    this.later(1500, () => this.emit('TASK_STARTED', { taskId, agentId: 'claude', activity: 'coding', progress: { kind: 'stage', stage: 'Implementing' } }));
+    this.later(work, () => {
+      this.emit('TASK_COMPLETED', { taskId, progress: { kind: 'stage', stage: 'Review required' } });
+      this.emit('PR_CREATED', { prId, title, agentId: 'claude', taskId });
+      this.emit('AGENT_REVIEWING', { agentId: 'codex', detail: `Reviewing: ${title}` });
+    });
+    this.later(work + review, () => { this.emit('PR_REVIEWED', { prId, verdict: 'approved' }); this.emit('AGENT_IDLE', { agentId: 'codex' }); });
+    this.later(work + review + 5000, () => this.emit('AGENT_IDLE', { agentId: 'claude' }));
+  }
   // A scripted walkthrough of the whole loop.
   tour() {
     const steps = [() => this.claudeCodes(), () => this.claudeMessagesCodex(), () => this.codexTests(), () => this.testFails(), () => this.emit('AGENT_THINKING', { agentId: 'claude' }),
@@ -114,7 +130,7 @@ export class Simulator {
 }
 
 export const SCENARIOS = [
-  ['claudeCodes', 'Claude starts coding'], ['codexTests', 'Codex starts testing'], ['claudeMessagesCodex', 'Claude messages Codex'],
+  ['reviewJourney', 'Claude builds, Codex reviews'], ['claudeCodes', 'Claude starts coding'], ['codexTests', 'Codex starts testing'], ['claudeMessagesCodex', 'Claude messages Codex'],
   ['testFails', 'Test fails'], ['testPasses', 'Test succeeds'], ['taskCompletes', 'Task completes'], ['deployBegins', 'Deployment begins'],
   ['deploySucceeds', 'Deployment succeeds'], ['teamMeeting', 'Start a meeting'], ['endMeeting', 'End the meeting'], ['ownerNeeded', 'Needs Kyle'], ['manyAgents', 'Many agents at once'], ['queueWork', 'Queue 5 tasks'], ['allIdle', 'Agents go idle'],
   ['systemError', 'System error'], ['systemRecovers', 'System recovers'], ['tour', 'Play full tour'],

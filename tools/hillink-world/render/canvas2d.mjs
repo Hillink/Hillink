@@ -1,8 +1,6 @@
-// Canvas 2D renderer. Draws scene entities with a replaceable skin (placeholder primitives today,
-// sprites later). It receives a frame description; it never reads World state or backends directly.
-import { placeholderSkin } from './skin-placeholder.mjs';
+// Canvas 2D renderer. Draws a frame with a replaceable skin (render/iso-skin.mjs today). It receives a frame description; it never reads World state or backends directly.
 
-export function createCanvasRenderer(canvas, { skin = placeholderSkin } = {}) {
+export function createCanvasRenderer(canvas, { skin = null } = {}) {
   const ctx = canvas.getContext('2d');
   let dpr = 1;
   return {
@@ -29,11 +27,14 @@ export function createCanvasRenderer(canvas, { skin = placeholderSkin } = {}) {
         if (!force && claimed.some(c => r[0] < c[2] && r[2] > c[0] && r[1] < c[3] && r[3] > c[1])) return false;
         claimed.push(r); return true;
       };
-      const env = { ctx, time, lod, zoom: camera.zoom, reducedMotion, theme, signals, scene: frame.scene, claimLabel, world, layout, activity, late: [] };
-      skin.ground?.(ctx, env);
-      for (const e of entities) {
-        const draw = skin[e.kind];
-        if (draw) draw(e, env, { hovered: e.id === hoverId, selected: e.id === selectedId });
+      const env = { ctx, time, lod, zoom: camera.zoom, reducedMotion, theme, signals, scene: frame.scene, claimLabel, world, layout, activity, late: [], hoverId, selectedId, modeLabel: frame.modeLabel };
+      if (skin.frame) skin.frame(ctx, env, entities); // object-built world: the skin orders its own depth
+      else {
+        skin.ground?.(ctx, env);
+        for (const e of entities) {
+          const draw = skin[e.kind];
+          if (draw) draw(e, env, { hovered: e.id === hoverId, selected: e.id === selectedId });
+        }
       }
       for (const fx of effects) skin.effect?.(fx, env);
       skin.overlay?.(ctx, env); // particles above the scene

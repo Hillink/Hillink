@@ -20,6 +20,14 @@ export class Lift {
     if (i >= 0 && this.requests[i].phase !== 'ride') this.requests.splice(i, 1);
   }
   get moving() { return Math.abs(this.target - this.y) > 0.5; }
+  // Elevator state for the renderer, inspection and the Blueprint view.
+  status() {
+    const floorAt = y => { const i = this.stops.indexOf(this.nearestStop(y)); return this.floors ? this.floors[this.floors.length - 1 - i] ?? i : i; };
+    const atStop = !this.moving && Math.abs(this.nearestStop(this.y) - this.y) < 0.5;
+    const doorState = this.doors >= 1 ? 'open' : this.doors <= 0 ? 'closed' : this.doorGoal > this.doors ? 'opening' : 'closing';
+    const requested = [...new Set(this.requests.flatMap(r => (r.phase === 'call' ? [r.from, r.to] : r.phase === 'ride' || r.phase === 'board' ? [r.to] : [])).map(floorAt))];
+    return { currentFloor: atStop ? floorAt(this.y) : null, targetFloor: floorAt(this.target), doorState, occupants: this.requests.filter(r => r.phase === 'ride' || r.phase === 'board' || r.phase === 'exit').map(r => r.rider), moving: this.moving, requestedFloors: requested };
+  }
   get riders() { return this.requests.filter(r => r.phase === 'ride').map(r => r.rider); }
 
   update(dt) {
@@ -50,7 +58,8 @@ export class Lift {
       if (this.doors >= 1) { r.phase = 'board'; this.hold = 0.35; }
     } else if (r.phase === 'board') {
       this.hold -= dt;
-      if (this.hold <= 0) { r.phase = 'ride'; this.target = r.to; }
+      // Doors stay open until the rider is inside (riders driven by motion report `boarded`).
+      if (this.hold <= 0 && ((r.boarded ?? true) || this.hold < -4)) { r.phase = 'ride'; this.target = r.to; }
     } else if (r.phase === 'ride') {
       this.target = r.to;
       if (this.travel(dt)) return;
@@ -58,7 +67,7 @@ export class Lift {
       if (this.doors >= 1) { r.phase = 'exit'; this.hold = 0.6; }
     } else if (r.phase === 'exit') {
       this.hold -= dt;
-      if (this.hold <= 0) { r.phase = 'done'; this.requests.shift(); this.dwell = 1.5 + this.rng() * 2; }
+      if (this.hold <= 0 && ((r.out ?? true) || this.hold < -3)) { r.phase = 'done'; this.requests.shift(); this.dwell = 1.5 + this.rng() * 2; }
     }
   }
   // Ambient: after arriving, doors open for a moment; then the car waits and sometimes travels to another floor.
