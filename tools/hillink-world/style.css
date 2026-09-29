@@ -1,0 +1,34 @@
+:root { color-scheme: dark; --ink: #e6ebf2; --muted: #9aa6b8; --panel: #121820ee; --line: #2c3645; --red: #e21b23; }
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { margin: 0; height: 100%; background: #1b2230; color: var(--ink); font: 14px/1.45 ui-sans-serif, system-ui, sans-serif; overflow: hidden; }
+button { font: inherit; color: var(--ink); background: #1f2835; border: 1px solid var(--line); border-radius: 8px; padding: 7px 11px; cursor: pointer; text-align: left; }
+button:hover { border-color: var(--red); }
+button:focus-visible, canvas:focus-visible { outline: 2px solid var(--red); outline-offset: 2px; }
+.stage { position: fixed; inset: 0; }
+canvas { display: block; width: 100%; height: 100%; cursor: grab; touch-action: none; }
+.hud { position: absolute; top: 12px; left: 16px; display: flex; gap: 14px; align-items: center; pointer-events: none; }
+.hud b { letter-spacing: 2px; font-size: 13px; } .hud b span { color: var(--red); }
+.mode { font-size: 11px; padding: 3px 8px; border-radius: 6px; background: #f4b94222; color: #f4b942; border: 1px solid #f4b94266; }
+.nav-toggle { position: absolute; top: 44px; left: 16px; font-size: 12px; padding: 5px 9px; background: var(--panel); }
+.nav { position: absolute; top: 78px; left: 16px; display: flex; flex-direction: column; gap: 4px; max-height: calc(100% - 170px); overflow: auto; width: 170px; }
+.nav button { background: var(--panel); font-size: 12px; padding: 5px 9px; }
+.nav hr { border: 0; border-top: 1px solid var(--line); width: 100%; margin: 4px 0; }
+.tooltip { position: absolute; left: 0; top: 0; pointer-events: none; background: #0b0f14ee; border: 1px solid var(--line); padding: 4px 8px; border-radius: 6px; font-size: 12px; white-space: nowrap; }
+.inspect { position: absolute; top: 12px; right: 12px; width: min(340px, calc(100% - 24px)); max-height: calc(100% - 24px); overflow: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px; backdrop-filter: blur(6px); }
+.inspect h2 { margin: 2px 0 4px; font-size: 18px; } .inspect h3 { font-size: 13px; margin: 14px 0 6px; }
+.inspect .kicker { margin: 0; font-size: 10px; letter-spacing: 2px; text-transform: uppercase; color: var(--red); font-weight: 700; }
+.inspect .muted { color: var(--muted); margin: 0 0 10px; font-size: 12px; }
+.inspect .row { display: flex; justify-content: space-between; gap: 12px; padding: 5px 0; border-top: 1px solid var(--line); font-size: 12px; }
+.inspect .row span { color: var(--muted); } .inspect .row b { font-weight: 600; text-align: right; }
+.inspect ul { padding-left: 18px; margin: 0; color: var(--muted); font-size: 12px; }
+.inspect button { margin-top: 12px; }
+.inspect .close { position: absolute; top: 8px; right: 8px; margin: 0; padding: 2px 9px; }
+.sim { position: absolute; left: 16px; bottom: 14px; max-width: calc(100% - 32px); }
+.sim-panel { margin-top: 6px; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 10px; }
+.sim-panel p { margin: 0 0 8px; font-size: 11px; color: var(--muted); }
+#scenarios { display: flex; flex-wrap: wrap; gap: 5px; max-width: 620px; }
+#scenarios button { font-size: 12px; padding: 5px 9px; }
+#scenarios .danger { border-color: #7a2a2a; }
+.empty { position: absolute; inset: 0; display: grid; place-items: center; color: var(--muted); pointer-events: none; }
+@media (max-width: 700px) { .sim-panel { max-height: 30vh; overflow: auto; } }

@@ -1,0 +1,163 @@
+// Hillink World app: wires source -> store -> view -> renderer, plus camera input and overlays.
+import { WorldStore, emptyWorld } from './core/state.mjs';
+import { WORLD_BOUNDS, locations, locationById } from './core/layout.mjs';
+import { Camera } from './engine/camera.mjs';
+import { Scene } from './engine/scene.mjs';
+import { Effects, stepPath } from './engine/motion.mjs';
+import { WorldView } from './engine/world-view.mjs';
+import { createCanvasRenderer } from './render/canvas2d.mjs';
+import { themes } from './render/skin-placeholder.mjs';
+import { Simulator, SCENARIOS } from './sim/simulator.mjs';
+import { hoverText, inspectHTML } from './ui/inspect.mjs';
+
+const $ = id => document.getElementById(id);
+const storage = {
+  get(key) { try { return JSON.parse(localStorage.getItem(key)); } catch { return null; } },
+  set(key, value) { try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* Persistence is a convenience. */ } },
+};
+const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
+const params = new URLSearchParams(location.search);
+const mode = params.get('source') ?? 'sim'; // Only the simulator exists until the Phase 4 HQ adapter lands.
+
+// World state. In sim mode, the last simulated world survives refresh; a live source would replace it (backend truth wins).
+const saved = mode === 'sim' ? storage.get('hlw:sim-world') : null;
+const store = new WorldStore(saved?.v === 1 ? saved.world : emptyWorld());
+const scene = new Scene(), effects = new Effects();
+const view = new WorldView(scene, effects);
+const camera = new Camera({ bounds: WORLD_BOUNDS });
+const canvas = $('world'), renderer = createCanvasRenderer(canvas);
+let hover = null, selected = null, follow = null, dirty = true, lastFrame = performance.now(), running = false;
+
+function resize() {
+  const r = canvas.parentElement.getBoundingClientRect();
+  camera.resize(r.width, r.height); renderer.resize(r.width, r.height, Math.min(2, devicePixelRatio || 1)); invalidate();
+}
+new ResizeObserver(resize).observe(canvas.parentElement);
+
+store.subscribe((changed, world) => {
+  view.sync(world, changed, performance.now());
+  if (selected) showInspect(selected);
+  $('empty').hidden = Object.keys(world.agents).length > 0;
+  invalidate();
+});
+
+// Render loop: runs only while something changes or animates; ambient animation is throttled; paused when hidden.
+function invalidate() { dirty = true; if (!running && !document.hidden) { running = true; requestAnimationFrame(frame); } }
+function frame(now) {
+  const dt = Math.min(0.1, (now - lastFrame) / 1000); lastFrame = now;
+  store.flush();
+  const instant = reducedMotion.matches;
+  const moving = view.step(dt, now, { instant }, stepPath);
+  if (follow) { const e = scene.get(follow); if (e && !camera.tween) { camera.x += (e.x - camera.x) * 0.12; camera.y += (e.y - 30 - camera.y) * 0.12; camera.clamp(); } }
+  const cameraMoving = camera.step(now);
+  const fx = effects.active(now);
+  const ambient = !instant && [...scene.entities.values()].some(e => e.kind === 'agent' && e.clip !== 'offline');
+  renderer.draw({ camera, scene, entities: scene.query(camera.viewRect(80)), time: now, hoverId: hover?.id, selectedId: selected?.id, effects: fx, signals: view.roomSignals, reducedMotion: instant, theme: themes.day });
+  dirty = false;
+  if (document.hidden) { running = false; return; }
+  if (moving || cameraMoving || fx.length || follow || store.pending.length) requestAnimationFrame(frame);
+  else if (ambient) setTimeout(() => requestAnimationFrame(frame), 50); // ~20 fps for idle ambience
+  else running = false;
+}
+document.addEventListener('visibilitychange', () => { if (!document.hidden) { lastFrame = performance.now(); invalidate(); } });
+setInterval(() => { if (!document.hidden) store.flush(); }, 250); // flush events even when nothing animates
+
+// Input: drag to pan, wheel/pinch to zoom, click to select, keyboard for navigation.
+const pointers = new Map(); let dragMoved = 0, pinchDist = null;
+canvas.addEventListener('pointerdown', e => { canvas.setPointerCapture(e.pointerId); pointers.set(e.pointerId, [e.offsetX, e.offsetY]); dragMoved = 0; });
+canvas.addEventListener('pointermove', e => {
+  const prev = pointers.get(e.pointerId);
+  if (prev) {
+    if (pointers.size === 2) {
+      pointers.set(e.pointerId, [e.offsetX, e.offsetY]);
+      const [a, b] = [...pointers.values()], d = Math.hypot(a[0] - b[0], a[1] - b[1]);
+      if (pinchDist) camera.zoomAt(d / pinchDist, (a[0] + b[0]) / 2, (a[1] + b[1]) / 2);
+      pinchDist = d; dragMoved += 10;
+    } else {
+      camera.pan(e.offsetX - prev[0], e.offsetY - prev[1]); dragMoved += Math.abs(e.offsetX - prev[0]) + Math.abs(e.offsetY - prev[1]);
+      pointers.set(e.pointerId, [e.offsetX, e.offsetY]);
+      if (dragMoved > 4) follow = null;
+    }
+    savePrefs(); invalidate(); return;
+  }
+  const [wx, wy] = camera.screenToWorld(e.offsetX, e.offsetY);
+  const hit = scene.pick(wx, wy, 6 / camera.zoom);
+  if (hit?.id !== hover?.id) { hover = hit; canvas.style.cursor = hit ? 'pointer' : 'grab'; invalidate(); }
+  const tip = $('tooltip');
+  const text = hit ? hoverText(hit.ref.type === 'room' ? { ...hit.ref, name: hit.location.name } : hit.ref, store.world) : '';
+  tip.hidden = !text; tip.textContent = text; tip.style.transform = `translate(${e.offsetX + 14}px, ${e.offsetY + 14}px)`;
+});
+canvas.addEventListener('pointerup', e => {
+  pointers.delete(e.pointerId); if (pointers.size < 2) pinchDist = null;
+  if (dragMoved > 4) return;
+  const [wx, wy] = camera.screenToWorld(e.offsetX, e.offsetY);
+  select(scene.pick(wx, wy, 6 / camera.zoom));
+});
+canvas.addEventListener('pointerleave', () => { $('tooltip').hidden = true; if (hover) { hover = null; invalidate(); } });
+canvas.addEventListener('wheel', e => { e.preventDefault(); camera.zoomAt(Math.exp(-e.deltaY * 0.0015), e.offsetX, e.offsetY); savePrefs(); invalidate(); }, { passive: false });
+addEventListener('keydown', e => {
+  if (e.target.closest('input,textarea,select')) return;
+  const step = 80;
+  const actions = { ArrowLeft: () => camera.pan(step, 0), ArrowRight: () => camera.pan(-step, 0), ArrowUp: () => camera.pan(0, step), ArrowDown: () => camera.pan(0, -step), '+': () => camera.zoomAt(1.2), '=': () => camera.zoomAt(1.2), '-': () => camera.zoomAt(1 / 1.2), Escape: () => { select(null); follow = null; camera.overview(); } };
+  if (actions[e.key]) { e.preventDefault(); actions[e.key](); savePrefs(); invalidate(); }
+});
+
+function select(entity) {
+  selected = entity; follow = null;
+  if (entity) showInspect(entity); else $('inspect').hidden = true;
+  invalidate();
+}
+function showInspect(entity) {
+  const panel = $('inspect'), current = scene.get(entity.id);
+  if (!current) { panel.hidden = true; selected = null; return; }
+  panel.innerHTML = `<button class="close" aria-label="Close">×</button>${inspectHTML(current.ref, store.world, Date.now(), current.location, view.places)}`;
+  panel.hidden = false;
+}
+$('inspect').addEventListener('click', e => {
+  if (e.target.closest('.close')) return select(null);
+  const target = e.target.closest('[data-focus]')?.dataset.focus;
+  if (target) focus(target);
+});
+// Camera commands: the hooks for "show me what Codex is doing" / "show the whole company".
+export function focus(target) {
+  if (target === 'overview') { follow = null; camera.overview(); return invalidate(); }
+  const [kind, id] = target.split(':');
+  if (kind === 'room') { const l = locationById[id]; follow = null; camera.focusRect({ x: l.x, y: l.y, w: l.w, h: l.h }); }
+  else { const e = scene.get(target); if (!e) return; camera.focusPoint(e.x, e.y - 30, { zoom: 1.5 }); if (kind === 'agent') setTimeout(() => { follow = target; invalidate(); }, 720); select(e); }
+  invalidate();
+}
+
+// Navigation overlay: overview, rooms and agents.
+function renderNav() {
+  const agents = Object.values(store.world.agents);
+  $('nav').innerHTML = `<button data-go="overview">Whole company</button>${locations.map(l => `<button data-go="room:${l.id}">${l.name}</button>`).join('')}${agents.length ? '<hr>' : ''}${agents.map(a => `<button data-go="agent:${a.id}">${a.name}</button>`).join('')}`;
+}
+$('nav').addEventListener('click', e => { const go = e.target.closest('[data-go]')?.dataset.go; if (go) focus(go); });
+$('nav-toggle').onclick = () => { const open = $('nav').hidden; $('nav').hidden = !open; $('nav-toggle').setAttribute('aria-expanded', String(open)); };
+store.subscribe(changed => { if (changed.has('*') || [...changed].some(k => k.startsWith('agent:'))) renderNav(); });
+
+// Dev simulation panel.
+const sim = new Simulator(store);
+$('mode').textContent = mode === 'sim' ? 'SIMULATION: not real Hillink activity' : `SOURCE: ${mode}`;
+$('scenarios').innerHTML = SCENARIOS.map(([key, text]) => `<button data-sim="${key}">${text}</button>`).join('') + '<button data-sim="reset" class="danger">Reset simulation</button>';
+$('scenarios').addEventListener('click', e => {
+  const key = e.target.closest('[data-sim]')?.dataset.sim; if (!key) return;
+  if (key === 'reset') { sim.stop(); storage.set('hlw:sim-world', null); location.reload(); return; }
+  sim[key](); invalidate();
+});
+$('sim-toggle').onclick = () => { const open = $('sim-panel').hidden; $('sim-panel').hidden = !open; $('sim-toggle').setAttribute('aria-expanded', String(open)); };
+setInterval(() => { if (mode === 'sim') storage.set('hlw:sim-world', { v: 1, world: store.world }); }, 2000);
+
+function savePrefs() { clearTimeout(savePrefs.t); savePrefs.t = setTimeout(() => storage.set('hlw:camera', camera.toJSON()), 300); }
+
+// Boot.
+resize();
+const cam = storage.get('hlw:camera');
+if (cam && Number.isFinite(cam.zoom)) camera.animateTo(cam, 0); else camera.overview({ duration: 0 });
+view.sync(store.world, new Set(['*']), performance.now());
+for (const e of scene.entities.values()) if (e.kind === 'agent') { const p = e.path?.at(-1); if (p) { e.x = p[0]; e.y = p[1]; e.path = []; e.moving = false; scene.moved(e); } }
+renderNav();
+$('empty').hidden = Object.keys(store.world.agents).length > 0;
+if (mode === 'sim' && !Object.keys(store.world.agents).length) sim.seed();
+invalidate();
+window.hillinkWorld = { store, scene, camera, sim, focus }; // Dev handle for tests and console.
