@@ -1,3 +1,4 @@
+import { renderWorld as drawWorld } from './world.mjs';
 const $ = id => document.getElementById(id);
 const escape = value => String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
 let token, snapshot, liveSnapshot, replaying = false, skin = 'real', selected = null, replayTimer;
@@ -45,13 +46,7 @@ function render(state) {
   }
 }
 function renderWorld() {
-  if (!snapshot) return;
-  $('world').className = `world ${skin} ${new Date(snapshot.now).getHours() >= 18 || new Date(snapshot.now).getHours() < 7 ? 'night' : ''}`;
-  replace('world', snapshot.agents.map(agent => {
-    const task = snapshot.tasks.find(t => t.id === agent.assignment);
-    const place = agent.status === 'UNKNOWN' || agent.status === 'OFFLINE' ? 'Connection gate' : ['BLOCKED', 'STALLED', 'RATE_LIMITED'].includes(agent.status) ? 'Triage room' : agent.workstation;
-    return `<button class="station ${agent.status.toLowerCase()}" data-agent="${escape(agent.id)}"><small>${escape(place)}</small><span class="character" aria-hidden="true">${skin === 'fantasy' ? '♜' : '▣'}</span>${badge(agent.status)}<h3>${escape(agent.name)}</h3><small>${escape(agent[skin])}</small><p>${task ? escape(`${task.stage} · ${task.title}`) : agent.adapterAvailable ? 'No current task' : 'Awaiting adapter connection'}</p></button>`;
-  }).join(''));
+  if (snapshot) drawWorld($('world'), snapshot, skin);
 }
 function inspect(type, id, focus = true) {
   selected = { type, id }; const panel = $('inspection'); panel.hidden = false;
