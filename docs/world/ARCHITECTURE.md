@@ -310,6 +310,16 @@ The runtime lives in HQ (branch `claude/hq-orchestrator`, `tools/hillink-hq/orch
 
 **Evidence:** `docs/world/evidence/pass25-orchestrator/` has the live acceptance log (question, delegation, reading the result, the coding boundary, reload), the HQ chain for the delegation, and the Claude regression. `tests/pass25.test.mjs` covers the states above, in-place coordinating and the not-connected refusal. HQ's `tests/orchestrator.test.mjs` covers the runtime, tools, limits and secrets against a fake OpenAI.
 
+## Next-pass plan, Pass 2.6: implementation delegation, ChatGPT → HQ → Claude (built)
+
+The runtime lives in HQ (branch `claude/hq-orchestrator`; see "Claude implementation tasks" in HQ's README):
+- **Operation:** `implement-repo`, with its own `local-worktree-write` safety class.
+- **Tool:** ChatGPT's `request_implementation`, Claude only, one per turn.
+- **Contract:** a policy validated in the engine (`implementation-policy.mjs`).
+- **Runner:** `implementation-runner.mjs` gives each task an isolated worktree on branch `hq/impl/<task>`. Claude runs with file tools only and edits pre-approved only inside the scope. HQ checks the scope and runs the tests, and commits only on green. Nothing is pushed or merged.
+
+The World needed no new state: ChatGPT is WAITING on the implementation task through `requestedBy`. Claude is WORKING (coding), then testing while HQ runs the acceptance tests. A BLOCKED outcome (failed tests, a scope violation) shows as Claude NEEDS_ATTENTION with HQ's reason. `tests/pass26.test.mjs` covers this. The live evidence is in `docs/world/evidence/pass26-implementation/`.
+
 ## Phases (from the brief) and where this PR stops
 
 | Phase | State |
