@@ -13,6 +13,7 @@ import { STAGE_LABEL } from './core/construction.mjs';
 import { hoverText, inspectHTML } from './ui/inspect.mjs';
 import { summarize, feedHTML, attentionHTML, rosterHTML, paintFaces } from './ui/hud.mjs';
 import { connectHq, hqAvailable } from './adapters/hq-client.mjs';
+import { explainAgent, STATE_LABEL } from './core/truth.mjs';
 
 const $ = id => document.getElementById(id);
 const storage = {
@@ -166,13 +167,53 @@ function inspectExtra(ref, entity) {
     status: entity?.kind === 'agent' ? actionText(entity, theme.layout) : undefined,
     job: a ? jobOf(world, a) : null, lastJob: a ? lastJobOf(world, a) : null, issues: a ? issuesFor(world, a) : [],
     meetingRoomId: theme.layout.locationById.comms?.id,
+    // Pass 1: the one real command loop. Only LIVE mode, and only agents the World server lists as commandable.
+    command: mode === 'hq' && a ? commandInfo.commandable?.[a.id] ?? null : null, commands: commandInfo.commands,
   };
 }
 function showInspectRef(ref, entity) {
   const panel = $('inspect');
+  // The inspector re-renders on every World change; keep what the user is typing and which results are open.
+  const text = $('cmd-text'), draft = text?.value ?? '', typing = document.activeElement === text, caret = text?.selectionStart;
+  const note = $('cmd-note')?.textContent ?? '', open = [...panel.querySelectorAll('details')].map(d => d.open);
   panel.innerHTML = `<button class="close" aria-label="Close">×</button>${inspectHTML(ref, store.world, Date.now(), entity?.location, view.places, inspectExtra(ref, entity))}`;
   panel.hidden = false; $('side').hidden = true;
+  const next = $('cmd-text');
+  if (next) { next.value = draft; if (typing) { next.focus(); next.setSelectionRange(caret, caret); } $('cmd-note').textContent = note; }
+  panel.querySelectorAll('details').forEach((d, i) => { if (open[i]) d.open = true; });
 }
+
+// World commands (Pass 1). The page never talks to HQ: it asks the World server, which creates the HQ task
+// through HQ's validated API. The id is made once per request and reused on retry, so a double click, a
+// network retry or a reload can never create a second HQ task.
+let commandInfo = { commandable: {}, commands: [] }, pendingCommand = null;
+async function pollCommands() {
+  try {
+    const r = await fetch('/api/commands', { cache: 'no-store' });
+    if (r.ok) {
+      const body = await r.json(), sig = JSON.stringify(body);
+      if (sig !== pollCommands.sig) { pollCommands.sig = sig; commandInfo = body; if (selected) showInspect(selected); }
+    }
+  } catch { /* history stays as last seen */ }
+  clearTimeout(pollCommands.t); pollCommands.t = setTimeout(pollCommands, 3000);
+}
+async function sendCommand(agentId) {
+  const text = $('cmd-text'), note = $('cmd-note'), instruction = text?.value.trim() ?? '';
+  if (!instruction) { note.textContent = 'Type an instruction first.'; return; }
+  if (pendingCommand?.busy) return;
+  if (!pendingCommand || pendingCommand.instruction !== instruction || pendingCommand.agentId !== agentId) pendingCommand = { commandId: crypto.randomUUID(), agentId, instruction };
+  pendingCommand.busy = true; note.textContent = 'Sending to HQ…';
+  try {
+    const r = await fetch('/api/commands', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(pendingCommand) });
+    const body = await r.json().catch(() => ({}));
+    if (r.status === 201 || (r.ok && body.duplicate)) {
+      pendingCommand = null; text.value = '';
+      $('cmd-note').textContent = `HQ task ${String(body.taskId).slice(0, 8)} created. ${store.world.agents[agentId]?.name ?? agentId} shows Working only once HQ confirms the run started.`;
+    } else { pendingCommand.busy = false; pendingCommand = body.id ? null : pendingCommand; $('cmd-note').textContent = body.error ? `Not sent: ${body.error}` : `Not sent (HTTP ${r.status}).`; }
+  } catch (error) { pendingCommand.busy = false; $('cmd-note').textContent = `Could not reach the World server (${error.message}). Sending again reuses the same request id.`; }
+  pollCommands();
+}
+$('inspect').addEventListener('click', e => { const id = e.target.closest('[data-command]')?.dataset.command; if (id) sendCommand(id); });
 // Links inside the inspector that open another record (an ended meeting has no scene object to click).
 $('inspect').addEventListener('click', e => {
   const target = e.target.closest('[data-inspect]')?.dataset.inspect; if (!target) return;
@@ -230,7 +271,8 @@ function renderHud() {
     $('stats').innerHTML = `<span class="n-total"><b>${s.total}</b>Agents</span><span class="n-working" title="${s.assigned} assigned; ${s.working} at their work right now"><b>${s.working}</b>Working</span><span class="n-waiting"><b>${s.waiting}</b>Waiting</span><span class="n-idle"><b>${s.idle}</b>Idle</span><span class="n-attention"><b>${s.attention.length}</b>Attention</span>`;
     $('attention').innerHTML = `<h2>Attention needed (${s.attention.length})</h2>${attentionHTML(s.attention)}`;
     $('feed').innerHTML = `<h2>Recent activity</h2>${feedHTML(world, Date.now())}`;
-    const statusOf = a => { const e = scene.get(`agent:${a.id}`); return e ? actionText(e, theme.layout) : a.activity; };
+    // A live agent that is not verified working shows its state (Not connected, Starting, Unknown...), never a pose.
+    const statusOf = a => { if (a.truth && a.truth.state !== 'WORKING' && a.truth.state !== 'IDLE') return STATE_LABEL[a.truth.state]; const e = scene.get(`agent:${a.id}`); return e ? actionText(e, theme.layout) : a.activity; };
     hudSig = bodySignature();
     // Roster dot follows the body like the in-world dot: green only while the work is actually happening.
     const toneOf = a => { const e = scene.get(`agent:${a.id}`); return !e || PRODUCTIVE_STATES.has(e.anim?.state) || ['talk', 'meeting'].includes(e.anim?.state) || !['coding', 'thinking', 'reviewing', 'testing', 'researching', 'communicating'].includes(a.activity) ? a.activity : 'moving'; };
@@ -284,7 +326,7 @@ if (mode === 'hq') {
   $('sim-toggle').hidden = true; $('sim-panel').hidden = true;
   showMode('live');
   connectHq(store, { onStatus: ok => showMode(ok ? 'live' : 'down') });
-  pollConstruction();
+  pollConstruction(); pollCommands();
 } else {
   showMode('sim');
   const saved = storage.get('hlw:sim-world');
@@ -292,4 +334,4 @@ if (mode === 'hq') {
 }
 $('empty').hidden = Object.keys(store.world.agents).length > 0;
 invalidate();
-window.hillinkWorld = { get constructionStatus() { return constructionStatus; }, store, get scene() { return scene; }, get theme() { return theme; }, camera, sim, focus, setTheme: applyTheme }; // Dev handle for tests and console.
+window.hillinkWorld = { why: id => explainAgent(store.world, id), get commands() { return commandInfo; }, get constructionStatus() { return constructionStatus; }, store, get scene() { return scene; }, get theme() { return theme; }, camera, sim, focus, setTheme: applyTheme }; // Dev handle for tests and console.

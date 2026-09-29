@@ -93,3 +93,11 @@ canvas { display: block; width: 100%; height: 100%; cursor: grab; touch-action: 
 
 /* "H" hides every overlay so the world can be judged on its own (Kyle's visual test). */
 body.ui-hidden .stage > :not(canvas) { display: none !important; }
+/* Pass 1: truthful state line and the World command box. */
+.inspect .why { margin: 2px 0 8px; font-size: 11.5px; color: var(--muted); }
+.inspect textarea { width: 100%; box-sizing: border-box; resize: vertical; font: inherit; color: var(--ink); background: #0b0f16; border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; margin: 4px 0 6px; }
+.inspect textarea:focus-visible { outline: 2px solid var(--red); outline-offset: 1px; }
+.inspect .commands { list-style: none; padding: 0; margin: 8px 0 0; display: grid; gap: 8px; font-size: 12px; }
+.inspect .commands q { display: block; color: var(--ink); } .inspect .commands time { color: var(--muted); }
+.inspect .commands .result { white-space: pre-wrap; max-height: 220px; overflow: auto; margin: 4px 0 0; color: var(--ink); }
+.cmd-good { color: var(--green); } .cmd-bad { color: var(--red); } .cmd-warn { color: var(--amber); } .cmd-live { color: var(--blue); } .cmd-muted { color: var(--muted); }

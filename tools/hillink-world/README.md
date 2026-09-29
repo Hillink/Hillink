@@ -7,7 +7,11 @@ npm run world          # http://127.0.0.1:4320 (WORLD_PORT to change)
 npm run test:world     # engine tests (node:test, no browser)
 ```
 
-**Live:** if Hillink HQ is running (`HQ_URL`, default http://127.0.0.1:4312), the World shows HQ's real agents and tasks. The badge reads LIVE: HQ. HQ is only read, never written. `WORLD_HQ=0` turns this off.
+**Live:** if Hillink HQ is running (`HQ_URL`, default http://127.0.0.1:4312), the World shows HQ's real agents and tasks. The badge reads LIVE: HQ. `WORLD_HQ=0` turns this off.
+
+**Truthful state:** each live agent's state (Working, Starting, Idle, Waiting, Needs attention, Failed, Offline, Not connected, Unknown) is derived from HQ's runtime facts in `core/truth.mjs`, and the body may only animate work while HQ reports a real, acknowledged run. If HQ stops answering, agents show Unknown rather than their last pose. Click an agent to see its state and the reason; `hillinkWorld.why('claude')` in the console shows the full trace.
+
+**Commands (one real loop):** click Claude, type a question and press "Send to HQ". The World server turns it into one HQ `review-repo` task (read-only: the Claude CLI gets Read, Grep and Glob only) through HQ's own API. It is the only thing the World writes. Claude shows Working only once HQ confirms the run started, and the answer appears under the command. History is kept in `~/.hillink-world/commands.jsonl`.
 
 **Construction:** each development pass is a building project on the plaza. The World server reads the local git clone and the `gh` CLI (your existing login) for plans in `tools/hillink-world/world/passes/*.json`, commits, CI, reviews and the merge, and journals that evidence in `~/.hillink-world/construction.jsonl` (`WORLD_STATE_DIR` to move it) so a reload or restart keeps what was built. The only network command is `git fetch`. A pass advances only on that evidence, never on time, and is accepted when it merges to main. It shows in LIVE mode only. `WORLD_GIT=0` turns it off; `WORLD_GIT_INTERVAL_MS` sets the poll (default 60000). Click the site for its stage, blockers and evidence. In simulation, "Construction: next milestone" walks a clearly labelled simulated pass one milestone per click.
 

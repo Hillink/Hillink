@@ -2,6 +2,7 @@
 // No DOM, no rendering, no backend knowledge. Deterministic and testable in Node.
 import { validateEvent } from './events.mjs';
 import { applyPassEvent } from './construction.mjs';
+import { reconcileAgents } from './truth.mjs';
 
 export function emptyWorld() {
   return { seq: 0, at: 0, agents: {}, tasks: {}, systems: {}, prs: {}, builds: {}, deploys: {}, testRuns: {}, issues: {}, meetings: {}, meetingLog: [], passes: {}, messages: [], log: [] };
@@ -56,6 +57,11 @@ export function applyEvent(world, event) {
       const a = agent(world, e.agentId, changed);
       Object.assign(a, { name: e.name, role: e.role, kind: e.kind ?? 'agent', home: e.home ?? null, appearance: e.appearance ?? null, source: e.source });
       if (e.activity) setActivity(a, e.activity, e);
+      break;
+    }
+    case 'AGENT_RUNTIME': {
+      const a = agent(world, e.agentId, changed);
+      a.runtime = { ...e.runtime, observedAt: e.at };
       break;
     }
     case 'SYSTEM_REGISTERED':
@@ -223,6 +229,9 @@ export function applyEvent(world, event) {
       }
     }
   }
+  // Truth: HQ-backed agents are re-derived after every event, so no event can leave one looking busy without a verified run.
+  for (const id of reconcileAgents(world, e.at, setActivity)) changed.add(`agent:${id}`);
+  if (e.type === 'AGENT_RUNTIME') return changed; // runtime reports are state, not activity: kept out of the feed
   world.log.push({ seq: world.seq, ...e }); // Events are small; keeping them whole lets the feed and replay describe them.
   if (world.log.length > LOG_LIMIT) world.log.shift();
   return changed;

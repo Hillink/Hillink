@@ -214,6 +214,38 @@ Not in this pass (as planned): Kyle's avatar, usage/credits, the Command Center 
 
 **Tests:** `tests/readability.test.mjs` (framing, review spots, labels), `tests/truth.test.mjs` (labels, continuity, failures, overlapping scenarios, meetings, history) and `tests/construction.test.mjs` (milestones, time, out-of-order evidence, blocked keeps work, rework, acceptance, sticky reset, journal reload, git adapter with fake git/gh, the simulated pass, builder visits).
 
+## Next-pass plan, Pass 1: trustworthy agent state and one real command loop (built)
+
+Kyle's 2026-09-29 plan (from Codex's investigation) orders the next work as: 1) trustworthy state plus one real command loop, 2) shared geometry, scale and animation alignment, 3) real meetings and construction outcomes, then the full theme redesign. Only Pass 1 is built here.
+
+**What owns the truth.**
+
+| Fact | Owner | How the World gets it |
+|---|---|---|
+| Agent identity (id, name, HQ role, looks) | HQ registry | `AGENT_REGISTERED` from the HQ snapshot and journal |
+| Organizational role (what the agent is for) | `core/roles.mjs` (product intent) | Shown in the inspector; never affects state |
+| Runtime: connected, status, assignment, run acknowledged, heartbeat | HQ (`agentStatus()` and `adapterAvailable` in tools/hillink-hq) | `AGENT_RUNTIME`, emitted by `adapters/hq.mjs` whenever an agent's facts change |
+| Task and run lifecycle, evidence, outcome | HQ journal | Existing task events (`TASK_STARTED`, `TASK_COMPLETED`, ...) |
+| Canonical state (WORKING, STARTING, IDLE, WAITING, NEEDS_ATTENTION, FAILED, OFFLINE, NOT_CONNECTED, UNKNOWN) | `core/truth.mjs` `deriveAgentState()` | Derived, never stored by a source |
+| What the body animates | `core/truth.mjs` `allowedActivity()` | The reducer clamps `a.activity` after every event |
+| World commands and their history | World server journal `~/.hillink-world/commands.jsonl`, joined with HQ's task record | `GET /api/commands` |
+
+**Derivation.** WORKING requires HQ status RUNNING, which HQ grants only for an acknowledged, heartbeating, progressing run. A dispatched run that is not acknowledged is STARTING. No execution adapter means NOT_CONNECTED. HQ's STALLED becomes NEEDS_ATTENTION, BLOCKED and RATE_LIMITED become WAITING, and OFFLINE stays OFFLINE. An IDLE agent whose latest finished task failed is FAILED, and one whose latest task is parked with an owner action is NEEDS_ATTENTION. If HQ is unreachable, every HQ agent becomes UNKNOWN (drawn offline), so a crashed run can never keep looking busy. Simulated agents (no runtime) keep their scripted activity and are labelled as simulation. Each agent keeps its last 12 state transitions with the reason, task and run; `window.hillinkWorld.why('claude')` prints them.
+
+**The command loop (Claude).**
+1. Kyle clicks Claude and types a question in the inspector.
+2. The page POSTs `/api/commands` with a request id made once per request (reused on retry).
+3. The World server (loopback, same-origin JSON only) checks the agent is in `COMMANDABLE` and creates one HQ task through HQ's own `POST /api/tasks`: `review-repo`, `local-read-only`, preferred agent Claude. A repeated id returns the first record; nothing is sent twice. The request and HQ's answer are journaled.
+4. HQ validates and queues the task, dispatches it, and runs the signed-in Claude CLI with Read, Grep and Glob only.
+5. HQ's run evidence (ACK, heartbeats, result, COMPLETED or FAILED) reaches the World through the existing snapshot feed. Claude shows STARTING at dispatch, WORKING only after the CLI acknowledges, and IDLE, FAILED or NEEDS_ATTENTION from the real outcome.
+6. The inspector lists recent commands with HQ's stage and the answer, from `GET /api/commands`, so they survive reloads and World server restarts.
+
+Nothing new can execute: the World can only create tasks HQ already allows, for agents the World server allowlists, and HQ keeps its own safety class, capability checks and read-only tool limits.
+
+**Not changed in this pass (Pass 2 and later):** scale, building, rooms, sprites, camera, pathfinding, furniture, art, themes, meetings and construction. Other agents are not commandable yet. Codex, Qwen, Gemma and the verifier show their real HQ state, and ChatGPT shows Not connected.
+
+**Tests:** `tests/pass1.test.mjs` covers the ten Pass 1 checks: events cannot fake work, a real run is WORKING, completion and failure leave WORKING, offline, rate-limited and unreachable-HQ agents never animate work, reload rebuilds the same truth, the command reaches HQ as exactly one read-only task, the outcome comes back, duplicates never create a second task (including after a restart), unconnected agents are not operational, and the route's same-origin rules. `tests/hq-adapter.test.mjs` fixtures now include HQ's `adapterAvailable` and move HQ status with the run, as real HQ does.
+
 ## Phases (from the brief) and where this PR stops
 
 | Phase | State |

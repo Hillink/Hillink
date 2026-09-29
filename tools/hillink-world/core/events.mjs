@@ -32,6 +32,8 @@ export const EVENT_TYPES = {
   AGENT_IDLE: ['agentId'],
   AGENT_ERROR: ['agentId'],
   AGENT_OFFLINE: ['agentId'],
+  // Authoritative runtime facts for one agent, copied from its backend (HQ). core/truth.mjs derives state from these.
+  AGENT_RUNTIME: ['agentId', 'runtime'],
   AGENT_MESSAGE: ['agentId', 'toAgentId'], // a handoff or note from one agent to another
   MEETING_STARTED: ['meetingId', 'agentIds'], // agents gather in the meeting room
   MEETING_ENDED: ['meetingId'],

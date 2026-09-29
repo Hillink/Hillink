@@ -1,4 +1,6 @@
 import { STAGE_LABEL, PIECES } from '../core/construction.mjs';
+import { STATE_LABEL, deriveAgentState } from '../core/truth.mjs';
+import { roleOf } from '../core/roles.mjs';
 // Contextual detail (brief §10–11): built from World state on demand, never shown by default.
 const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const ago = (at, now) => (at == null ? 'unknown' : `${Math.max(0, Math.round((now - at) / 1000))}s ago`);
@@ -34,7 +36,33 @@ function issueBlock(issues, world, now) {
   }).join('');
 }
 
+// A World command as it stands in HQ. Every word here comes from the command journal or HQ's task record.
+export function commandStatus(c) {
+  if (c.error) return { tone: 'bad', text: `HQ refused it: ${c.error}` };
+  if (!c.hq) return { tone: 'muted', text: 'Sent to HQ; its task is not visible right now.' };
+  const o = c.hq.outcome;
+  if (c.hq.stage === 'DONE') return { tone: 'good', text: 'Done' };
+  if (o?.kind === 'RATE_LIMITED') return { tone: 'warn', text: `Waiting: ${o.summary}` };
+  if (c.hq.stage === 'BLOCKED') return { tone: 'bad', text: `Blocked: ${c.hq.blocker ?? o?.summary ?? 'see HQ'}` };
+  if (c.hq.stage === 'FAILED' || o?.kind === 'FAILED') return { tone: 'bad', text: `Failed: ${o?.summary ?? 'see HQ'}` };
+  if (c.hq.stage === 'READY') return { tone: 'muted', text: 'Queued in HQ, not started' };
+  return { tone: 'live', text: `In HQ: ${c.hq.stage.toLowerCase()}` };
+}
+function commandBlock(a, spec, commands, now) {
+  const mine = (commands ?? []).filter(c => c.agentId === a.id).slice(0, 5);
+  const list = mine.length ? `<ul class="commands">${mine.map(c => {
+    const s = commandStatus(c);
+    return `<li><q>${esc(c.instruction.length > 140 ? `${c.instruction.slice(0, 139)}…` : c.instruction)}</q>
+      <span class="cmd-${s.tone}">${esc(s.text)}</span> <time>${esc(ago(c.at, now))}</time>
+      ${c.hq?.result ? `<details><summary>Result</summary><p class="result">${esc(c.hq.result)}</p></details>` : ''}</li>`;
+  }).join('')}</ul>` : '';
+  return `<h3>${esc(spec.label)}</h3><p class="muted">${esc(spec.limits)}</p>
+    <textarea id="cmd-text" rows="3" maxlength="2000" placeholder="For example: where are athlete payouts calculated?"></textarea>
+    <button data-command="${esc(a.id)}">Send to HQ</button><p id="cmd-note" class="muted" aria-live="polite"></p>${list}`;
+}
+
 // extra: { status, job, lastJob, issues } from the live view (what the body is doing is not World state).
+// Pass 1 adds { command, commands }: the World command this agent accepts (if any) and the command history.
 export function inspectHTML(ref, world, now, location, places = {}, extra = {}) {
   if (!ref) return '';
   const row = (k, v) => `<div class="row"><span>${esc(k)}</span><b>${esc(v)}</b></div>`;
@@ -43,13 +71,16 @@ export function inspectHTML(ref, world, now, location, places = {}, extra = {}) 
     const job = extra.job, last = extra.lastJob, t = job?.task;
     const prRow = job?.pr ? row(job.kind === 'review' ? 'Reviewing' : 'Pull request', `${job.pr.title}${job.pr.state ? ` (${job.pr.state}${job.pr.verdict ? `: ${job.pr.verdict}` : ''})` : ''}`) : '';
     const owner = t?.agentId && t.agentId !== a.id ? row('Built by', world.agents[t.agentId]?.name ?? t.agentId) : '';
-    return `<p class="kicker">Agent</p><h2>${esc(a.name)}</h2><p class="muted">${esc(a.role)}</p>
-      ${row('Doing', extra.status ?? a.activity)}${row('Since', ago(a.since, now))}
+    const truth = a.truth ?? deriveAgentState(world, a), role = roleOf(a.id);
+    return `<p class="kicker">Agent</p><h2>${esc(a.name)}</h2><p class="muted">${esc(role ? `${role.title}: ${role.summary}` : a.role)}</p>
+      ${row('State', STATE_LABEL[truth.state] ?? truth.state)}<p class="why">${esc(truth.reason)}</p>
+      ${row('Doing', extra.status ?? a.activity)}${row('Since', ago(truth.since ?? a.since, now))}
       ${job ? row(job.kind === 'meeting' ? 'Meeting' : 'Task', job.title) + row('Stage', job.stage ?? 'Unknown') + prRow + owner : row('Task', 'None')}
       ${extra.issues?.length ? issueBlock(extra.issues, world, now) : ''}
       ${t ? evidenceList(t.evidence, now) : ''}
       ${!job && last ? `<h3>Last task</h3>${row('Task', last.title)}${row('Outcome', last.outcome)}${row('Ended', ago(last.at, now))}${last.pr ? row('PR', `${last.pr.title} (${last.pr.state}${last.pr.verdict ? `: ${last.pr.verdict}` : ''})`) : ''}${evidenceList(last.task?.evidence, now, 3)}` : ''}
-      ${row('Source', a.source ?? 'unknown')}
+      ${extra.command ? commandBlock(a, extra.command, extra.commands, now) : ''}
+      ${row('Source', truth.basis === 'hq' ? 'HQ (live)' : truth.basis === 'simulation' ? 'Simulation' : a.source ?? 'unknown')}
       <button data-focus="agent:${esc(a.id)}">Follow with camera</button>`;
   }
   if (ref.type === 'meeting') {

@@ -48,14 +48,44 @@ function issueFor(alert) {
     owner: alert.ownerMustAct === true || undefined, // needs Kyle, not just an agent
   };
 }
+const hash = s => { let h = 0; for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0; return (h >>> 0).toString(36); };
 const healthState = h => (h?.controller === 'ONLINE' ? 'ok' : h?.controller ? 'degraded' : 'unknown');
 export function parseTestCounts(summary) {
   const m = /(\d+)\s+passed\D+(\d+)\s+failed/.exec(summary ?? '');
   return m ? { passed: Number(m[1]), failed: Number(m[2]) } : null;
 }
 
+// One agent's authoritative runtime facts from an HQ snapshot (core/truth.mjs derives state from these).
+// status is HQ's own agentStatus(); connected is whether HQ has an execution adapter for it.
+export function runtimeFor(snap, a) {
+  const tasks = snap.tasks ?? [], task = a.assignment ? tasks.find(t => t.id === a.assignment) : null;
+  const run = task?.runId ? snap.runs?.[task.runId] : null, live = run && !run.endedAt;
+  // The agent's most recent finished task, so a failure or a parked task stays visible after the run ends.
+  const last = tasks.filter(t => t.agentId === a.id && t.endedAt && ['DONE', 'FAILED', 'BLOCKED'].includes(t.stage)).sort((x, y) => y.endedAt - x.endedAt)[0];
+  return {
+    connected: a.adapterAvailable ?? Boolean(a.executionAdapter), adapter: a.executionAdapter ?? null,
+    status: a.status ?? 'UNKNOWN', detail: clip(a.detail, 300), retryAt: a.retryAt ?? null,
+    taskId: task?.id ?? null, runId: live ? task.runId : null, acknowledged: Boolean(live && run.acknowledgedAt),
+    heartbeatAt: live ? run.heartbeatAt ?? null : null, activity: task ? stageActivity(task) : null,
+    last: last ? { taskId: last.id, stage: last.stage, endedAt: last.endedAt, detail: clip(last.blocker ?? last.ownerAction, 200) } : null,
+  };
+}
+
 export class HqTranslator {
-  constructor() { this.seq = 0; this.runs = {}; this.tasks = {}; this.health = null; }
+  constructor() { this.seq = 0; this.runs = {}; this.tasks = {}; this.health = null; this.runtime = {}; }
+
+  // AGENT_RUNTIME for every agent whose facts changed since the last poll (all of them after a reset).
+  runtimeEvents(snap, reset) {
+    if (reset) this.runtime = {};
+    const out = [], at = snap.now ?? Date.now();
+    for (const a of snap.agents ?? []) {
+      const runtime = runtimeFor(snap, a), sig = JSON.stringify(runtime);
+      if (this.runtime[a.id] === sig) continue;
+      this.runtime[a.id] = sig;
+      out.push(make(`hq-rt-${snap.seq}-${a.id}-${hash(sig)}`, 'AGENT_RUNTIME', at, { agentId: a.id, runtime, ...(reset ? { snapshot: true } : {}) }));
+    }
+    return out;
+  }
 
   // One HQ /api/state poll -> { reset, events }. On reset the caller replaces the World before applying.
   ingest(snap) {
@@ -68,6 +98,7 @@ export class HqTranslator {
       const state = healthState(snap.health);
       if (state !== this.health) out.events.push(make(`hq-health-${snap.seq}-${state}`, 'SYSTEM_STATUS', snap.now ?? Date.now(), { systemId: 'hq', state, detail: clip(snap.health?.lastError) }));
     }
+    out.events.push(...this.runtimeEvents(snap, out.reset));
     this.health = healthState(snap.health);
     this.seq = snap.seq;
     return out;

@@ -5,7 +5,7 @@ import { WorldStore, emptyWorld } from '../core/state.mjs';
 import { validateEvent } from '../core/events.mjs';
 import { trimSnapshot, createServer } from '../serve.mjs';
 
-const agent = (id, status, extra = {}) => ({ id, name: id[0].toUpperCase() + id.slice(1), role: 'Worker', real: 'Engineer', fantasy: 'Dwarf', status, assignment: null, ...extra });
+const agent = (id, status, extra = {}) => ({ id, name: id[0].toUpperCase() + id.slice(1), role: 'Worker', real: 'Engineer', fantasy: 'Dwarf', status, assignment: null, executionAdapter: `cli-${id}`, adapterAvailable: true, ...extra });
 let n = 0;
 const hqEvent = (seq, type, data) => ({ seq, id: `e${++n}`, at: 1_000 + seq, type, data });
 function base() {
@@ -37,14 +37,19 @@ test('hq adapter: a live review run walks through claimed, reviewing and done', 
     hqEvent(3, 'TASK_CREATED', { id: 't1', title: 'Review payouts', operation: 'review-repo', capability: 'review-repo', safety: 'local-read-only' }),
     hqEvent(4, 'DISPATCHED', { taskId: 't1', agentId: 'claude', runId: 'r1' }),
   ];
-  apply(store, tr.ingest({ ...snap, seq: 4, events: [...snap.events, ...events] }));
+  // HQ's snapshot moves with its journal: dispatched but unacknowledged is UNKNOWN in HQ, so STARTING here.
+  const t1 = stage => ({ id: 't1', title: 'Review payouts', stage, agentId: 'claude', runId: 'r1', capability: 'review-repo', operation: 'review-repo', createdAt: 1003 });
+  const claimed = { ...snap, seq: 4, agents: [agent('claude', 'UNKNOWN', { assignment: 't1' }), snap.agents[1]], tasks: [...snap.tasks, t1('CLAIMED')], runs: { r1: { taskId: 't1', agentId: 'claude' } }, events: [...snap.events, ...events] };
+  apply(store, tr.ingest(claimed));
   assert.equal(store.world.tasks.t1.status, 'active');
-  assert.equal(store.world.agents.claude.activity, 'thinking');
+  assert.equal(store.world.agents.claude.truth.state, 'STARTING');
+  assert.equal(store.world.agents.claude.activity, 'idle', 'not shown working before the agent acknowledges the run');
   const more = [hqEvent(5, 'WORKER_EVENT', { runId: 'r1', kind: 'ACK', summary: 'Claude Code session started' }), hqEvent(6, 'WORKER_EVENT', { runId: 'r1', kind: 'HEARTBEAT', summary: 'alive' })];
-  apply(store, tr.ingest({ ...snap, seq: 6, events: [...snap.events, ...events, ...more] }));
+  apply(store, tr.ingest({ ...claimed, seq: 6, agents: [agent('claude', 'RUNNING', { assignment: 't1' }), snap.agents[1]], tasks: [...snap.tasks, t1('IMPLEMENTING')], runs: { r1: { taskId: 't1', agentId: 'claude', acknowledgedAt: 1005, heartbeatAt: 1006 } }, events: [...claimed.events, ...more] }));
+  assert.equal(store.world.agents.claude.truth.state, 'WORKING');
   assert.equal(store.world.agents.claude.activity, 'reviewing');
   const done = [hqEvent(7, 'WORKER_EVENT', { runId: 'r1', kind: 'COMPLETED', summary: 'finished' }), hqEvent(8, 'AGENT_OBSERVED', { agentId: 'claude', status: 'IDLE' })];
-  const out = tr.ingest({ ...snap, seq: 8, events: [...snap.events, ...events, ...more, ...done] });
+  const out = tr.ingest({ ...snap, seq: 8, tasks: [...snap.tasks, { ...t1('DONE'), endedAt: 1007 }], runs: { r1: { taskId: 't1', agentId: 'claude', endedAt: 1007 } }, events: [...claimed.events, ...more, ...done] });
   assert.equal(out.reset, false);
   apply(store, out);
   assert.equal(store.world.tasks.t1.status, 'done');
@@ -65,7 +70,7 @@ test('hq adapter: tests, rate limits, requeues and alerts map to World signals',
     hqEvent(10, 'TASK_REQUEUED', { taskId: 't2' }),
     hqEvent(11, 'ALERT_RESOLVED', { key: 'verification:t2' }),
   ];
-  const out = tr.ingest({ ...snap, seq: 11, events: [...snap.events, ...ev] });
+  const out = tr.ingest({ ...snap, seq: 11, agents: [snap.agents[0], agent('codex', 'RATE_LIMITED', { retryAt: 99_999 })], events: [...snap.events, ...ev] });
   for (const e of out.events) assert.equal(validateEvent(e), null, e.type);
   store.dispatchAll(out.events.slice(0, 8)); store.flush();
   assert.deepEqual(Object.values(store.world.testRuns).map(r => [r.state, r.passed, r.failed]), [['failed', 69, 2]]);
