@@ -14,3 +14,7 @@ npm run test:world     # engine tests (node:test, no browser)
 Styles: **Realistic**, **Fantasy** and **Blueprint** (toggle in the header, or `?theme=fantasy`). All three show the same World state.
 
 Controls: drag to pan, scroll or pinch to zoom, click to inspect, arrow keys, `+`/`-`, and Esc for the overview. Use "Go to…" to focus a room or follow an agent.
+
+**Animation:** Realistic and Fantasy run an animation layer over the painted art. It includes water, the crane, lifts, traffic, screens, lights and staff. Agents are animated characters that walk and ride the lift to where their real work is. Rooms react only to real work. A theme's scenery lives in `themes/*-scenery.mjs`, in image pixels. See "Animation layer" in the architecture doc. With `prefers-reduced-motion`, the world holds still.
+
+Try it in simulation: in "Dev simulation", use Claude starts coding, Claude messages Codex (the handoff), Start a meeting, and Needs Kyle.

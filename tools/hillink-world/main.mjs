@@ -34,7 +34,7 @@ let hover = null, selected = null, follow = null, lastFrame = performance.now(),
 function applyTheme(id) {
   theme = loadTheme(THEME_ORDER.includes(id) ? id : 'real', { onArtLoaded: () => { invalidate(); renderHud(); } });
   const places = view?.places ?? {}; // Semantic places (room + station ids) carry across themes.
-  scene = new Scene(); view = new WorldView(scene, effects, theme.layout); view.places = places;
+  scene = new Scene(); view = new WorldView(scene, effects, theme.layout, theme.scenery); view.places = places;
   Object.assign(camera, { bounds: theme.layout.bounds, minZoom: theme.camera.minZoom, maxZoom: theme.camera.maxZoom });
   view.sync(store.world, new Set(['*']), performance.now());
   // Agents start at their stations instead of walking in from the entrance.
@@ -85,11 +85,12 @@ function frame(now) {
   if (follow) { const e = scene.get(follow); if (e && !camera.tween) { const c = camera.centerFor(e.x, e.y - e.h / 2); camera.x += (c.x - camera.x) * 0.12; camera.y += (c.y - camera.y) * 0.12; camera.clamp(); } }
   const cameraMoving = camera.step(now);
   const fx = effects.active(now);
-  const ambient = !instant && [...scene.entities.values()].some(e => e.kind === 'agent' && e.clip !== 'offline');
-  renderer.draw({ camera, scene, skin: theme.skin, layout: theme.layout, world: store.world, entities: scene.query(camera.viewRect(80)), time: now, hoverId: hover?.id, selectedId: selected?.id, effects: fx, signals: view.roomSignals, reducedMotion: instant, theme: theme.palette });
+  // Art themes always have ambient life (water, machinery, staff); the blueprint only animates its agents.
+  const ambient = !instant && (theme.scenery || [...scene.entities.values()].some(e => e.kind === 'agent' && e.clip !== 'offline'));
+  renderer.draw({ camera, scene, skin: theme.skin, layout: theme.layout, world: store.world, entities: scene.query(camera.viewRect(80)), time: now, hoverId: hover?.id, selectedId: selected?.id, effects: fx, signals: view.roomSignals, activity: view.activity, reducedMotion: instant, theme: theme.palette });
   if (document.hidden) { running = false; return; }
   if (moving || cameraMoving || fx.length || follow || store.pending.length) requestAnimationFrame(frame);
-  else if (ambient) setTimeout(() => requestAnimationFrame(frame), 50); // ~20 fps for idle ambience
+  else if (ambient) setTimeout(() => requestAnimationFrame(frame), theme.scenery ? 28 : 50); // ~30 fps ambience (~20 on the blueprint)
   else running = false;
 }
 document.addEventListener('visibilitychange', () => { if (!document.hidden) { lastFrame = performance.now(); invalidate(); } });
@@ -156,6 +157,7 @@ for (const id of ['inspect', 'side', 'roster']) $(id).addEventListener('click', 
 });
 // Camera commands: the hooks for "show me what Codex is doing" / "show the whole company".
 export function focus(target) {
+  cameraTouched = true; // a chosen view must survive HUD resizes
   if (target === 'overview') { follow = null; camera.overview(); return invalidate(); }
   const [kind, id] = target.split(':');
   if (kind === 'room') { const l = theme.layout.locationById[id]; follow = null; camera.focusRect({ x: l.x, y: l.y, w: l.w, h: l.h }, { maxZoom: theme.camera.maxZoom * 0.75 }); }

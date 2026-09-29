@@ -90,13 +90,26 @@ export function createLayout(def) {
     const path = []; for (let n = goal; n; n = prev[n]) { path.unshift(n); if (n === start) break; }
     return path[0] === start ? path : [start, goal];
   }
+  // Lifts: a list of nav nodes that are stops of one shaft (nav.lifts = { tower: ['el1', ...] }).
+  const liftOf = {};
+  for (const [id, stops] of Object.entries(def.nav.lifts ?? {})) for (const n of stops) liftOf[n] = id;
+  const lifts = Object.fromEntries(Object.entries(def.nav.lifts ?? {}).map(([id, stops]) => [id, { id, x: navNodes[stops[0]][0], stops: stops.map(n => navNodes[n][1]) }]));
   // Waypoints from a world point to a station. Inside the same room: straight line. Otherwise: out the door, along walkways, in the door.
+  // A waypoint reached by riding a lift carries `.lift` (the shaft id); consecutive stops collapse into one ride.
   function route(from, toLocationId, toPoint) {
     const src = locationAt(from[0], from[1]);
     if (src && src.id === toLocationId) return [toPoint];
     const start = src ? `door:${src.id}` : nearestNode(from);
     const path = shortest(start, `door:${toLocationId}`);
-    return [...path.map(n => navNodes[n]), toPoint];
+    const out = [];
+    path.forEach((n, i) => {
+      const ride = i > 0 && liftOf[n] && liftOf[n] === liftOf[path[i - 1]];
+      if (ride && i + 1 < path.length && liftOf[path[i + 1]] === liftOf[n]) return; // still riding
+      const p = [...navNodes[n]];
+      if (ride) p.lift = liftOf[n];
+      out.push(p);
+    });
+    return [...out, toPoint];
   }
-  return { ...def, locationById, navNodes, navEdges, locationAt, route };
+  return { ...def, locationById, navNodes, navEdges, locationAt, route, lifts };
 }

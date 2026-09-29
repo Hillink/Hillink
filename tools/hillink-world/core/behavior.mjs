@@ -18,6 +18,8 @@ export const ACTIVITY_PLACE = {
 
 // A layout may re-home an activity (for example idle agents to a break room) via `layout.places`.
 const ruleFor = (activity, layout) => ({ ...(ACTIVITY_PLACE[activity] ?? ACTIVITY_PLACE.idle), ...(layout.places?.[activity] ?? {}) });
+// Only a meeting sends agents to the meeting room; a one-off message (a handoff) keeps the sender where it is.
+const ruleForAgent = (a, layout) => (a.activity === 'communicating' && !a.meetingId ? { stay: true, clip: 'talk' } : ruleFor(a.activity, layout));
 
 // Assign stations deterministically so agents don't pile onto one spot.
 // `current` is agentId -> {location, station}; agents keep their station while their activity keeps the same room.
@@ -27,7 +29,7 @@ export function placeAgents(agents, current, layout) {
   const ordered = [...agents].sort((a, b) => a.id.localeCompare(b.id));
   // Pass 1: agents that stay (completed/error) or keep an existing valid station.
   for (const a of ordered) {
-    const rule = ruleFor(a.activity, layout);
+    const rule = ruleForAgent(a, layout);
     // A place from another theme's layout may not exist here (e.g. the Realistic break room).
     const prev = layout.locationById[current[a.id]?.location]?.stations[current[a.id]?.station] ? current[a.id] : null;
     if (rule.stay && prev) { result[a.id] = { ...prev, clip: rule.clip }; taken.add(`${prev.location}:${prev.station}`); continue; }
@@ -38,7 +40,7 @@ export function placeAgents(agents, current, layout) {
   // Pass 2: everyone else takes the first free station (ordered, so conversation partners sit at adjacent tables).
   for (const a of ordered) {
     if (result[a.id]) continue;
-    const rule = ruleFor(ACTIVITY_PLACE[a.activity]?.stay ? 'idle' : a.activity, layout);
+    const own = ruleForAgent(a, layout), rule = own.stay ? ruleFor('idle', layout) : own;
     const loc = layout.locationById[rule.location];
     let station = rule.stations.find(s => !taken.has(`${loc.id}:${s}`));
     let overflow = 0;

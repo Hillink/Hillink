@@ -166,17 +166,102 @@ Everything is plain ESM with no build step and no dependencies. It sits outside 
 - **Proposed:** which persona each agent gets (Claude = Builder (Dwarf) and the Claude portrait; Codex = Inspector (Cyborg) and the Codex portrait). These pairings are data in the theme files.
 - **Next for art:** replace the concept images with clean layered art (backdrop without baked labels, plus character sprite sheets with walk and work clips). The theme files keep their coordinates if the new art keeps the composition.
 
+## Animation layer: "make the World actually alive" (built)
+
+Kyle's next-pass brief (2026-09-29, confirmed by Kyle): keep the live HQ state, registry, statuses, attention, feed, rooms, themes and placement; work only on animation, movement, scene composition, navigation and environmental life. The painted concept image stays as the base plate and an independent animation scene runs over it.
+
+Layers, bottom to top (`render/scenery.mjs`, `render/skin-art.mjs`):
+
+1. Base plate. On Realistic the painted crane jib, hook and helicopter rotor were inpainted out of `art/real.jpg` so they can be redrawn moving.
+2. Room light. A room brightens only while a real agent is doing real work in it.
+3. Environment and machinery. This covers the water wall, fountain, crane, fans, helicopter rotor, cars and trucks.
+4. Screens and lights. This covers monitors, server LEDs, sign glow, construction and helipad blinkers, and city twinkle.
+5. Characters. NPC staff, agents, the lift car and foreground occluders share one pass sorted by floor position, so depth works.
+6. Particles. Welding sparks, drifting motes and (Fantasy) magic.
+7. UI. Portrait badges, names and attention markers draw last, so nothing in the world hides them.
+
+The brief's three levels map to code as follows:
+
+- **Micro** runs constantly: water, screens, LEDs, fans, sign glow and breathing.
+- **Ambient** fires occasionally on independent, seeded timers (`engine/ambience.mjs`): cars and a construction truck, lift trips, crane slews and hook moves, rotor idle, and staff walks. Nothing is in sync.
+- **Semantic** comes only from World state (`WorldView.roomActivity`):
+  - rooms light up and workstations wake up;
+  - the Security & QA screens react when Codex tests or reviews;
+  - the construction site gets busier while a task is active or a build or deploy is running;
+  - the meeting displays switch on during a meeting.
+
+Characters (`render/character.mjs`) are procedural placeholders, built for motion first as the brief asks.
+
+- **Anatomy.** They have legs, arms, a head and a contact shadow.
+- **Poses.** The poses are idle, walk, typing, think, inspecting, reading, carrying, meeting, blocked, waiting, celebrating, offline, ride and receive.
+- **Walking.** The walk cycle is driven by distance travelled, so a walking character visibly walks.
+- **Telling agents from staff.**
+  - Agents have a floor ring in their status color and a portrait badge.
+  - NPCs have neither and are never tied to Hillink data.
+- **Truthfulness (Test C).**
+  - A productive pose needs a productive activity, and the agent must have arrived at its station.
+  - Idle agents can sip coffee, stretch or glance around, but they never type.
+
+Navigation and the lift:
+
+- **Lift legs.** Nav graphs can declare lifts (`nav.lifts`). `route()` marks the waypoint reached by lift, and consecutive stops collapse into one ride.
+- **The car** (`engine/lift.mjs`):
+  - It serves riders first, in the order call, board, ride, exit.
+  - Otherwise it makes ambient trips.
+  - It never moves with its doors open.
+- **Riders.** They wait at the shaft, board, ride inside the car (which is drawn in two halves around them) and step out. If an agent's destination changes mid-ride, it finishes the ride, then re-routes.
+- **Page load and HQ reconnect.** The World is rebuilt in one step (`WorldStore.reset`), so agents appear at their stations instead of replaying walks.
+
+Handoffs and meetings:
+
+- **Handoffs.** A real `AGENT_MESSAGE` becomes a handoff.
+  1. The sender picks up a package (a data box on Realistic, a scroll on Fantasy).
+  2. It walks, riding the lift if needed, to the receiver, following the receiver if the receiver moves.
+  3. It hands the package over, then walks back.
+  - The receiver's own work still comes only from its own events.
+  - A one-off message no longer sends the sender to the meeting room.
+- **Meetings.** New events `MEETING_STARTED { meetingId, agentIds }` and `MEETING_ENDED` gather agents in the Meeting Room and switch its displays on. When the meeting ends, each agent goes back to its previous activity.
+  - HQ has no meeting concept today, so only the simulator emits these.
+  - This is proposed and still needs a real source.
+
+Attention in the world uses restrained markers:
+
+- An amber clock means waiting.
+- A red "!" means an error, and the agent holds a hands-on-head pose.
+- A purple "You" badge appears only when HQ says the owner must act (`ownerMustAct` becomes `issue.owner`).
+
+Depth: each theme lists foreground occluders (plants, the sofa and the pool table on Realistic). Each occluder is redrawn from the base plate over anyone standing behind its baseline. The lift car's front glass is drawn over its riders.
+
+Realistic has the full first-milestone set:
+
+- the water wall;
+- the slewing crane with hook, load and sparks;
+- the elevator with riders;
+- road traffic plus a site truck;
+- Engineering and Security monitors;
+- Claude's Break Room to lift to Engineering walk, in the simulation.
+
+Fantasy has a lighter pass: fountain and jet, holograms, two ambient lifts, data-center LEDs, forge sparks, magic motes and staff.
+
+Proposed next steps (not built):
+
+- sprite-sheet characters to replace the procedural ones;
+- more occluders;
+- construction stages mapped to real task stages (claimed, implementing, testing, review, done);
+- lift batching when several riders queue;
+- day and night.
+
 ## Phases (from the brief) and where this PR stops
 
 | Phase | State |
 |---|---|
 | 1. World state and event schema | Done |
 | 2. Rooms, navigation and camera | Done |
-| 3. Agents, placement, movement and clips | Done, with primitives |
+| 3. Agents, placement, movement and clips | Done: animated procedural characters, lift rides, handoffs and meetings |
 | 4. Real data adapter (HQ) | Done: live from HQ via a read-only feed |
 | 5. Interaction: inspect, focus and follow | Done |
 | 6. Art skin | Started: Realistic and Fantasy themes on Kyle's concept art, with live plaques and portrait tokens |
-| 7. Polish: sound, weather, day/night, ambient life | Not started |
+| 7. Polish: sound, weather, day/night, ambient life | Ambient life and animation built (see Animation layer); sound, weather and day/night not started |
 | 8. In-app hosting | Not started. Unresolved question above. |
 
 ## Open questions

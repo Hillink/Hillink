@@ -42,6 +42,7 @@ function issueFor(alert) {
     severity: alert.kind === 'ADAPTER_UNAVAILABLE' ? 'low' : alert.ownerMustAct ? 'high' : 'medium',
     location: alert.kind === 'VERIFICATION_FAILED' ? 'testing' : 'command',
     agentId: alert.agentId ?? undefined,
+    owner: alert.ownerMustAct === true || undefined, // needs Kyle, not just an agent
   };
 }
 const healthState = h => (h?.controller === 'ONLINE' ? 'ok' : h?.controller ? 'degraded' : 'unknown');

@@ -32,7 +32,9 @@ export const EVENT_TYPES = {
   AGENT_IDLE: ['agentId'],
   AGENT_ERROR: ['agentId'],
   AGENT_OFFLINE: ['agentId'],
-  AGENT_MESSAGE: ['agentId', 'toAgentId'],
+  AGENT_MESSAGE: ['agentId', 'toAgentId'], // a handoff or note from one agent to another
+  MEETING_STARTED: ['meetingId', 'agentIds'], // agents gather in the meeting room
+  MEETING_ENDED: ['meetingId'],
   // Source control.
   PR_CREATED: ['prId', 'title'],
   PR_REVIEWED: ['prId'],

@@ -1,6 +1,5 @@
 // Browser side of the HQ adapter: polls the World server's read-only HQ feed and feeds the store.
 // The World server holds the HQ session; the page never sees an HQ token.
-import { emptyWorld } from '../core/state.mjs';
 import { makeEvent } from '../core/events.mjs';
 import { HqTranslator } from './hq.mjs';
 
@@ -18,8 +17,8 @@ export function connectHq(store, { intervalMs = 2000, onStatus = () => {} } = {}
       const body = await r.json().catch(() => ({}));
       if (!r.ok || body.offline) throw Error(body.error ?? `HTTP ${r.status}`);
       const { reset, events } = translator.ingest(body);
-      if (reset) store.replace(emptyWorld()); // backend truth replaces whatever was shown
-      store.dispatchAll(events);
+      if (reset) store.reset(events); // backend truth replaces whatever was shown
+      else store.dispatchAll(events);
       status(true);
     } catch (error) {
       if (online !== false && store.world.systems.hq) store.dispatch(makeEvent('SYSTEM_STATUS', { systemId: 'hq', state: 'down', detail: `HQ unreachable: ${error.message}` }, { source: 'hq' }));

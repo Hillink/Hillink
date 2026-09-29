@@ -1,3 +1,5 @@
+import { fantasyScenery } from './fantasy-scenery.mjs';
+
 // Fantasy theme: the Hillink realm concept art (Kyle's reference, 2026-09-29).
 // The painted character name cards become live "plaques": each shows the real agent bound to that
 // persona and its real status, or "No agent connected". Nothing painted claims activity by itself.
@@ -9,6 +11,18 @@ export const fantasyTheme = {
   // Proposed persona pairing (Claude builds, Codex inspects, HQ's verifier is the Oracle); a plaque shows the first
   // listed agent that exists, and personas without an agent say so.
   avatars: { claude: 'dwarf', codex: 'cyborg', chatgpt: 'king', gemma: 'cyclops', 'hq-verifier': 'oracle', qwen: 'goblin', sales: 'cupid', support: 'ghost', research: 'cyclops', security: 'sentinel' },
+  looks: {
+    dwarf: { shirt: '#c96a2b', pants: '#4a3526', skin: '#e3b08a', hair: '#b5541c', beard: '#b5541c', hat: 'helmet', hatColor: '#e0a030', screen: '#ffb27a' },
+    cyborg: { shirt: '#d7dde6', pants: '#8a94a3', skin: '#c7ced8', hair: '#aab4c2', visor: '#3ad0ff', hat: 'helmet', hatColor: '#e8ecf1', screen: '#5ee1ff' },
+    king: { shirt: '#6d1f2b', pants: '#3a1f1f', hair: '#6b4a2b', beard: '#6b4a2b', cape: '#9b1c2c', hat: 'crown' },
+    cyclops: { shirt: '#7b6bd6', pants: '#3d3470', skin: '#9c8fe0', hair: '#5a4fb0', screen: '#8fd3ff' },
+    oracle: { shirt: '#5b4a9e', pants: '#3b2f6e', hat: 'hood', hatColor: '#6f5bc0', glow: '#9b7bff', screen: '#c3a6ff' },
+    goblin: { shirt: '#4c6b2f', pants: '#3a2f22', skin: '#8fb45a', hair: '#3f5a22', screen: '#b6f07c' },
+    cupid: { shirt: '#f3e6d8', pants: '#e8d4c2', hair: '#d4a24c' }, ghost: { shirt: '#dfe8ff', pants: '#c9d6f5', skin: '#eef3ff', hair: '#eef3ff' },
+    sentinel: { shirt: '#3a3f55', pants: '#262a3a', hat: 'helmet', hatColor: '#4b5170' },
+  },
+  package: 'scroll',
+  scenery: fantasyScenery,
   plaques: [
     { rect: [352, 166, 496, 207], title: 'Scout (Cupid)', agentIds: ['sales'] },
     { rect: [793, 164, 932, 201], title: 'Orchestrator (King)', agentIds: ['chatgpt'] },

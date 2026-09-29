@@ -88,6 +88,13 @@ export class Simulator {
       this.emit('AGENT_WAITING', { agentId: 'support', detail: 'Waiting for sales handoff' });
     });
   }
+  teamMeeting() {
+    const ids = Object.keys(this.store.world.agents).slice(0, 4);
+    this.meeting = this.id('meeting');
+    this.emit('MEETING_STARTED', { meetingId: this.meeting, agentIds: ids, topic: 'Planning (simulated)' });
+  }
+  endMeeting() { if (this.meeting) this.emit('MEETING_ENDED', { meetingId: this.meeting }); this.meeting = null; }
+  ownerNeeded() { this.emit('ISSUE_FOUND', { issueId: this.id('issue'), title: 'Approve production SQL (simulated)', severity: 'high', location: 'command', agentId: 'codex', owner: true }); this.emit('AGENT_WAITING', { agentId: 'codex', detail: 'Waiting for Kyle' }); }
   queueWork(count = 5) { for (let i = 0; i < count; i++) this.emit('TASK_CREATED', { taskId: this.id('task'), title: `Queued task ${this.n}` }); }
   allIdle() { for (const a of Object.values(this.store.world.agents)) this.emit('AGENT_IDLE', { agentId: a.id }); }
   systemError() {
@@ -109,6 +116,6 @@ export class Simulator {
 export const SCENARIOS = [
   ['claudeCodes', 'Claude starts coding'], ['codexTests', 'Codex starts testing'], ['claudeMessagesCodex', 'Claude messages Codex'],
   ['testFails', 'Test fails'], ['testPasses', 'Test succeeds'], ['taskCompletes', 'Task completes'], ['deployBegins', 'Deployment begins'],
-  ['deploySucceeds', 'Deployment succeeds'], ['manyAgents', 'Many agents at once'], ['queueWork', 'Queue 5 tasks'], ['allIdle', 'Agents go idle'],
+  ['deploySucceeds', 'Deployment succeeds'], ['teamMeeting', 'Start a meeting'], ['endMeeting', 'End the meeting'], ['ownerNeeded', 'Needs Kyle'], ['manyAgents', 'Many agents at once'], ['queueWork', 'Queue 5 tasks'], ['allIdle', 'Agents go idle'],
   ['systemError', 'System error'], ['systemRecovers', 'System recovers'], ['tour', 'Play full tour'],
 ];

@@ -1,5 +1,9 @@
-// Art skin: draws a theme's painted backdrop, then live entities on top of it as portrait tokens,
-// orbs, beacons and plaques. Same draw contract as the placeholder skin; it only reads the frame.
+// Art skin: draws a theme's painted base plate, its animation layer (scenery), and live entities as
+// animated characters with a small portrait badge (the UI identifier), plus orbs, beacons and plaques.
+// Same draw contract as the placeholder skin; it only reads the frame.
+import { drawCharacter, agentPose } from './character.mjs';
+import { createScenery } from './scenery.mjs';
+import { hash } from '../engine/ambience.mjs';
 const STATUS = {
   coding: '#34d27b', thinking: '#34d27b', researching: '#34d27b', testing: '#34d27b', reviewing: '#34d27b', communicating: '#34d27b',
   waiting: '#f4a23b', idle: '#8aa0b8', completed: '#5cc98a', error: '#ef4b4b', offline: '#59616d',
@@ -32,6 +36,18 @@ export function createArtSkin(theme, onLoaded = () => {}) {
   const backdrop = load(theme.art.src), portraits = load(theme.art.portraits);
   const ready = img => img.complete && img.naturalWidth > 0;
   const [ox, oy] = theme.art.origin, [aw, ah] = theme.art.size;
+  const scenery = theme.scenery ? createScenery(theme.scenery, { img: backdrop, ready: () => ready(backdrop), origin: theme.art.origin, size: theme.art.size }) : null;
+  const idHash = id => { let h = 0; for (const c of id) h = (h * 31 + c.charCodeAt(0)) >>> 0; return (h % 1000) / 1000; };
+  // Idle agents are allowed to look alive (coffee, a stretch, glancing around) but never to look productive.
+  const idleVariant = (id, t) => {
+    const w = Math.floor((t + idHash(id) * 20) / 9), r = hash(w * 1.7 + idHash(id) * 50), into = (t + idHash(id) * 20) % 9;
+    return r < 0.3 ? 'coffee' : r < 0.4 && into < 2.5 ? 'stretch' : 'idle';
+  };
+  const lookFor = a => {
+    const key = theme.avatars?.[a.id];
+    return { ...(theme.looks?.[key] ?? { shirt: a.appearance?.color ?? colorFor(a.id) }), package: theme.package };
+  };
+  const ownerAction = (world, id) => Object.values(world?.issues ?? {}).some(i => i.open && i.agentId === id && i.owner);
 
   function portrait(ctx, agent, cx, cy, r) {
     const key = theme.avatars?.[agent.id] ?? agent.appearance?.[`${theme.id}Portrait`];
@@ -45,9 +61,11 @@ export function createArtSkin(theme, onLoaded = () => {}) {
   return {
     lod: [0.55, 1.35],
     background(ctx, camera) { ctx.fillStyle = '#0b0f16'; ctx.fillRect(0, 0, camera.width, camera.height); },
-    ground(ctx, { world, time, reducedMotion }) {
+    ground(ctx, env) {
+      const { world, time, reducedMotion } = env;
       if (ready(backdrop)) ctx.drawImage(backdrop, ox, oy, aw, ah);
       else { ctx.fillStyle = '#141a24'; ctx.fillRect(ox, oy, aw, ah); text(ctx, 'Loading art…', ox + aw / 2, oy + ah / 2, 24, '#9aa6b8'); }
+      if (ready(backdrop)) scenery?.under(ctx, env);
       // Painted name cards become live plaques bound to real agents.
       for (const p of theme.plaques ?? []) {
         const [x0, y0, x1, y1] = p.rect, a = p.agentIds.map(id => world?.agents?.[id]).find(Boolean) ?? null;
@@ -82,30 +100,47 @@ export function createArtSkin(theme, onLoaded = () => {}) {
         pill(ctx, sig.prs[0], sig.prs[1], [`${signals.development.length} open PR${signals.development.length > 1 ? 's' : ''}`], { dot: '#d7dde6', px: 9 });
       }
     },
-    agent(e, { ctx, time, lod, zoom, reducedMotion, claimLabel }, { hovered, selected }) {
+    agent(e, env, { hovered, selected }) {
       const a = e.agent; if (!a) return;
-      const clip = e.moving ? 'walk' : e.clip, anim = !reducedMotion, t = (time - (e.clipStart ?? 0)) / 1000;
-      let dx = 0, dy = 0;
-      if (anim) {
-        if (clip === 'walk') dy = -Math.abs(Math.sin(time / 90)) * 3;
-        else if (clip === 'error') dx = t < 1.2 ? Math.sin(time / 30) * 2.5 : 0;
-        else if (clip === 'success') dy = t < 1 ? -Math.abs(Math.sin(t * Math.PI * 2)) * 7 : 0;
-        else if (clip === 'think') dy = Math.sin(time / 500) * 1;
-      }
-      // Tokens grow a little when zoomed out so agents stay findable over detailed art.
-      const k = Math.min(1.7, Math.max(1, 1.1 / zoom)), r = 13 * k, cx = e.x + dx, cy = e.y - r - 6 + dy, ring = STATUS[a.activity] ?? STATUS.idle;
-      ctx.fillStyle = '#0008'; ctx.beginPath(); ctx.ellipse(e.x, e.y, 10, 3.5, 0, 0, Math.PI * 2); ctx.fill();
-      ctx.globalAlpha = a.activity === 'offline' ? 0.45 : 1;
-      if ((selected || hovered)) { ctx.beginPath(); ctx.arc(cx, cy, r + 6, 0, Math.PI * 2); ctx.fillStyle = selected ? '#e21b23' : '#ffffffcc'; ctx.fill(); }
-      ctx.beginPath(); ctx.arc(cx, cy, r + 3, 0, Math.PI * 2); ctx.fillStyle = ring; ctx.fill();
-      portrait(ctx, a, cx, cy, r);
-      if (a.activity === 'waiting' && anim) { ctx.beginPath(); ctx.arc(cx, cy, r + 3, -Math.PI / 2, -Math.PI / 2 + ((time / 1200) % 1) * Math.PI * 2); ctx.lineWidth = 2; ctx.strokeStyle = '#fff'; ctx.stroke(); }
-      if (a.activity === 'error') { ctx.beginPath(); ctx.arc(cx + r, cy - r, 6, 0, Math.PI * 2); ctx.fillStyle = '#ef4b4b'; ctx.fill(); text(ctx, '!', cx + r, cy - r + 0.5, 9, '#fff', { weight: 800 }); }
-      ctx.globalAlpha = 1;
-      if (lod === 'far' && !(hovered || selected)) return;
-      const lines = lod === 'near' || hovered || selected ? [a.name, activityText(a)] : [a.name];
-      if (claimLabel(e.x, e.y + 11 * k, (a.name.length * 6 + 24) * k, (lines.length * 12 + 6) * k, hovered || selected)) pill(ctx, e.x, e.y + 3, lines, { dot: ring, px: 9 * k });
+      const { ctx, time, lod, zoom, reducedMotion, claimLabel, world } = env, t = reducedMotion ? 0 : time / 1000;
+      const gait = e.gait ?? (e.moving ? 'walk' : null);
+      let pose = agentPose({ activity: a.activity, clip: e.clip, gait, carrying: e.carrying, receiving: e.receiving, arrived: !e.moving }, idleVariant(a.id, t));
+      if (pose === 'celebrating' && time - (e.clipStart ?? 0) > 3500) pose = 'idle';
+      let facing = e.facing ?? 1;
+      if (pose === 'idle' && hash(Math.floor((t + idHash(a.id) * 7) / 4) + idHash(a.id) * 9) > 0.72) facing = -facing; // glance around
+      if (gait === 'wait-lift' || gait === 'ride') facing = -1;
+      const ring = STATUS[a.activity] ?? STATUS.idle;
+      // Floor ring: marks a real, telemetry-bound agent (NPCs have none).
+      ctx.beginPath(); ctx.ellipse(e.x, e.y + 0.5, e.h * 0.27, e.h * 0.08, 0, 0, Math.PI * 2);
+      ctx.lineWidth = selected || hovered ? 2 : 1.2; ctx.strokeStyle = selected ? '#e21b23' : hovered ? '#ffffff' : ring; ctx.globalAlpha = 0.85; ctx.stroke(); ctx.globalAlpha = 1;
+      const head = drawCharacter(ctx, { x: e.x, y: e.y, h: e.h, facing, pose, t, stride: e.stride ?? 0, look: lookFor(a), alpha: a.activity === 'offline' ? 0.6 : 1 });
+      // UI layer (badge, label, attention marker) draws after everything else so foreground objects never hide it.
+      env.late.push(() => {
+        const k = Math.min(1.8, Math.max(0.8, 1 / zoom)), r = 6.5 * k, cx = e.x, cy = head.top - r - 3;
+        ctx.globalAlpha = a.activity === 'offline' ? 0.55 : 1;
+        if (selected || hovered) { ctx.beginPath(); ctx.arc(cx, cy, r + 4, 0, Math.PI * 2); ctx.fillStyle = selected ? '#e21b23' : '#ffffffcc'; ctx.fill(); }
+        ctx.beginPath(); ctx.arc(cx, cy, r + 2, 0, Math.PI * 2); ctx.fillStyle = ring; ctx.fill();
+        portrait(ctx, a, cx, cy, r);
+        ctx.globalAlpha = 1;
+        // Attention in the world: restrained markers; owner action looks different from a generic blocker.
+        const pulse = reducedMotion ? 1 : 0.75 + 0.25 * Math.sin(time / 380);
+        if (ownerAction(world, a.id)) { roundRect(ctx, cx + r - 1, cy - r - 9, 30, 12, 6); ctx.fillStyle = '#7b3fe4'; ctx.globalAlpha = pulse; ctx.fill(); ctx.globalAlpha = 1; text(ctx, 'You', cx + r + 14, cy - r - 3, 7.5, '#fff', { weight: 800 }); }
+        else if (a.activity === 'error') { ctx.beginPath(); ctx.arc(cx + r + 2, cy - r + 1, 5, 0, Math.PI * 2); ctx.fillStyle = '#e5484d'; ctx.globalAlpha = pulse; ctx.fill(); ctx.globalAlpha = 1; text(ctx, '!', cx + r + 2, cy - r + 1.5, 7.5, '#fff', { weight: 800 }); }
+        else if (a.activity === 'waiting') { ctx.beginPath(); ctx.arc(cx + r + 2, cy - r + 1, 5, 0, Math.PI * 2); ctx.fillStyle = '#f4a23b'; ctx.fill(); ctx.strokeStyle = '#fff'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(cx + r + 2, cy - r - 1.5); ctx.lineTo(cx + r + 2, cy - r + 1.5); ctx.lineTo(cx + r + 4, cy - r + 2.5); ctx.stroke(); }
+        if (a.activity === 'offline' && !reducedMotion) text(ctx, 'z', cx + r + 3, cy - r - 2 - ((time / 900) % 1) * 5, 7, '#c9d2de', { weight: 700 });
+        if (lod === 'far' && !(hovered || selected)) return;
+        const lines = lod === 'near' || hovered || selected ? [a.name, activityText(a)] : [a.name];
+        const ly = cy - r - 6 - lines.length * 11;
+        if (claimLabel(cx, ly + lines.length * 5, (a.name.length * 6 + 24) * k, lines.length * 12 + 6, hovered || selected)) pill(ctx, cx, ly, lines, { dot: ring, px: 8.5 });
+      });
     },
+    npc(e, { ctx, time, reducedMotion }) {
+      drawCharacter(ctx, { x: e.x, y: e.y, h: e.h, facing: e.facing, pose: e.pose, t: reducedMotion ? 0 : time / 1000 + e.index, stride: e.stride ?? 0, look: e.npc.look, alpha: 0.93, npc: true });
+    },
+    occluder(e, { ctx }) { scenery?.occluder(ctx, e.shapes); },
+    liftBack(e, { ctx, time, reducedMotion }) { scenery?.liftBack(ctx, e.lift, time / 1000, !reducedMotion); },
+    liftFront(e, { ctx }) { scenery?.liftFront(ctx, e.lift); },
+    overlay(ctx, env) { scenery?.over(ctx, env); },
     task(e, { ctx, time, reducedMotion }, { hovered, selected }) {
       const c = TASK_COLOR[e.task.status] ?? '#d6dde8', r = selected || hovered ? 5.5 : 4;
       const glow = e.task.status === 'active' && !reducedMotion ? 0.4 + 0.3 * Math.sin(time / 300) : 0.3;
@@ -138,7 +173,7 @@ export function createArtSkin(theme, onLoaded = () => {}) {
     },
     effect(fx, { ctx, time, scene }) {
       if (fx.kind !== 'message') return;
-      const a = scene.get(fx.from), b = scene.get(fx.to); if (!a || !b) return;
+      const a = scene.get(fx.from), b = scene.get(fx.to); if (!a || !b || a.errand) return; // a physical handoff replaces the envelope
       const k = Math.min(1, (time - fx.start) / fx.duration);
       const x = a.x + (b.x - a.x) * k, y = a.y - 34 + (b.y - a.y) * k - Math.sin(k * Math.PI) * 50;
       roundRect(ctx, x - 8, y - 6, 16, 12, 2); ctx.fillStyle = '#f1f4f8'; ctx.fill();

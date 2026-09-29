@@ -11,6 +11,6 @@ export const THEME_ORDER = ['real', 'fantasy', 'blueprint'];
 export function loadTheme(id, { onArtLoaded } = {}) {
   if (id === 'blueprint') return { id, name: 'Blueprint', layout: createLayout(blueprintLayout), skin: placeholderSkin, palette: palettes.day, camera: { minZoom: 0.2, maxZoom: 3 } };
   const def = id === 'fantasy' ? fantasyTheme : realTheme;
-  return { id: def.id, name: def.name, layout: createLayout(def.layout), skin: createArtSkin(def, onArtLoaded), palette: palettes.day, camera: def.camera, avatars: def.avatars, art: def.art };
+  return { id: def.id, name: def.name, layout: createLayout(def.layout), skin: createArtSkin(def, onArtLoaded), palette: palettes.day, camera: def.camera, avatars: def.avatars, art: def.art, scenery: def.scenery ?? null };
 }
 export const THEME_NAMES = { real: 'Realistic', fantasy: 'Fantasy', blueprint: 'Blueprint' };

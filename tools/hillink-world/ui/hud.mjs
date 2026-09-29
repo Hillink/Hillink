@@ -41,6 +41,8 @@ export function describe(e, world) {
     case 'AGENT_RESEARCHING': return `${name(world, e.agentId)} is researching`;
     case 'AGENT_ERROR': return `${name(world, e.agentId)} hit an error${e.detail ? `: ${e.detail}` : ''}`;
     case 'AGENT_WAITING': return `${name(world, e.agentId)} is waiting${e.detail ? `: ${e.detail}` : ''}`;
+    case 'MEETING_STARTED': return `Meeting started${e.topic ? `: ${e.topic}` : ''}`;
+    case 'MEETING_ENDED': return 'Meeting ended';
     case 'TESTS_STARTED': return `Tests started${e.suite ? ` (${e.suite})` : ''}`;
     case 'TESTS_FINISHED': return `Tests: ${e.passed} passed, ${e.failed} failed`;
     case 'PR_CREATED': return `PR opened: ${e.title ?? e.prId}`;

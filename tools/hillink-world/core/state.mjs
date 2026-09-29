@@ -3,7 +3,7 @@
 import { validateEvent } from './events.mjs';
 
 export function emptyWorld() {
-  return { seq: 0, at: 0, agents: {}, tasks: {}, systems: {}, prs: {}, builds: {}, deploys: {}, testRuns: {}, issues: {}, messages: [], log: [] };
+  return { seq: 0, at: 0, agents: {}, tasks: {}, systems: {}, prs: {}, builds: {}, deploys: {}, testRuns: {}, issues: {}, meetings: {}, messages: [], log: [] };
 }
 
 const ACTIVITY_BY_EVENT = {
@@ -112,6 +112,29 @@ export function applyEvent(world, event) {
       changed.add('messages');
       break;
     }
+    case 'MEETING_STARTED': {
+      world.meetings ??= {};
+      world.meetings[e.meetingId] = { id: e.meetingId, agentIds: [...e.agentIds], topic: e.topic ?? null, at: e.at };
+      for (const id of e.agentIds) {
+        const a = agent(world, id, changed);
+        if (!a.meetingId) a.beforeMeeting = a.activity;
+        a.meetingId = e.meetingId; setActivity(a, 'communicating', e);
+      }
+      changed.add('meetings');
+      break;
+    }
+    case 'MEETING_ENDED': {
+      const m = world.meetings?.[e.meetingId];
+      for (const id of m?.agentIds ?? []) {
+        const a = world.agents[id];
+        if (!a || a.meetingId !== e.meetingId) continue;
+        changed.add(`agent:${id}`);
+        a.meetingId = null; setActivity(a, a.beforeMeeting && a.beforeMeeting !== 'communicating' ? a.beforeMeeting : 'idle', e); a.beforeMeeting = null;
+      }
+      if (m) delete world.meetings[e.meetingId];
+      changed.add('meetings');
+      break;
+    }
     case 'PR_CREATED': case 'PR_REVIEWED': case 'PR_MERGED': {
       const pr = world.prs[e.prId] ??= { id: e.prId, title: e.title ?? e.prId, url: e.url ?? null, createdAt: e.at };
       pr.state = { PR_CREATED: 'open', PR_REVIEWED: 'reviewed', PR_MERGED: 'merged' }[e.type];
@@ -139,7 +162,7 @@ export function applyEvent(world, event) {
       break;
     }
     case 'ISSUE_FOUND':
-      world.issues[e.issueId] = { id: e.issueId, title: e.title, severity: e.severity ?? 'unknown', location: e.location ?? null, agentId: e.agentId ?? null, open: true, at: e.at };
+      world.issues[e.issueId] = { id: e.issueId, title: e.title, severity: e.severity ?? 'unknown', location: e.location ?? null, agentId: e.agentId ?? null, owner: e.owner === true, open: true, at: e.at };
       changed.add(`issue:${e.issueId}`);
       break;
     case 'ISSUE_RESOLVED':
@@ -152,6 +175,7 @@ export function applyEvent(world, event) {
         const a = agent(world, e.agentId, changed);
         setActivity(a, activity, e);
         if (activity !== 'communicating') a.talkingTo = null;
+        if (a.meetingId) { a.meetingId = null; a.beforeMeeting = null; } // real work pulls an agent out of a meeting
         if (e.taskId !== undefined) a.taskId = e.taskId;
       }
     }
@@ -183,4 +207,13 @@ export class WorldStore {
   }
   // Backend truth replaces the cached/simulated world wholesale.
   replace(world) { this.world = world; this.seen.clear(); for (const fn of this.listeners) fn(new Set(['*']), this.world); }
+  // Rebuild from a snapshot's events in one step, so views place everything directly instead of animating a replay.
+  reset(events) {
+    const world = emptyWorld(), ids = [];
+    for (const event of [...events].sort((a, b) => a.at - b.at)) {
+      try { applyEvent(world, event); ids.push(event.id); }
+      catch (error) { this.rejected.push({ event, error: error.message }); if (this.rejected.length > 50) this.rejected.shift(); }
+    }
+    this.pending = []; this.replace(world); for (const id of ids) this.seen.add(id);
+  }
 }
