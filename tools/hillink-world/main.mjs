@@ -8,7 +8,8 @@ import { statusLine } from './render/iso-skin.mjs';
 import { jobOf, lastJobOf, issuesFor } from './core/job.mjs';
 import { createCanvasRenderer } from './render/canvas2d.mjs';
 import { loadTheme, THEME_ORDER, THEME_NAMES } from './themes/index.mjs';
-import { Simulator, SCENARIOS } from './sim/simulator.mjs';
+import { Simulator, SCENARIOS, SIM_PASS_STEPS } from './sim/simulator.mjs';
+import { STAGE_LABEL } from './core/construction.mjs';
 import { hoverText, inspectHTML } from './ui/inspect.mjs';
 import { summarize, feedHTML, attentionHTML, rosterHTML, paintFaces } from './ui/hud.mjs';
 import { connectHq, hqAvailable } from './adapters/hq-client.mjs';
@@ -241,12 +242,28 @@ $('scenarios').addEventListener('click', e => {
   if (key === 'reset') { sim.stop(); storage.set('hlw:sim-world', null); location.reload(); return; }
   const cancelled = sim.run(key);
   $('sim-note').textContent = cancelled.length ? `Stopped “${cancelled.join('”, “')}” so it can't overwrite this scenario.` : '';
+  if (key === 'constructionStep') {
+    store.flush();
+    const p = store.world.passes?.['sim-pass'];
+    $('sim-note').textContent = p ? `Simulated construction: ${STAGE_LABEL[p.stage] ?? p.stage} (${Object.keys(p.evidence).length} of ${SIM_PASS_STEPS.length - 1} milestones). Click again for the next one.` : '';
+  }
   invalidate();
 });
 // v2: worlds saved by older builds (v1) are discarded rather than replayed into the new state shape.
 setInterval(() => { if (mode === 'sim') storage.set('hlw:sim-world', { v: 2, world: store.world }); }, 2000);
 
 function savePrefs() { cameraTouched = true; clearTimeout(savePrefs.t); savePrefs.t = setTimeout(() => storage.set(`hlw:camera:${theme.id}`, camera.toJSON()), 300); }
+
+// Construction (LIVE only): pass evidence from git and GitHub, collected and journaled by the World server.
+// Kept as sticky events so an HQ reconnect never demolishes what has been built.
+let constructionStatus = null;
+async function pollConstruction() {
+  try {
+    const r = await fetch('/api/construction', { cache: 'no-store' });
+    if (r.ok) { const body = await r.json(); constructionStatus = body.status ?? null; if (Array.isArray(body.events)) store.keep(body.events); }
+  } catch { /* the World keeps what it already has */ }
+  setTimeout(pollConstruction, 30000);
+}
 
 // Boot.
 resize();
@@ -257,6 +274,7 @@ if (mode === 'hq') {
   $('sim-toggle').hidden = true; $('sim-panel').hidden = true;
   showMode('live');
   connectHq(store, { onStatus: ok => showMode(ok ? 'live' : 'down') });
+  pollConstruction();
 } else {
   showMode('sim');
   const saved = storage.get('hlw:sim-world');
@@ -264,4 +282,4 @@ if (mode === 'hq') {
 }
 $('empty').hidden = Object.keys(store.world.agents).length > 0;
 invalidate();
-window.hillinkWorld = { store, get scene() { return scene; }, get theme() { return theme; }, camera, sim, focus, setTheme: applyTheme }; // Dev handle for tests and console.
+window.hillinkWorld = { get constructionStatus() { return constructionStatus; }, store, get scene() { return scene; }, get theme() { return theme; }, camera, sim, focus, setTheme: applyTheme }; // Dev handle for tests and console.

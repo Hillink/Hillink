@@ -192,6 +192,24 @@ Checked (observed, 2026-09-29, headless Chromium in the container):
 
 Not in the slice yet (proposed next): the remaining semantic rooms as real rooms (Command, Testing lab, Server room, Archive, Deploy), Kyle's character, sprite-quality art, construction stages mapped to task stages, lift batching, and day/night.
 
+## Pass 2: truthful state and pass-by-pass construction (built)
+
+Kyle approved the correction plan in issue #12 (comment 5895635191) on 2026-09-29 with "Keep / use existing / merge to main". Confirmed by Kyle: today's two-floor HQ is the V1 baseline; GitHub reads use the laptop's existing `gh` login; a pass is accepted when it merges to main.
+
+**P0, truthful state (observed in code after this change).** Labels separate what the body is doing (`actionText`: "Walking to Engineering", "Riding the elevator") from the job's stage (`core/job.mjs`), and the status dot is green only while the body does productive work. Tasks keep an evidence list (commit, PR, tests, review, handoff, finding), an outcome, and agents keep `lastTask`. Failures carry the agent, task, failing checks and the next action as reported by the source. Meetings are clickable objects with topic, participants, decision, evidence and outcome, and idle or waiting no longer ends them. Simulator scenarios own their timers: starting one cancels an older one that drives the same agents, and says so. Snapshot events collapse into one "Loaded" feed line.
+
+**P1, construction.**
+- A pass is data: `world/passes/<id>.json` (`id`, `order`, `title`, `branch`, `pr`, `since`, `scope`, `structures[]` with a plan footprint and site points).
+- `adapters/git.mjs` (server side, read-only) turns git and `gh` output into `PASS_PLANNED` and `PASS_EVIDENCE` events (branch, commit, pr, ci, review, merge). Event ids come from the evidence itself, so polling is idempotent. Commits map to agents by co-author trailer or author. Without `gh`, plans and commits still come from git; CI and reviews are simply absent (never guessed).
+- `serve.mjs` journals the events append-only (`~/.hillink-world/construction.jsonl`) and serves them at `/api/construction` (same-origin, loopback).
+- `core/construction.mjs` derives the stage from the whole evidence set: planned, claimed, implementing, testing, review, changes requested, rework, approved, accepted, and blocked (the latest commit's CI failed). One structural piece per commit; the final "active" piece only with the merge. Time moves nothing, and duplicate or out-of-order evidence gives the same result.
+- The browser keeps these as sticky events (`WorldStore.keep`), so an HQ reconnect or snapshot reset never demolishes the building.
+- `render/construction.mjs` draws the site from that state only: survey tape, slab, frame, beams, walls, glass, roof, fit-out boards, the lit sign once accepted, a test rig lamp that blinks only while CI runs, a stop sign when blocked (nothing is removed), a FIX/REWORK tag, an approval flag, and a plaque with the stage and counts.
+- Builders: a new commit or review (from the last 20 minutes, not history on load) sends its agent, if free, to the site to assemble or inspect for a few seconds, then back. An agent doing its own work never leaves it; offline agents never walk.
+- LIVE shows only real passes; simulation shows only the simulated pass ("Construction: next milestone", one milestone per click, no timers, labelled SIMULATED).
+
+**Tests:** `tests/truth.test.mjs` (labels, continuity, failures, overlapping scenarios, meetings, history) and `tests/construction.test.mjs` (milestones, time, out-of-order evidence, blocked keeps work, rework, acceptance, sticky reset, journal reload, git adapter with fake git/gh, the simulated pass, builder visits).
+
 ## Phases (from the brief) and where this PR stops
 
 | Phase | State |

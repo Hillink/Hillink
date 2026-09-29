@@ -1,9 +1,10 @@
 // World state: a pure reducer over World events plus a store that reports exactly what changed.
 // No DOM, no rendering, no backend knowledge. Deterministic and testable in Node.
 import { validateEvent } from './events.mjs';
+import { applyPassEvent } from './construction.mjs';
 
 export function emptyWorld() {
-  return { seq: 0, at: 0, agents: {}, tasks: {}, systems: {}, prs: {}, builds: {}, deploys: {}, testRuns: {}, issues: {}, meetings: {}, meetingLog: [], messages: [], log: [] };
+  return { seq: 0, at: 0, agents: {}, tasks: {}, systems: {}, prs: {}, builds: {}, deploys: {}, testRuns: {}, issues: {}, meetings: {}, meetingLog: [], passes: {}, messages: [], log: [] };
 }
 
 const ACTIVITY_BY_EVENT = {
@@ -193,6 +194,9 @@ export function applyEvent(world, event) {
       if (t) { addEvidence(t, { kind: 'tests', ref: e.runId, summary: `${e.passed} passed, ${e.failed} failed${r.suite ? ` (${r.suite})` : ''}`, failed: e.failed, at: e.at }); changed.add(`task:${t.id}`); }
       break;
     }
+    case 'PASS_PLANNED': case 'PASS_EVIDENCE':
+      applyPassEvent(world, e, changed);
+      break;
     case 'ISSUE_FOUND':
       world.issues[e.issueId] = { id: e.issueId, title: e.title, severity: e.severity ?? 'unknown', location: e.location ?? null, agentId: e.agentId ?? null, taskId: e.taskId ?? null, runId: e.runId ?? null, nextAction: e.nextAction ?? null, nextActionSource: e.nextAction ? e.source : null, owner: e.owner === true, open: true, at: e.at };
       changed.add(`issue:${e.issueId}`);
@@ -227,7 +231,10 @@ export function applyEvent(world, event) {
 // Store: batches events and notifies subscribers once per flush with the union of changed keys,
 // so one agent's progress never forces a whole-world redraw decision.
 export class WorldStore {
-  constructor(world = emptyWorld()) { this.world = world; this.listeners = new Set(); this.pending = []; this.seen = new Set(); this.rejected = []; }
+  constructor(world = emptyWorld()) { this.world = world; this.listeners = new Set(); this.pending = []; this.seen = new Set(); this.rejected = []; this.sticky = new Map(); }
+  // Events from a source independent of the main feed (construction evidence from git and GitHub) survive
+  // a reset or replace: HQ reconnecting must not demolish the building.
+  keep(events) { for (const e of events) if (!this.sticky.has(e.id)) { this.sticky.set(e.id, e); this.pending.push(e); } }
   subscribe(fn) { this.listeners.add(fn); return () => this.listeners.delete(fn); }
   dispatch(event) { this.pending.push(event); }
   dispatchAll(events) { for (const e of events) this.pending.push(e); }
@@ -245,7 +252,11 @@ export class WorldStore {
     return changed;
   }
   // Backend truth replaces the cached/simulated world wholesale.
-  replace(world) { this.world = world; this.seen.clear(); for (const fn of this.listeners) fn(new Set(['*']), this.world); }
+  replace(world) {
+    this.world = world; this.seen.clear();
+    for (const e of this.sticky.values()) { try { applyEvent(world, e); this.seen.add(e.id); } catch { /* reported on first delivery */ } }
+    for (const fn of this.listeners) fn(new Set(['*']), this.world);
+  }
   // Rebuild from a snapshot's events in one step, so views place everything directly instead of animating a replay.
   reset(events) {
     const world = emptyWorld(), ids = [];

@@ -80,14 +80,14 @@ export const FURNITURE = [
   // Roof
   { id: 'sign', type: 'roofSign', floor: 2, x: 180, z: 60, w: 280, d: 8, h: 44 },
   { id: 'ac1', type: 'acUnit', floor: 2, x: 40, z: 30, w: 34, d: 24, h: 22 },
-  { id: 'crane', type: 'crane', floor: 2, x: 610, z: 70, w: 16, d: 16, h: 150, system: 'deploy' },
-  { id: 'scaffold', type: 'scaffold', floor: 2, x: 525, z: 50, w: 250, d: 100, h: 100 },
+  // (Pass 2) The always-on crane and scaffold are gone: a construction site exists only while a real pass is
+  // being built, where its plan puts it (render/construction.mjs).
   { id: 'liftMotor', type: 'liftMotor', floor: 2, x: 535, z: 71, w: 70, d: 58, h: 26 },
   // Plaza and street (exterior)
   { id: 'tree1', type: 'tree', floor: 0, x: 812, z: 74, w: 24, d: 24, h: 96, solid: true },
   { id: 'tree2', type: 'tree', floor: 0, x: -70, z: 60, w: 24, d: 24, h: 84, solid: true },
   { id: 'hedge', type: 'hedge', floor: 0, x: -60, z: 16, w: 90, d: 14, h: 16, solid: true },
-  { id: 'benchOut', type: 'parkBench', floor: 0, x: 744, z: 22, w: 44, d: 12, h: 16, facing: 'front', solid: true },
+  { id: 'benchOut', type: 'parkBench', floor: 0, x: 925, z: 40, w: 44, d: 12, h: 16, facing: 'front', solid: true },
   { id: 'lamp1', type: 'lamp', floor: 0, x: 700, z: -24, w: 6, d: 6, h: 90 },
   { id: 'lamp2', type: 'lamp', floor: 0, x: 916, z: -24, w: 6, d: 6, h: 90 },
   { id: 'planter', type: 'planter', floor: 0, x: 880, z: 30, w: 40, d: 16, h: 16, solid: true },
@@ -141,6 +141,9 @@ export const POINTS = [
   { id: 'review2', room: 'development', x: 316, z: 70, pose: 'stand', facing: 'back', use: 'inspect', desk: 'console', via: 'erv' },
   { id: 'rig', room: 'development', x: 368, z: 64, pose: 'stand', facing: 'back', use: 'inspect', desk: 'console', via: 'erv' },
   { id: 'shelf', room: 'development', x: 282, z: 76, pose: 'stand', facing: 'back', use: 'read', via: 'ea276' },
+  // Plaza: where builders stand to work on a construction site east of the entrance (Pass 2's annex).
+  { id: 'site1', room: 'plaza', x: 716, z: 26, pose: 'stand', facing: 'back', use: 'build', via: 'p2' },
+  { id: 'site2', room: 'plaza', x: 770, z: 26, pose: 'stand', facing: 'back', use: 'inspect', via: 'p2' },
 ];
 
 // Navigation graph: walkable nodes per floor and the edges between them (all edges stay on floor

@@ -9,6 +9,8 @@ npm run test:world     # engine tests (node:test, no browser)
 
 **Live:** if Hillink HQ is running (`HQ_URL`, default http://127.0.0.1:4312), the World shows HQ's real agents and tasks. The badge reads LIVE: HQ. HQ is only read, never written. `WORLD_HQ=0` turns this off.
 
+**Construction:** each development pass is a building project on the plaza. The World server reads the local git clone and the `gh` CLI (your existing login) for plans in `tools/hillink-world/world/passes/*.json`, commits, CI, reviews and the merge, and journals that evidence in `~/.hillink-world/construction.jsonl` (`WORLD_STATE_DIR` to move it) so a reload or restart keeps what was built. The only network command is `git fetch`. A pass advances only on that evidence, never on time, and is accepted when it merges to main. It shows in LIVE mode only. `WORLD_GIT=0` turns it off; `WORLD_GIT_INTERVAL_MS` sets the poll (default 60000). Click the site for its stage, blockers and evidence. In simulation, "Construction: next milestone" walks a clearly labelled simulated pass one milestone per click.
+
 **Simulation:** without HQ, or with `?source=sim`, the World uses the dev simulator. Open "Dev simulation" to play scenarios. Simulated events are tagged `sim`, never mix with live data, and never touch Hillink data.
 
 Styles: **Realistic**, **Fantasy** and **Blueprint** (toggle in the header, or `?theme=fantasy`). All three show the same World state.

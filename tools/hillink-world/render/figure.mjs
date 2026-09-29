@@ -36,6 +36,11 @@ function prop(ctx, kind, hx, hy, s, look, T, lw) {
   } else if (kind === 'book') {
     shape(ctx, round(hx - s * 0.12, hy - s * 0.1, s * 0.24, s * 0.12, s * 0.01), '#f2ead8', lw * 0.7);
     ctx.fillStyle = look.bookColor ?? '#8b3a3a'; ctx.fillRect(hx - s * 0.008, hy - s * 0.1, s * 0.016, s * 0.12);
+  } else if (kind === 'hammer') {
+    ctx.save(); ctx.translate(hx, hy); ctx.rotate(-0.6 + Math.max(0, Math.sin(T * 5)) * 0.9);
+    shape(ctx, round(-s * 0.012, -s * 0.16, s * 0.024, s * 0.16, s * 0.006), '#8a5a2b', lw * 0.6);
+    shape(ctx, round(-s * 0.05, -s * 0.18, s * 0.1, s * 0.04, s * 0.008), '#6b7280', lw * 0.6);
+    ctx.restore();
   } else if (kind === 'package') {
     if (look.package === 'scroll') {
       shape(ctx, round(hx - s * 0.13, hy - s * 0.1, s * 0.26, s * 0.1, s * 0.04), '#ecdcae', lw);
@@ -159,7 +164,8 @@ export function drawFigure(ctx, o) {
     case 'carry': arms = side ? [[f * h * 0.16, h * 0.14], [f * h * 0.2, h * 0.15]] : [[-h * 0.1, h * 0.14], [h * 0.1, h * 0.14]]; held = 'package'; break;
     case 'type': { const a = wave(T, 24) * h * 0.012, b = wave(T, 21, 1) * h * 0.012; arms = dir === 'back' ? [[-h * 0.1, h * 0.03 + a], [h * 0.1, h * 0.03 + b]] : [[reach * h * 0.2 - h * 0.05, h * 0.13 + a], [reach * h * 0.24 + h * 0.05, h * 0.14 + b]]; break; }
     case 'work': arms = dir === 'back' ? [[-h * 0.12, h * 0.08], [h * 0.06, -h * 0.02 + wave(T, 0.7) * h * 0.01]] : [[-h * 0.17, h * 0.2], [h * 0.04, h * 0.0]]; break;
-    case 'inspect': arms = dir === 'back' ? [[-h * 0.06, h * 0.02], [h * 0.2, h * 0.0 + wave(T, 1.6) * h * 0.02]] : [[reach * h * 0.14 - h * 0.07, h * 0.1], [reach * h * 0.2 + h * 0.07, h * 0.08 + wave(T, 1.6) * h * 0.02]]; held = 'tablet'; break;
+    case 'inspect': case 'survey': arms = dir === 'back' ? [[-h * 0.06, h * 0.02], [h * 0.2, h * 0.0 + wave(T, 1.6) * h * 0.02]] : [[reach * h * 0.14 - h * 0.07, h * 0.1], [reach * h * 0.2 + h * 0.07, h * 0.08 + wave(T, 1.6) * h * 0.02]]; held = 'tablet'; break;
+    case 'assemble': { const k = Math.max(0, Math.sin(T * 5)); arms = [[-h * 0.1, h * 0.1], [h * 0.12, -h * 0.02 - k * h * 0.12]]; held = 'hammer'; break; }
     case 'read': arms = [[reach * h * 0.14 - h * 0.09, h * 0.12], [reach * h * 0.14 + h * 0.09, h * 0.12]]; held = 'book'; break;
     case 'talk': case 'meeting': { const speak = state === 'talk' || Math.sin(T * 0.6 + x * 0.05) > 0.2; arms = [[-h * 0.2, h * 0.2], [h * 0.14 + (speak ? wave(T, 3.2) * h * 0.06 : 0), speak ? h * 0.06 + wave(T, 4.1) * h * 0.05 : h * 0.2]]; break; }
     case 'blocked': arms = [[-h * 0.12, -h * 0.2], [h * 0.12, -h * 0.2]]; break;
@@ -210,7 +216,7 @@ export function drawFigure(ctx, o) {
   } else if (dir === 'front') {
     if (held) prop(ctx, held, (handL[0] + handR[0]) / 2, Math.min(handL[1], handR[1]) + h * 0.04, h, L, T, lw);
     drawArm(shL, handL, armColor); drawArm(shR, handR, armColor2);
-  } else if (held === 'tablet' || held === 'package') prop(ctx, held, handR[0] + h * 0.05, handR[1], h, L, T, lw);
+  } else if (held === 'tablet' || held === 'package' || held === 'hammer') prop(ctx, held, handR[0] + h * 0.05, handR[1], h, L, T, lw);
   // A brief "!" when a character notices something that needs it.
   if (state === 'react') {
     const k = Math.min(1, t / 0.18);

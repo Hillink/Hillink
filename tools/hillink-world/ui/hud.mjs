@@ -62,6 +62,11 @@ export function describe(e, world) {
     case 'DEPLOY_FAILED': return 'Deploy failed';
     case 'BUILD_FAILED': return 'Build failed';
     case 'ISSUE_FOUND': return `Issue: ${e.title}`;
+    case 'PASS_PLANNED': return null; // the site itself shows the plan
+    case 'PASS_EVIDENCE': {
+      const pass = world.passes?.[e.passId], who = e.evidence?.by && world.agents[e.evidence.by]?.name;
+      return `${pass?.title?.split(':')[0] ?? e.passId}: ${who && e.evidence.kind === 'commit' ? `${who} installed ` : ''}${e.evidence?.summary ?? e.evidence?.kind}`;
+    }
     case 'ISSUE_RESOLVED': return `Resolved: ${world.issues[e.issueId]?.title ?? 'issue'}`;
     case 'SYSTEM_STATUS': return e.state === 'ok' ? `${world.systems[e.systemId]?.name ?? e.systemId} is healthy` : `${world.systems[e.systemId]?.name ?? e.systemId} ${e.state}`;
     default: return null;
@@ -77,7 +82,8 @@ export function ago(ms) {
 // "Loaded" line at the time the state was loaded, and every other line keeps its source timestamp.
 export function feedHTML(world, now, limit = 6) {
   const lines = [];
-  for (let i = world.log.length - 1; i >= 0 && lines.length < limit; i--) {
+  // Newest by source time, not by arrival: a batch of older construction evidence must not bury live news.
+  for (let i = world.log.length - 1; i >= 0; i--) {
     const e = world.log[i]; if (e.snapshot) continue;
     const text = describe(e, world);
     if (text) lines.push({ text, at: e.at });

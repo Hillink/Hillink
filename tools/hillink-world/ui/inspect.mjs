@@ -1,3 +1,4 @@
+import { STAGE_LABEL, PIECES } from '../core/construction.mjs';
 // Contextual detail (brief §10–11): built from World state on demand, never shown by default.
 const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const ago = (at, now) => (at == null ? 'unknown' : `${Math.max(0, Math.round((now - at) / 1000))}s ago`);
@@ -13,11 +14,12 @@ export function hoverText(ref, world, extra = {}) {
   if (ref.type === 'system') { const s = world.systems[ref.id]; return s ? `${s.name} · ${s.state}` : ''; }
   if (ref.type === 'issue') { const i = world.issues[ref.id]; return i ? `Issue: ${i.title}` : ''; }
   if (ref.type === 'meeting') { const m = world.meetings?.[ref.id]; return m ? `Meeting: ${m.topic ?? 'untitled'}` : ''; }
+  if (ref.type === 'pass') { const p = world.passes?.[ref.id]; return p ? `${p.title} · ${STAGE_LABEL[p.stage] ?? p.stage}` : ''; }
   if (ref.type === 'room') return ref.name ?? ref.id;
   return '';
 }
 
-const EVIDENCE_LABEL = { commit: 'Commit', pr: 'PR', tests: 'Tests', review: 'Review', handoff: 'Handoff', finding: 'Finding' };
+const EVIDENCE_LABEL = { commit: 'Commit', pr: 'PR', tests: 'Tests', review: 'Review', handoff: 'Handoff', finding: 'Finding', branch: 'Branch', ci: 'CI', merge: 'Merge' };
 function evidenceList(items, now, limit = 5) {
   if (!items?.length) return '';
   return `<h3>Evidence</h3><ul class="evidence">${items.slice(-limit).reverse().map(e => `<li><b>${esc(EVIDENCE_LABEL[e.kind] ?? e.kind)}</b> ${esc(e.summary ?? e.ref ?? '')} ${e.at != null ? `<time>${esc(ago(e.at, now))}</time>` : ''}</li>`).join('')}</ul>`;
@@ -56,6 +58,22 @@ export function inspectHTML(ref, world, now, location, places = {}, extra = {}) 
       ${row('With', m.agentIds.map(id => world.agents[id]?.name ?? id).join(', '))}${row('Started', ago(m.at, now))}
       ${row('Decision needed', m.decision ?? 'None stated')}${m.endedAt ? row('Outcome', m.outcome ?? 'None recorded') : row('Outcome', 'Pending')}
       ${m.taskId && world.tasks[m.taskId] ? row('Task', world.tasks[m.taskId].title) : ''}${evidenceList(m.evidence, now)}`;
+  }
+  if (ref.type === 'pass') {
+    const p = world.passes?.[ref.id]; if (!p) return '';
+    const ev = Object.values(p.evidence ?? {}).sort((a, b) => a.at - b.at);
+    const sim = p.source === 'sim', prEv = ev.filter(x => x.kind === 'pr').at(-1);
+    const reviews = ev.filter(x => x.kind === 'review');
+    const built = PIECES.slice(0, p.pieces).join(', ');
+    const link = !sim && prEv?.url && /^https:\/\/github\.com\//.test(prEv.url) ? `<a href="${esc(prEv.url)}" target="_blank" rel="noopener">${esc(prEv.ref)} on GitHub</a>` : '';
+    return `<p class="kicker">Construction${sim ? ' (simulated)' : ''}</p><h2>${esc(p.title)}</h2>${p.summary ? `<p class="muted">${esc(p.summary)}</p>` : ''}
+      ${row('Stage', STAGE_LABEL[p.stage] ?? p.stage)}${row('Builds', (p.structures ?? []).map(s => s.name).join(', ') || 'Nothing on the map')}
+      ${row('Installed', `${p.pieces} of ${PIECES.length}: ${built}`)}${row('Commits', p.commits)}${row('CI (latest commit)', p.ci ?? 'No run yet')}
+      ${row('Reviews', reviews.length ? reviews.map(r => `${r.by ?? 'someone'}: ${String(r.state).replace('_', ' ')}`).join('; ') : 'None yet')}${p.rework ? row('Rework rounds', p.rework) : ''}
+      ${p.blocker ? `<div class="alert"><b>Blocked: ${esc(p.blocker.summary)}</b><p><span>Next:</span> Fix the failing checks on the latest commit and push. The site keeps everything already built.</p></div>` : ''}
+      ${p.request ? `<div class="alert"><b>Changes requested${p.request.by ? ` by ${esc(p.request.by)}` : ''}</b><p>${esc(p.request.summary)}</p><p><span>Next:</span> A commit that addresses the review.</p></div>` : ''}
+      ${p.stage === 'accepted' ? '<p class="muted">Merged to main: this structure is now part of the World.</p>' : '<p class="muted">Advances only on real evidence (commits, CI, reviews, merge). Accepted when it merges to main.</p>'}
+      ${link}${evidenceList(ev, now, 8)}${row('Source', sim ? 'Simulation' : 'Git and GitHub')}`;
   }
   if (ref.type === 'task') {
     const t = world.tasks[ref.id]; if (!t) return '';

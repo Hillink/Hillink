@@ -49,6 +49,9 @@ export const EVENT_TYPES = {
   // Tests.
   TESTS_STARTED: ['runId'],
   TESTS_FINISHED: ['runId', 'passed', 'failed'],
+  // Construction: each development pass is a building project; it moves only on real evidence.
+  PASS_PLANNED: ['passId', 'title'],
+  PASS_EVIDENCE: ['passId', 'evidence'],
   // Issues and system health.
   ISSUE_FOUND: ['issueId', 'title'],
   ISSUE_RESOLVED: ['issueId'],

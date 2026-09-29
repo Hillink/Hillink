@@ -121,7 +121,7 @@ export function createIsoLayout(def = B) {
     locations, locationById, navNodes, navEdges, nodePlan: plan, locationAt, planAt, route, lifts, liftOf, stationInfo,
     places: def.PLACES,
     taskSlots: { queue: { x: bx, y: by, cols: 6, step: 12 }, archive: { x: sx, y: sy, cols: 4, step: 6 } },
-    systemSpots: { database: spot('rack'), tests: spot('console'), platform: spot('reception'), hq: spot('reception'), deploy: spot('crane'), build: spot('crane') },
+    systemSpots: { database: spot('rack'), tests: spot('console'), platform: spot('reception'), hq: spot('reception'), deploy: spot('liftMotor'), build: spot('liftMotor') },
     signals: {},
   };
 }

@@ -162,6 +162,16 @@ export class Simulator {
     this.later(work + review, () => { this.emit('PR_REVIEWED', { prId, verdict: 'approved', summary: 'no blocking findings (simulated)' }); this.emit('AGENT_IDLE', { agentId: 'codex' }); });
     this.later(work + review + 5000, () => this.emit('AGENT_IDLE', { agentId: 'claude' }));
   }
+  // Construction, one real-shaped milestone per click (no timers: nothing advances on its own).
+  // The pass is marked simulated everywhere it shows; LIVE mode only ever draws passes from git and GitHub.
+  constructionStep() {
+    const pass = this.store.world.passes?.[SIM_PASS.id], done = pass ? Object.keys(pass.evidence).length + 1 : 0;
+    const step = SIM_PASS_STEPS[done];
+    if (!step) return false;
+    const [type, fields] = step;
+    this.emit(type, { passId: SIM_PASS.id, ...fields });
+    return true;
+  }
   // A scripted walkthrough of the whole loop.
   tour() {
     const steps = [() => this.claudeCodes(), () => this.claudeMessagesCodex(), () => this.codexTests(), () => this.testFails(), () => this.emit('AGENT_THINKING', { agentId: 'claude' }),
@@ -169,6 +179,31 @@ export class Simulator {
     steps.forEach((fn, i) => this.later(i * 3000, fn));
   }
 }
+
+export const SIM_PASS = {
+  id: 'sim-pass', title: 'Pass 2 (simulated): operations annex', order: 2,
+  structures: [{ id: 'ops-annex', kind: 'annex', name: 'Operations annex', floor: 0, x0: 690, x1: 796, z0: 40, z1: 98, h: 84, sitePoints: ['site1', 'site2'] }],
+};
+const sha = n => `51a${String(n).padStart(4, '0')}`.padEnd(40, '0');
+const commit = (n, summary, by = 'claude') => ['PASS_EVIDENCE', { agentId: by, evidence: { kind: 'commit', ref: sha(n), key: `commit:${sha(n)}`, summary, by } }];
+const ci = (n, state, summary) => ['PASS_EVIDENCE', { evidence: { kind: 'ci', ref: sha(n), sha: sha(n), key: `ci:${sha(n)}:${state}`, state, summary } }];
+const review = (id, state, summary) => ['PASS_EVIDENCE', { agentId: 'codex', evidence: { kind: 'review', ref: id, key: `review:${id}`, state, by: 'codex', summary } }];
+export const SIM_PASS_STEPS = [
+  ['PASS_PLANNED', { title: SIM_PASS.title, summary: 'Simulated milestones for trying the construction view. Not real Hillink work.', structures: SIM_PASS.structures, order: SIM_PASS.order }],
+  ['PASS_EVIDENCE', { evidence: { kind: 'branch', ref: 'sim/annex', key: 'branch', summary: 'Branch sim/annex' } }],
+  commit(1, 'Slab and frame for the annex'),
+  commit(2, 'Beams and walls'),
+  ['PASS_EVIDENCE', { evidence: { kind: 'pr', ref: '#sim', key: 'pr:ready', state: 'ready', summary: 'PR opened for review' } }],
+  ci(2, 'running', 'CI: running'),
+  ci(2, 'failed', 'Failing: unit tests'),
+  commit(3, 'Fix the failing unit tests'),
+  ci(3, 'passed', 'CI: passed'),
+  review('r1', 'changes_requested', 'Board text is too small to read'),
+  commit(4, 'Larger board text (review fix)'),
+  ci(4, 'passed', 'CI: passed'),
+  review('r2', 'approved', 'No blocking findings'),
+  ['PASS_EVIDENCE', { evidence: { kind: 'merge', ref: '#sim', key: 'merge', summary: 'Merged to main' } }],
+];
 
 // Which agents a scenario drives (for scenario ownership).
 function scenarioAgents(key, world) {
@@ -184,5 +219,5 @@ export const SCENARIOS = [
   ['reviewJourney', 'Claude builds, Codex reviews'], ['claudeCodes', 'Claude starts coding'], ['codexTests', 'Codex starts testing'], ['claudeMessagesCodex', 'Claude messages Codex'],
   ['testFails', 'Test fails'], ['testPasses', 'Test succeeds'], ['taskCompletes', 'Task completes'], ['deployBegins', 'Deployment begins'],
   ['deploySucceeds', 'Deployment succeeds'], ['teamMeeting', 'Start a meeting'], ['endMeeting', 'End the meeting'], ['ownerNeeded', 'Needs Kyle'], ['manyAgents', 'Many agents at once'], ['queueWork', 'Queue 5 tasks'], ['allIdle', 'Agents go idle'],
-  ['systemError', 'System error'], ['systemRecovers', 'System recovers'], ['tour', 'Play full tour'],
+  ['constructionStep', 'Construction: next milestone'], ['systemError', 'System error'], ['systemRecovers', 'System recovers'], ['tour', 'Play full tour'],
 ];

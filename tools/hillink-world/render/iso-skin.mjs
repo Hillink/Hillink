@@ -10,6 +10,7 @@ import { MATERIALS, lookFor } from './looks.mjs';
 import { vehiclesAt, hash } from '../engine/ambience.mjs';
 import { PRODUCTIVE_STATES, actionText } from '../engine/iso-view.mjs';
 import { jobOf } from '../core/job.mjs';
+import { drawSite, siteBox } from './construction.mjs';
 
 const TAU = Math.PI * 2;
 const STATUS = { coding: '#34d27b', thinking: '#34d27b', researching: '#34d27b', testing: '#34d27b', reviewing: '#34d27b', communicating: '#34d27b', waiting: '#f4a23b', idle: '#8aa0b8', completed: '#5cc98a', error: '#ef4b4b', offline: '#59616d' };
@@ -292,9 +293,13 @@ export function createIsoSkin(layout, skinId = 'real') {
       lastTests, openPrs: Object.values(world.prs ?? {}).filter(p => p.state !== 'merged').sort((a, b) => a.createdAt - b.createdAt),
       queued: tasks.filter(t => t.status === 'queued' || t.status === 'blocked'), archived: tasks.filter(t => t.status === 'done').length,
       construction: !!env.activity?.construction, meeting: agents.some(a => a.agent?.meetingId && !a.moving),
-      counts: { total: agents.length, working: agents.filter(a => WORKING.has(a.agent?.activity)).length },
+      counts: { total: agents.length, working: agents.filter(a => WORKING.has(a.agent?.activity)).length, issues: Object.values(world.issues ?? {}).filter(i => i.open).length },
       modeLabel: (env.modeLabel ?? '').split(':')[0], modeColor: env.modeLabel?.startsWith('LIVE') ? '#3ddc84' : '#ffb020',
     };
+    // Construction: in LIVE only real passes (git/GitHub evidence); in simulation only simulated ones.
+    const live = env.modeLabel?.startsWith('LIVE');
+    const passes = Object.values(world.passes ?? {}).filter(p => (live ? p.source !== 'sim' : p.source === 'sim') && p.structures?.length);
+    d.passCounts = { accepted: passes.filter(p => p.stage === 'accepted').length, active: passes.filter(p => p.stage !== 'accepted').length };
     if (debug) return blueprint(d, agents);
     drawGround(d);
     for (const f of floorsWithRooms) drawShell(d, f);
@@ -317,6 +322,10 @@ export function createIsoSkin(layout, skinId = 'real') {
       if (f === 0) {
         for (const e of npcs) { const pl = layout.planAt(e.x, e.y); if (pl) items.push({ ...charBox(e, pl.x, pl.z), draw: () => drawNpc(d, e) }); }
         for (const v of cars) items.push({ x0: v.x - 17, x1: v.x + 17, z0: v.y - 9, z1: v.y + 9, sb: boxBounds(P, { x0: v.x - 17, x1: v.x + 17, z0: v.y - 9, z1: v.y + 9, h1: 20 }, 0), draw: () => drawVehicle(d, v) });
+      }
+      for (const pass of passes) for (const s of pass.structures) if (s.floor === f) {
+        const builders = agents.filter(a => (s.sitePoints ?? []).includes(a.spot) && !a.moving).length;
+        items.push({ ...siteBox(P, s), draw: () => drawSite(d, pass, s, { builders, sim: pass.source === 'sim' }) });
       }
       if (lift && liftStops.floors.includes(f)) {
         const withCar = cf === f;

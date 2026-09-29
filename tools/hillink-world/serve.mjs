@@ -1,10 +1,14 @@
-// Local server for Hillink World. Loopback only, allowlisted static files, and one read-only data route:
-// GET /api/hq relays a trimmed HQ snapshot. The World server holds the HQ session server-side (the same
+// Local server for Hillink World. Loopback only, allowlisted static files, and two read-only data routes:
+// GET /api/hq relays a trimmed HQ snapshot; GET /api/construction serves construction evidence read from
+// the local git clone and the `gh` CLI (adapters/git.mjs), journaled so accepted work survives restarts. The World server holds the HQ session server-side (the same
 // local handshake HQ's own page uses); the browser never receives the HQ token and there are no writes.
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import os from 'node:os';
+import { execFile } from 'node:child_process';
+import { createConstructionSource } from './adapters/git.mjs';
 
 const root = path.dirname(fileURLToPath(import.meta.url));
 const types = { '.html': 'text/html; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.jpg': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp' };
@@ -52,7 +56,32 @@ export function hqClient(base = 'http://127.0.0.1:4312', { fetchImpl = fetch, ti
   };
 }
 
-export function createServer({ hq = process.env.WORLD_HQ === '0' ? null : hqClient(process.env.HQ_URL || 'http://127.0.0.1:4312') } = {}) {
+// Append-only construction journal (outside the repo). Each line is one evidence event with its source time,
+// so a restart, a reload or HQ reconnecting never resets the building; replay is the file in order.
+export function createJournal(file) {
+  const events = new Map();
+  try { for (const line of fs.readFileSync(file, 'utf8').split('\n')) if (line.trim()) { try { const e = JSON.parse(line); if (e?.id) events.set(e.id, e); } catch { /* skip a torn line */ } } } catch { /* first run */ }
+  return {
+    add(list) {
+      const fresh = list.filter(e => e?.id && !events.has(e.id));
+      if (!fresh.length) return 0;
+      for (const e of fresh) events.set(e.id, e);
+      try { fs.mkdirSync(path.dirname(file), { recursive: true }); fs.appendFileSync(file, fresh.map(e => JSON.stringify(e)).join('\n') + '\n'); } catch { /* still served from memory */ }
+      return fresh.length;
+    },
+    all: () => [...events.values()].sort((a, b) => a.at - b.at),
+  };
+}
+
+// Polls the construction source on an interval and keeps the journal; get() is what /api/construction serves.
+export function constructionFeed({ source, journal, intervalMs = 60000 }) {
+  let busy = false;
+  const tick = async () => { if (busy) return; busy = true; try { journal.add(await source.poll()); } catch (e) { source.status.error = String(e.message).slice(0, 200); } finally { busy = false; } };
+  tick(); const timer = setInterval(tick, intervalMs); timer.unref?.();
+  return { get: () => ({ events: journal.all(), status: { ...source.status } }), tick, stop: () => clearInterval(timer) };
+}
+
+export function createServer({ hq = process.env.WORLD_HQ === '0' ? null : hqClient(process.env.HQ_URL || 'http://127.0.0.1:4312'), construction = null } = {}) {
   return http.createServer(async (req, res) => {
     const url = new URL(req.url, 'http://localhost');
     const host = req.headers.host ?? '', port = req.socket.localPort;
@@ -67,6 +96,12 @@ export function createServer({ hq = process.env.WORLD_HQ === '0' ? null : hqClie
       // HQ being down is a normal state for this page (it falls back to simulation), so it is data, not an HTTP error.
       try { return send(200, JSON.stringify(await hq())); } catch (error) { return send(200, JSON.stringify({ offline: true, error: String(error.cause?.code ?? error.message).slice(0, 200) })); }
     }
+    if (url.pathname === '/api/construction') {
+      const site = req.headers['sec-fetch-site'];
+      if ((site && site !== 'same-origin') || (req.headers.origin && req.headers.origin !== `http://${host}`)) return send(403, '{"error":"Same-origin only"}');
+      if (!construction) return send(200, JSON.stringify({ events: [], status: { disabled: true } }));
+      return send(200, JSON.stringify(construction.get()));
+    }
     const file = url.pathname === '/' ? 'index.html' : decodeURIComponent(url.pathname.slice(1));
     if (!allowed.has(file)) return send(404, 'Not found', 'text/plain');
     send(200, fs.readFileSync(path.join(root, file)), types[path.extname(file)]);
@@ -75,5 +110,12 @@ export function createServer({ hq = process.env.WORLD_HQ === '0' ? null : hqClie
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const port = Number(process.env.WORLD_PORT || 4320);
-  createServer().listen(port, '127.0.0.1', () => console.log(`Hillink World: http://127.0.0.1:${port} (live from HQ at ${process.env.HQ_URL || 'http://127.0.0.1:4312'} when it is running, otherwise simulation)`));
+  const repo = path.resolve(root, '../..');
+  const run = (cmd, args) => new Promise((resolve, reject) => execFile(cmd, args, { cwd: repo, timeout: 30000, maxBuffer: 8e6, windowsHide: true }, (e, out) => (e ? reject(e) : resolve(out))));
+  const construction = process.env.WORLD_GIT === '0' ? null : constructionFeed({
+    source: createConstructionSource({ run }),
+    journal: createJournal(path.join(process.env.WORLD_STATE_DIR || path.join(os.homedir(), '.hillink-world'), 'construction.jsonl')),
+    intervalMs: Number(process.env.WORLD_GIT_INTERVAL_MS || 60000),
+  });
+  createServer({ construction }).listen(port, '127.0.0.1', () => console.log(`Hillink World: http://127.0.0.1:${port} (live from HQ at ${process.env.HQ_URL || 'http://127.0.0.1:4312'} when it is running, otherwise simulation)`));
 }
