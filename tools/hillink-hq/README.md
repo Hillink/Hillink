@@ -44,6 +44,17 @@ HTTP submission/headers alone leave the worker UNKNOWN/CLAIMED. Actual generatio
 
 Protocol sources: [Ollama model inventory](https://docs.ollama.com/api/tags), [generation stream and counters](https://docs.ollama.com/api/generate). On 2026-09-28 the local `gemma3:4b` bridge was exercised through the browser and completed an actual summary with ACK, output, usage and completion evidence. `qwen3.5:9b` was discovered and its adapter configured; live Qwen inference was not exercised in this pass. Deterministic tests cover routing and interrupted/rejected/empty responses.
 
+## Optional Claude and Codex CLI bridge
+
+Set `HQ_AGENTS_ENABLED=1` before starting the server (PowerShell: `$env:HQ_AGENTS_ENABLED='1'`). HQ then launches the owner's own installed and signed-in CLIs; no API key is stored in HQ.
+
+- **Claude** runs `claude -p --output-format stream-json` with only the `Read`, `Grep` and `Glob` tools, no MCP servers and no saved session.
+- **Codex** runs `codex exec --json --sandbox read-only -c approval_policy=never --ephemeral`. Its read-only guarantee is Codex's own sandbox.
+
+Queue **Ask Claude or Codex to review the repo (read-only)** and optionally pick the worker. The task description is sent over stdin, never on a command line. The child gets only PATH, profile/home and proxy variables plus that provider's own credential variable (`ANTHROPIC_API_KEY`/`CLAUDE_CONFIG_DIR` or `OPENAI_API_KEY`/`CODEX_HOME`); Supabase, Stripe and other secrets are not inherited.
+
+Evidence is real: the CLI's session start is the ACK, the live process sends heartbeats, and each agent step (tool use, message) is progress. The final answer, the token counts the CLI reports and exit status close the run. A missing CLI shows OFFLINE. A CLI that exits before starting a session fails with a sign-in hint. A usage limit becomes RATE_LIMITED with the reported reset time. Runs are stopped after 20 minutes. Cancellation needs observed process close (SIGTERM then SIGKILL; `taskkill /T` then `/T /F` on Windows, where the npm shim runs through a shell). Answers are model output, not verified implementation. Edit-capable runs are not implemented; that needs an owner decision on worktrees and review gates. ChatGPT has no local runner and stays UNKNOWN.
+
 ## Notifications
 
 Material alerts are durable and deduplicated per episode. They include agent/task, time since meaningful progress, evidence, recovery attempts, runnable count and exact owner action. Ordinary healthy progress does not alert. Acknowledgement and delivery are separate.

@@ -9,6 +9,7 @@ import { LocalAdapter } from './local-adapter.mjs';
 import { deliverNotifications, webhookSink } from './notifications.mjs';
 import { operations } from './registry.mjs';
 import { connectOllama } from './ollama-adapter.mjs';
+import { connectCliAgents } from './cli-agent-adapter.mjs';
 
 const here = fileURLToPath(new URL('.', import.meta.url));
 const assets = { '/': ['index.html', 'text/html'], '/app.mjs': ['app.mjs', 'text/javascript'], '/style.css': ['style.css', 'text/css'] };
@@ -22,11 +23,16 @@ async function body(req) {
   return JSON.parse(raw);
 }
 
-export async function createHQ({ port = 4312, directory = path.join(here, '.state'), store, adapters, sink, intervalMs = 1000, ollama = false } = {}) {
+export async function createHQ({ port = 4312, directory = path.join(here, '.state'), store, adapters, sink, intervalMs = 1000, ollama = false, cliAgents = false } = {}) {
   const journal = store ?? new FileStore(directory);
   const local = new LocalAdapter();
   const engine = new Engine({ store: journal, adapters: adapters ?? { 'local-checks': local } });
   engine.initialize();
+  let agentsStatus = 'DISABLED';
+  if (cliAgents) {
+    try { connectCliAgents(engine); agentsStatus = 'CONFIGURED'; }
+    catch (error) { agentsStatus = `UNAVAILABLE: ${error.message}`; }
+  }
   let ollamaStatus = 'DISABLED';
   if (ollama) {
     try { await connectOllama(engine); ollamaStatus = 'DISCOVERED'; }
@@ -51,7 +57,7 @@ export async function createHQ({ port = 4312, directory = path.join(here, '.stat
       if (req.headers['x-hq-client'] !== 'command-center' || (req.headers.origin && req.headers.origin !== origin) || (req.headers['sec-fetch-site'] && req.headers['sec-fetch-site'] !== 'same-origin')) return json(403, { error: 'Same-origin HQ client required' });
       if (req.method === 'GET' && url.pathname === '/api/session') return json(200, { token: session });
       if (!equal(req.headers.authorization, `Bearer ${session}`)) return json(401, { error: 'HQ session required' });
-      if (req.method === 'GET' && url.pathname === '/api/state') return json(200, { ...engine.snapshot(), events: engine.state.events.slice(-recentEvents), eventCount: engine.state.events.length, operations, health: { controller: lastError ? 'DEGRADED' : 'ONLINE', lastError, externalNotifications: sink ? 'CONFIGURED' : 'UNCONFIGURED', ollama: ollamaStatus, localOnly: true } });
+      if (req.method === 'GET' && url.pathname === '/api/state') return json(200, { ...engine.snapshot(), events: engine.state.events.slice(-recentEvents), eventCount: engine.state.events.length, operations, health: { controller: lastError ? 'DEGRADED' : 'ONLINE', lastError, externalNotifications: sink ? 'CONFIGURED' : 'UNCONFIGURED', ollama: ollamaStatus, cliAgents: agentsStatus, localOnly: true } });
       if (req.method === 'GET' && url.pathname === '/api/history') {
         const seq = Number(url.searchParams.get('seq') ?? engine.state.seq);
         if (!Number.isSafeInteger(seq) || seq < 0 || seq > engine.state.seq) throw Error('Invalid replay sequence');
@@ -93,7 +99,7 @@ export async function createHQ({ port = 4312, directory = path.join(here, '.stat
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const sink = process.env.HQ_NOTIFICATION_WEBHOOK ? webhookSink(process.env.HQ_NOTIFICATION_WEBHOOK) : null;
-  const hq = await createHQ({ port: Number(process.env.HQ_PORT || 4312), directory: process.env.HQ_STATE_DIR || path.join(here, '.state'), sink, ollama: process.env.HQ_OLLAMA_ENABLED === '1' });
+  const hq = await createHQ({ port: Number(process.env.HQ_PORT || 4312), directory: process.env.HQ_STATE_DIR || path.join(here, '.state'), sink, ollama: process.env.HQ_OLLAMA_ENABLED === '1', cliAgents: process.env.HQ_AGENTS_ENABLED === '1' });
   console.log(`Hillink HQ: ${hq.origin} (local control service; cloud execution adapters unavailable)`);
   if (!sink) console.log('External notifications unconfigured. Enable browser notifications or configure HQ_NOTIFICATION_WEBHOOK for delivery when the browser is closed.');
   for (const signal of ['SIGINT', 'SIGTERM']) process.once(signal, async () => { await hq.close(); process.exit(0); });
