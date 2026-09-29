@@ -5,7 +5,7 @@
 export const SCHEMA_VERSION = 1;
 
 // Semantic agent activities. The renderer decides what each looks like.
-export const ACTIVITIES = ['idle', 'thinking', 'coding', 'researching', 'testing', 'reviewing', 'communicating', 'waiting', 'completed', 'error', 'offline'];
+export const ACTIVITIES = ['idle', 'thinking', 'coordinating', 'coding', 'researching', 'testing', 'reviewing', 'communicating', 'waiting', 'completed', 'error', 'offline'];
 
 export const SYSTEM_STATES = ['ok', 'busy', 'degraded', 'down', 'unknown'];
 
@@ -25,6 +25,7 @@ export const EVENT_TYPES = {
   // Agent activity.
   AGENT_STARTED_WORK: ['agentId'],
   AGENT_THINKING: ['agentId'],
+  AGENT_COORDINATING: ['agentId'], // the orchestrator reading HQ and organizing work (Pass 2.5)
   AGENT_RESEARCHING: ['agentId'],
   AGENT_REVIEWING: ['agentId'],
   AGENT_TESTING: ['agentId'],

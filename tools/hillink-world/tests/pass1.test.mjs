@@ -161,7 +161,7 @@ test('world server: the command route accepts only same-origin JSON and journals
     const ok = await fetch(base, { method: 'POST', body, headers: { 'content-type': 'application/json', 'sec-fetch-site': 'same-origin' } });
     assert.equal(ok.status, 201);
     const list = await (await fetch(base)).json();
-    assert.deepEqual(Object.keys(list.commandable), ['claude']);
+    assert.deepEqual(Object.keys(list.commandable), ['claude', 'chatgpt']);
     assert.equal(list.commands[0].taskId, 'task-1'); assert.equal(list.commands[0].hq.stage, 'READY');
     assert.equal(hq.created.length, 1);
   } finally { server.close(); }

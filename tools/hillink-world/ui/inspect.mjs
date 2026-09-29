@@ -79,7 +79,7 @@ export function inspectHTML(ref, world, now, location, places = {}, extra = {}) 
       ${extra.issues?.length ? issueBlock(extra.issues, world, now) : ''}
       ${t ? evidenceList(t.evidence, now) : ''}
       ${!job && last ? `<h3>Last task</h3>${row('Task', last.title)}${row('Outcome', last.outcome)}${row('Ended', ago(last.at, now))}${last.pr ? row('PR', `${last.pr.title} (${last.pr.state}${last.pr.verdict ? `: ${last.pr.verdict}` : ''})`) : ''}${evidenceList(last.task?.evidence, now, 3)}` : ''}
-      ${extra.command ? commandBlock(a, extra.command, extra.commands, now) : ''}
+      ${extra.command ? (['NOT_CONNECTED', 'OFFLINE', 'UNKNOWN'].includes(truth.state) ? `<p class="muted">Not accepting requests: ${esc(truth.reason)}</p>` : commandBlock(a, extra.command, extra.commands, now)) : ''}
       ${row('Source', truth.basis === 'hq' ? 'HQ (live)' : truth.basis === 'simulation' ? 'Simulation' : a.source ?? 'unknown')}
       <button data-focus="agent:${esc(a.id)}">Follow with camera</button>`;
   }

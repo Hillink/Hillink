@@ -13,6 +13,8 @@ export const ACTIVITY_PLACE = {
   offline: { location: 'command', stations: ['lounge6', 'lounge5', 'lounge4', 'lounge3', 'lounge2', 'lounge1'], clip: 'offline' },
   // Completed and error stay where the work happened; only the clip changes.
   completed: { stay: true, clip: 'success' },
+  // The orchestrator's turns take seconds: it works where it stands rather than walking to a desk.
+  coordinating: { stay: true, clip: 'inspect' },
   error: { stay: true, clip: 'error' },
 };
 

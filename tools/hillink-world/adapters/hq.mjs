@@ -14,10 +14,10 @@ export function activityForCapability(capability = '') {
   if (/review/.test(capability)) return 'reviewing';
   if (/^(test|verify|security)/.test(capability)) return 'testing';
   if (/^(summarize|classify|extract|inspect|reason)/.test(capability)) return 'researching';
-  if (/^(plan|coordinate)/.test(capability)) return 'thinking';
+  if (/^(plan|coordinate)/.test(capability)) return 'coordinating';
   return 'coding';
 }
-const ACTIVITY_EVENT = { coding: 'AGENT_STARTED_WORK', reviewing: 'AGENT_REVIEWING', testing: 'AGENT_TESTING', researching: 'AGENT_RESEARCHING', thinking: 'AGENT_THINKING' };
+const ACTIVITY_EVENT = { coordinating: 'AGENT_COORDINATING', coding: 'AGENT_STARTED_WORK', reviewing: 'AGENT_REVIEWING', testing: 'AGENT_TESTING', researching: 'AGENT_RESEARCHING', thinking: 'AGENT_THINKING' };
 const LIVE = new Set(['CLAIMED', 'IMPLEMENTING', 'TESTING', 'REVIEW']);
 
 function stageActivity(task) {
@@ -62,12 +62,18 @@ export function runtimeFor(snap, a) {
   const run = task?.runId ? snap.runs?.[task.runId] : null, live = run && !run.endedAt;
   // The agent's most recent finished task, so a failure or a parked task stays visible after the run ends.
   const last = tasks.filter(t => t.agentId === a.id && t.endedAt && ['DONE', 'FAILED', 'BLOCKED'].includes(t.stage)).sort((x, y) => y.endedAt - x.endedAt)[0];
+  // Work this agent asked for (HQ's requestedBy): still open means it is waiting on someone.
+  const names = Object.fromEntries((snap.agents ?? []).map(x => [x.id, x.name]));
+  const asked = tasks.filter(t => t.requestedBy?.agentId === a.id);
+  const waitingOn = asked.filter(t => t.safety !== 'owner-required' && !['DONE', 'BLOCKED', 'FAILED'].includes(t.stage)).map(t => ({ taskId: t.id, agentId: t.agentId ?? t.preferredAgentId ?? null, agentName: names[t.agentId ?? t.preferredAgentId] ?? null, title: clip(t.title, 120), stage: t.stage }));
+  const approvals = asked.filter(t => t.safety === 'owner-required' && t.stage === 'BLOCKED').map(t => ({ taskId: t.id, title: clip(t.title, 120) }));
   return {
     connected: a.adapterAvailable ?? Boolean(a.executionAdapter), adapter: a.executionAdapter ?? null,
     status: a.status ?? 'UNKNOWN', detail: clip(a.detail, 300), retryAt: a.retryAt ?? null,
     taskId: task?.id ?? null, runId: live ? task.runId : null, acknowledged: Boolean(live && run.acknowledgedAt),
     heartbeatAt: live ? run.heartbeatAt ?? null : null, activity: task ? stageActivity(task) : null,
-    last: last ? { taskId: last.id, stage: last.stage, endedAt: last.endedAt, detail: clip(last.blocker ?? last.ownerAction, 200) } : null,
+    last: last ? { taskId: last.id, stage: last.stage, endedAt: last.endedAt, terminal: snap.runs?.[last.runId]?.terminal ?? null, detail: clip(last.blocker ?? last.ownerAction, 200) } : null,
+    waitingOn, approvals,
   };
 }
 

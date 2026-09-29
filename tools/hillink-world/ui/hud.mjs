@@ -5,7 +5,8 @@ import { jobOf, lastJobOf } from '../core/job.mjs';
 // Everything here is derived from World state; nothing is invented (no usage or cost figures until a
 // real source reports them).
 const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-export const WORKING = new Set(['coding', 'thinking', 'researching', 'testing', 'reviewing', 'communicating']);
+import { PRODUCTIVE_ACTIVITIES } from '../core/truth.mjs';
+export const WORKING = PRODUCTIVE_ACTIVITIES;
 
 // isWorking (optional): whether an agent's body is actually doing its work right now (from the view).
 // Without it, "working" falls back to the semantic activity.

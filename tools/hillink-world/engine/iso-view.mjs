@@ -35,6 +35,7 @@ export function resolveState(e, now) {
   switch (a.activity) {
     case 'coding': return atStation ? (e.posture === 'sit' ? 'type' : 'work') : 'idle';
     case 'thinking': return atStation ? 'work' : 'idle';
+    case 'coordinating': return e.moving || e.departAt > now ? 'idle' : 'inspect'; // in place: no trip for a few-second turn
     case 'reviewing': case 'testing': return atStation ? 'inspect' : 'idle';
     case 'researching': return atStation ? 'read' : 'idle';
     case 'communicating': return a.meetingId ? (atStation ? 'meeting' : 'idle') : 'talk';
@@ -47,7 +48,7 @@ export function resolveState(e, now) {
 }
 
 // What the body is doing, in words (never the job: "coding" is not shown while walking to the desk).
-const PRODUCTIVE_WORDS = { coding: 'Typing', thinking: 'Thinking at desk', reviewing: 'Inspecting', testing: 'Running checks', researching: 'Reading' };
+const PRODUCTIVE_WORDS = { coordinating: 'Coordinating', coding: 'Typing', thinking: 'Thinking at desk', reviewing: 'Inspecting', testing: 'Running checks', researching: 'Reading' };
 export function actionText(e, layout) {
   const st = e.anim?.state ?? 'idle', a = e.agent;
   const where = e.dest?.location ? layout?.locationById?.[e.dest.location]?.name : null;

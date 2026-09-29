@@ -18,7 +18,7 @@ export const STATE_LABEL = {
   FAILED: 'Failed', OFFLINE: 'Offline', NOT_CONNECTED: 'Not connected', UNKNOWN: 'Unknown',
 };
 // Activities the renderer draws as real work (desk, bench, review station). Only WORKING may show them.
-export const PRODUCTIVE_ACTIVITIES = new Set(['coding', 'thinking', 'researching', 'reviewing', 'testing', 'communicating']);
+export const PRODUCTIVE_ACTIVITIES = new Set(['coding', 'thinking', 'researching', 'reviewing', 'testing', 'communicating', 'coordinating']);
 
 const when = at => (Number.isFinite(at) ? new Date(at).toISOString() : 'unknown time');
 
@@ -45,9 +45,15 @@ export function deriveAgentState(world, a) {
       if (r.runId) return { ...base, state: 'STARTING', reason: `HQ dispatched run ${r.runId}; waiting for the agent to acknowledge it.` };
       return { ...base, state: 'UNKNOWN', reason: r.detail || 'HQ has no fresh observation of this agent.' };
     case 'IDLE': {
-      // Available now. What happened to its most recent task decides whether someone must look at it.
+      // Available, but it may be waiting on work it asked for (Pass 2.5): Kyle's decision first, then other agents.
+      // Both come from HQ tasks that record requestedBy = this agent, never from what the agent said.
+      const ask = r.approvals?.[0];
+      if (ask) return { ...base, taskId: ask.taskId, state: 'NEEDS_ATTENTION', reason: `Waiting for Kyle to decide: ${ask.title} (HQ task ${ask.taskId.slice(0, 8)}).` };
+      const dep = r.waitingOn?.[0];
+      if (dep) return { ...base, taskId: dep.taskId, state: 'WAITING', reason: `Waiting for ${dep.agentName ?? dep.agentId ?? 'an agent'} task ${dep.taskId.slice(0, 8)} (${dep.stage.toLowerCase()}): ${dep.title}${r.waitingOn.length > 1 ? `, and ${r.waitingOn.length - 1} more` : ''}.` };
+      // What happened to its most recent task decides whether someone must look at it.
       const last = r.last;
-      if (last?.stage === 'FAILED') return { ...base, taskId: last.taskId, state: 'FAILED', reason: `Its last task failed${last.detail ? `: ${last.detail}` : '.'}` };
+      if (last?.stage === 'FAILED' || (last?.stage === 'BLOCKED' && last.terminal === 'FAILED')) return { ...base, taskId: last.taskId, state: 'FAILED', reason: `Its last task failed${last.detail ? `: ${last.detail}` : '.'}` };
       if (last?.stage === 'BLOCKED') return { ...base, taskId: last.taskId, state: 'NEEDS_ATTENTION', reason: `Its last task is parked in HQ${last.detail ? `: ${last.detail}` : '.'}` };
       return { ...base, state: 'IDLE', reason: 'Available with no active run in HQ.' };
     }

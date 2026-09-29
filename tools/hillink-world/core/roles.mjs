@@ -6,7 +6,7 @@ export const ROLES = {
   codex: { title: 'Investigation and review', summary: 'Audits, traces behavior, verifies and reviews work, and specifies what to build next. Not an implementation agent.' },
   qwen: { title: 'Local analysis', summary: 'Delegated local research and verification on this machine.' },
   gemma: { title: 'Local utility', summary: 'Small delegated local jobs: summaries, classification, extraction.' },
-  chatgpt: { title: 'Orchestration', summary: 'Planning and coordination. No runtime is connected to HQ yet.' },
+  chatgpt: { title: 'Orchestration', summary: 'Coordinates the agents through HQ: reads state, delegates reviews, asks Kyle to decide. Does not code. Workspace: Lobby reception.' },
   'hq-verifier': { title: 'Verification process', summary: 'Runs allowlisted local checks. A process, not an AI model.' },
 };
 export const roleOf = id => ROLES[id] ?? null;

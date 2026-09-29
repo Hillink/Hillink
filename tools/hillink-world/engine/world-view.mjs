@@ -6,7 +6,7 @@ import { startPath, WALK_SPEED } from './motion.mjs';
 import { Lift, seeded } from './lift.mjs';
 import { npcAt } from './ambience.mjs';
 
-const PRODUCTIVE = new Set(['coding', 'thinking', 'reviewing', 'testing', 'researching', 'communicating']);
+import { PRODUCTIVE_ACTIVITIES as PRODUCTIVE } from '../core/truth.mjs';
 const HANDOFF_MS = 1500;
 
 export class WorldView {

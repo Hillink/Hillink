@@ -18,7 +18,7 @@ const LABEL_PX = 11; // on-screen size of agent name labels
 const STATUS = { coding: '#34d27b', thinking: '#34d27b', researching: '#34d27b', testing: '#34d27b', reviewing: '#34d27b', communicating: '#34d27b', waiting: '#f4a23b', idle: '#8aa0b8', completed: '#5cc98a', error: '#ef4b4b', offline: '#59616d' };
 const SYSTEM_COLOR = { ok: '#3ddc84', busy: '#4aa3ff', degraded: '#ffb020', down: '#ff4d4d', unknown: '#7c8594' };
 const font = (px, weight = 600) => `${weight} ${px}px ui-sans-serif, system-ui, sans-serif`;
-const WORKING = new Set(['coding', 'thinking', 'reviewing', 'testing', 'researching', 'communicating']);
+import { PRODUCTIVE_ACTIVITIES as WORKING } from '../core/truth.mjs';
 // Status dot: green only while the body is actually doing the work; blue while on the way to it.
 function dotColor(e, a) {
   if (PRODUCTIVE_STATES.has(e.anim?.state)) return STATUS.coding;

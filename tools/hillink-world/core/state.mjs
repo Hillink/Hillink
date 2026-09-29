@@ -9,12 +9,12 @@ export function emptyWorld() {
 }
 
 const ACTIVITY_BY_EVENT = {
-  AGENT_STARTED_WORK: 'coding', AGENT_THINKING: 'thinking', AGENT_RESEARCHING: 'researching', AGENT_REVIEWING: 'reviewing',
+  AGENT_STARTED_WORK: 'coding', AGENT_THINKING: 'thinking', AGENT_COORDINATING: 'coordinating', AGENT_RESEARCHING: 'researching', AGENT_REVIEWING: 'reviewing',
   AGENT_TESTING: 'testing', AGENT_WAITING: 'waiting', AGENT_IDLE: 'idle', AGENT_ERROR: 'error', AGENT_OFFLINE: 'offline',
 };
 const LOG_LIMIT = 500, MESSAGE_LIMIT = 50, EVIDENCE_LIMIT = 20, MEETING_LOG_LIMIT = 10;
 // Activities that are real work: they pull an agent out of a meeting. Idle or waiting does not.
-const ENDS_MEETING = new Set(['coding', 'thinking', 'researching', 'reviewing', 'testing', 'error', 'offline']);
+const ENDS_MEETING = new Set(['coding', 'thinking', 'coordinating', 'researching', 'reviewing', 'testing', 'error', 'offline']);
 
 function agent(world, id, changed) {
   let a = world.agents[id];

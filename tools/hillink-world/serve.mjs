@@ -34,9 +34,9 @@ export function trimSnapshot(s) {
     health: { controller: s.health?.controller ?? null, lastError: s.health?.lastError ?? null },
     agents: (s.agents ?? []).map(a => pick(a, ['id', 'name', 'role', 'real', 'fantasy', 'status', 'assignment', 'detail', 'retryAt', 'executionAdapter', 'adapterAvailable'])),
     tasks: (s.tasks ?? []).map(t => ({
-      ...pick(t, ['id', 'title', 'stage', 'agentId', 'runId', 'capability', 'operation', 'blocker', 'ownerAction', 'createdAt', 'claimedAt', 'endedAt']),
+      ...pick(t, ['id', 'title', 'stage', 'agentId', 'runId', 'capability', 'operation', 'safety', 'preferredAgentId', 'requestedBy', 'blocker', 'ownerAction', 'createdAt', 'claimedAt', 'endedAt']),
       // The last few evidence lines (kind, short summary, time) so a reload keeps the task's story; raw payloads stay in HQ.
-      ...(Array.isArray(t.evidence) && t.evidence.length ? { evidence: t.evidence.slice(-6).map(e => ({ kind: String(e.kind ?? ''), summary: typeof e.summary === 'string' ? e.summary.slice(0, 200) : null, at: e.at ?? null })) } : {}),
+      ...(Array.isArray(t.evidence) && t.evidence.length ? { evidence: t.evidence.slice(-6).map(e => ({ kind: String(e.kind ?? ''), summary: typeof e.summary === 'string' ? e.summary.slice(0, 200) : null, at: e.at ?? null, ...(typeof e.delegatedTaskId === 'string' ? { delegatedTaskId: e.delegatedTaskId } : {}) })) } : {}),
     })),
     runs: Object.fromEntries(Object.entries(s.runs ?? {}).map(([id, r]) => [id, pick(r, ['taskId', 'agentId', 'endedAt', 'acknowledgedAt', 'heartbeatAt', 'lastMeaningfulAt', 'terminal'])])),
     alerts: Object.fromEntries(Object.entries(s.alerts ?? {}).map(([k, a]) => [k, pick(a, ['key', 'kind', 'agentId', 'taskId', 'ownerMustAct', 'ownerAction', 'detail', 'active', 'openedAt'])])),
@@ -79,6 +79,8 @@ export function hqClient(base = 'http://127.0.0.1:4312', { fetchImpl = fetch, ti
 // loop: Claude through HQ's read-only repository review (the signed-in Claude CLI with Read, Grep and Glob only).
 export const COMMANDABLE = {
   claude: { operation: 'review-repo', safety: 'local-read-only', priority: 50, label: 'Ask Claude a read-only question about the repository', limits: 'Claude can only read files for this: no edits, shell, deploys or database access.' },
+  // Pass 2.5: ChatGPT, the orchestrator. HQ runs it through the OpenAI adapter with its narrow HQ tools.
+  chatgpt: { operation: 'orchestrate', safety: 'local-read-only', priority: 60, label: 'Ask ChatGPT, the orchestrator', limits: 'ChatGPT reads HQ and can queue read-only reviews by Claude or Codex, or ask you to decide. It cannot edit code or run commands.' },
 };
 const COMMAND_ID = /^[A-Za-z0-9-]{8,64}$/;
 const TERMINAL_KINDS = new Set(['COMPLETED', 'FAILED', 'CANCELLED', 'RATE_LIMITED', 'BLOCKED', 'UNCERTAIN']);
@@ -113,6 +115,8 @@ export function commandHandler({ hq, journal, now = Date.now }) {
     const work = (async () => {
       const record = { id: commandId, at: now(), agentId, instruction, operation: spec.operation, taskId: null, error: null };
       try {
+        // Never queue work for an agent HQ says is not connected: it would sit there looking accepted.
+        if (hq.raw) { const a = (await hq.raw()).agents?.find(x => x.id === agentId); if (a && a.adapterAvailable === false) throw Error(`${a.name} is not connected in HQ: ${String(a.detail ?? 'no runtime').slice(0, 160)}`); }
         record.taskId = await hq.createTask({ title: `World request: ${instruction.replace(/\s+/g, ' ').slice(0, 120)}`, description: instruction, operation: spec.operation, safety: spec.safety, priority: spec.priority, preferredAgentId: agentId });
       } catch (error) { record.error = String(error.cause?.code ?? error.message).slice(0, 300); }
       journal.add([record]); // refusals are history too
