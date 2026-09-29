@@ -1,0 +1,6 @@
+Codex implement      -> 400 {"error":"Selected worker cannot perform this operation"}
+scope ../../Windows/ -> 400 {"error":"scope path \"../../Windows/\" may not contain empty, \".\" or \"..\" segments"}
+scope tools/hillink-hq -> 400 {"error":"scope path \"tools/hillink-hq/engine.mjs\" is in a protected area (tools/hillink-hq/)"}
+scope .env           -> 400 {"error":"scope path \"app/.env.local\" looks like a secret or credential file"}
+write on a review    -> 400 {"error":"implement-repo tasks, and only they, use local-worktree-write"}
+forged requestedBy   -> 201 {"id":"d5065b5e-b679-406c-84cc-5dcfa4b03729"} (a normal review; requestedBy is ignored — checked below)
