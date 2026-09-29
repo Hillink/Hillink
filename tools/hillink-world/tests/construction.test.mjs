@@ -187,7 +187,7 @@ test('builders: new live evidence sends a free agent to the site; history and bu
   let seen = null;
   for (let t = 0; t < 60 && !seen; t += 0.25) { run(0.25); if (claude.anim?.state === 'assemble') seen = actionText(claude, theme.layout); }
   assert.match(seen ?? '', /Installing commit 2222222/);
-  run(20);
+  run(40); // 6.5 s on site, then the walk home at a person's pace (world/scale.mjs AGENT.walkSpeed)
   assert.equal(claude.visit ?? null, null, 'and walks back afterwards');
   store.keep([review('r9', 'approved', at)]); store.flush(); run(0.2);
   assert.equal(scene.get('agent:codex').visit ?? null, null, 'an agent doing its own work never leaves it');

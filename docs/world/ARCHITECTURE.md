@@ -246,6 +246,47 @@ Nothing new can execute: the World can only create tasks HQ already allows, for 
 
 **Tests:** `tests/pass1.test.mjs` covers the ten Pass 1 checks: events cannot fake work, a real run is WORKING, completion and failure leave WORKING, offline, rate-limited and unreachable-HQ agents never animate work, reload rebuilds the same truth, the command reaches HQ as exactly one read-only task, the outcome comes back, duplicates never create a second task (including after a restart), unconnected agents are not operational, and the route's same-origin rules. `tests/hq-adapter.test.mjs` fixtures now include HQ's `adapterAvailable` and move HQ status with the run, as real HQ does.
 
+## Next-pass plan, Pass 2: shared geometry, scale, depth and animation alignment (built)
+
+**One coordinate system (kept, now formalized).** The building plan already was the only World space: `x` along the building, `z` depth into a room (0 = the open front), `floor`, and `h` above that floor, all in world units. `engine/iso.mjs` `projector().at()` turns plan into projected world points, and the camera (`engine/camera.mjs`) turns those into screen pixels with one uniform scale. Nothing else scales anything. Zoom, pan and the browser size change only the camera. Pass 2 adds no second coordinate system.
+
+**One scale: `world/scale.mjs`.** Every size is a multiple of one reference person, `AGENT_HEIGHT` = 50 units ("1.0 person"). The characters are stylized (big head, short legs), so furniture follows their body landmarks rather than centimetres: hip 0.26, seat 0.30, torso 0.30 of height. `render/figure.mjs` reads the same landmarks, so a chair's seat is exactly where the figure bends. The file defines:
+- `AGENT`: footprint 14 × 10, reach, clearance, walk speed 45 units/s on the floor, arrival distance, sit and stand times.
+- `ARCH`: storey 96, slab 12, door 62, entrance 68, elevator car 58 × 48 × 65.
+- `STREET_SCALE`: car 120 × 48 × 40, lane 90, pavement 70, car and pedestrian speeds.
+- `SIZES`: per furniture type, with seat, surface, backrest and arm landmarks.
+
+`sized()` fills each piece's fixed dimensions from its type and refuses an authored size that disagrees. Only a type's `free` dimensions (a counter's width, a bench's length) or a `range` (plants, trees) may vary.
+
+**Anchors.** Interaction points are no longer hand-placed coordinates. `anchor(item, 'seat', { index })` puts the hips on the cushion: centred on a chair, or on the n-th place of a couch or bench, half a backrest forward of the item's centre. `anchor(item, 'stand', { offset })` stands in front of the item's front face at clearance plus half a footprint, facing it. A workstation is its desk chair's seat, and desk chairs are placed from their desks (tucked in by the knee clearance). Only spots that use no object (a window, a doorway, a construction site) are written by hand, marked `free`.
+
+**Ground position.** A character's position is its feet on the floor. The figure is drawn up from that point, and its depth box is its footprint (`AGENT.footprint`), not the size of its drawing.
+
+**Depth.** Items on a floor are painter-sorted by `depthSort` over plan boxes, derived from world position. Two changes:
+- Chairs are two items, seat and backrest. A desk chair's backrest (toward the camera) now covers its sitter, and a chair facing the camera stays behind them.
+- A seated character wins ties with the seat it sits on. Couches, desks and tables sort by position alone.
+
+The same rule serves interiors, the plaza, the street (cars are plan boxes too) and the roof.
+
+**Movement.** `stepPath` budgets each step as distance on the floor plane (`layout.metric`), so pace is the same across, into and out of a room and never depends on zoom. Stride (the leg cycle) counts the same floor distance, so legs match the ground covered. The last `AGENT.arriveDistance` is taken at 55% pace. Movement state lives on the entity (`e.motion`: stationary, walking, arriving, waiting-lift, boarding, riding), separate from operational state (`core/truth.mjs`) and from animation state (`engine/iso-view.mjs` `play()`). A re-placement onto the spot an agent already occupies is no trip, so it doesn't stand up and sit down again.
+
+**Pathing and collision.** Unchanged in approach: an authored waypoint graph per floor, joined by the lift, with Dijkstra routing. Every walkway edge is tested clear of solid furniture. The one exception is entering the seat you sit in. Agents never cross walls because walls have no walkway through them except doorways.
+
+**Multi-agent.** Stations are assigned deterministically, one agent per anchor, with overflow fanned one footprint apart. New arrivals queue side by side at the door instead of spawning on one point.
+
+**Evidence:** `docs/world/evidence/pass2-geometry/` has before and after screenshots, the journey log (operational, movement and animation states for a simulated Claude and Codex run) and the live Pass 1 regression log. `tests/spatial.test.mjs` covers:
+- every piece matches its type's size
+- people, architecture and the street share one reference person
+- anchors sit on seats, desks and fronts
+- camera changes never move the World
+- pace is equal in every direction
+- walking, arriving and stationary are movement states
+- desk-chair and couch depth, and deterministic depth order
+- distinct stations and arrivals
+- no in-place trips
+
+**Not changed (Pass 3 and later):** real meetings, construction tied to real work, the Fantasy and Blueprint redesigns, command permissions, and more commandable agents.
+
 ## Phases (from the brief) and where this PR stops
 
 | Phase | State |

@@ -1,7 +1,10 @@
 // Furniture, fixtures and exterior pieces, each drawn from its own record (building.mjs) with the
 // active skin's materials. Everything is vector drawing in plan space through the projection:
 // no images. `d` is the draw context: { ctx, P, M, T (seconds), lw, room(id) -> activity, ... }.
+import { SIZES } from '../world/scale.mjs';
 const TAU = Math.PI * 2;
+// Pass 2: every landmark a character meets (seat, surface, backrest, arm) comes from world/scale.mjs SIZES.
+const S = SIZES;
 export const INK = 'rgba(24,26,33,0.85)';
 
 export const shade = (c, k) => {
@@ -51,16 +54,15 @@ export const PROPS = {
   rug(d, it) { const b = box(it); flat(d, it.floor, b.x0, b.x1, b.z0, b.z1, 0.3, d.M.fantasy ? '#7a3a48' : '#6f8fb0'); flat(d, it.floor, b.x0 + 5, b.x1 - 5, b.z0 + 4, b.z1 - 4, 0.4, d.M.torches ? '#9a5a4a' : '#88a7c4'); },
   mat(d, it) { const b = box(it); flat(d, it.floor, b.x0, b.x1, b.z0, b.z1, 0.3, '#3a3f47'); },
   couch(d, it) {
-    const b = box(it), f = it.floor, c = d.M.fabric;
-    prism(d, f, { ...b, z0: b.z1 - 7, h1: 30 }, shade(c, 0.92)); // back
-    prism(d, f, { ...b, z1: b.z1 - 5, h1: 14 }, c); // seat
-    for (const x of [b.x0 + b.w / 2 - 25, b.x0 + b.w / 2 + 25]) void x;
-    prism(d, f, { x0: b.x0, x1: b.x0 + 7, z0: b.z0, z1: b.z1, h1: 21 }, shade(c, 0.95));
-    prism(d, f, { x0: b.x1 - 7, x1: b.x1, z0: b.z0, z1: b.z1, h1: 21 }, shade(c, 0.95));
-    for (const [x, col] of [[b.x0 + 28, d.M.accent], [b.x1 - 30, d.M.fabric2]]) prism(d, f, { x0: x - 7, x1: x + 7, z0: b.z1 - 9, z1: b.z1 - 5, h0: 14, h1: 26 }, col);
+    const b = box(it), f = it.floor, c = d.M.fabric, k = S.couch, arm = 7;
+    prism(d, f, { ...b, z0: b.z1 - k.back, h1: it.h }, shade(c, 0.92)); // backrest
+    prism(d, f, { ...b, z1: b.z1 - k.back, h1: k.seat }, c); // cushions
+    prism(d, f, { x0: b.x0, x1: b.x0 + arm, z0: b.z0, z1: b.z1, h1: k.arm }, shade(c, 0.95));
+    prism(d, f, { x0: b.x1 - arm, x1: b.x1, z0: b.z0, z1: b.z1, h1: k.arm }, shade(c, 0.95));
+    for (const [x, col] of [[b.x0 + arm + 6, d.M.accent], [b.x1 - arm - 6, d.M.fabric2]]) prism(d, f, { x0: x - 5, x1: x + 5, z0: b.z1 - k.back - 3, z1: b.z1 - k.back, h0: k.seat, h1: k.seat + 10 }, col);
   },
-  sideTable(d, it) { const b = box(it), f = it.floor; prism(d, f, { ...b, h1: 20 }, d.M.woodLight); prism(d, f, { x0: it.x - 2, x1: it.x + 2, z0: it.z - 2, z1: it.z + 2, h0: 20, h1: 32 }, d.M.metalDark); const [sx, sy] = d.P.at(it.x, it.z, f, 36); d.ctx.fillStyle = d.M.lamp; d.ctx.beginPath(); d.ctx.moveTo(sx - 7, sy + 5); d.ctx.lineTo(sx + 7, sy + 5); d.ctx.lineTo(sx + 4, sy - 4); d.ctx.lineTo(sx - 4, sy - 4); d.ctx.closePath(); d.ctx.fill(); d.ctx.strokeStyle = INK; d.ctx.lineWidth = d.lw; d.ctx.stroke(); glow(d, sx, sy + 2, 26, d.M.light); },
-  armchair(d, it) { const b = box(it), f = it.floor, c = d.M.fabric2; prism(d, f, { ...b, z0: b.z1 - 6, h1: 28 }, shade(c, 0.9)); prism(d, f, { ...b, z1: b.z1 - 4, h1: 13 }, c); prism(d, f, { x0: b.x0, x1: b.x0 + 6, z0: b.z0, z1: b.z1, h1: 20 }, c); prism(d, f, { x0: b.x1 - 6, x1: b.x1, z0: b.z0, z1: b.z1, h1: 20 }, c); },
+  sideTable(d, it) { const b = box(it), f = it.floor, top = S.sideTable.surface; prism(d, f, { ...b, h1: top }, d.M.woodLight); prism(d, f, { x0: it.x - 2, x1: it.x + 2, z0: it.z - 2, z1: it.z + 2, h0: top, h1: top + 10 }, d.M.metalDark); const [sx, sy] = d.P.at(it.x, it.z, f, top + 14); d.ctx.fillStyle = d.M.lamp; d.ctx.beginPath(); d.ctx.moveTo(sx - 7, sy + 5); d.ctx.lineTo(sx + 7, sy + 5); d.ctx.lineTo(sx + 4, sy - 4); d.ctx.lineTo(sx - 4, sy - 4); d.ctx.closePath(); d.ctx.fill(); d.ctx.strokeStyle = INK; d.ctx.lineWidth = d.lw; d.ctx.stroke(); glow(d, sx, sy + 2, 26, d.M.light); },
+  armchair(d, it) { const b = box(it), f = it.floor, c = d.M.fabric2, k = S.armchair; prism(d, f, { ...b, z0: b.z1 - k.back, h1: it.h }, shade(c, 0.9)); prism(d, f, { ...b, z1: b.z1 - k.back, h1: k.seat }, c); prism(d, f, { x0: b.x0, x1: b.x0 + 6, z0: b.z0, z1: b.z1, h1: k.arm }, c); prism(d, f, { x0: b.x1 - 6, x1: b.x1, z0: b.z0, z1: b.z1, h1: k.arm }, c); },
   plant(d, it) {
     const f = it.floor, b = box(it, 2, -2, 2, -2);
     prism(d, f, { ...b, h1: 12 }, d.M.pot);
@@ -69,17 +71,18 @@ export const PROPS = {
   },
   counter(d, it) {
     const b = box(it), f = it.floor;
-    prism(d, f, { ...b, h1: 32 }, d.M.wood);
-    prism(d, f, { ...b, h0: 32, h1: 35 }, d.M.fantasy ? '#7d6a52' : '#e8e6e1');
-    for (const x of [b.x0 + 12, b.x0 + 36, b.x0 + 58]) panel(d, f, x - 9, x + 9, b.z0, 6, 26, null, 'rgba(0,0,0,0.25)');
+    const top = S.counter.surface;
+    prism(d, f, { ...b, h1: top - 3 }, d.M.wood);
+    prism(d, f, { ...b, h0: top - 3, h1: top }, d.M.fantasy ? '#7d6a52' : '#e8e6e1');
+    for (const x of [b.x0 + 12, b.x0 + 36, b.x0 + 58]) panel(d, f, x - 9, x + 9, b.z0, 4, top - 7, null, 'rgba(0,0,0,0.25)');
   },
   coffeeMachine(d, it) {
-    const b = box(it), f = it.floor, base = 35;
-    prism(d, f, { ...b, h0: base, h1: base + 18 }, d.M.metalDark);
-    panel(d, f, b.x0 + 3, b.x1 - 3, b.z0, base + 3, base + 9, '#20252d');
+    const b = box(it), f = it.floor, base = S.counter.surface; // stands on the counter top
+    prism(d, f, { ...b, h0: base, h1: base + it.h }, d.M.metalDark);
+    panel(d, f, b.x0 + 3, b.x1 - 3, b.z0, base + 3, base + 8, '#20252d');
     const busy = d.pointBusy('lounge:coffeeMachine');
-    if (busy) { const { ctx } = d; for (let i = 0; i < 3; i++) { const k = ((d.T * 0.6 + i / 3) % 1), [sx, sy] = d.P.at(it.x + Math.sin(k * 6 + i) * 2, b.z0, f, base + 18 + k * 18); ctx.fillStyle = `rgba(255,255,255,${0.35 * (1 - k)})`; ctx.beginPath(); ctx.arc(sx, sy, 2 + k * 3, 0, TAU); ctx.fill(); } }
-    const [lx, ly] = d.P.at(b.x1 - 3, b.z0, f, base + 14); d.ctx.fillStyle = busy ? '#7ee787' : '#ff7a1a'; d.ctx.fillRect(lx - 1.2, ly - 1.2, 2.4, 2.4);
+    if (busy) { const { ctx } = d; for (let i = 0; i < 3; i++) { const k = ((d.T * 0.6 + i / 3) % 1), [sx, sy] = d.P.at(it.x + Math.sin(k * 6 + i) * 2, b.z0, f, base + it.h + k * 18); ctx.fillStyle = `rgba(255,255,255,${0.35 * (1 - k)})`; ctx.beginPath(); ctx.arc(sx, sy, 2 + k * 3, 0, TAU); ctx.fill(); } }
+    const [lx, ly] = d.P.at(b.x1 - 3, b.z0, f, base + it.h - 4); d.ctx.fillStyle = busy ? '#7ee787' : '#ff7a1a'; d.ctx.fillRect(lx - 1.2, ly - 1.2, 2.4, 2.4);
   },
   fridge(d, it) { const b = box(it), f = it.floor; prism(d, f, { ...b, h1: it.h }, d.M.fantasy ? '#7d6a52' : '#e9ecef'); panel(d, f, b.x0 + 2, b.x1 - 2, b.z0, it.h * 0.62, it.h * 0.64, INK); panel(d, f, b.x1 - 5, b.x1 - 3, b.z0, it.h * 0.4, it.h * 0.56, d.M.metalDark); },
   roundTable(d, it) {
@@ -89,39 +92,40 @@ export const PROPS = {
     ctx.beginPath(); ctx.ellipse(cx, cy + 2, rx, ry, 0, 0, Math.PI); ctx.strokeStyle = shade(d.M.wood, 0.9); ctx.lineWidth = 3; ctx.stroke();
     if (d.meeting) { ctx.fillStyle = d.M.screenOn; ctx.globalAlpha = 0.25 + 0.15 * Math.sin(d.T * 2); ctx.beginPath(); ctx.ellipse(cx, cy, rx * 0.6, ry * 0.6, 0, 0, TAU); ctx.fill(); ctx.globalAlpha = 1; }
   },
-  chair(d, it) { chairShape(d, it, d.M.wood, d.M.fabric2); },
-  officeChair(d, it) { chairShape(d, it, d.M.metalDark, d.M.fantasy ? '#6b2f3a' : '#2f3a4a', true); },
+  chair(d, it, part) { chairShape(d, it, d.M.wood, d.M.fabric2, false, part); },
+  officeChair(d, it, part) { chairShape(d, it, d.M.metalDark, d.M.fantasy ? '#6b2f3a' : '#2f3a4a', true, part); },
   vending(d, it) {
     const b = box(it), f = it.floor;
     prism(d, f, { ...b, h1: it.h }, d.M.fantasy ? '#6b4226' : '#c0392b');
     // Its lit front faces right (toward the room).
     const p = (z, h) => d.P.at(b.x1, z, f, h);
-    poly(d.ctx, [p(b.z0 + 3, 24), p(b.z1 - 3, 24), p(b.z1 - 3, it.h - 6), p(b.z0 + 3, it.h - 6)], d.M.fantasy ? '#ffcf6b' : '#ffe9b0', INK, d.lw * 0.7);
-    for (let r = 0; r < 4; r++) for (let c = 0; c < 3; c++) { const q = p(b.z0 + 6 + c * 4.5, it.h - 12 - r * 10); d.ctx.fillStyle = d.M.code[(r + c) % 4]; d.ctx.fillRect(q[0] - 1.5, q[1] - 2, 3, 3); }
+    poly(d.ctx, [p(b.z0 + 3, it.h * 0.4), p(b.z1 - 3, it.h * 0.4), p(b.z1 - 3, it.h - 6), p(b.z0 + 3, it.h - 6)], d.M.fantasy ? '#ffcf6b' : '#ffe9b0', INK, d.lw * 0.7);
+    for (let r = 0; r < 4; r++) for (let c = 0; c < 3; c++) { const q = p(b.z0 + 6 + c * 4.5, it.h - 12 - r * (it.h * 0.45 / 4)); d.ctx.fillStyle = d.M.code[(r + c) % 4]; d.ctx.fillRect(q[0] - 1.5, q[1] - 2, 3, 3); }
   },
-  bench(d, it) { const b = box(it), f = it.floor; prism(d, f, { ...b, z0: b.z1 - 4, h1: 30 }, d.M.woodLight); prism(d, f, { ...b, h0: 12, h1: 16 }, d.M.woodLight); for (const x of [b.x0 + 4, b.x1 - 6]) prism(d, f, { x0: x, x1: x + 2, z0: b.z0 + 1, z1: b.z0 + 3, h1: 12 }, d.M.metalDark); },
+  bench(d, it) { const b = box(it), f = it.floor, k = S[it.type] ?? S.bench; prism(d, f, { ...b, z0: b.z1 - k.back, h1: it.h }, d.M.woodLight); prism(d, f, { ...b, h0: k.seat - 3, h1: k.seat }, d.M.woodLight); for (const x of [b.x0 + 4, b.x1 - 6]) prism(d, f, { x0: x, x1: x + 2, z0: b.z0 + 1, z1: b.z0 + 3, h1: k.seat - 3 }, d.M.metalDark); },
   parkBench(d, it) { PROPS.bench(d, it); },
   reception(d, it) {
     const b = box(it), f = it.floor;
-    prism(d, f, { ...b, h1: 30 }, d.M.fantasy ? d.M.wood : '#f1f2f4');
-    prism(d, f, { ...b, h0: 30, h1: 33 }, d.M.fantasy ? d.M.woodLight : '#2f3a4a');
-    panel(d, f, b.x0 + 6, b.x1 - 6, b.z0, 10, 22, d.M.accent);
-    const [sx, sy] = d.P.at(it.x + 10, it.z + 2, f, 34); d.ctx.fillStyle = '#1d2431'; d.ctx.fillRect(sx - 7, sy - 12, 14, 10); d.ctx.fillStyle = d.systemColor('platform'); d.ctx.fillRect(sx - 6, sy - 11, 12, 8);
+    const top = S.reception.surface;
+    prism(d, f, { ...b, h1: top - 3 }, d.M.fantasy ? d.M.wood : '#f1f2f4');
+    prism(d, f, { ...b, h0: top - 3, h1: top }, d.M.fantasy ? d.M.woodLight : '#2f3a4a');
+    panel(d, f, b.x0 + 6, b.x1 - 6, b.z0, 8, top - 8, d.M.accent);
+    const [sx, sy] = d.P.at(it.x + 10, it.z + 2, f, top + 1); d.ctx.fillStyle = '#1d2431'; d.ctx.fillRect(sx - 7, sy - 12, 14, 10); d.ctx.fillStyle = d.systemColor('platform'); d.ctx.fillRect(sx - 6, sy - 11, 12, 8);
   },
   desk(d, it) {
-    const b = box(it), f = it.floor, active = d.stationActive(`development:${it.station}`), T = d.T;
-    prism(d, f, { ...b, h0: 24, h1: 27 }, d.M.woodLight);
-    for (const x of [b.x0 + 2, b.x1 - 4]) prism(d, f, { x0: x, x1: x + 2, z0: b.z0 + 2, z1: b.z1 - 2, h1: 24 }, d.M.metalDark);
-    prism(d, f, { x0: b.x0 + 8, x1: b.x0 + 22, z0: b.z0 + 3, z1: b.z1 - 3, h1: 24 }, d.M.metal); // drawer unit
-    // Keyboard, a mug, and the monitor facing the chair (toward the camera).
-    flat(d, f, it.x - 10, it.x + 10, b.z0 + 2, b.z0 + 6, 27.2, '#2a2f38');
-    prism(d, f, { x0: b.x1 - 10, x1: b.x1 - 6, z0: b.z0 + 3, z1: b.z0 + 6, h0: 27, h1: 32 }, '#e8e2d6', { outline: false });
-    prism(d, f, { x0: it.x - 1.5, x1: it.x + 1.5, z0: it.z + 1, z1: it.z + 3, h0: 27, h1: 33 }, d.M.metalDark, { outline: false });
-    const mz = it.z + 1;
-    prism(d, f, { x0: it.x - 15, x1: it.x + 15, z0: mz - 1, z1: mz + 1.5, h0: 32, h1: 52 }, '#1b1f27');
-    panel(d, f, it.x - 13.5, it.x + 13.5, mz - 1, 33.5, 50.5, active ? d.M.screenOn : d.M.screenIdle);
-    if (active) { screenLines(d, f, it.x - 13, it.x + 13, mz - 1, 34, 50, true, it.x); glow(d, ...d.P.at(it.x, mz - 2, f, 42), 30, 'rgba(94,200,255,0.16)'); }
-    else { const [sx, sy] = d.P.at(it.x + 10, mz - 1, f, 36); d.ctx.fillStyle = `rgba(126,231,135,${0.4 + 0.4 * Math.sin(T * 1.3 + it.x)})`; d.ctx.fillRect(sx, sy, 1.6, 1.6); }
+    const b = box(it), f = it.floor, active = d.stationActive(`development:${it.station}`), T = d.T, top = S.desk.surface;
+    prism(d, f, { ...b, h0: top - 3, h1: top }, d.M.woodLight);
+    for (const x of [b.x0 + 2, b.x1 - 4]) prism(d, f, { x0: x, x1: x + 2, z0: b.z0 + 2, z1: b.z1 - 2, h1: top - 3 }, d.M.metalDark);
+    prism(d, f, { x0: b.x0 + 6, x1: b.x0 + 18, z0: b.z0 + 3, z1: b.z1 - 3, h1: top - 3 }, d.M.metal); // drawer unit
+    // Keyboard at the front edge, a mug, and the monitor facing the chair (toward the camera).
+    flat(d, f, it.x - 9, it.x + 9, b.z0 + 2, b.z0 + 6, top + 0.2, '#2a2f38');
+    prism(d, f, { x0: b.x1 - 9, x1: b.x1 - 5, z0: b.z0 + 3, z1: b.z0 + 6, h0: top, h1: top + 5 }, '#e8e2d6', { outline: false });
+    prism(d, f, { x0: it.x - 1.5, x1: it.x + 1.5, z0: it.z + 1, z1: it.z + 3, h0: top, h1: top + 5 }, d.M.metalDark, { outline: false });
+    const mz = it.z + 1, m0 = top + 4, m1 = top + 20; // the screen sits at a seated agent's eye line
+    prism(d, f, { x0: it.x - 13, x1: it.x + 13, z0: mz - 1, z1: mz + 1.5, h0: m0, h1: m1 }, '#1b1f27');
+    panel(d, f, it.x - 11.5, it.x + 11.5, mz - 1, m0 + 1.5, m1 - 1.5, active ? d.M.screenOn : d.M.screenIdle);
+    if (active) { screenLines(d, f, it.x - 11, it.x + 11, mz - 1, m0 + 2, m1 - 2, true, it.x); glow(d, ...d.P.at(it.x, mz - 2, f, (m0 + m1) / 2), 30, 'rgba(94,200,255,0.16)'); }
+    else { const [sx, sy] = d.P.at(it.x + 9, mz - 1, f, m0 + 3); d.ctx.fillStyle = `rgba(126,231,135,${0.4 + 0.4 * Math.sin(T * 1.3 + it.x)})`; d.ctx.fillRect(sx, sy, 1.6, 1.6); }
   },
   serverRack(d, it) {
     const b = box(it), f = it.floor, st = d.systemState('database');
@@ -130,7 +134,7 @@ export const PROPS = {
     const rate = st === 'busy' ? 9 : st === 'down' ? 1.2 : 3, col = st === 'down' ? '#ff4d4d' : st === 'degraded' ? '#ffb020' : '#3ddc84';
     for (let r = 0; r < 9; r++) for (let c = 0; c < 3; c++) {
       const on = Math.sin(d.T * rate + r * 1.7 + c * 2.3) > (st === 'down' ? 0.6 : -0.2);
-      const [sx, sy] = d.P.at(b.x1, b.z0 + 4 + c * 5, f, 10 + r * 7);
+      const [sx, sy] = d.P.at(b.x1, b.z0 + 4 + c * 5, f, 8 + r * ((it.h - 14) / 9));
       d.ctx.fillStyle = on ? col : 'rgba(255,255,255,0.12)'; d.ctx.fillRect(sx - 1, sy - 1, 2.2, 2);
     }
   },
@@ -140,7 +144,7 @@ export const PROPS = {
     const colors = ['#b5452b', '#2f6fb5', '#e0b04a', '#3f8f4f', '#7d4fb5', '#d98a3a'];
     const done = d.archived ?? 0;
     for (let shelfI = 0; shelfI < 4; shelfI++) {
-      const h0 = 4 + shelfI * 14.5;
+      const h0 = 4 + shelfI * ((it.h - 6) / 4);
       panel(d, f, b.x0 + 2, b.x1 - 2, b.z0, h0 - 1, h0, shade(d.M.wood, 0.7));
       // The top shelf holds finished work: one folder per archived task (up to 10), real counts only.
       const n = shelfI === 3 ? Math.min(10, done) : 7;
@@ -149,29 +153,30 @@ export const PROPS = {
   },
   reviewConsole(d, it) {
     const b = box(it), f = it.floor, T = d.T, busy = d.stationActive('development:review') || d.stationActive('development:review2') || d.stationActive('development:rig');
-    prism(d, f, { ...b, h1: 28 }, d.M.fantasy ? d.M.wood : '#3a4452');
-    prism(d, f, { ...b, h0: 28, h1: 31 }, d.M.fantasy ? d.M.woodLight : '#56657a');
+    const top = S.reviewConsole.surface, scr = top + 32; // a standing reviewer's eye line
+    prism(d, f, { ...b, h1: top - 3 }, d.M.fantasy ? d.M.wood : '#3a4452');
+    prism(d, f, { ...b, h0: top - 3, h1: top }, d.M.fantasy ? d.M.woodLight : '#56657a');
     // Tall review screen at the back of the console, and the review tray on top.
-    prism(d, f, { x0: b.x0 + 4, x1: b.x1 - 4, z0: b.z1 - 3, z1: b.z1 - 1, h0: 31, h1: 66 }, '#1b1f27');
-    panel(d, f, b.x0 + 6, b.x1 - 6, b.z1 - 3, 33, 64, busy ? d.M.screenOn : d.M.screenIdle);
+    prism(d, f, { x0: b.x0 + 4, x1: b.x1 - 4, z0: b.z1 - 3, z1: b.z1 - 1, h0: top, h1: scr }, '#1b1f27');
+    panel(d, f, b.x0 + 6, b.x1 - 6, b.z1 - 3, top + 2, scr - 2, busy ? d.M.screenOn : d.M.screenIdle);
     const tests = d.lastTests;
     if (tests) {
       const ok = tests.state === 'passed', run = tests.state === 'running';
-      panel(d, f, b.x0 + 8, b.x1 - 8, b.z1 - 3.1, 56, 62, run ? '#ffb020' : ok ? '#3ddc84' : '#ff4d4d');
-      if (run) { const k = (T * 0.7) % 1; panel(d, f, b.x0 + 8 + k * (it.w - 20), b.x0 + 12 + k * (it.w - 20), b.z1 - 3.2, 56, 62, 'rgba(255,255,255,0.6)'); }
+      panel(d, f, b.x0 + 8, b.x1 - 8, b.z1 - 3.1, scr - 10, scr - 4, run ? '#ffb020' : ok ? '#3ddc84' : '#ff4d4d');
+      if (run) { const k = (T * 0.7) % 1; panel(d, f, b.x0 + 8 + k * (it.w - 20), b.x0 + 12 + k * (it.w - 20), b.z1 - 3.2, scr - 10, scr - 4, 'rgba(255,255,255,0.6)'); }
     }
-    if (busy) screenLines(d, f, b.x0 + 8, b.x1 - 8, b.z1 - 3.1, 35, 54, true, 7);
+    if (busy) screenLines(d, f, b.x0 + 8, b.x1 - 8, b.z1 - 3.1, top + 4, scr - 12, true, 7);
     // Review tray: one folder per open pull request (the handoff artifact).
     const prs = d.openPrs ?? [];
     prs.slice(0, 4).forEach((pr, i) => {
       const x = b.x0 + 3 + i * 13, z = b.z0 + 4;
       const col = pr.state === 'reviewed' ? (pr.verdict === 'changes' ? '#ff9f43' : '#3ddc84') : '#f2d47a';
-      prism(d, f, { x0: x, x1: x + 11, z0: z, z1: z + 7, h0: 31, h1: 34 }, col);
-      if (pr.state !== 'reviewed') { const [sx, sy] = d.P.at(x + 4.5, z + 3, f, 36); glow(d, sx, sy, 10, `rgba(255,220,120,${0.25 + 0.15 * Math.sin(T * 3)})`); }
-      else { const [sx, sy] = d.P.at(x + 4.5, z + 3, f, 36); d.ctx.strokeStyle = '#1f7a3f'; d.ctx.lineWidth = 1.4; d.ctx.beginPath(); d.ctx.moveTo(sx - 2.5, sy); d.ctx.lineTo(sx - 0.5, sy + 2); d.ctx.lineTo(sx + 3, sy - 2.5); d.ctx.stroke(); }
+      prism(d, f, { x0: x, x1: x + 11, z0: z, z1: z + 7, h0: top, h1: top + 3 }, col);
+      if (pr.state !== 'reviewed') { const [sx, sy] = d.P.at(x + 4.5, z + 3, f, top + 5); glow(d, sx, sy, 10, `rgba(255,220,120,${0.25 + 0.15 * Math.sin(T * 3)})`); }
+      else { const [sx, sy] = d.P.at(x + 4.5, z + 3, f, top + 5); d.ctx.strokeStyle = '#1f7a3f'; d.ctx.lineWidth = 1.4; d.ctx.beginPath(); d.ctx.moveTo(sx - 2.5, sy); d.ctx.lineTo(sx - 0.5, sy + 2); d.ctx.lineTo(sx + 3, sy - 2.5); d.ctx.stroke(); }
     });
   },
-  waterCooler(d, it) { const b = box(it, 1, -1, 1, -1), f = it.floor; prism(d, f, { ...b, h1: 28 }, '#e9ecef'); const [sx, sy] = d.P.at(it.x, it.z, f, 36); d.ctx.fillStyle = 'rgba(120,190,255,0.75)'; d.ctx.beginPath(); d.ctx.ellipse(sx, sy, 6, 9, 0, 0, TAU); d.ctx.fill(); d.ctx.strokeStyle = INK; d.ctx.lineWidth = d.lw; d.ctx.stroke(); },
+  waterCooler(d, it) { const b = box(it, 1, -1, 1, -1), f = it.floor; prism(d, f, { ...b, h1: it.h - 12 }, '#e9ecef'); const [sx, sy] = d.P.at(it.x, it.z, f, it.h - 5); d.ctx.fillStyle = 'rgba(120,190,255,0.75)'; d.ctx.beginPath(); d.ctx.ellipse(sx, sy, 6, 9, 0, 0, TAU); d.ctx.fill(); d.ctx.strokeStyle = INK; d.ctx.lineWidth = d.lw; d.ctx.stroke(); },
   roofSign(d, it) {
     const { ctx, P } = d, f = it.floor, b = box(it);
     for (const x of [b.x0 + 20, b.x1 - 20]) prism(d, f, { x0: x, x1: x + 3, z0: b.z0, z1: b.z1, h1: 14 }, d.M.metalDark);
@@ -228,16 +233,23 @@ export const PROPS = {
   bikeRack(d, it) { const f = it.floor; for (let i = 0; i < 3; i++) { const [sx, sy] = d.P.at(it.x - 12 + i * 12, it.z, f, 7); d.ctx.strokeStyle = d.M.metalDark; d.ctx.lineWidth = 1.2; d.ctx.beginPath(); d.ctx.arc(sx, sy, 6, Math.PI, TAU); d.ctx.stroke(); } },
 };
 
-function chairShape(d, it, frame, seat, swivel = false) {
-  const f = it.floor, dir = it.facing, s = 12;
-  const cx = it.x + (dir === 'right' ? -3 : dir === 'left' ? 3 : 0), cz = it.z + (dir === 'front' ? -3 : dir === 'back' ? 3 : 0);
-  // Seat, then the backrest on the side the sitter's back is.
-  if (swivel) prism(d, f, { x0: cx - 1, x1: cx + 1, z0: cz - 1, z1: cz + 1, h1: 12 }, frame, { outline: false });
-  else for (const [dx, dz] of [[-4, -4], [4, -4], [-4, 4], [4, 4]]) prism(d, f, { x0: cx + dx - 0.7, x1: cx + dx + 0.7, z0: cz + dz - 0.7, z1: cz + dz + 0.7, h1: 12 }, frame, { outline: false });
-  prism(d, f, { x0: cx - s / 2, x1: cx + s / 2, z0: cz - s / 2, z1: cz + s / 2, h0: 12, h1: 15 }, seat);
-  const back = dir === 'right' ? { x0: cx - s / 2, x1: cx - s / 2 + 2.5, z0: cz - s / 2, z1: cz + s / 2 } : dir === 'left' ? { x0: cx + s / 2 - 2.5, x1: cx + s / 2, z0: cz - s / 2, z1: cz + s / 2 }
-    : dir === 'front' ? { x0: cx - s / 2, x1: cx + s / 2, z0: cz + s / 2 - 2.5, z1: cz + s / 2 } : { x0: cx - s / 2, x1: cx + s / 2, z0: cz - s / 2, z1: cz - s / 2 + 2.5 };
-  prism(d, f, { ...back, h0: 15, h1: swivel ? 23 : 24 }, seat);
+// Pass 2: the seat is exactly where the anchor puts the sitter's hips: centred on the chair, at the
+// type's seat height (the same height render/figure.mjs bends at). Only the backrest is off-centre.
+// part: 'all', or 'seat' / 'back' when the depth sort draws them as two pieces (a sitter sits between them).
+export function chairShape(d, it, frame, seat, swivel = false, part = 'all') {
+  const f = it.floor, s = Math.min(it.w, it.d), k = S[it.type] ?? S.chair, sh = k.seat;
+  const cx = it.x, cz = it.z;
+  if (part === 'back') { prism(d, f, { ...chairBack(it), h0: sh, h1: it.h }, seat); return; }
+  if (swivel) prism(d, f, { x0: cx - 1, x1: cx + 1, z0: cz - 1, z1: cz + 1, h1: sh - 3 }, frame, { outline: false });
+  else for (const [dx, dz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) { const ox = dx * (s / 2 - 1.5), oz = dz * (s / 2 - 1.5); prism(d, f, { x0: cx + ox - 0.7, x1: cx + ox + 0.7, z0: cz + oz - 0.7, z1: cz + oz + 0.7, h1: sh - 3 }, frame, { outline: false }); }
+  prism(d, f, { x0: cx - s / 2, x1: cx + s / 2, z0: cz - s / 2, z1: cz + s / 2, h0: sh - 3, h1: sh }, seat);
+  if (part === 'all') prism(d, f, { ...chairBack(it), h0: sh, h1: it.h }, seat);
+}
+// The backrest's footprint: the edge behind the sitter (used for drawing and for depth).
+export function chairBack(it) {
+  const s = Math.min(it.w, it.d), cx = it.x, cz = it.z, t = 2.5, dir = it.facing;
+  return dir === 'right' ? { x0: cx - s / 2, x1: cx - s / 2 + t, z0: cz - s / 2, z1: cz + s / 2 } : dir === 'left' ? { x0: cx + s / 2 - t, x1: cx + s / 2, z0: cz - s / 2, z1: cz + s / 2 }
+    : dir === 'front' ? { x0: cx - s / 2, x1: cx + s / 2, z0: cz + s / 2 - t, z1: cz + s / 2 } : { x0: cx - s / 2, x1: cx + s / 2, z0: cz - s / 2, z1: cz - s / 2 + t };
 }
 
 export function glow(d, x, y, r, color) {

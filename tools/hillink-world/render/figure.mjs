@@ -2,7 +2,10 @@
 // drawFigure(ctx, { x, y, h, dir, posture, state, t, time, stride, look, use }) draws a character whose
 // feet touch (x, y). `state` is the controller's semantic animation state; `t` is seconds since it began.
 // Directions: left, right (profile), back (walking into a room, or seated at a desk), front.
+import { AGENT } from '../world/scale.mjs';
 const TAU = Math.PI * 2;
+// Body landmarks as fractions of height, shared with world/scale.mjs so seats and desks meet the body.
+const HIP = AGENT.hip / AGENT.height, SEAT = AGENT.seat / AGENT.height, TORSO = AGENT.torso / AGENT.height;
 const INK = 'rgba(22,24,31,0.92)';
 
 const shade = (hex, k) => {
@@ -103,12 +106,12 @@ export function drawFigure(ctx, o) {
   const side = f !== 0;
   // Sitting amount: 1 seated, 0 standing; transitions blend.
   let sit = o.posture === 'sit' ? 1 : 0;
-  if (state === 'sit') sit = ease(t / 0.48);
-  if (state === 'stand') sit = 1 - ease(t / 0.52);
+  if (state === 'sit') sit = ease(t / AGENT.sitSeconds);
+  if (state === 'stand') sit = 1 - ease(t / AGENT.standSeconds);
   const walking = state === 'walk' || (state === 'carry' && o.moving);
   const phase = walking ? (stride / (h * 0.42)) * Math.PI : 0;
-  const legLen = h * 0.26, torsoH = h * 0.3, r = h * 0.2 * (L.headScale ?? 1);
-  const seatY = y - h * 0.3;
+  const legLen = h * HIP, torsoH = h * TORSO, r = h * 0.2 * (L.headScale ?? 1);
+  const seatY = y - h * SEAT; // hips rest on a seat of AGENT.seat, the height every chair is built to
   let bob = walking ? -Math.abs(Math.sin(phase)) * h * 0.04 : wave(T, 2.2, x) * h * 0.007;
   if (state === 'celebrate') bob -= Math.max(0, Math.sin(t * 7)) * h * 0.06 * Math.max(0, 1 - t / 2.6);
   if (state === 'react') bob -= Math.sin(Math.min(1, t / 0.25) * Math.PI) * h * 0.05;

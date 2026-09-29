@@ -65,8 +65,10 @@ export class WorldView {
       const created = !e;
       if (!e) {
         // New agents walk in from the command center door rather than appearing mid-room.
-        const door = layout.locationById[layout.spawn ?? 'command'].door;
-        e = this.scene.add({ id: `agent:${a.id}`, kind: 'agent', layer: LAYERS.agent, x: door[0], y: door[1], w: this.size.agent[0], h: this.size.agent[1], selectable: true, ref: { type: 'agent', id: a.id }, facing: 1, anchor: this.scenery ? 'feet' : undefined });
+        // Arrivals queue side by side at the door (one footprint apart) instead of spawning on one point.
+        const door = layout.locationById[layout.spawn ?? 'command'].door, slot = this.arrivals = (this.arrivals ?? 0) + 1;
+        const dx = ((slot - 1) % 5) * (layout.overflowStep ?? 0);
+        e = this.scene.add({ id: `agent:${a.id}`, kind: 'agent', layer: LAYERS.agent, x: door[0] + dx, y: door[1], w: this.size.agent[0], h: this.size.agent[1], selectable: true, ref: { type: 'agent', id: a.id }, facing: 1, anchor: this.scenery ? 'feet' : undefined });
       }
       const prev = this.places[a.id];
       const placeChanged = created || !prev || prev.location !== place.location || prev.station !== place.station || prev.overflow !== place.overflow;
@@ -172,7 +174,7 @@ export class WorldView {
       if (e.kind === 'agent') {
         // A character that is still reacting or standing up has not set off yet (see engine/iso-view.mjs).
         if (e.moving && e.departAt > now && !instant) moving = true;
-        else if (e.moving) { moving = stepPath(e, dt, { instant, speed: this.speed, lifts: this.lifts }) || moving; this.scene.moved(e); }
+        else if (e.moving) { moving = stepPath(e, dt, { instant, speed: this.speed, lifts: this.lifts, metric: this.layout.metric, arriveDistance: this.layout.arriveDistance }) || moving; this.scene.moved(e); }
         if (e.repath && !e.ride && e.dest) { e.repath = false; startPath(e, this.layout.route([e.x, e.y], e.dest.location, e.dest.target), now); moving = true; }
         if (e.errand) { this.stepHandoff(e, now); moving = true; }
       } else if (e.kind === 'npc') {

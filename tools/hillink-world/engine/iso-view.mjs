@@ -150,6 +150,8 @@ export class IsoWorldView extends WorldView {
   // Every trip starts with a beat: the character notices, stands up if seated, then sets off.
   goTo(e, place, target, now) {
     e.visit = null; e.pendingVisit = null; // real work always wins over a site visit
+    // Already standing (or sitting) on the new spot: nothing to walk, so no reaction, no standing up.
+    if (!e.moving && !e.ride && Math.hypot(target[0] - e.x, target[1] - e.y) < 1) { e.dest = { location: place.location, target }; return; }
     super.goTo(e, place, target, now);
     this.depart(e, now, true);
   }

@@ -6,8 +6,13 @@
 // engine/iso.mjs turns (x, z, floor, height) into world units. Every object below is independent:
 // rooms, walls, doors, furniture and interaction points are separate records the renderer and the
 // navigation both read, so nothing depends on a painted image.
+//
+// Pass 2: every size obeys world/scale.mjs. Furniture takes its fixed dimensions from SIZES (sized()),
+// desk chairs are placed from their desks, and interaction points are anchors derived from the object
+// they use (anchor()), so a seat is where the chair is and a work spot is where the desk is.
+import { ARCH, SIZES, AGENT, STREET_SCALE, sized, anchor } from './scale.mjs';
 
-export const GEOMETRY = { skx: 0.5, sky: 0.4, depth: 100, height: 118, slab: 14, base: 560 };
+export const GEOMETRY = { skx: 0.5, sky: 0.4, depth: ARCH.roomDepth, height: ARCH.floorHeight, slab: ARCH.slab, base: 560 };
 
 export const FLOORS = [
   { floor: 0, name: 'Ground floor' },
@@ -32,51 +37,58 @@ export const ALIASES = { command: 'queue', comms: 'lounge', archive: 'developmen
 // Walls. Partitions separate rooms and carry doorways; the back and outer walls enclose each floor.
 // door: [z from, z to] opening, doorH: its height.
 export const WALLS = [
-  { id: 'part0', floor: 0, x0: 380, x1: 400, z0: 0, z1: 100, door: [8, 46], doorH: 78, kind: 'partition' },
-  { id: 'part1', floor: 1, x0: 380, x1: 400, z0: 0, z1: 100, door: [8, 46], doorH: 78, kind: 'partition' },
-  { id: 'east0', floor: 0, x0: 660, x1: 668, z0: 0, z1: 100, door: [12, 54], doorH: 84, kind: 'facade' },
+  { id: 'part0', floor: 0, x0: 380, x1: 400, z0: 0, z1: 100, door: [8, 46], doorH: ARCH.door.h, kind: 'partition' },
+  { id: 'part1', floor: 1, x0: 380, x1: 400, z0: 0, z1: 100, door: [8, 46], doorH: ARCH.door.h, kind: 'partition' },
+  { id: 'east0', floor: 0, x0: 660, x1: 668, z0: 0, z1: 100, door: [12, 54], doorH: ARCH.entrance.h, kind: 'facade' },
   { id: 'east1', floor: 1, x0: 660, x1: 668, z0: 0, z1: 100, kind: 'facade' },
 ];
 
 // The central glass elevator: one shaft, one car, a stop on every occupied floor.
-export const ELEVATOR = { id: 'tower', x0: 500, x1: 570, z0: 42, z1: 100, car: { x: 535, z: 71, w: 58, d: 48, h: 74 }, floors: [0, 1], door: 'front' };
+const CAR = ARCH.elevator;
+export const ELEVATOR = { id: 'tower', x0: 500, x1: 570, z0: 42, z1: 100, car: { x: 535, z: 71, w: CAR.w, d: CAR.d, h: CAR.h }, floors: [0, 1], door: 'front' };
 
-// Furniture and fixtures. (x, z) is the footprint centre, w along x, d along z, h tall.
-// solid: characters route around it. facing: which way the object's front points.
+// Furniture and fixtures. (x, z) is the footprint centre; w along x, d along z and h tall come from the
+// piece's type in world/scale.mjs (only a type's `free` dimensions are written here). solid: characters
+// route around it. facing: which way the object's front points.
+const DESKS = [['desk1', 76, 88], ['desk2', 156, 88], ['desk3', 236, 88], ['desk4', 40, 40], ['desk5', 116, 40], ['desk6', 192, 40]];
+// A desk chair stands in front of its desk, tucked under the edge by the clearance a sitter's knees need.
+const deskChairZ = z => z - SIZES.desk.d / 2 - SIZES.officeChair.d / 2 + AGENT.clearance;
+const TABLE = { x: 215, z: 34 }, tw = SIZES.roundTable.w / 2, td = SIZES.roundTable.d / 2, cw = SIZES.chair.w / 2, tuck = 2;
+const against = d => 100 - d / 2 - 1; // a piece standing against the back wall
 export const FURNITURE = [
   // Break Room
-  { id: 'rug', type: 'rug', floor: 0, x: 92, z: 56, w: 124, d: 30, h: 0 },
-  { id: 'couch', type: 'couch', floor: 0, x: 90, z: 88, w: 100, d: 20, h: 30, facing: 'front', solid: true },
-  { id: 'sideTable', type: 'sideTable', floor: 0, x: 24, z: 90, w: 20, d: 14, h: 20, solid: true },
-  { id: 'armchair', type: 'armchair', floor: 0, x: 176, z: 85, w: 30, d: 20, h: 28, facing: 'front', solid: true },
-  { id: 'plant0', type: 'plant', floor: 0, x: 270, z: 91, w: 14, d: 14, h: 40, solid: true },
-  { id: 'counter', type: 'counter', floor: 0, x: 314, z: 92, w: 68, d: 16, h: 34, solid: true },
-  { id: 'coffee', type: 'coffeeMachine', floor: 0, x: 296, z: 94, w: 14, d: 10, h: 18, on: 'counter' },
-  { id: 'fridge', type: 'fridge', floor: 0, x: 364, z: 91, w: 24, d: 18, h: 78, solid: true },
-  { id: 'table', type: 'roundTable', floor: 0, x: 215, z: 34, w: 34, d: 30, h: 24, solid: true },
-  { id: 'chairT1', type: 'chair', floor: 0, x: 180, z: 34, w: 6, d: 12, h: 30, facing: 'right' },
-  { id: 'chairT2', type: 'chair', floor: 0, x: 250, z: 34, w: 6, d: 12, h: 30, facing: 'left' },
-  { id: 'chairT3', type: 'chair', floor: 0, x: 215, z: 59, w: 12, d: 5, h: 30, facing: 'front' },
-  { id: 'chairT4', type: 'chair', floor: 0, x: 215, z: 7, w: 12, d: 5, h: 30, facing: 'back' },
-  { id: 'vending', type: 'vending', floor: 0, x: 18, z: 30, w: 24, d: 20, h: 72, facing: 'right', solid: true },
+  { id: 'rug', type: 'rug', floor: 0, x: 92, z: 56, w: 124, d: 30 },
+  { id: 'couch', type: 'couch', floor: 0, x: 90, z: against(SIZES.couch.d), facing: 'front', solid: true },
+  { id: 'sideTable', type: 'sideTable', floor: 0, x: 38, z: 90, solid: true },
+  { id: 'armchair', type: 'armchair', floor: 0, x: 160, z: against(SIZES.armchair.d), facing: 'front', solid: true },
+  { id: 'plant0', type: 'plant', floor: 0, x: 270, z: 91, h: 40, solid: true },
+  { id: 'counter', type: 'counter', floor: 0, x: 314, z: against(SIZES.counter.d), w: 68, facing: 'front', solid: true },
+  { id: 'coffee', type: 'coffeeMachine', floor: 0, x: 296, z: 93, on: 'counter' },
+  { id: 'fridge', type: 'fridge', floor: 0, x: 364, z: against(SIZES.fridge.d), solid: true },
+  { id: 'table', type: 'roundTable', floor: 0, x: TABLE.x, z: TABLE.z, solid: true },
+  { id: 'chairT1', type: 'chair', floor: 0, x: TABLE.x - tw - cw + tuck, z: TABLE.z, facing: 'right' },
+  { id: 'chairT2', type: 'chair', floor: 0, x: TABLE.x + tw + cw - tuck, z: TABLE.z, facing: 'left' },
+  { id: 'chairT3', type: 'chair', floor: 0, x: TABLE.x, z: TABLE.z + td + cw - tuck, facing: 'front' },
+  { id: 'chairT4', type: 'chair', floor: 0, x: TABLE.x, z: TABLE.z - td - cw + tuck, facing: 'back' },
+  { id: 'vending', type: 'vending', floor: 0, x: 18, z: 30, facing: 'right', solid: true },
   // Lobby
-  { id: 'bench', type: 'bench', floor: 0, x: 452, z: 86, w: 70, d: 14, h: 18, facing: 'front', solid: true },
-  { id: 'reception', type: 'reception', floor: 0, x: 612, z: 70, w: 50, d: 18, h: 30, facing: 'front', solid: true, system: 'platform' },
-  { id: 'plant1', type: 'plant', floor: 0, x: 648, z: 92, w: 14, d: 14, h: 46, solid: true },
-  { id: 'mat', type: 'mat', floor: 0, x: 646, z: 33, w: 18, d: 40, h: 0 },
+  { id: 'bench', type: 'bench', floor: 0, x: 452, z: against(SIZES.bench.d), w: 70, facing: 'front', solid: true },
+  { id: 'reception', type: 'reception', floor: 0, x: 612, z: 70, w: 50, facing: 'front', solid: true, system: 'platform' },
+  { id: 'plant1', type: 'plant', floor: 0, x: 648, z: 92, h: 46, solid: true },
+  { id: 'mat', type: 'mat', floor: 0, x: 646, z: 33, w: 18, d: 40 },
   // Engineering: two rows of workstations facing the back wall, a review console, a bookshelf and the server rack.
-  ...[['desk1', 76, 88], ['desk2', 156, 88], ['desk3', 236, 88], ['desk4', 40, 40], ['desk5', 116, 40], ['desk6', 192, 40]].flatMap(([id, x, z]) => [
-    { id, type: 'desk', floor: 1, x, z, w: 50, d: 16, h: 26, facing: 'front', solid: true, station: id },
-    { id: `${id}:chair`, type: 'officeChair', floor: 1, x, z: z - 24, w: 12, d: 4, h: 30, facing: 'back' },
+  ...DESKS.flatMap(([id, x, z]) => [
+    { id, type: 'desk', floor: 1, x, z, facing: 'front', solid: true, station: id },
+    { id: `${id}:chair`, type: 'officeChair', floor: 1, x, z: deskChairZ(z), facing: 'back' },
   ]),
-  { id: 'rack', type: 'serverRack', floor: 1, x: 14, z: 88, w: 20, d: 20, h: 74, facing: 'right', solid: true, system: 'database' },
-  { id: 'shelf', type: 'bookshelf', floor: 1, x: 282, z: 93, w: 32, d: 12, h: 62, facing: 'front', solid: true },
-  { id: 'console', type: 'reviewConsole', floor: 1, x: 330, z: 90, w: 60, d: 16, h: 30, facing: 'front', solid: true, system: 'tests' },
-  { id: 'plant2', type: 'plant', floor: 1, x: 364, z: 92, w: 14, d: 14, h: 44, solid: true },
+  { id: 'rack', type: 'serverRack', floor: 1, x: 14, z: against(SIZES.serverRack.d), facing: 'right', solid: true, system: 'database' },
+  { id: 'shelf', type: 'bookshelf', floor: 1, x: 282, z: against(SIZES.bookshelf.d), facing: 'front', solid: true },
+  { id: 'console', type: 'reviewConsole', floor: 1, x: 330, z: against(SIZES.reviewConsole.d), facing: 'front', solid: true, system: 'tests' },
+  { id: 'plant2', type: 'plant', floor: 1, x: 370, z: 92, h: 44, solid: true },
   // Level 1 hallway
-  { id: 'cooler', type: 'waterCooler', floor: 1, x: 612, z: 90, w: 14, d: 14, h: 44, solid: true },
-  { id: 'plant3', type: 'plant', floor: 1, x: 646, z: 90, w: 14, d: 14, h: 46, solid: true },
-  { id: 'hallBench', type: 'bench', floor: 1, x: 452, z: 88, w: 60, d: 12, h: 18, facing: 'front', solid: true },
+  { id: 'cooler', type: 'waterCooler', floor: 1, x: 612, z: 90, solid: true },
+  { id: 'plant3', type: 'plant', floor: 1, x: 646, z: 90, h: 46, solid: true },
+  { id: 'hallBench', type: 'bench', floor: 1, x: 452, z: against(SIZES.bench.d), w: 60, facing: 'front', solid: true },
   // Roof
   { id: 'sign', type: 'roofSign', floor: 2, x: 180, z: 60, w: 280, d: 8, h: 44 },
   { id: 'ac1', type: 'acUnit', floor: 2, x: 40, z: 30, w: 34, d: 24, h: 22 },
@@ -84,16 +96,16 @@ export const FURNITURE = [
   // being built, where its plan puts it (render/construction.mjs).
   { id: 'liftMotor', type: 'liftMotor', floor: 2, x: 535, z: 71, w: 70, d: 58, h: 26 },
   // Plaza and street (exterior)
-  { id: 'tree1', type: 'tree', floor: 0, x: 812, z: 74, w: 24, d: 24, h: 96, solid: true },
-  { id: 'tree2', type: 'tree', floor: 0, x: -70, z: 60, w: 24, d: 24, h: 84, solid: true },
-  { id: 'hedge', type: 'hedge', floor: 0, x: -60, z: 16, w: 90, d: 14, h: 16, solid: true },
-  { id: 'benchOut', type: 'parkBench', floor: 0, x: 925, z: 40, w: 44, d: 12, h: 16, facing: 'front', solid: true },
-  { id: 'lamp1', type: 'lamp', floor: 0, x: 700, z: -24, w: 6, d: 6, h: 90 },
-  { id: 'lamp2', type: 'lamp', floor: 0, x: 916, z: -24, w: 6, d: 6, h: 90 },
-  { id: 'planter', type: 'planter', floor: 0, x: 880, z: 30, w: 40, d: 16, h: 16, solid: true },
-  { id: 'monument', type: 'monument', floor: 0, x: 930, z: 84, w: 40, d: 10, h: 40, solid: true },
-  { id: 'bikes', type: 'bikeRack', floor: 0, x: 870, z: 88, w: 34, d: 8, h: 14, solid: true },
-];
+  { id: 'tree1', type: 'tree', floor: 0, x: 812, z: 74, h: 104, solid: true },
+  { id: 'tree2', type: 'tree', floor: 0, x: -70, z: 60, h: 92, solid: true },
+  { id: 'hedge', type: 'hedge', floor: 0, x: -60, z: 16, w: 90, d: 14, solid: true },
+  { id: 'benchOut', type: 'parkBench', floor: 0, x: 925, z: 40, w: 44, facing: 'front', solid: true },
+  { id: 'lamp1', type: 'lamp', floor: 0, x: 700, z: -58 },
+  { id: 'lamp2', type: 'lamp', floor: 0, x: 916, z: -58 },
+  { id: 'planter', type: 'planter', floor: 0, x: 880, z: 30, w: 40, d: 16, solid: true },
+  { id: 'monument', type: 'monument', floor: 0, x: 930, z: 84, w: 40, d: 10, solid: true },
+  { id: 'bikes', type: 'bikeRack', floor: 0, x: 870, z: 88, w: 34, d: 8, solid: true },
+].map(sized);
 
 // Wall-mounted pieces (drawn on the back wall; not obstacles).
 export const WALL_DECOR = [
@@ -110,41 +122,43 @@ export const WALL_DECOR = [
 ];
 
 // Interaction points: where a character stands or sits, which way it faces, and what it is for.
+// Pass 2: a point that uses an object is that object's anchor (world/scale.mjs anchor()): seats sit on the
+// seat, work spots are the desk chair's seat, standing spots face the object's front at arm's reach. Only
+// spots that use no object (a window, a doorway, a construction site) are written by hand (`free`).
 // via: the navigation node it is reached from (walking between the two never crosses furniture).
+const byId = Object.fromEntries(FURNITURE.map(f => [f.id, f]));
+const seatOf = (id, index = 0) => anchor(byId[id], 'seat', { index });
+const standAt = (id, offset = 0) => anchor(byId[id], 'stand', { offset });
+const free = (x, z, pose, facing) => ({ x, z, pose, facing, of: null, free: true });
 export const POINTS = [
   // Break Room: idle spots and the meeting table.
-  { id: 'couchSeat1', room: 'lounge', x: 72, z: 76, pose: 'sit', facing: 'front', use: 'relax', via: 'b72' },
-  { id: 'couchSeat2', room: 'lounge', x: 108, z: 76, pose: 'sit', facing: 'front', use: 'relax', via: 'b108' },
-  { id: 'chair', room: 'lounge', x: 176, z: 73, pose: 'sit', facing: 'front', use: 'relax', via: 'b176' },
-  { id: 'window', room: 'lounge', x: 234, z: 84, pose: 'stand', facing: 'back', use: 'look', via: 'b234' },
-  { id: 'coffeeMachine', room: 'lounge', x: 296, z: 78, pose: 'stand', facing: 'back', use: 'coffee', via: 'b296' },
-  { id: 'counter', room: 'lounge', x: 334, z: 78, pose: 'stand', facing: 'back', use: 'snack', via: 'b334' },
-  { id: 'tableSeat1', room: 'lounge', x: 186, z: 34, pose: 'sit', facing: 'right', use: 'table', via: 'b186' },
-  { id: 'tableSeat2', room: 'lounge', x: 244, z: 34, pose: 'sit', facing: 'left', use: 'table', via: 'b244' },
-  { id: 'tableSeat3', room: 'lounge', x: 215, z: 54, pose: 'sit', facing: 'front', use: 'table', via: 'b215' },
-  { id: 'tableSeat4', room: 'lounge', x: 215, z: 11, pose: 'sit', facing: 'back', use: 'table', via: 'bf150' },
-  { id: 'vendingSpot', room: 'lounge', x: 42, z: 30, pose: 'stand', facing: 'left', use: 'snack', via: 'bl42' },
-  { id: 'door', room: 'lounge', x: 352, z: 30, pose: 'stand', facing: 'right', use: 'lean', via: 'bdoor' },
-  // Lobby: the waiting bench and standing spots by reception.
-  { id: 'wait1', room: 'queue', x: 436, z: 76, pose: 'sit', facing: 'front', use: 'wait', via: 'lL' },
-  { id: 'wait2', room: 'queue', x: 468, z: 76, pose: 'sit', facing: 'front', use: 'wait', via: 'lL' },
-  { id: 'wait3', room: 'queue', x: 596, z: 46, pose: 'stand', facing: 'back', use: 'wait', via: 'lR' },
-  { id: 'wait4', room: 'queue', x: 628, z: 46, pose: 'stand', facing: 'back', use: 'wait', via: 'lR' },
-  // Engineering: six workstations, the review console, the bookshelf.
-  { id: 'desk1', room: 'development', x: 76, z: 70, pose: 'sit', facing: 'back', use: 'work', desk: 'desk1', via: 'ea76' },
-  { id: 'desk2', room: 'development', x: 156, z: 70, pose: 'sit', facing: 'back', use: 'work', desk: 'desk2', via: 'ea156' },
-  { id: 'desk3', room: 'development', x: 236, z: 70, pose: 'sit', facing: 'back', use: 'work', desk: 'desk3', via: 'ea236' },
-  { id: 'desk4', room: 'development', x: 40, z: 22, pose: 'sit', facing: 'back', use: 'work', desk: 'desk4', via: 'ef40' },
-  { id: 'desk5', room: 'development', x: 116, z: 22, pose: 'sit', facing: 'back', use: 'work', desk: 'desk5', via: 'ef116' },
-  { id: 'desk6', room: 'development', x: 192, z: 22, pose: 'sit', facing: 'back', use: 'work', desk: 'desk6', via: 'ef192' },
-  // Review spots sit left of x 320 so the partition's cut end (x 380 to 400) never hides the reviewer (Pass 2).
-  { id: 'review', room: 'development', x: 312, z: 70, pose: 'stand', facing: 'back', use: 'inspect', desk: 'console', via: 'erv' },
-  { id: 'review2', room: 'development', x: 290, z: 64, pose: 'stand', facing: 'back', use: 'inspect', desk: 'console', via: 'erv' },
-  { id: 'rig', room: 'development', x: 334, z: 56, pose: 'stand', facing: 'back', use: 'inspect', desk: 'console', via: 'erv' },
-  { id: 'shelf', room: 'development', x: 282, z: 76, pose: 'stand', facing: 'back', use: 'read', via: 'ea276' },
-  // Plaza: where builders stand to work on a construction site east of the entrance (Pass 2's annex).
-  { id: 'site1', room: 'plaza', x: 716, z: 26, pose: 'stand', facing: 'back', use: 'build', via: 'p2' },
-  { id: 'site2', room: 'plaza', x: 770, z: 26, pose: 'stand', facing: 'back', use: 'inspect', via: 'p2' },
+  { id: 'couchSeat1', room: 'lounge', ...seatOf('couch', 0), use: 'relax', via: 'b72' },
+  { id: 'couchSeat2', room: 'lounge', ...seatOf('couch', 1), use: 'relax', via: 'b108' },
+  { id: 'chair', room: 'lounge', ...seatOf('armchair'), use: 'relax', via: 'b150' },
+  { id: 'window', room: 'lounge', ...free(234, 84, 'stand', 'back'), use: 'look', via: 'b234' },
+  { id: 'coffeeMachine', room: 'lounge', ...standAt('counter', 296 - 314), use: 'coffee', via: 'b296' },
+  { id: 'counter', room: 'lounge', ...standAt('counter', 334 - 314), use: 'snack', via: 'b334' },
+  { id: 'tableSeat1', room: 'lounge', ...seatOf('chairT1'), use: 'table', via: 'b186' },
+  { id: 'tableSeat2', room: 'lounge', ...seatOf('chairT2'), use: 'table', via: 'b244' },
+  { id: 'tableSeat3', room: 'lounge', ...seatOf('chairT3'), use: 'table', via: 'b215' },
+  { id: 'tableSeat4', room: 'lounge', ...seatOf('chairT4'), use: 'table', via: 'bf150' },
+  { id: 'vendingSpot', room: 'lounge', ...standAt('vending'), use: 'snack', via: 'bl42' },
+  { id: 'door', room: 'lounge', ...free(352, 30, 'stand', 'right'), use: 'lean', via: 'bdoor' },
+  // Lobby: the waiting bench and standing spots at reception.
+  { id: 'wait1', room: 'queue', ...seatOf('bench', 0), use: 'wait', via: 'lL' },
+  { id: 'wait2', room: 'queue', ...seatOf('bench', 1), use: 'wait', via: 'lL' },
+  { id: 'wait3', room: 'queue', ...standAt('reception', -16), use: 'wait', via: 'lR' },
+  { id: 'wait4', room: 'queue', ...standAt('reception', 16), use: 'wait', via: 'lR' },
+  // Engineering: six workstations (the chair of each desk), the review console, the bookshelf.
+  ...DESKS.map(([id, x, z]) => ({ id, room: 'development', ...seatOf(`${id}:chair`), use: 'work', desk: id, via: `${z > 60 ? 'ea' : 'ef'}${x}` })),
+  // Review spots stand left of x 320 so the partition's cut end (x 380 to 400) never hides the reviewer.
+  { id: 'review', room: 'development', ...standAt('console', -20), use: 'inspect', desk: 'console', via: 'erv' },
+  { id: 'review2', room: 'development', ...standAt('console', -42), use: 'inspect', desk: 'console', via: 'erv' },
+  { id: 'rig', room: 'development', ...standAt('console', 4), use: 'inspect', desk: 'console', via: 'erv' },
+  { id: 'shelf', room: 'development', ...standAt('shelf'), use: 'read', via: 'ea276' },
+  // Plaza: where builders stand to work on a construction site east of the entrance.
+  { id: 'site1', room: 'plaza', ...free(716, 26, 'stand', 'back'), use: 'build', via: 'p2' },
+  { id: 'site2', room: 'plaza', ...free(770, 26, 'stand', 'back'), use: 'inspect', via: 'p2' },
 ];
 
 // Navigation graph: walkable nodes per floor and the edges between them (all edges stay on floor
@@ -191,9 +205,12 @@ export const PLACES = {
 };
 
 // Ambient life outside (not Hillink data): cars on the street, a couple of pedestrians on the pavement.
+// Pass 2: sized to the same people (world/scale.mjs STREET_SCALE): two real lanes, a real pavement, cars
+// about 2.4 people long, pedestrians walking at a person's pace.
+const PAVE = STREET_SCALE.pavement, LANE = STREET_SCALE.lane;
 export const STREET = {
-  road: { z0: -92, z1: -44, x0: -240, x1: 1040 },
-  pavement: { z0: -44, z1: 0 },
-  lanes: [{ z: -58, dir: 1, speed: 70, every: 9, chance: 0.7 }, { z: -80, dir: -1, speed: 62, every: 11, chance: 0.65 }],
-  walkers: [{ z: -16, x0: -200, x1: 1000, speed: 22, pause: 4 }, { z: -30, x0: 980, x1: -160, speed: 18, pause: 6 }],
+  road: { z0: -PAVE - 2 * LANE, z1: -PAVE, x0: -240, x1: 1040 },
+  pavement: { z0: -PAVE, z1: 0 },
+  lanes: [{ z: -PAVE - LANE / 2, dir: 1, speed: STREET_SCALE.carSpeed, every: 9, chance: 0.7 }, { z: -PAVE - LANE * 1.5, dir: -1, speed: STREET_SCALE.carSpeed * 0.88, every: 11, chance: 0.65 }],
+  walkers: [{ z: -20, x0: -200, x1: 1000, speed: STREET_SCALE.pedestrianSpeed, pause: 4 }, { z: -46, x0: 980, x1: -160, speed: STREET_SCALE.pedestrianSpeed * 0.85, pause: 6 }],
 };

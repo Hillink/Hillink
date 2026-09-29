@@ -4,6 +4,7 @@
 import { createIsoLayout } from '../world/layout.mjs';
 import { createIsoSkin } from '../render/iso-skin.mjs';
 import { STREET } from '../world/building.mjs';
+import { AGENT, ARCH } from '../world/scale.mjs';
 
 export const THEME_ORDER = ['real', 'fantasy', 'blueprint'];
 export const THEME_NAMES = { real: 'Realistic', fantasy: 'Fantasy', blueprint: 'Blueprint' };
@@ -14,7 +15,7 @@ export const hqLayout = () => (layout ||= createIsoLayout());
 // Ambient pedestrians on the pavement (not Hillink data; never labelled, never selectable).
 function scenery(L) {
   return {
-    characterHeight: L.characterHeight, walkSpeed: L.walkSpeed, liftSpeed: 58, npcHeight: 40,
+    characterHeight: L.characterHeight, walkSpeed: L.walkSpeed, liftSpeed: ARCH.elevator.speed, npcHeight: AGENT.height, // pedestrians are people too: same height as agents
     npcs: STREET.walkers.map(w => ({ route: [L.P.at(w.x0, w.z, 0), L.P.at(w.x1, w.z, 0)], speed: w.speed, pause: w.pause })),
   };
 }

@@ -4,8 +4,9 @@
 // Skins: 'real' (Realistic), 'fantasy' (Fantasy): same simulation, different materials and looks.
 // 'blueprint' is the debug view: rooms, nav graph, interaction points, ids, states and paths.
 import { depthSort, boxBounds } from '../engine/iso.mjs';
+import { AGENT, ARCH, STREET_SCALE } from '../world/scale.mjs';
 import { drawFigure } from './figure.mjs';
-import { PROPS, DECOR, prism, poly, glow, shade, INK } from './props.mjs';
+import { PROPS, chairBack, DECOR, prism, poly, glow, shade, INK } from './props.mjs';
 import { MATERIALS, lookFor } from './looks.mjs';
 import { vehiclesAt, hash } from '../engine/ambience.mjs';
 import { PRODUCTIVE_STATES, actionText } from '../engine/iso-view.mjs';
@@ -72,6 +73,14 @@ export function createIsoSkin(layout, skinId = 'real') {
     const b = { x0: it.x - it.w / 2, x1: it.x + it.w / 2, z0: it.z - it.d / 2, z1: it.z + it.d / 2 };
     if (it.on) { const base = def.FURNITURE.find(o => o.id === it.on); b.z0 = base.z - base.d / 2 + 0.2; b.z1 = base.z + base.d / 2; b.bias = 1; }
     const h = it.type === 'crane' ? it.h + 20 : it.h + 30;
+    // A chair is two depth pieces, seat and backrest, so a sitter lands between them: a desk chair's
+    // backrest (toward the camera) covers the sitter's back; a chair facing the camera stays behind them.
+    if (it.type === 'chair' || it.type === 'officeChair') {
+      const back = chairBack(it);
+      add(it.floor, { ...b, sb: boxBounds(P, { ...b, h1: h }, it.floor), kind: 'furniture', it, draw: d => PROPS[it.type](d, it, 'seat') });
+      add(it.floor, { ...back, sb: boxBounds(P, { ...back, h1: h }, it.floor), kind: 'furniture', it, draw: d => PROPS[it.type](d, it, 'back') });
+      continue;
+    }
     add(it.floor, { ...b, sb: boxBounds(P, { ...b, h1: h }, it.floor), kind: 'furniture', it, draw: d => PROPS[it.type]?.(d, it) });
   }
   for (const w of def.WALLS) {
@@ -87,7 +96,7 @@ export function createIsoSkin(layout, skinId = 'real') {
   // A partition is a low solid wainscot with glass above; the facade is glass with a frame.
   function wall(d, w, z0, z1, h0) {
     const glassy = w.kind === 'facade' || w.kind === 'partition';
-    const low = w.kind === 'partition' ? 22 : 6;
+    const low = w.kind === 'partition' ? ARCH.partitionWainscot : 6;
     if (h0 > 0) { prism(d, w.floor, { x0: w.x0, x1: w.x1, z0, z1, h0, h1: HT }, glassy ? M.partitionLow : M.wallSide); return; }
     prism(d, w.floor, { x0: w.x0, x1: w.x1, z0, z1, h1: low }, w.kind === 'facade' ? M.facadeFrame : M.partitionLow);
     const p = (x, z, h) => P.at(x, z, w.floor, h);
@@ -126,8 +135,9 @@ export function createIsoSkin(layout, skinId = 'real') {
     poly(ctx, [P.at(S.road.x0, S.pavement.z0, 0), P.at(S.road.x1, S.pavement.z0, 0), P.at(S.road.x1, S.pavement.z1, 0), P.at(S.road.x0, S.pavement.z1, 0)], M.pavement);
     poly(ctx, [P.at(S.road.x0, S.pavement.z0, 0), P.at(S.road.x1, S.pavement.z0, 0), P.at(S.road.x1, S.pavement.z0 - 2, 0), P.at(S.road.x0, S.pavement.z0 - 2, 0)], M.pavementEdge);
     poly(ctx, [P.at(S.road.x0, S.road.z0, 0), P.at(S.road.x1, S.road.z0, 0), P.at(S.road.x1, S.road.z1 - 2, 0), P.at(S.road.x0, S.road.z1 - 2, 0)], M.road);
-    ctx.strokeStyle = M.roadLine; ctx.lineWidth = 1.4; ctx.setLineDash([14, 12]);
-    ctx.beginPath(); ctx.moveTo(...P.at(S.road.x0, -69, 0)); ctx.lineTo(...P.at(S.road.x1, -69, 0)); ctx.stroke(); ctx.setLineDash([]);
+    ctx.strokeStyle = M.roadLine; ctx.lineWidth = 2; ctx.setLineDash([36, 28]);
+    const mid = (S.road.z0 + S.road.z1) / 2; // the centre line between the two lanes
+    ctx.beginPath(); ctx.moveTo(...P.at(S.road.x0, mid, 0)); ctx.lineTo(...P.at(S.road.x1, mid, 0)); ctx.stroke(); ctx.setLineDash([]);
     ctx.strokeStyle = M.pavementEdge; ctx.lineWidth = 0.5;
     for (let x = S.road.x0; x < S.road.x1; x += 26) { ctx.beginPath(); ctx.moveTo(...P.at(x, S.pavement.z0, 0)); ctx.lineTo(...P.at(x, 0, 0)); ctx.stroke(); }
   }
@@ -282,15 +292,19 @@ export function createIsoSkin(layout, skinId = 'real') {
   function drawNpc(d, e) {
     drawFigure(d.ctx, { x: e.x, y: e.y, h: e.h, dir: e.moving === false ? 'front' : e.facing < 0 ? 'left' : 'right', state: e.pose === 'walk' ? 'walk' : 'idle', t: 0, time: d.reduced ? 0 : d.T + e.index, stride: e.stride ?? 0, look: PEDESTRIANS[e.index % PEDESTRIANS.length], moving: e.pose === 'walk', alpha: 0.95 });
   }
+  // Cars are sized to people (world/scale.mjs STREET_SCALE): about 2.4 agents long and 0.8 tall.
+  const CAR = STREET_SCALE.car, carL = CAR.length / 2, carW = CAR.width / 2;
   function drawVehicle(d, v) {
-    const { ctx } = d, x0 = v.x - 17, x1 = v.x + 17, z = v.y, f = 0;
-    const body = M.fantasy ? '#7a5534' : v.color;
-    ctx.fillStyle = 'rgba(0,0,0,0.3)'; poly(ctx, [P.at(x0, z - 9, 0), P.at(x1, z - 9, 0), P.at(x1, z + 9, 0), P.at(x0, z + 9, 0)], 'rgba(0,0,0,0.28)');
-    for (const wx of [x0 + 6, x1 - 6]) for (const wz of [z - 8]) { const [sx, sy] = P.at(wx, wz, f, 3); ctx.beginPath(); ctx.arc(sx, sy, M.fantasy ? 5 : 3.4, 0, TAU); ctx.fillStyle = '#16181d'; ctx.fill(); }
-    prism(d, f, { x0, x1, z0: z - 8, z1: z + 8, h0: 3, h1: 11 }, body);
-    if (M.fantasy) { const [lx, ly] = P.at(v.dx > 0 ? x1 : x0, z - 8, f, 14); ctx.fillStyle = '#ffcf6b'; ctx.beginPath(); ctx.arc(lx, ly, 2, 0, TAU); ctx.fill(); glow(d, lx, ly, 14, 'rgba(255,200,90,0.3)'); return; }
-    prism(d, f, { x0: x0 + 7, x1: x1 - 8, z0: z - 7, z1: z + 7, h0: 11, h1: 18 }, { front: 'rgba(160,200,235,0.85)', side: 'rgba(120,160,200,0.85)', top: shade(body, 1.1) });
-    const [hx, hy] = P.at(v.dx > 0 ? x1 : x0, z - 8, f, 8); ctx.fillStyle = v.dx > 0 ? '#fff5c8' : '#ff4040'; ctx.fillRect(hx - 1.5, hy - 1.5, 3, 2.5);
+    const { ctx } = d, x0 = v.x - carL, x1 = v.x + carL, z = v.y, f = 0, wr = CAR.wheel, bh = CAR.body;
+    const body = M.fantasy ? '#7a5534' : v.color, nose = v.dx > 0 ? 1 : -1;
+    poly(ctx, [P.at(x0, z - carW, 0), P.at(x1, z - carW, 0), P.at(x1, z + carW, 0), P.at(x0, z + carW, 0)], 'rgba(0,0,0,0.28)');
+    for (const wx of [x0 + wr * 2.2, x1 - wr * 2.2]) { const [sx, sy] = P.at(wx, z - carW, f, wr); ctx.beginPath(); ctx.arc(sx, sy, wr, 0, TAU); ctx.fillStyle = '#16181d'; ctx.fill(); ctx.beginPath(); ctx.arc(sx, sy, wr * 0.45, 0, TAU); ctx.fillStyle = '#8a9099'; ctx.fill(); }
+    prism(d, f, { x0, x1, z0: z - carW, z1: z + carW, h0: wr * 0.9, h1: bh }, body);
+    if (M.fantasy) { const [lx, ly] = P.at(nose > 0 ? x1 : x0, z - carW, f, bh + 4); ctx.fillStyle = '#ffcf6b'; ctx.beginPath(); ctx.arc(lx, ly, 3, 0, TAU); ctx.fill(); glow(d, lx, ly, 20, 'rgba(255,200,90,0.3)'); return; }
+    // Cabin set back from the bonnet, windows all round.
+    const c0 = nose > 0 ? x0 + CAR.length * 0.18 : x0 + CAR.length * 0.3, c1 = nose > 0 ? x1 - CAR.length * 0.3 : x1 - CAR.length * 0.18;
+    prism(d, f, { x0: c0, x1: c1, z0: z - carW + 3, z1: z + carW - 3, h0: bh, h1: CAR.height }, { front: 'rgba(160,200,235,0.85)', side: 'rgba(120,160,200,0.85)', top: shade(body, 1.1) });
+    const [hx, hy] = P.at(nose > 0 ? x1 : x0, z - carW, f, bh * 0.7); ctx.fillStyle = '#fff5c8'; ctx.fillRect(hx - 2, hy - 2, 4, 3); glow(d, hx, hy, 16, 'rgba(255,245,200,0.25)');
   }
 
   // ---- Per-frame. ----
@@ -332,7 +346,10 @@ export function createIsoSkin(layout, skinId = 'real') {
     const cars = d.reduced ? [] : vehiclesAt(T, vehicleRoutes);
     for (const f of [0, 1, 2]) {
       const items = [...(staticItems[f] ?? [])];
-      const charBox = (e, x, z) => ({ x0: x - 5, x1: x + 5, z0: z - 2, z1: z + 2, sb: { l: e.x - 20, r: e.x + 20, t: e.y - 70, b: e.y + 4 } });
+      // A character's depth box is its footprint on the floor (world/scale.mjs), not its drawing. Seated, it
+      // wins ties with the seat it is sitting on (it is on top of the cushion).
+      const fw = AGENT.footprint.w / 2, fd = AGENT.footprint.d / 2;
+      const charBox = (e, x, z) => ({ x0: x - fw, x1: x + fw, z0: z - fd, z1: z + fd, bias: e.posture === 'sit' ? 1 : 0, sb: { l: e.x - AGENT.height * 0.45, r: e.x + AGENT.height * 0.45, t: e.y - AGENT.height * 1.5, b: e.y + 4 } });
       for (const e of agents) {
         if (inCar(e)) continue;
         const pl = layout.planAt(e.x, e.y); if (!pl || pl.floor !== f) continue;
@@ -340,7 +357,7 @@ export function createIsoSkin(layout, skinId = 'real') {
       }
       if (f === 0) {
         for (const e of npcs) { const pl = layout.planAt(e.x, e.y); if (pl) items.push({ ...charBox(e, pl.x, pl.z), draw: () => drawNpc(d, e) }); }
-        for (const v of cars) items.push({ x0: v.x - 17, x1: v.x + 17, z0: v.y - 9, z1: v.y + 9, sb: boxBounds(P, { x0: v.x - 17, x1: v.x + 17, z0: v.y - 9, z1: v.y + 9, h1: 20 }, 0), draw: () => drawVehicle(d, v) });
+        for (const v of cars) { const box = { x0: v.x - carL, x1: v.x + carL, z0: v.y - carW, z1: v.y + carW }; items.push({ ...box, sb: boxBounds(P, { ...box, h1: CAR.height + 4 }, 0), draw: () => drawVehicle(d, v) }); }
       }
       for (const pass of passes) for (const s of pass.structures) if (s.floor === f) {
         const builders = agents.filter(a => (s.sitePoints ?? []).includes(a.spot) && !a.moving).length;

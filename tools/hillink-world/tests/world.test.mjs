@@ -99,10 +99,12 @@ test('layout: every room is reachable along the walkways and every activity has 
 
 test('layout: no walkway crosses solid furniture, and every point and node is on a real floor', () => {
   const solids = B.FURNITURE.filter(f => f.solid);
+  // Sitting down means entering the seat you sit in (a couch, a bench): that one piece, and only it.
+  const seatOf = Object.fromEntries(B.POINTS.filter(p => p.pose === 'sit' && p.of).map(p => [p.id, p.of]));
   for (const [a, b] of L.navEdges) {
     const A = L.nodePlan[a], N = L.nodePlan[b];
     if (A.floor !== N.floor) continue; // the lift
-    for (const f of solids) if (f.floor === A.floor) {
+    for (const f of solids) if (f.floor === A.floor && seatOf[a] !== f.id && seatOf[b] !== f.id) {
       const r = { x0: f.x - f.w / 2, x1: f.x + f.w / 2, z0: f.z - f.d / 2, z1: f.z + f.d / 2 };
       assert.ok(!segmentHitsRect([A.x, A.z], [N.x, N.z], r), `${a}-${b} crosses ${f.id}`);
     }

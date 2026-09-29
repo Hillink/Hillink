@@ -21,6 +21,8 @@ Styles: **Realistic**, **Fantasy** and **Blueprint** (toggle in the header, or `
 
 Controls: drag to pan, scroll or pinch to zoom, click to inspect, arrow keys, `+`/`-`, and Esc for the overview. Use "Go to…" to focus a room or follow an agent.
 
+**Scale (Pass 2):** one reference person sets every size. `world/scale.mjs` holds the agent (height 50 units, footprint, walk speed), architecture (storey, doors, elevator), street (cars, lanes) and furniture sizes with their seat and surface heights. Furniture takes its size from its type, and interaction spots are anchors derived from the furniture they use. Movement is measured on the floor, so zoom never changes pace or proportions.
+
 **The world:** Hillink HQ is built from objects (no background image): a Break Room, Lobby, glass elevator, Engineering and the street outside, drawn in a 2.5D cut-away. The building is data in `world/building.mjs`; skins only change materials and outfits. Agents walk, ride the elevator, sit and work only where their real work is. See "Object-built World" in the architecture doc. With `prefers-reduced-motion`, the world holds still. Press `h` to hide the panels.
 
 Try it in simulation: in "Dev simulation", use Claude builds, Codex reviews, Claude starts coding, Claude messages Codex (the handoff), Start a meeting, and Needs Kyle.

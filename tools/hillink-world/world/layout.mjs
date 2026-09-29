@@ -3,6 +3,7 @@
 // units. The same layout serves every skin: Realistic, Fantasy and the Blueprint debug view.
 import * as B from './building.mjs';
 import { projector, hull, inPolygon } from '../engine/iso.mjs';
+import { AGENT } from './scale.mjs';
 
 const dist = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]);
 
@@ -117,10 +118,16 @@ export function createIsoLayout(def = B) {
   const homePts = [[-10, 0, 0, 0], [830, 0, 0, 0], [-10, 0, 2, 60], [830, D, 2, 60], [830, 0, 0, -10]].map(([x, z, f, h]) => P.at(x, z, f, h));
   const hx = homePts.map(q => q[0]), hy = homePts.map(q => q[1]);
   const home = { x: Math.min(...hx), y: Math.min(...hy), w: Math.max(...hx) - Math.min(...hx), h: Math.max(...hy) - Math.min(...hy) };
+  // Distance on the floor plane between two projected points on the same floor (world units). Movement is
+  // budgeted in this, so a character crosses a room at the same pace whichever way it walks, and the camera
+  // (zoom, pan, browser size) never enters into it.
+  const metric = (a, b) => { const dy = b[1] - a[1], dz = -dy / g.sky, dx = b[0] - a[0] - dz * g.skx; return Math.hypot(dx, dz); };
+  // Camera bounds: the whole plot, from the skyline down to the far kerb of the street.
+  const kerb = P.at(0, def.STREET.road.z0, 0)[1];
   return {
-    id: 'hq', kind: 'iso', P, g, def, home,
-    bounds: { x: -150, y: 90, w: 1180, h: 520 },
-    entityScale: 0.5, overflowStep: 16, walkSpeed: 64, characterHeight: 50,
+    id: 'hq', kind: 'iso', P, g, def, home, metric,
+    bounds: { x: -150, y: 90, w: 1180, h: Math.ceil(kerb + 24 - 90) },
+    entityScale: 0.5, overflowStep: AGENT.footprint.w + 2, walkSpeed: AGENT.walkSpeed, arriveDistance: AGENT.arriveDistance, characterHeight: AGENT.height,
     spawn: 'plaza',
     locations, locationById, navNodes, navEdges, nodePlan: plan, locationAt, planAt, route, lifts, liftOf, stationInfo,
     places: def.PLACES,
