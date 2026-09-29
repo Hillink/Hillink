@@ -208,3 +208,11 @@ test('completed verification may contain failed assertions without retrying the 
   assert.equal(s.engine.state.alerts[`verification:${id}`].kind, 'VERIFICATION_FAILED');
   assert.equal(s.engine.state.tasks[id].verificationResult, 'failed');
 });
+test('an idle connected worker does not journal an observation every tick', async () => {
+  let clock = 0; const store = new MemoryStore();
+  const engine = new Engine({ store, adapters: { 'local-checks': { health: async () => ({ status: 'IDLE' }), start: async () => {}, cancel: async () => true } }, now: () => clock });
+  engine.initialize(); const before = engine.state.seq;
+  for (let i = 0; i < 3600; i++) { await engine.tick(); clock += 1000; }
+  assert.ok(engine.state.seq - before <= 13, `journaled ${engine.state.seq - before} events in an idle hour`);
+  assert.equal(engine.snapshot().agents.find(a => a.id === 'hq-verifier').status, 'IDLE');
+});

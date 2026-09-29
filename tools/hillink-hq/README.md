@@ -83,3 +83,7 @@ Terminal worker failures enter diagnosis before cycle completion is allowed. A c
 Completed verification can be DONE with Tests: failed: the check completed, but the tested code did not pass. A VERIFICATION_FAILED alert requests repair. Worker crashes remain FAILED and use recovery. Actual completed-test counts emit throttled TEST_PROGRESS evidence; repeated counts are rejected. Heartbeats alone still do not reset progress: a single test producing no result for the progress timeout remains subject to the watchdog. This is a deliberate limit, not a claim that heartbeat proves useful work.
 
 Known follow-ups from review: idle health journal growth, bounded state/event pagination, and replay snapshots are not implemented in this foundation slice.
+
+## Journal size
+
+Unchanged health observations are kept in memory, not journaled every tick. The journal records status or detail changes plus a keep-alive every 5 minutes, so an idle connected worker adds about 12 events an hour instead of about 450. Replay therefore shows a worker as UNKNOWN between journaled observations; that is the honest historical reading. `/api/state` returns the latest 300 events and `eventCount`; `/api/history?seq=` still replays the full journal.

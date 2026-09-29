@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { initialAgents, operations } from './registry.mjs';
 
-export const defaults = { heartbeatMs: 15_000, progressMs: 120_000, adapterTimeoutMs: 3000, quarantineMs: 60_000, maxAttempts: 2, maxLocalWorkers: 1 };
+export const defaults = { heartbeatMs: 15_000, progressMs: 120_000, adapterTimeoutMs: 3000, quarantineMs: 60_000, observationJournalMs: 300_000, maxAttempts: 2, maxLocalWorkers: 1 };
 async function bounded(call, timeoutMs) {
   let timer;
   try { return await Promise.race([Promise.resolve().then(call), new Promise((_, reject) => { timer = setTimeout(() => reject(Error('Adapter response timed out')), timeoutMs); })]); }
@@ -69,7 +69,8 @@ export function reduce(state, event) {
   return state;
 }
 
-export function agentStatus(state, agent, now, config = defaults) {
+// seenAt: latest in-memory adapter observation. Unchanged observations are journaled only as a periodic keep-alive.
+export function agentStatus(state, agent, now, config = defaults, seenAt = null) {
   const task = state.tasks[agent.assignment], run = state.runs[task?.runId];
   if (run && !run.endedAt) {
     if (task.stage === 'BLOCKED') return 'BLOCKED';
@@ -79,15 +80,17 @@ export function agentStatus(state, agent, now, config = defaults) {
     return 'RUNNING';
   }
   if (agent.quarantineUntil > now) return 'OFFLINE';
-  if (!agent.observedAt || now - agent.observedAt > config.heartbeatMs) return 'UNKNOWN';
+  const observedAt = Math.max(agent.observedAt ?? 0, seenAt ?? 0);
+  if (!observedAt || now - observedAt > config.heartbeatMs) return 'UNKNOWN';
   return agent.observedStatus;
 }
 
 export class Engine {
   constructor({ store, adapters = {}, now = Date.now, config = {} }) {
-    this.store = store; this.adapters = adapters; this.now = now; this.config = { ...defaults, ...config }; this.busy = false;
+    this.store = store; this.adapters = adapters; this.now = now; this.config = { ...defaults, ...config }; this.busy = false; this.seen = {};
     this.state = store.read().reduce(reduce, emptyState());
   }
+  status(agent, at = this.now()) { return agentStatus(this.state, agent, at, this.config, this.seen[agent.id]); }
   emit(type, data) {
     const event = { seq: this.state.seq + 1, id: randomUUID(), at: this.now(), type, data };
     this.store.append(event); // Persist before mutating state or executing anything.
@@ -148,7 +151,7 @@ export class Engine {
   }
   runnable() { return Object.values(this.state.tasks).filter(t => t.stage === 'READY' && t.safety === 'local-read-only').sort((a, b) => b.priority - a.priority || a.createdAt - b.createdAt); }
   snapshot(at = this.now()) {
-    const tasks = Object.values(this.state.tasks), agents = Object.values(this.state.agents).map(a => ({ ...a, status: agentStatus(this.state, a, at, this.config), adapterAvailable: Boolean(this.adapters[a.executionAdapter]) }));
+    const tasks = Object.values(this.state.tasks), agents = Object.values(this.state.agents).map(a => ({ ...a, status: this.status(a, at), adapterAvailable: Boolean(this.adapters[a.executionAdapter]) }));
     const counts = { ready: this.runnable().length, assigned: tasks.filter(t => liveStages.has(t.stage)).length, working: agents.filter(a => a.status === 'RUNNING').length, review: tasks.filter(t => t.stage === 'REVIEW').length, blocked: tasks.filter(t => t.stage === 'BLOCKED').length, done: tasks.filter(t => t.stage === 'DONE').length };
     const unresolvedRuns = Object.values(this.state.runs).filter(r => !r.endedAt).length;
     return { ...this.state, agents, tasks, counts, unresolvedRuns, now: at, cycleComplete: tasks.length > 0 && counts.ready === 0 && counts.assigned === 0 && counts.working === 0 && counts.review === 0 && unresolvedRuns === 0 && tasks.every(t => t.stage === 'DONE' || (t.stage === 'BLOCKED' && !t.recoveryPending && Boolean(t.blocker))) };
@@ -166,14 +169,15 @@ export class Engine {
           observation = await bounded(() => adapter.health(), this.config.adapterTimeoutMs);
           if (!['IDLE', 'OFFLINE', 'UNKNOWN', 'RATE_LIMITED'].includes(observation.status)) throw Error('Invalid adapter health');
         } catch (error) { observation = { status: 'UNKNOWN', detail: `Adapter health failed: ${error.message}` }; }
-        if (agent.observedStatus !== observation.status || !agent.observedAt || this.now() - agent.observedAt > this.config.heartbeatMs / 2) this.emit('AGENT_OBSERVED', { agentId: agent.id, ...observation });
+        if (agent.observedStatus !== observation.status || agent.detail !== observation.detail || !agent.observedAt || this.now() - agent.observedAt > this.config.observationJournalMs) this.emit('AGENT_OBSERVED', { agentId: agent.id, ...observation });
+        this.seen[agent.id] = this.now();
       }
       await this.recover();
       for (const task of this.runnable()) {
         if (task.notBefore > this.now()) continue;
         const active = Object.values(this.state.runs).filter(r => !r.endedAt);
         if (active.length >= this.config.maxLocalWorkers) break;
-        const agent = Object.values(this.state.agents).sort((a, b) => (a.routingPriority ?? 0) - (b.routingPriority ?? 0)).find(a => (!task.preferredAgentId || a.id === task.preferredAgentId) && a.capabilities.includes(task.capability) && !a.assignment && agentStatus(this.state, a, this.now(), this.config) === 'IDLE' && this.adapters[a.executionAdapter]);
+        const agent = Object.values(this.state.agents).sort((a, b) => (a.routingPriority ?? 0) - (b.routingPriority ?? 0)).find(a => (!task.preferredAgentId || a.id === task.preferredAgentId) && a.capabilities.includes(task.capability) && !a.assignment && this.status(a) === 'IDLE' && this.adapters[a.executionAdapter]);
         if (!agent) continue;
         const runId = randomUUID();
         this.emit('DISPATCHED', { taskId: task.id, agentId: agent.id, runId });
@@ -204,7 +208,7 @@ export class Engine {
       }
       const failed = run.terminal === 'FAILED' && task.recoveryPending;
       if (!failed && (run.endedAt || task.stage === 'BLOCKED')) continue;
-      const agent = this.state.agents[run.agentId], status = agentStatus(this.state, agent, this.now(), this.config);
+      const agent = this.state.agents[run.agentId], status = this.status(agent);
       const ackExpired = !run.acknowledgedAt && this.now() - run.dispatchedAt > (agent.ackTimeoutMs ?? this.config.heartbeatMs);
       if (!failed && !ackExpired && !['OFFLINE', 'STALLED'].includes(status)) continue;
       this.emit('RECOVERY', { taskId: task.id, step: 'diagnose', reason: failed ? task.blocker : ackExpired ? 'No worker acknowledgement' : status, runId: run.runId });
@@ -217,7 +221,7 @@ export class Engine {
       if (!run.endedAt) this.workerEvent(run.runId, { kind: 'CANCELLED', summary: 'Watchdog confirmed worker stopped before recovery.' });
       this.emit('AGENT_OBSERVED', { agentId: agent.id, status: 'OFFLINE', detail: 'Recovery quarantine; awaiting cooldown and fresh health check', quarantineUntil: this.now() + this.config.quarantineMs });
       // Different worker handoff is preferred; no blind repetition or arbitrary shell retries.
-      const alternate = Object.values(this.state.agents).find(a => a.id !== agent.id && (!task.preferredAgentId || a.id === task.preferredAgentId) && a.capabilities.includes(task.capability) && !a.assignment && this.adapters[a.executionAdapter] && agentStatus(this.state, a, this.now(), this.config) === 'IDLE');
+      const alternate = Object.values(this.state.agents).find(a => a.id !== agent.id && (!task.preferredAgentId || a.id === task.preferredAgentId) && a.capabilities.includes(task.capability) && !a.assignment && this.adapters[a.executionAdapter] && this.status(a) === 'IDLE');
       if (alternate && task.attempts < this.config.maxAttempts) {
         this.emit('RECOVERY', { taskId: task.id, step: 'handoff', reason: `Retry with ${alternate.name}`, from: agent.id, to: alternate.id });
         this.emit('TASK_REQUEUED', { taskId: task.id });
