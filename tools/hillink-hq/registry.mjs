@@ -10,6 +10,7 @@ export const initialAgents = [
 
 export const operations = {
   'summarize-local': { label: 'Summarize text with a local model', capability: 'summarize', description: 'Opt-in Ollama bridge; summarizes only the task description, without tools or repository access.' },
+  'review-repo': { label: 'Ask Claude or Codex to review the repo (read-only)', capability: 'review-repo', description: 'Opt-in local CLI bridge; the agent reads the repository and answers. No edits, shell writes, deploys or database access.' },
   'inspect-repo': { label: 'Inspect repository source', capability: 'inspect-repo', description: 'Count source files locally; no network, credentials or database.' },
   'verify-hq': { label: 'Run HQ foundation tests', capability: 'verify-hq', description: 'Run isolated engine and persistence tests.' },
   'verify-unit': { label: 'Run Hillink unit tests', capability: 'verify-unit', description: 'Run existing pure unit tests; never seed or run E2E.' },
