@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getBillingTierFromPriceId, getStripe, getTierConfig, type BillingTier } from "@/lib/stripe/config";
 import { isValidStripeWebhookSecret } from "@/lib/env/validation";
+import { envValue } from "@/lib/env/read";
 import { markPaymentFunded } from "@/lib/payments/server";
 import { createNotification } from "@/lib/notifications";
 
@@ -9,7 +10,7 @@ import { createNotification } from "@/lib/notifications";
 
 export async function POST(req: NextRequest) {
   const signature = req.headers.get("stripe-signature");
-  const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+  const webhookSecret = envValue("STRIPE_WEBHOOK_SECRET");
 
   if (!signature || !webhookSecret || !isValidStripeWebhookSecret(webhookSecret)) {
     return NextResponse.json({ error: "Missing webhook signature or secret" }, { status: 400 });

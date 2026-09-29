@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requireRoleAccess } from "@/lib/auth/requireRoleAccess";
+import { getTierFromXp } from "@/lib/xp";
+import { fetchAllPages } from "@/lib/supabase/paginate";
 
 export type LeaderboardEntry = {
   rank: number;
@@ -13,21 +15,6 @@ export type LeaderboardEntry = {
   tier: string;
 };
 
-const TIER_THRESHOLDS: { tier: string; min: number }[] = [
-  { tier: "Diamond", min: 5000 },
-  { tier: "Platinum", min: 2500 },
-  { tier: "Gold", min: 1000 },
-  { tier: "Silver", min: 400 },
-  { tier: "Bronze", min: 0 },
-];
-
-function tierFromXp(xp: number): string {
-  for (const { tier, min } of TIER_THRESHOLDS) {
-    if (xp >= min) return tier;
-  }
-  return "Bronze";
-}
-
 export async function GET() {
   const access = await requireRoleAccess(["athlete"]);
   if (!access.ok) {
@@ -37,9 +24,13 @@ export async function GET() {
   const adminClient = createAdminClient();
 
   // Fetch all XP events (athlete_id + xp_delta only for efficiency)
-  const { data: xpRows, error: xpError } = await adminClient
-    .from("athlete_xp_events")
-    .select("athlete_id, xp_delta");
+  const { data: xpRows, error: xpError } = await fetchAllPages<{ athlete_id: string; xp_delta: number | null }>((from, to) =>
+    adminClient
+      .from("athlete_xp_events")
+      .select("athlete_id, xp_delta")
+      .order("id", { ascending: true })
+      .range(from, to)
+  );
 
   if (xpError) {
     return NextResponse.json({ error: xpError.message }, { status: 500 });
@@ -86,7 +77,7 @@ export async function GET() {
       school: profile?.school ?? null,
       sport: profile?.sport ?? null,
       total_xp,
-      tier: tierFromXp(total_xp),
+      tier: getTierFromXp(total_xp),
     };
   });
 

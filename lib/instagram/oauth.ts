@@ -28,15 +28,6 @@ export function getMetaOAuthConfig(): MetaOAuthConfig {
   };
 }
 
-export function encodeOAuthState(payload: { userId: string; ts: number; nonce: string }) {
-  return Buffer.from(JSON.stringify(payload), "utf8").toString("base64url");
-}
-
-export function decodeOAuthState(state: string) {
-  const json = Buffer.from(state, "base64url").toString("utf8");
-  const parsed = JSON.parse(json) as { userId: string; ts: number; nonce: string };
-  return parsed;
-}
 
 export function buildMetaOAuthUrl(params: {
   appId: string;
