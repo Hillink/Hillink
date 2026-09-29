@@ -208,7 +208,11 @@ Kyle approved the correction plan in issue #12 (comment 5895635191) on 2026-09-2
 - Builders: a new commit or review (from the last 20 minutes, not history on load) sends its agent, if free, to the site to assemble or inspect for a few seconds, then back. An agent doing its own work never leaves it; offline agents never walk.
 - LIVE shows only real passes; simulation shows only the simulated pass ("Construction: next milestone", one milestone per click, no timers, labelled SIMULATED).
 
-**Tests:** `tests/truth.test.mjs` (labels, continuity, failures, overlapping scenarios, meetings, history) and `tests/construction.test.mjs` (milestones, time, out-of-order evidence, blocked keeps work, rework, acceptance, sticky reset, journal reload, git adapter with fake git/gh, the simulated pass, builder visits).
+**P2, readability.** Camera framing leaves room for the right-hand panel (measured from the DOM) and the overview frames the building and plaza rather than the whole street. Agent labels keep a constant on-screen size and step up with a leader line rather than hide when they overlap. The Go to menu closes after a pick; roster cards wrap to two lines and their dot is blue while an agent is on the way. Review spots moved left of the partition's cut end, and working or selected agents get a faint x-ray copy so glass and walls never hide them.
+
+Not in this pass (as planned): Kyle's avatar, usage/credits, the Command Center and replay UI, new rooms.
+
+**Tests:** `tests/readability.test.mjs` (framing, review spots, labels), `tests/truth.test.mjs` (labels, continuity, failures, overlapping scenarios, meetings, history) and `tests/construction.test.mjs` (milestones, time, out-of-order evidence, blocked keeps work, rework, acceptance, sticky reset, journal reload, git adapter with fake git/gh, the simulated pass, builder visits).
 
 ## Phases (from the brief) and where this PR stops
 
