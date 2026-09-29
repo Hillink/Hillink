@@ -137,3 +137,15 @@ export function getTierRewards(tier: string): string[] {
   const key = tier as AthleteTier;
   return TIER_REWARDS[key] ?? [];
 }
+
+// "Joined" a campaign means the business accepted the athlete. Applying alone, being declined,
+// withdrawing, or having proof rejected does not count toward challenges (XP-003).
+const JOINED_APPLICATION_STATUSES = new Set(["accepted", "submitted", "approved", "completed"]);
+
+export function hasJoinedCampaign(status: string | null | undefined): boolean {
+  return JOINED_APPLICATION_STATUSES.has(String(status || "").trim().toLowerCase());
+}
+
+export function countJoinedCampaigns(applications: { status?: string | null }[]): number {
+  return applications.filter((a) => hasJoinedCampaign(a.status)).length;
+}

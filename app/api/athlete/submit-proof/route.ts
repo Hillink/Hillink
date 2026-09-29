@@ -9,6 +9,7 @@ import {
 } from "@/lib/instagram/diagnostics";
 import { maybeRefreshMetaUserToken } from "@/lib/instagram/oauth";
 import { createNotification } from "@/lib/notifications";
+import { checkProofUrl } from "@/lib/validation/proofUrl";
 
 type SubmitBody = {
   applicationId?: string;
@@ -23,7 +24,12 @@ export async function POST(req: NextRequest) {
   }
   const userId = access.userId;
 
-  const body = (await req.json()) as SubmitBody;
+  let body: SubmitBody;
+  try {
+    body = (await req.json()) as SubmitBody;
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+  }
   const applicationId = body.applicationId?.trim();
   const proofUrl = body.proofUrl?.trim();
 
@@ -33,6 +39,11 @@ export async function POST(req: NextRequest) {
 
   if (!proofUrl) {
     return NextResponse.json({ error: "Proof URL is required" }, { status: 400 });
+  }
+
+  const proofUrlCheck = checkProofUrl(proofUrl);
+  if (!proofUrlCheck.ok) {
+    return NextResponse.json({ error: proofUrlCheck.error }, { status: 400 });
   }
 
   const adminClient = createAdminClient();

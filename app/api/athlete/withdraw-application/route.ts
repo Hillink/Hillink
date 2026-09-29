@@ -17,7 +17,12 @@ export async function POST(req: NextRequest) {
   }
   const userId = access.userId;
 
-  const body = (await req.json()) as WithdrawBody;
+  let body: WithdrawBody;
+  try {
+    body = (await req.json()) as WithdrawBody;
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+  }
   const applicationId = body.applicationId?.trim();
 
   if (!applicationId) {

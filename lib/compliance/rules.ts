@@ -96,11 +96,21 @@ export function validateComplianceInput(input: Partial<AthleteCompliance>): { ok
 
 export const DEFAULT_REVIEW_WINDOW_HOURS = 72;
 
+/**
+ * The review window the server enforces. Businesses can write campaigns.review_window_hours directly,
+ * so a stored value can only shorten the window, never stretch it past 72h and delay an athlete's
+ * payout (BUS-002).
+ */
+export function effectiveReviewWindowHours(reviewWindowHours: number | null | undefined): number {
+  const hours = Number(reviewWindowHours);
+  if (!Number.isFinite(hours) || hours <= 0) return DEFAULT_REVIEW_WINDOW_HOURS;
+  return Math.min(hours, DEFAULT_REVIEW_WINDOW_HOURS);
+}
+
 /** True once a submission has waited longer than the campaign's review window. */
 export function isReviewOverdue(submittedAt: string | null | undefined, reviewWindowHours: number | null | undefined, now: Date): boolean {
   if (!submittedAt) return false;
   const submitted = Date.parse(submittedAt);
   if (!Number.isFinite(submitted)) return false;
-  const hours = reviewWindowHours && reviewWindowHours > 0 ? reviewWindowHours : DEFAULT_REVIEW_WINDOW_HOURS;
-  return now.getTime() - submitted >= hours * 3600_000;
+  return now.getTime() - submitted >= effectiveReviewWindowHours(reviewWindowHours) * 3600_000;
 }

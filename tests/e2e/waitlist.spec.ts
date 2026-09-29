@@ -1,8 +1,8 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 
 const appUrl = process.env.PLAYWRIGHT_BASE_URL || "http://127.0.0.1:3001";
 
-async function fillAndAssert(page: Parameters<typeof test>[1] extends (args: infer T) => unknown ? T["page"] : never, selector: string, value: string) {
+async function fillAndAssert(page: Page, selector: string, value: string) {
   const input = page.locator(selector);
   await input.fill(value);
   await expect(input).toHaveValue(value);

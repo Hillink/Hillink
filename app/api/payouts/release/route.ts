@@ -4,6 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getStripe } from "@/lib/stripe/config";
 import { notifyUser } from "@/lib/notifications";
 import { getPaymentForApplication, payOutPayment } from "@/lib/payments/server";
+import { envValue } from "@/lib/env/read";
 
 type ReleaseBody = {
   applicationId: string;
@@ -29,7 +30,7 @@ export async function POST(request: NextRequest) {
   try {
     // Check auth: admin role OR valid CRON_SECRET header
     const cronSecret = request.headers.get("x-cron-secret");
-    const expectedCronSecret = process.env.CRON_SECRET;
+    const expectedCronSecret = envValue("CRON_SECRET");
 
     let isAuthorized = false;
 
