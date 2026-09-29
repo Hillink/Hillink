@@ -34,6 +34,8 @@ export function checkPath(raw, { kind = 'scope' } = {}) {
   // so ".git." is ".git" and "tools/hillink-hq./x" is HQ's own code); some names are refused at any depth.
   for (const s of segs) {
     if (!SEGMENT.test(s)) throw Error(`${kind} path "${p.slice(0, 80)}" has a segment with characters that are not allowed ("${s.slice(0, 40)}"): use letters, digits and . _ - @ + ( )`);
+    // Pass 2.7: a path is passed to node and git as an argument; one starting with "-" would read as an option.
+    if (s.startsWith('-')) throw Error(`${kind} path "${p.slice(0, 80)}" has a segment starting with "-" (it would read as a command option)`);
     if (s.endsWith('.')) throw Error(`${kind} path "${p.slice(0, 80)}" has a segment ending in "." (Windows would alias it)`);
     if (DEVICE.test(s)) throw Error(`${kind} path "${p.slice(0, 80)}" uses a reserved Windows device name ("${s}")`);
     if (DENIED_ANYWHERE.has(s.toLowerCase())) throw Error(`${kind} path "${p.slice(0, 80)}" contains a protected name ("${s}") that is refused at any depth`);

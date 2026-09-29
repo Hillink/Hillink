@@ -88,6 +88,18 @@ With `HQ_AGENTS_ENABLED=1` (or `HQ_IMPLEMENTATION_ENABLED=1`), Claude can take b
 - **Blocked outcomes:** failed tests, a scope violation, missing test files or no changes end BLOCKED with the reason and an owner action. Nothing is committed, and the worktree is kept for inspection.
 - **Permissions:** chosen per task by `ClaudeRouter`. Review tasks use the unchanged read-only adapter in the repository, so nothing carries over from one task to the next.
 
+## OS sandbox for implementation (Pass 2.7)
+
+Implementation runs only inside a disposable WSL2 instance (`sandbox.mjs`). Without the sandbox base image HQ does not offer `implement-repo` at all, and withdraws the capability if an earlier start recorded it.
+
+- **Setup (once):** `node tools/hillink-hq/sandbox/build-base.mjs` builds `~/.hillink-hq/sandbox/base.tar` (Ubuntu Base 24.04, Node 24, Claude Code pinned, all downloads checksum-verified) and records its sha256. Set `HQ_SANDBOX_ANTHROPIC_API_KEY` in your Windows user environment; it is the only key the sandbox receives (`ANTHROPIC_API_KEY` and every other credential stay out).
+- **Per task:** the image checksum is verified, a fresh instance `hq-sbx-<task>` is imported, the base commit is streamed in with `git archive` (no Windows path is mounted), and the key goes in on stdin, readable only by root. Drive automount and Windows interop are off, WSL's shared mounts are hidden, there is no sudo and no setuid binary.
+- **Claude** runs as the unprivileged `claude` user in its own network namespace. Its only way out is a root-owned proxy that allows `CONNECT api.anthropic.com:443` and refuses and logs everything else. bubblewrap gives it its own PID/IPC namespaces with user namespaces disabled.
+- **Tests** run as a second user, `runner`, with no network at all, the key deleted, `/work` read-only, and `node --permission` on top.
+- **Return path:** only a patch leaves the instance. HQ rejects symlinks, submodules, `.git`, traversal and anything that looks like a secret, applies it with hardened git, then every Pass 2.6 check runs (scope, tests, local commit only).
+- **Teardown:** the instance is unregistered on every outcome, and stale `hq-sbx-*` instances are removed when HQ starts.
+- **Attack tests:** `node tools/hillink-hq/sandbox/attack-tests.mjs` runs a hostile "Claude" and a hostile test file through the real wrappers and checks every escape attempt fails.
+
 ## Notifications
 
 Material alerts are durable and deduplicated per episode. They include agent/task, time since meaningful progress, evidence, recovery attempts, runnable count and exact owner action. Ordinary healthy progress does not alert. Acknowledgement and delivery are separate.

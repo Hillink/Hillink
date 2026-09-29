@@ -46,11 +46,11 @@ const PASSING = "import test from 'node:test';\ntest('ok', () => {});\n";
 const CONTRACT = { objective: 'Add a module.', scope: ['sandbox/hq-implementation/'], acceptanceCriteria: 'Test passes.', constraints: 'Nothing else.', tests: ['sandbox/hq-implementation/a.test.mjs'] };
 const inScope = [['write', 'sandbox/hq-implementation/a.mjs', 'export const a = 1;\n'], ['write', 'sandbox/hq-implementation/a.test.mjs', PASSING]];
 
-function setup(ops, { repoExtra, holdMs, contract = CONTRACT } = {}) {
+function setup(ops, { repoExtra, holdMs, contract = CONTRACT, implementer: opts = {} } = {}) {
   const repo = tempRepo(repoExtra), worktreeRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'hq-sec-wt-'));
   const fake = fakeClaude(ops, { holdMs });
   const review = new CliAgentAdapter(cliAgents.claude, { spawn: fake.spawn, env: { PATH: process.env.PATH }, cwd: repo, graceMs: 10 });
-  const implementer = new ClaudeImplementer({ repoRoot: repo, worktreeRoot, claudeBin: 'claude-test.exe', spawn: fake.spawn, env: { PATH: process.env.PATH, SystemRoot: process.env.SystemRoot, TEMP: os.tmpdir(), TMP: os.tmpdir() }, pulseMs: 50 });
+  const implementer = new ClaudeImplementer({ repoRoot: repo, worktreeRoot, claudeBin: 'claude-test.exe', spawn: fake.spawn, env: { PATH: process.env.PATH, SystemRoot: process.env.SystemRoot, TEMP: os.tmpdir(), TMP: os.tmpdir() }, pulseMs: 50, unsandboxed: true, ...opts });
   const engine = new Engine({ store: new MemoryStore(), adapters: { 'local-checks': { health: async () => ({ status: 'IDLE' }), start: async () => {}, cancel: async () => true }, 'cli-claude': new ClaudeRouter({ health: async () => ({ status: 'IDLE' }), start: r => review.start(r), cancel: id => review.cancel(id), close: () => {} }, implementer) }, config: { heartbeatMs: 600_000, progressMs: 600_000 } });
   engine.initialize();
   engine.configureAgent('claude', { capabilities: ['implement', 'review', 'review-repo', 'implement-repo'], executionAdapter: 'cli-claude' });

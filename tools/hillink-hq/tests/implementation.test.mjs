@@ -47,12 +47,12 @@ function fakeClaude(files, { exitCode = 0, result = 'Done: added greeting.' } = 
 const GREETING = { 'sandbox/hq-implementation/greeting.mjs': "export const greet = name => `Hello, ${name}!`;\n", 'sandbox/hq-implementation/greeting.test.mjs': "import test from 'node:test';\nimport assert from 'node:assert/strict';\nimport { greet } from './greeting.mjs';\ntest('greets', () => assert.equal(greet('Kyle'), 'Hello, Kyle!'));\n" };
 const CONTRACT = { objective: 'Add greet(name) returning "Hello, <name>!" with a test.', scope: ['sandbox/hq-implementation/'], acceptanceCriteria: 'greet("Kyle") === "Hello, Kyle!" and the test passes.', constraints: 'Change nothing outside the sandbox directory.', tests: ['sandbox/hq-implementation/greeting.test.mjs'] };
 
-function setup({ files = GREETING, claude = {}, contract = CONTRACT } = {}) {
+function setup({ files = GREETING, claude = {}, contract = CONTRACT, implementer: opts = {} } = {}) {
   let clock = 1_000_000;
   const repo = tempRepo(), worktreeRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'hq-impl-wt-'));
   const fake = fakeClaude(files, claude);
   const review = new CliAgentAdapter(cliAgents.claude, { spawn: fake.spawn, env: { PATH: process.env.PATH }, cwd: repo, graceMs: 10 });
-  const implementer = new ClaudeImplementer({ repoRoot: repo, worktreeRoot, claudeBin: 'claude-test.exe', spawn: fake.spawn, env: { PATH: process.env.PATH, SystemRoot: process.env.SystemRoot, TEMP: os.tmpdir() }, pulseMs: 50 });
+  const implementer = new ClaudeImplementer({ repoRoot: repo, worktreeRoot, claudeBin: 'claude-test.exe', spawn: fake.spawn, env: { PATH: process.env.PATH, SystemRoot: process.env.SystemRoot, TEMP: os.tmpdir() }, pulseMs: 50, unsandboxed: true, ...opts });
   const engine = new Engine({ store: new MemoryStore(), adapters: { 'local-checks': { health: async () => ({ status: 'IDLE' }), start: async () => {}, cancel: async () => true }, 'cli-claude': new ClaudeRouter({ ...review, health: async () => ({ status: 'IDLE', detail: 'fake Claude' }), start: r => review.start(r), cancel: id => review.cancel(id), close: () => {} }, implementer) }, now: () => clock, config: { heartbeatMs: 600_000, progressMs: 600_000 } });
   engine.initialize();
   engine.configureAgent('claude', { capabilities: ['implement', 'review', 'review-repo', 'implement-repo'], executionAdapter: 'cli-claude' });

@@ -12,6 +12,7 @@ import { connectOllama } from './ollama-adapter.mjs';
 import { connectCliAgents } from './cli-agent-adapter.mjs';
 import { connectOrchestrator } from './orchestrator-adapter.mjs';
 import { ClaudeImplementer, ClaudeRouter, findClaudeBinary } from './implementation-runner.mjs';
+import { WslSandbox } from './sandbox.mjs';
 import { execFileSync } from 'node:child_process';
 
 const here = fileURLToPath(new URL('.', import.meta.url));
@@ -26,7 +27,7 @@ async function body(req) {
   return JSON.parse(raw);
 }
 
-export async function createHQ({ port = 4312, directory = path.join(here, '.state'), store, adapters, sink, intervalMs = 1000, ollama = false, cliAgents = false, orchestrator = false, implementation = false, env = process.env, request = fetch } = {}) {
+export async function createHQ({ port = 4312, directory = path.join(here, '.state'), store, adapters, sink, intervalMs = 1000, ollama = false, cliAgents = false, orchestrator = false, implementation = false, env = process.env, request = fetch, sandboxFactory = ({ env: e }) => new WslSandbox({ home: e.HQ_SANDBOX_HOME || undefined }) } = {}) {
   const journal = store ?? new FileStore(directory);
   const local = new LocalAdapter();
   const engine = new Engine({ store: journal, adapters: adapters ?? { 'local-checks': local } });
@@ -41,13 +42,22 @@ export async function createHQ({ port = 4312, directory = path.join(here, '.stat
   let implementationStatus = 'DISABLED';
   if (implementation && engine.adapters['cli-claude'] && !engine.state.agents.claude.assignment) {
     const claudeBin = findClaudeBinary({ env, execFileSync });
+    // Pass 2.7: implementation exists only with the OS sandbox. No sandbox image, no implement-repo capability.
+    const sandbox = sandboxFactory({ env });
+    const box = sandbox.available();
     if (!claudeBin) implementationStatus = 'UNAVAILABLE: Claude Code binary not found (set HQ_CLAUDE_BIN)';
+    else if (!box.ok) implementationStatus = `UNAVAILABLE: ${box.reason}`;
     else {
-      const implementer = new ClaudeImplementer({ repoRoot: path.resolve(here, '../..'), worktreeRoot: env.HQ_WORKTREE_DIR || undefined, claudeBin, env });
+      sandbox.cleanupStale().catch(() => {}); // instances left by a crash are disposable
+      const implementer = new ClaudeImplementer({ repoRoot: path.resolve(here, '../..'), worktreeRoot: env.HQ_WORKTREE_DIR || undefined, claudeBin, env, sandbox });
       engine.adapters['cli-claude'] = new ClaudeRouter(engine.adapters['cli-claude'], implementer);
       engine.configureAgent('claude', { capabilities: [...new Set([...engine.state.agents.claude.capabilities, 'implement-repo'])] });
       implementationStatus = 'CONFIGURED';
     }
+  }
+  // A capability recorded by an earlier start does not survive a start without the sandbox (fail closed).
+  if (implementationStatus !== 'CONFIGURED' && engine.state.agents.claude?.capabilities?.includes('implement-repo') && !engine.state.agents.claude.assignment) {
+    engine.configureAgent('claude', { capabilities: engine.state.agents.claude.capabilities.filter(c => c !== 'implement-repo') });
   }
   // ChatGPT orchestrator: connected only when HQ's environment has OPENAI_API_KEY (never read from requests).
   let orchestratorStatus = 'DISABLED';
