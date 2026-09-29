@@ -2,8 +2,13 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { makeEvent, validateEvent, validProgress, EVENT_TYPES } from '../core/events.mjs';
 import { WorldStore, applyEvent, emptyWorld } from '../core/state.mjs';
-import { locations, navNodes, route, locationAt } from '../core/layout.mjs';
-import { placeAgents, stationPoint, taskPlacement } from '../core/behavior.mjs';
+import { createLayout, blueprintLayout } from '../core/layout.mjs';
+import { placeAgents, stationPoint, taskPlacement, ACTIVITY_PLACE } from '../core/behavior.mjs';
+import { realTheme } from '../themes/real.mjs';
+import { fantasyTheme } from '../themes/fantasy.mjs';
+
+const LAYOUTS = [blueprintLayout, realTheme.layout, fantasyTheme.layout].map(createLayout);
+const blueprint = LAYOUTS[0];
 import { Camera } from '../engine/camera.mjs';
 import { Scene } from '../engine/scene.mjs';
 import { Simulator } from '../sim/simulator.mjs';
@@ -67,7 +72,8 @@ test('store: batches, orders by time, dedupes by id, and quarantines invalid eve
   assert.deepEqual(calls.at(-1), ['*']);
 });
 
-test('layout: every location is reachable from every other location', () => {
+for (const layout of LAYOUTS) test(`layout ${layout.id}: every location is reachable and every activity has its stations`, () => {
+  const { locations, locationAt, route, bounds } = layout;
   for (const a of locations) for (const b of locations) {
     const start = a.stations[Object.keys(a.stations)[0]], end = b.stations[Object.keys(b.stations)[0]];
     const path = route(start, b.id, end);
@@ -75,26 +81,44 @@ test('layout: every location is reachable from every other location', () => {
     assert.ok(path.every(p => Array.isArray(p) && p.every(Number.isFinite)), `${a.id} -> ${b.id}`);
     if (a.id !== b.id) assert.ok(path.length >= 3, `${a.id} -> ${b.id} goes through doors`);
   }
-  for (const l of locations) for (const [name, [x, y]] of Object.entries(l.stations)) assert.equal(locationAt(x, y)?.id, l.id, `${l.id}.${name} is inside its room`);
-  assert.ok(Object.keys(navNodes).length >= 8);
+  for (const l of locations) for (const [name, [x, y]] of Object.entries(l.stations)) {
+    assert.equal(locationAt(x, y)?.id, l.id, `${l.id}.${name} is inside its room`);
+    assert.ok(x >= bounds.x && x <= bounds.x + bounds.w && y >= bounds.y && y <= bounds.y + bounds.h, `${l.id}.${name} is inside the world`);
+  }
+  for (const [activity, base] of Object.entries(ACTIVITY_PLACE)) {
+    const rule = { ...base, ...(layout.places?.[activity] ?? {}) };
+    if (rule.stay) continue;
+    const loc = layout.locationById[rule.location];
+    assert.ok(loc, `${activity} maps to a room in ${layout.id}`);
+    for (const s of rule.stations) assert.ok(loc.stations[s], `${layout.id}: ${rule.location} has station ${s}`);
+  }
+  for (const id of ['development', 'command', 'testing', 'deploy', 'operations', 'servers', 'queue', 'comms', 'archive']) assert.ok(layout.locationById[id], `${layout.id} has ${id}`);
 });
 
 test('behavior: agents get distinct station points, even when a room overflows', () => {
   const agents = Array.from({ length: 12 }, (_, i) => ({ id: `a${i}`, activity: 'testing' }));
-  const places = placeAgents(agents);
-  const points = Object.values(places).map(p => stationPoint(p).join(','));
+  const places = placeAgents(agents, {}, blueprint);
+  const points = Object.values(places).map(p => stationPoint(p, blueprint).join(','));
   assert.equal(new Set(points).size, agents.length);
   assert.ok(Object.values(places).every(p => p.location === 'testing'));
-  const kept = placeAgents([{ id: 'a0', activity: 'error' }], { a0: places.a0 });
+  const kept = placeAgents([{ id: 'a0', activity: 'error' }], { a0: places.a0 }, blueprint);
   assert.equal(kept.a0.station, places.a0.station, 'errors stay where the work happened');
   assert.equal(kept.a0.clip, 'error');
 });
 
 test('behavior: queued tasks sit in the queue, active tasks follow their agent', () => {
-  const out = taskPlacement({ q: { id: 'q', status: 'queued', createdAt: 1 }, a: { id: 'a', status: 'active', agentId: 'claude' }, d: { id: 'd', status: 'done', createdAt: 2 } });
-  assert.equal(locationAt(...out.q.point).id, 'queue');
-  assert.deepEqual(out.a, { follow: 'claude' });
-  assert.equal(locationAt(...out.d.point).id, 'archive');
+  for (const layout of LAYOUTS) {
+    const out = taskPlacement({ q: { id: 'q', status: 'queued', createdAt: 1 }, a: { id: 'a', status: 'active', agentId: 'claude' }, d: { id: 'd', status: 'done', createdAt: 2 } }, layout);
+    assert.equal(layout.locationAt(...out.q.point)?.id, 'queue', layout.id);
+    assert.deepEqual(out.a, { follow: 'claude' });
+    assert.equal(layout.locationAt(...out.d.point)?.id, 'archive', layout.id);
+  }
+});
+
+test('behavior: a layout can re-home idle agents (realistic break room)', () => {
+  const real = LAYOUTS[1];
+  assert.equal(placeAgents([{ id: 'a', activity: 'idle' }], {}, real).a.location, 'lounge');
+  assert.equal(placeAgents([{ id: 'a', activity: 'idle' }], {}, blueprint).a.location, 'command');
 });
 
 test('camera: screen/world transforms invert and zoom keeps the cursor point fixed', () => {
@@ -109,6 +133,10 @@ test('camera: screen/world transforms invert and zoom keeps the cursor point fix
   c.pan(-1e6, -1e6);
   const v = c.viewRect();
   assert.ok(v.x + v.w <= 2400 + 1e-6 && v.y + v.h <= 1560 + 1e-6, 'camera clamps to world bounds');
+  c.insets = { top: 50, right: 0, bottom: 100, left: 0 };
+  c.focusPoint(1000, 700, { zoom: 1, duration: 0 });
+  const [, sy2] = c.worldToScreen(1000, 700);
+  assert.ok(Math.abs(sy2 - (50 + (800 - 150) / 2)) < 1e-6, 'focus centers in the area between HUD insets');
 });
 
 test('scene: query culls to the rectangle and pick returns the topmost selectable entity', () => {

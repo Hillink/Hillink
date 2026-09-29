@@ -23,14 +23,23 @@ export class Camera {
     this.y = wy - (sy - this.height / 2) / this.zoom;
     this.clamp();
   }
+  // Screen-space insets (px) covered by fixed HUD; focus and clamping use the free area between them.
+  insets = { top: 0, right: 0, bottom: 0, left: 0 };
   fitZoom(rect = this.bounds, padding = 40) {
-    return Math.min((this.width - padding * 2) / rect.w, (this.height - padding * 2) / rect.h);
+    const i = this.insets;
+    return Math.min((this.width - i.left - i.right - padding * 2) / rect.w, (this.height - i.top - i.bottom - padding * 2) / rect.h);
   }
+  // World point that puts (wx, wy) at the center of the free area at zoom z.
+  centerFor(wx, wy, z = this.zoom) { const i = this.insets; return { x: wx - (i.left - i.right) / (2 * z), y: wy - (i.top - i.bottom) / (2 * z) }; }
   clamp() {
-    // The center may not leave the world bounds; at low zoom the world stays centered.
-    const b = this.bounds, halfW = this.width / this.zoom / 2, halfH = this.height / this.zoom / 2;
-    this.x = halfW * 2 >= b.w ? b.x + b.w / 2 : Math.min(b.x + b.w - halfW, Math.max(b.x + halfW, this.x));
-    this.y = halfH * 2 >= b.h ? b.y + b.h / 2 : Math.min(b.y + b.h - halfH, Math.max(b.y + halfH, this.y));
+    // The world may scroll until its edge meets the HUD inset, never past it; smaller worlds center in the free area.
+    const b = this.bounds, z = this.zoom, i = this.insets, halfW = this.width / z / 2, halfH = this.height / z / 2;
+    const axis = (v, lo, size, half, a, c) => {
+      const min = lo + half - a / z, max = lo + size - half + c / z;
+      return min > max ? lo + size / 2 - (a - c) / (2 * z) : Math.min(max, Math.max(min, v));
+    };
+    this.x = axis(this.x, b.x, b.w, halfW, i.left, i.right);
+    this.y = axis(this.y, b.y, b.h, halfH, i.top, i.bottom);
   }
   animateTo(target, duration = 700, now = performance.now()) {
     const to = { x: target.x ?? this.x, y: target.y ?? this.y, zoom: Math.min(this.maxZoom, Math.max(this.minZoom, target.zoom ?? this.zoom)) };
@@ -38,10 +47,10 @@ export class Camera {
     this.tween = { from: { x: this.x, y: this.y, zoom: this.zoom }, to, start: now, duration };
   }
   focusRect(rect, { padding = 80, maxZoom = 1.6, duration } = {}) {
-    const zoom = Math.min(maxZoom, this.fitZoom(rect, padding));
-    this.animateTo({ x: rect.x + rect.w / 2, y: rect.y + rect.h / 2, zoom }, duration);
+    const zoom = Math.max(this.minZoom, Math.min(maxZoom, this.fitZoom(rect, padding)));
+    this.animateTo({ ...this.centerFor(rect.x + rect.w / 2, rect.y + rect.h / 2, zoom), zoom }, duration);
   }
-  focusPoint(x, y, { zoom = 1.6, duration } = {}) { this.animateTo({ x, y, zoom }, duration); }
+  focusPoint(x, y, { zoom = 1.6, duration } = {}) { const z = Math.min(this.maxZoom, Math.max(this.minZoom, zoom)); this.animateTo({ ...this.centerFor(x, y, z), zoom: z }, duration); }
   overview(opts) { this.focusRect(this.bounds, { padding: 30, maxZoom: 10, ...opts }); }
   // Advances an active transition; returns true while moving.
   step(now) {

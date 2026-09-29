@@ -138,6 +138,18 @@ Everything is plain ESM with no build step and no dependencies. It sits outside 
 5. **Renderer upgrade (only if needed):** implement `createPixiRenderer` with the same `resize` and `draw` contract, and choose the renderer at boot.
 6. **Room art:** layout rectangles and stations stay the coordinate system. Room art is drawn to match them, so art can land one room at a time.
 
+## Realistic and Fantasy themes (confirmed by Kyle: "We want a toggle for fantasy world or realistic world", 2026-09-29)
+
+- Kyle shared two concept images, a night-time HQ tower (Realistic) and a fantasy realm (Fantasy). The header toggle switches between Realistic, Fantasy and Blueprint (the primitives view). The choice is remembered per browser.
+- **Themes are data.** `themes/real.mjs` and `themes/fantasy.mjs` place the same nine semantic locations (plus a Realistic-only Break Room for idle agents) onto rooms painted in each image. Each theme also defines its walkways, task slots, system beacons and signal badges. Tests check that every theme has every location, and that every station and route resolves.
+- **Interim art is Kyle's concept images** (`art/*.jpg`). They are cropped to remove the mock HUD, and any mock panel left inside the scene is hazed out. Portraits for agent tokens and the roster are cropped from the same images.
+- **Real activity only:**
+  - The Fantasy image's painted name cards ("Builder (Dwarf)…") are covered at runtime by live plaques. Each plaque shows the bound agent's real status, or "No agent connected".
+  - The painted people are scenery. Live agents are the portrait tokens.
+  - The HUD shows no cost or usage numbers, because no source reports them yet.
+- **Proposed:** which persona each agent gets (Claude = Builder (Dwarf) and the Claude portrait; Codex = Inspector (Cyborg) and the Codex portrait). These pairings are data in the theme files.
+- **Next for art:** replace the concept images with clean layered art (backdrop without baked labels, plus character sprite sheets with walk and work clips). The theme files keep their coordinates if the new art keeps the composition.
+
 ## Phases (from the brief) and where this PR stops
 
 | Phase | State |
@@ -147,7 +159,7 @@ Everything is plain ESM with no build step and no dependencies. It sits outside 
 | 3. Agents, placement, movement and clips | Done, with primitives |
 | 4. Real data adapter (HQ) | **Next.** Proposed above. |
 | 5. Interaction: inspect, focus and follow | Done |
-| 6. Art skin | Not started (placeholders only) |
+| 6. Art skin | Started: Realistic and Fantasy themes on Kyle's concept art, with live plaques and portrait tokens |
 | 7. Polish: sound, weather, day/night, ambient life | Not started |
 | 8. In-app hosting | Not started. Unresolved question above. |
 

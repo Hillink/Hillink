@@ -1,16 +1,14 @@
 // Bridges World state to scene entities. Only entities whose keys changed are touched (brief §13).
 // Movement starts only because semantic state changed where an agent belongs.
-import { locations, locationById, route } from '../core/layout.mjs';
 import { placeAgents, stationPoint, taskPlacement } from '../core/behavior.mjs';
 import { LAYERS } from './scene.mjs';
 import { startPath } from './motion.mjs';
 
-const SYSTEM_SPOTS = { database: ['servers', 1940, 760], tests: ['testing', 2170, 370], deploy: ['deploy', 460, 760], build: ['deploy', 300, 900], platform: ['operations', 1200, 740], hq: ['command', 1200, 200] };
-
 export class WorldView {
-  constructor(scene, effects) {
-    this.scene = scene; this.effects = effects; this.places = {}; this.lastMessage = null;
-    for (const l of locations) scene.add({ id: `room:${l.id}`, kind: 'room', layer: LAYERS.room, x: l.x + l.w / 2, y: l.y + l.h / 2, w: l.w, h: l.h, selectable: true, ref: { type: 'room', id: l.id }, location: l });
+  constructor(scene, effects, layout) {
+    this.scene = scene; this.effects = effects; this.layout = layout; this.places = {}; this.lastMessage = null; this.roomSignals = {};
+    const s = layout.entityScale ?? 1; this.size = { agent: [44 * s, 64 * s], task: 14 * s, system: 90 * s, issue: 30 * s };
+    for (const l of layout.locations) scene.add({ id: `room:${l.id}`, kind: 'room', layer: LAYERS.room, x: l.x + l.w / 2, y: l.y + l.h / 2, w: l.w, h: l.h, selectable: true, ref: { type: 'room', id: l.id }, location: l });
   }
   // changed: Set of keys from the store ('*' means rebuild everything).
   sync(world, changed, now) {
@@ -31,18 +29,18 @@ export class WorldView {
   }
   syncAgents(world, now) {
     const agents = Object.values(world.agents);
-    const next = placeAgents(agents, this.places);
+    const layout = this.layout, next = placeAgents(agents, this.places, layout);
     for (const a of agents) {
       let e = this.scene.get(`agent:${a.id}`);
-      const place = next[a.id], target = stationPoint(place);
+      const place = next[a.id], target = stationPoint(place, layout);
       if (!e) {
         // New agents walk in from the command center door rather than appearing mid-room.
-        const door = locationById.command.door;
-        e = this.scene.add({ id: `agent:${a.id}`, kind: 'agent', layer: LAYERS.agent, x: door[0], y: door[1] + 40, w: 44, h: 64, selectable: true, ref: { type: 'agent', id: a.id }, facing: 1 });
+        const door = layout.locationById[layout.spawn ?? 'command'].door;
+        e = this.scene.add({ id: `agent:${a.id}`, kind: 'agent', layer: LAYERS.agent, x: door[0], y: door[1], w: this.size.agent[0], h: this.size.agent[1], selectable: true, ref: { type: 'agent', id: a.id }, facing: 1 });
       }
       const prev = this.places[a.id];
       const placeChanged = !prev || prev.location !== place.location || prev.station !== place.station || prev.overflow !== place.overflow;
-      if (placeChanged) startPath(e, route([e.x, e.y], place.location, target), now);
+      if (placeChanged) startPath(e, layout.route([e.x, e.y], place.location, target), now);
       if (e.clip !== place.clip) e.clipStart = now;
       Object.assign(e, { clip: place.clip, agent: a });
     }
@@ -50,19 +48,19 @@ export class WorldView {
     this.places = next;
   }
   syncTasks(world) {
-    const placement = taskPlacement(world.tasks);
+    const placement = taskPlacement(world.tasks, this.layout);
     for (const t of Object.values(world.tasks)) {
       let e = this.scene.get(`task:${t.id}`);
-      if (!e) e = this.scene.add({ id: `task:${t.id}`, kind: 'task', layer: LAYERS.task, x: 0, y: 0, w: 14, h: 14, selectable: true, ref: { type: 'task', id: t.id } });
+      if (!e) e = this.scene.add({ id: `task:${t.id}`, kind: 'task', layer: LAYERS.task, x: 0, y: 0, w: this.size.task, h: this.size.task, selectable: true, ref: { type: 'task', id: t.id } });
       const p = placement[t.id];
       e.task = t; e.follow = p.follow ? `agent:${p.follow}` : null;
       if (p.point) { e.x = p.point[0]; e.y = p.point[1]; this.scene.moved(e); }
     }
   }
   syncSystem(s) {
-    const spot = SYSTEM_SPOTS[s.kind] ?? ['operations', 1200, 900];
+    const spots = this.layout.systemSpots, spot = spots[s.kind] ?? spots.platform;
     let e = this.scene.get(`system:${s.id}`);
-    if (!e) e = this.scene.add({ id: `system:${s.id}`, kind: 'system', layer: LAYERS.system, x: spot[1], y: spot[2], w: 90, h: 90, selectable: true, ref: { type: 'system', id: s.id } });
+    if (!e) e = this.scene.add({ id: `system:${s.id}`, kind: 'system', layer: LAYERS.system, x: spot[0], y: spot[1], w: this.size.system, h: this.size.system, selectable: true, ref: { type: 'system', id: s.id } });
     e.system = s;
   }
   // Tests, builds, deploys, PRs and issues light up their rooms' equipment; the renderer reads these per room.
@@ -76,11 +74,11 @@ export class WorldView {
     for (const [id, e] of this.scene.entities) if (e.kind === 'issue' && !world.issues[e.ref.id]?.open) this.scene.remove(id);
     for (const issue of Object.values(world.issues)) {
       if (!issue.open) continue;
-      const loc = locationById[issue.location] ?? locationById.command;
+      const byId = this.layout.locationById, loc = byId[issue.location] ?? byId.command, s = this.size.issue;
       const id = `issue:${issue.id}`;
       if (!this.scene.get(id)) {
         const n = [...this.scene.entities.values()].filter(e => e.kind === 'issue' && e.issue?.location === issue.location).length;
-        this.scene.add({ id, kind: 'issue', layer: LAYERS.effect, x: loc.x + 40 + n * 34, y: loc.y + loc.h - 36, w: 30, h: 30, selectable: true, ref: { type: 'issue', id: issue.id } });
+        this.scene.add({ id, kind: 'issue', layer: LAYERS.effect, x: loc.x + s * 1.3 + n * s * 1.15, y: loc.y + loc.h - s * 1.2, w: s, h: s, selectable: true, ref: { type: 'issue', id: issue.id } });
       }
       this.scene.get(id).issue = issue;
     }
@@ -93,7 +91,7 @@ export class WorldView {
     }
     for (const e of this.scene.entities.values()) if (e.kind === 'task' && e.follow) {
       const a = this.scene.get(e.follow);
-      if (a) { e.x = a.x + 22; e.y = a.y - 58; this.scene.moved(e); }
+      if (a) { e.x = a.x + a.w / 2; e.y = a.y - a.h * 0.9; this.scene.moved(e); }
     }
     return moving;
   }

@@ -11,7 +11,7 @@ function label(ctx, text, x, y, px, color, align = 'center') { ctx.font = font(p
 
 export const placeholderSkin = {
   background(ctx, camera, theme) { ctx.fillStyle = theme.ground; ctx.fillRect(0, 0, camera.width, camera.height); },
-  corridors(ctx, theme) {
+  ground(ctx, { theme }) {
     ctx.strokeStyle = theme.corridor; ctx.lineWidth = 60; ctx.lineCap = 'round';
     ctx.beginPath(); ctx.moveTo(90, 530); ctx.lineTo(2310, 530); ctx.moveTo(90, 1050); ctx.lineTo(2310, 1050);
     for (const x of [90, 830, 1570, 2310]) { ctx.moveTo(x, 530); ctx.lineTo(x, 1050); }

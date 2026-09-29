@@ -12,15 +12,16 @@ export function createCanvasRenderer(canvas, { skin = placeholderSkin } = {}) {
       canvas.style.width = `${width}px`; canvas.style.height = `${height}px`;
     },
     draw(frame) {
-      const { camera, entities, time, hoverId, selectedId, effects, signals, reducedMotion, theme } = frame;
+      const { camera, entities, time, hoverId, selectedId, effects, signals, reducedMotion, theme, world, layout } = frame;
+      const skin = frame.skin ?? this.skin;
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       skin.background(ctx, camera, theme);
       ctx.save();
       ctx.translate(camera.width / 2, camera.height / 2);
       ctx.scale(camera.zoom, camera.zoom);
       ctx.translate(-camera.x, -camera.y);
-      skin.corridors?.(ctx, theme);
-      const lod = camera.zoom < 0.45 ? 'far' : camera.zoom < 0.9 ? 'mid' : 'near';
+      const [farBelow, nearFrom] = skin.lod ?? [0.45, 0.9];
+      const lod = camera.zoom < farBelow ? 'far' : camera.zoom < nearFrom ? 'mid' : 'near';
       // Labels claim screen space per frame so stacked agents don't print names over each other.
       const claimed = [];
       const claimLabel = (x, y, w, h, force) => {
@@ -28,7 +29,8 @@ export function createCanvasRenderer(canvas, { skin = placeholderSkin } = {}) {
         if (!force && claimed.some(c => r[0] < c[2] && r[2] > c[0] && r[1] < c[3] && r[3] > c[1])) return false;
         claimed.push(r); return true;
       };
-      const env = { ctx, time, lod, zoom: camera.zoom, reducedMotion, theme, signals, scene: frame.scene, claimLabel };
+      const env = { ctx, time, lod, zoom: camera.zoom, reducedMotion, theme, signals, scene: frame.scene, claimLabel, world, layout };
+      skin.ground?.(ctx, env);
       for (const e of entities) {
         const draw = skin[e.kind];
         if (draw) draw(e, env, { hovered: e.id === hoverId, selected: e.id === selectedId });

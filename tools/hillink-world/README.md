@@ -9,4 +9,6 @@ npm run test:world     # engine tests (node:test, no browser)
 
 Today it runs in **simulation mode only**. Open "Dev simulation" to play scenarios. Simulated events are tagged `sim` and never read or write Hillink data. The first real feed is the HQ adapter (Phase 4).
 
+Styles: **Realistic**, **Fantasy** and **Blueprint** (toggle in the header, or `?theme=fantasy`). All three show the same World state.
+
 Controls: drag to pan, scroll or pinch to zoom, click to inspect, arrow keys, `+`/`-`, and Esc for the overview. Use "Go to…" to focus a room or follow an agent.

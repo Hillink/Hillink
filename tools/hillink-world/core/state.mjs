@@ -146,7 +146,7 @@ export function applyEvent(world, event) {
       }
     }
   }
-  world.log.push({ seq: world.seq, id: e.id, type: e.type, at: e.at, source: e.source });
+  world.log.push({ seq: world.seq, ...e }); // Events are small; keeping them whole lets the feed and replay describe them.
   if (world.log.length > LOG_LIMIT) world.log.shift();
   return changed;
 }
