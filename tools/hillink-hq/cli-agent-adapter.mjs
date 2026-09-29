@@ -12,7 +12,9 @@ const framing = 'You are a read-only reviewer launched by Hillink HQ. Answer the
 export const cliAgents = {
   claude: {
     agentId: 'claude', adapterId: 'cli-claude', command: 'claude', label: 'Claude Code', routingPriority: 10,
-    env: ['ANTHROPIC_API_KEY', 'CLAUDE_CONFIG_DIR'],
+    // No ANTHROPIC_API_KEY: reviews use Kyle's Claude Code sign-in (subscription), never API billing. The sandbox
+    // has its own dedicated key (HQ_SANDBOX_ANTHROPIC_API_KEY, sandbox.mjs).
+    env: ['CLAUDE_CONFIG_DIR'],
     args: () => ['-p', '--output-format', 'stream-json', '--verbose', '--tools', 'Read,Grep,Glob', '--strict-mcp-config', '--no-session-persistence', '--max-turns', '40'],
     parse(message, run) {
       if (message.type === 'system' && message.subtype === 'init') return [{ kind: 'ACK', summary: `Claude Code session started with tools: ${(message.tools || []).join(', ').slice(0, 200)}.` }];
