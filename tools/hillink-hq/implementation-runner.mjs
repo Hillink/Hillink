@@ -56,25 +56,37 @@ export class ClaudeImplementer {
       else resolve(String(stdout));
     }));
   }
-  git(args, cwd = this.repoRoot) { return this.exec('git', args, { cwd }); }
+  // Every git command HQ runs ignores repository-configured hooks and filesystem monitors: a hooks path set in the
+  // repo config, or hook files Claude wrote, never execute (security review, Pass 2.6).
+  git(args, cwd = this.repoRoot, opts = {}) {
+    const noHooks = this.noHooksDir ??= fs.mkdtempSync(path.join(os.tmpdir(), 'hq-no-hooks-'));
+    return this.exec('git', ['-c', `core.hooksPath=${noHooks}`, '-c', 'core.fsmonitor=false', '-c', 'core.untrackedCache=false', ...args], { cwd, ...opts });
+  }
   async start({ task, runId, emit }) {
     if (task.operation !== 'implement-repo' || task.safety !== 'local-worktree-write') throw Error('Implementation runner accepts implement-repo tasks only');
     if (this.runs.size) throw Error('Implementation runner already has an unresolved run');
     const contract = validateImplementation(task.implementation); // re-checked at execution, not only at creation
-    const entry = { cancelled: false, cli: null, child: null };
+    const entry = { cancelled: false, cli: null, abort: new AbortController() };
     this.runs.set(runId, entry);
     entry.promise = this.execute(task, runId, contract, entry, emit)
       .catch(error => { try { emit({ kind: entry.cancelled ? 'CANCELLED' : 'FAILED', summary: (entry.cancelled ? 'Implementation cancelled.' : `Implementation failed: ${error.message}`).slice(0, 1900) }); } catch { /* run already closed */ } })
       .finally(() => this.runs.delete(runId));
   }
   async execute(task, runId, contract, entry, emit) {
-    const id8 = task.id.slice(0, 8), branch = `hq/impl/${id8}`, dir = path.join(this.worktreeRoot, id8);
+    // Branch and worktree are per run, so a re-dispatched task never collides with or inherits an earlier attempt.
+    const id8 = task.id.slice(0, 8), name = `${id8}-${runId.replace(/[^0-9a-f]/gi, '').slice(0, 6)}`, branch = `hq/impl/${name}`, dir = path.join(this.worktreeRoot, name);
+    const stop = () => { if (entry.cancelled) throw Error('cancelled'); };
     // 1. Isolated worktree from the base commit.
     const base = (await this.git(['rev-parse', '--verify', `${this.base}^{commit}`])).trim();
     fs.mkdirSync(this.worktreeRoot, { recursive: true });
     await this.git(['worktree', 'add', '-b', branch, dir, base]);
     const where = { repository: 'Hillink/Hillink', branch, base, baseRef: this.base, worktree: dir };
-    if (entry.cancelled) throw Error('cancelled');
+    stop();
+    // A symbolic link inside (or above) the scope could redirect Claude's writes outside the worktree, where git
+    // would never see them. Refuse the task before Claude starts (security review, Pass 2.6).
+    const links = (await this.git(['ls-tree', '-r', '-z', base], dir)).split('\0').filter(l => l.startsWith('120000 ')).map(l => l.split('\t')[1]);
+    const risky = links.filter(l => inScope(l, contract.scope) || contract.scope.some(s => s.startsWith(`${l}/`)));
+    if (risky.length) { emit({ kind: 'BLOCKED', summary: `The scope contains a symbolic link (${risky.join(', ')}); HQ will not let Claude write through links. Nothing ran.`, implementation: where, ownerAction: 'Narrow the scope to exclude symbolic links.' }); return; }
     // 2. Claude with this task's permissions. Its terminal event is held back until HQ has verified the work.
     const cli = entry.cli = new CliAgentAdapter(cliAgents.claude, { ...this.cliOptions, env: this.env, spawn: this.spawn ?? this.cliOptions.spawn, cwd: dir, operation: 'implement-repo', safety: 'local-worktree-write', framing: IMPLEMENT_FRAMING, command: this.claudeBin, shell: this.claudeBin ? false : null });
     const spec = { ...cliAgents.claude, args: () => implementationArgs(contract.scope) };
@@ -88,7 +100,9 @@ export class ClaudeImplementer {
     pulse.unref?.();
     try {
       // 3. What actually changed, from git, against the scope.
-      const status = await this.git(['status', '--porcelain=v1', '-z', '--untracked-files=all'], dir);
+      // --ignored: gitignored files (.env.local, node_modules, *.log) are changes too; they could steer the tests.
+      stop();
+      const status = await this.git(['status', '--porcelain=v1', '-z', '--untracked-files=all', '--ignored=matching'], dir);
       const files = changedFiles(status);
       if (!files.length) { emit({ kind: 'BLOCKED', summary: `Claude finished without changing any file. Nothing to verify or commit.`, implementation: { ...where, files } }); return; }
       const outside = files.filter(f => !inScope(f, contract.scope));
@@ -97,20 +111,28 @@ export class ClaudeImplementer {
       // 4. HQ runs the acceptance tests.
       const missing = contract.tests.filter(t => !fs.existsSync(path.join(dir, t)));
       if (missing.length) { emit({ kind: 'BLOCKED', summary: `Acceptance test file(s) missing: ${missing.join(', ')}. Nothing committed; worktree kept at ${dir}.`, implementation: { ...where, files } }); return; }
-      const nodeArgs = ['--test', ...(contract.tests.some(t => t.endsWith('.ts')) ? ['--experimental-strip-types', '--no-warnings'] : []), ...contract.tests];
-      emit({ kind: 'TEST_STARTED', summary: `HQ running node ${nodeArgs.join(' ')} in the task worktree.` });
+      // The tests (and anything they import) may be Claude-written code: run them under Node's permission model,
+      // reading only the worktree, writing nothing, spawning nothing, in-process (security review, Pass 2.6).
+      const sandbox = ['--permission', `--allow-fs-read=${dir}`, '--test-isolation=none'];
+      const nodeArgs = [...sandbox, '--test', ...(contract.tests.some(t => t.endsWith('.ts')) ? ['--experimental-strip-types', '--no-warnings'] : []), ...contract.tests];
+      const shown = ['--permission', '--allow-fs-read=<worktree>', '--test-isolation=none', ...nodeArgs.slice(sandbox.length)].join(' ');
+      stop();
+      emit({ kind: 'TEST_STARTED', summary: `HQ running node ${shown} in the task worktree (sandboxed: read worktree only, no writes, no processes).` });
       const env = Object.fromEntries(TEST_ENV.filter(k => this.env[k]).map(k => [k, this.env[k]]));
       let out = '', ok = true;
-      try { out = await this.exec(process.execPath, nodeArgs, { cwd: dir, env, timeout: this.testTimeoutMs }); }
+      try { out = await this.exec(process.execPath, nodeArgs, { cwd: dir, env, timeout: this.testTimeoutMs, signal: entry.abort.signal }); }
       catch (error) { ok = false; out = `${error.stdout ?? ''}\n${error.stderr ?? ''}`; if (error.code === null || /timed out|ETIMEDOUT/.test(error.message)) out += '\n# fail 1\n'; }
+      stop();
       const c = testCounts(out), passed = c.passed ?? 0, failed = c.failed ?? (ok ? 0 : 1);
       const green = ok && failed === 0 && passed > 0;
       emit({ kind: 'TEST_RESULT', result: green ? 'passed' : 'failed', summary: `${passed} passed; ${failed} failed.` });
       if (!green) { emit({ kind: 'BLOCKED', summary: `Acceptance tests failed (${passed} passed, ${failed} failed). Implementation not accepted; nothing committed; worktree kept at ${dir}.`, implementation: { ...where, files, tests: { files: contract.tests, passed, failed } }, ownerAction: 'Inspect the failing tests in the worktree and create a follow-up task.' }); return; }
-      // 5. Commit on the task branch. Never pushed, never merged.
+      // 5. Commit on the task branch. Never pushed, never merged. Never after a cancellation.
+      stop();
       await this.git(['add', '--', ...files], dir);
+      stop();
       const subject = `HQ implementation ${id8}: ${contract.objective.split('\n')[0]}`.slice(0, 100);
-      await this.git(['commit', '-q', '-m', subject, '-m', `HQ-Task: ${task.id}\nRequested-By: ${task.requestedBy ? `${task.requestedBy.agentId} (HQ task ${task.requestedBy.taskId})` : 'kyle'}\nScope: ${contract.scope.join(', ')}\nVerified-By: HQ node ${nodeArgs.join(' ')} (${passed} passed, 0 failed)\n\nCo-Authored-By: Claude Code <noreply@anthropic.com>`], dir);
+      await this.git(['commit', '-q', '--no-verify', '-m', subject, '-m', `HQ-Task: ${task.id}\nRequested-By: ${task.requestedBy ? `${task.requestedBy.agentId} (HQ task ${task.requestedBy.taskId})` : 'kyle'}\nScope: ${contract.scope.join(', ')}\nVerified-By: HQ node ${shown} (${passed} passed, 0 failed)\n\nCo-Authored-By: Claude Code <noreply@anthropic.com>`], dir);
       const sha = (await this.git(['rev-parse', 'HEAD'], dir)).trim();
       emit({ kind: 'COMMIT', summary: `Committed ${sha.slice(0, 10)} on ${branch} (local only: not pushed, not merged).`, sha });
       emit({ kind: 'COMPLETED', summary: `Implementation committed on ${branch} (${sha.slice(0, 10)}); acceptance tests passed (${passed}/${passed}). Not merged: Kyle decides.`, implementation: { ...where, commit: sha, files, tests: { files: contract.tests, passed, failed: 0 } } });
@@ -119,10 +141,13 @@ export class ClaudeImplementer {
   async cancel(runId) {
     const entry = this.runs.get(runId);
     if (!entry) return false;
+    // Stop every stage: no further git step, tests killed, Claude stopped if still running. Report stopped only
+    // once the run has actually ended, so HQ never believes it stopped while a commit could still happen.
     entry.cancelled = true;
-    const stopped = entry.cli ? await entry.cli.cancel(runId) : true;
-    if (stopped) { try { await entry.promise; } catch { /* reported */ } }
-    return stopped;
+    entry.abort.abort();
+    if (entry.cli?.runs?.has(runId) && !(await entry.cli.cancel(runId))) return false;
+    try { await entry.promise; } catch { /* reported by start */ }
+    return true;
   }
   async close() { await Promise.all([...this.runs.keys()].map(id => this.cancel(id))); }
 }

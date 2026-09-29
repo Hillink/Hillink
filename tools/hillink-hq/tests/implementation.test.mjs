@@ -117,7 +117,7 @@ test('7-9, 13. a valid implementation: one task, linked, real worktree branch, H
   const kinds = t.evidence.map(e => e.kind).filter(k => k !== 'HEARTBEAT');
   assert.deepEqual(kinds, ['ACK', 'MODEL_OUTPUT', 'MODEL_RESULT', 'USAGE', 'FINDING', 'TEST_STARTED', 'TEST_RESULT', 'COMMIT', 'COMPLETED']);
   const result = t.evidence.find(e => e.kind === 'COMPLETED').implementation;
-  assert.equal(result.branch, `hq/impl/${id.slice(0, 8)}`);
+  assert.match(result.branch, new RegExp(`^hq/impl/${id.slice(0, 8)}-[0-9a-f]{6}$`), 'a per-run branch');
   assert.deepEqual(result.files, ['sandbox/hq-implementation/greeting.mjs', 'sandbox/hq-implementation/greeting.test.mjs']);
   assert.deepEqual(result.tests, { files: CONTRACT.tests, passed: 1, failed: 0 });
   assert.equal(t.evidence.find(e => e.kind === 'TEST_RESULT').result, 'passed');
@@ -135,7 +135,9 @@ test('14. failing acceptance tests are not success: BLOCKED, nothing committed',
   assert.equal(t.stage, 'BLOCKED'); assert.match(t.blocker, /Acceptance tests failed \(0 passed, 1 failed\)/);
   assert.equal(t.evidence.find(e => e.kind === 'TEST_RESULT').result, 'failed');
   assert.ok(!t.evidence.some(e => e.kind === 'COMMIT'));
-  assert.equal(git(s.repo, 'rev-parse', `hq/impl/${id.slice(0, 8)}`).trim(), git(s.repo, 'rev-parse', 'main').trim(), 'the branch has no commit');
+  const branch = git(s.repo, 'branch', '--list', `hq/impl/${id.slice(0, 8)}-*`, '--format=%(refname:short)').trim();
+  assert.ok(branch, 'the run made its branch');
+  assert.equal(git(s.repo, 'rev-parse', branch).trim(), git(s.repo, 'rev-parse', 'main').trim(), 'the branch has no commit');
 });
 
 test('C. a change outside the authorized scope blocks the task and nothing is committed', async () => {

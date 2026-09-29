@@ -13,6 +13,10 @@ export const DENIED_PREFIXES = ['.git/', '.github/', '.claude/', '.vscode/', 'no
 const SECRET_NAME = /(^|\/)(\.env(\..*)?|\.npmrc|\.netrc|\.pgpass|id_rsa|id_ed25519|.*\.(pem|key|p12|pfx|keystore)|.*secret.*|.*credential.*|.*token.*)$/i;
 const DENIED_FILES = new Set(['.gitattributes', '.gitignore', '.gitmodules', 'package.json', 'package-lock.json', 'vercel.json', 'next.config.ts', 'middleware.ts']);
 const TEST_FILE = /\.test\.(mjs|js|ts)$/;
+const SEGMENT = /^[A-Za-z0-9._@+()-]+$/;
+const DEVICE = /^(con|prn|aux|nul|com[0-9]|lpt[0-9])(\..*)?$/i;
+// Refused as any path segment: git control data, agent configuration and agent instruction files.
+const DENIED_ANYWHERE = new Set(['.git', '.gitattributes', '.gitignore', '.gitmodules', '.claude', 'claude.md', 'agents.md', '.husky']);
 
 // One path: returns the normalized repo-relative path (directories end with "/") or throws with a reason.
 export function checkPath(raw, { kind = 'scope' } = {}) {
@@ -25,6 +29,15 @@ export function checkPath(raw, { kind = 'scope' } = {}) {
   const dir = p.endsWith('/');
   const segs = parts.filter((s, i) => !(dir && i === parts.length - 1 && s === ''));
   if (segs.some(s => s === '' || s === '.' || s === '..')) throw Error(`${kind} path "${p}" may not contain empty, "." or ".." segments`);
+  // Security review (Pass 2.6): every segment is plain ASCII from a small set, so percent-encoding, Unicode
+  // lookalikes and spaces cannot alias another path; no segment may end in "." (Windows strips trailing dots,
+  // so ".git." is ".git" and "tools/hillink-hq./x" is HQ's own code); some names are refused at any depth.
+  for (const s of segs) {
+    if (!SEGMENT.test(s)) throw Error(`${kind} path "${p.slice(0, 80)}" has a segment with characters that are not allowed ("${s.slice(0, 40)}"): use letters, digits and . _ - @ + ( )`);
+    if (s.endsWith('.')) throw Error(`${kind} path "${p.slice(0, 80)}" has a segment ending in "." (Windows would alias it)`);
+    if (DEVICE.test(s)) throw Error(`${kind} path "${p.slice(0, 80)}" uses a reserved Windows device name ("${s}")`);
+    if (DENIED_ANYWHERE.has(s.toLowerCase())) throw Error(`${kind} path "${p.slice(0, 80)}" contains a protected name ("${s}") that is refused at any depth`);
+  }
   const norm = segs.join('/') + (dir ? '/' : '');
   const probe = norm.toLowerCase();
   for (const d of DENIED_PREFIXES) if (probe === d.slice(0, -1) || probe.startsWith(d)) throw Error(`${kind} path "${norm}" is in a protected area (${d})`);
