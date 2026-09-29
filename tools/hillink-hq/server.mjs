@@ -12,7 +12,7 @@ import { connectOllama } from './ollama-adapter.mjs';
 import { connectCliAgents } from './cli-agent-adapter.mjs';
 
 const here = fileURLToPath(new URL('.', import.meta.url));
-const assets = { '/': ['index.html', 'text/html'], '/app.mjs': ['app.mjs', 'text/javascript'], '/style.css': ['style.css', 'text/css'] };
+const assets = { '/': ['index.html', 'text/html'], '/app.mjs': ['app.mjs', 'text/javascript'], '/world.mjs': ['world.mjs', 'text/javascript'], '/style.css': ['style.css', 'text/css'] };
 // Polls return recent events only; the full journal stays on disk and in /api/history replay.
 const recentEvents = 300;
 const equal = (a, b) => typeof a === 'string' && a.length === b.length && timingSafeEqual(Buffer.from(a), Buffer.from(b));
