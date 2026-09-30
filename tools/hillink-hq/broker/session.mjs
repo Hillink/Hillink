@@ -6,9 +6,9 @@
 // Every operation is authorized in HQ (policy.mjs), executed INSIDE the sandbox (hq-broker.sh / hq-test.sh), and
 // its output sanitized (sanitize.mjs) before Claude sees it. Operations run one at a time per session. The audit
 // trail goes to HQ's journal as BROKER evidence: operation, logical path, outcome and sizes, never file contents.
-import { authorize, LIMITS } from './policy.mjs';
+import { authorize, visible, LIMITS } from './policy.mjs';
 import { sanitizeText, refusalText } from './sanitize.mjs';
-import { testCounts } from '../implementation-runner.mjs';
+import { newRunKey, testVerdict } from '../test-verdict.mjs';
 
 const READ_OPS = new Set(['list', 'read', 'search']);
 
@@ -67,7 +67,9 @@ export class BrokerSession {
       else if (req.op === 'test') text = await this.runTests(req);
       else {
         if (req.kind === 'write') this.audit('BROKER_WRITE_REQUESTED', { op: req.op, path: req.path, outcome: 'requested', bytes: Buffer.byteLength(req.content ?? req.newText ?? '') });
-        const { stdout } = await this.sandbox.exec(this.box, 'hq-broker.sh', [], { input: JSON.stringify(req), timeoutMs: 60_000, maxBytes: 4 * 1024 * 1024, signal: this.abort.signal });
+        // Listings and searches ask the sandbox for extra entries, because HQ drops the ones its read policy hides.
+        const sent = req.op === 'search' ? { ...req, max: Math.min(req.max * 5, 500) } : req.op === 'list' ? { ...req, max: Math.min(req.max * 2, 1000) } : req;
+        const { stdout } = await this.sandbox.exec(this.box, 'hq-broker.sh', [], { input: JSON.stringify(sent), timeoutMs: 60_000, maxBytes: 4 * 1024 * 1024, signal: this.abort.signal });
         let out; try { out = JSON.parse(stdout); } catch { throw Error('the sandbox returned an unreadable reply'); }
         if (!out || typeof out.ok !== 'boolean') throw Error('the sandbox returned an unreadable reply');
         if (!out.ok) { if (req.kind === 'write') this.audit('BROKER_WRITE_REFUSED', { op: req.op, path: req.path, outcome: 'refused in sandbox', reason: String(out.error).slice(0, 200) }); return this.refuse(name, String(out.error ?? 'refused'), { path: req.path, where: 'sandbox' }); }
@@ -77,7 +79,7 @@ export class BrokerSession {
           this.written.set(req.path, { bytes: out.bytes, created: out.created || this.written.get(req.path)?.created || false });
           this.audit('BROKER_WRITE_ALLOWED', { op: req.op, path: req.path, outcome: 'written', bytes: out.bytes });
         } else this.audit(req.op === 'search' ? 'BROKER_SEARCH' : 'BROKER_READ', { op: req.op, path: req.path || '.', outcome: 'ok' });
-        text = out.text;
+        text = req.op === 'list' ? this.formatList(req, out) : req.op === 'search' ? this.formatSearch(req, out) : out.text;
       }
       const clean = sanitizeText(text, { maxBytes: this.limits.readBytes + 4096 });
       this.counters.outBytes += Buffer.byteLength(clean);
@@ -88,14 +90,42 @@ export class BrokerSession {
       return this.refuse(name, /cancel/i.test(error.message) ? 'cancelled' : `the sandbox could not complete it (${String(error.message).split(':')[0].slice(0, 80)})`);
     }
   }
+  // HQ's read policy decides what a listing or search may show (policy.visible), the same rule as repo_read.
+  formatList(req, out) {
+    if (!Array.isArray(out.entries)) throw Error('the sandbox returned an unreadable listing');
+    let hidden = 0;
+    const shown = [];
+    for (const e of out.entries) {
+      if (typeof e?.path !== 'string' || !visible(e.path, { dir: e.type === 'dir' })) { hidden++; continue; }
+      if (shown.length >= req.max) break;
+      shown.push(e.type === 'dir' ? `${e.path}/` : e.type === 'file' ? `${e.path} (${Number(e.size) || 0} bytes)` : `${e.path} [${e.type === 'link' ? 'link' : 'other'}, not accessible]`);
+    }
+    if (hidden) this.audit('BROKER_HIDDEN', { op: 'list', path: req.path || '.', outcome: 'hidden by read policy', count: hidden });
+    const more = shown.length >= req.max || out.truncated ? `\n[listing stopped at ${req.max} entries]` : '';
+    return shown.length ? shown.join('\n') + more : '(empty directory)';
+  }
+  formatSearch(req, out) {
+    if (!Array.isArray(out.hits)) throw Error('the sandbox returned unreadable search results');
+    let hidden = 0;
+    const shown = [];
+    for (const h of out.hits) {
+      if (typeof h?.path !== 'string' || !visible(h.path)) { hidden++; continue; }
+      if (shown.length >= req.max) break;
+      shown.push(`${h.path}:${Number(h.line) || 0}: ${String(h.text ?? '').slice(0, 220)}`);
+    }
+    if (hidden) this.audit('BROKER_HIDDEN', { op: 'search', path: req.path || '.', outcome: 'hidden by read policy', count: hidden });
+    return shown.length ? shown.join('\n') + (shown.length >= req.max || out.truncated ? `\n[stopped at ${req.max} matches]` : '') : 'No matches.';
+  }
   async runTests(req) {
     this.audit('SANDBOX_TEST_STARTED', { op: 'test', outcome: 'started', tests: req.tests });
     let out = '', ok = true;
-    try { out = (await this.sandbox.exec(this.box, 'hq-test.sh', ['--test-reporter=tap', ...req.tests], { timeoutMs: 330_000, maxBytes: 4 * 1024 * 1024, signal: this.abort.signal })).stdout; }
-    catch (error) { if (this.state !== 'OPEN' || /cancel/i.test(error.message)) throw error; ok = false; out = `${error.stdout ?? ''}\n${error.stderr ?? ''}`; if (error.code == null) out += '\n# fail 1\n'; }
-    const c = testCounts(out), passed = c.passed ?? 0, failed = c.failed ?? (ok ? 0 : 1);
-    this.audit('SANDBOX_TEST_COMPLETED', { op: 'test', outcome: ok && failed === 0 && passed > 0 ? 'passed' : 'failed', passed, failed });
-    const tail = out.split('\n').filter(l => !/^\s*$/.test(l)).slice(-60).join('\n');
-    return `Tests run by HQ in the sandbox (no network): ${passed} passed, ${failed} failed.${ok ? '' : ' The test process exited with an error.'} This is information for you; HQ runs the acceptance tests again itself after you finish.\n--- end of output ---\n${tail}`;
+    // HQ's runner with a fresh run key (test-verdict.mjs): what the tests print cannot change the counts HQ reports.
+    const key = newRunKey(), strip = req.tests.some(t => t.endsWith('.ts')) ? ['--experimental-strip-types'] : [];
+    try { out = (await this.sandbox.exec(this.box, 'hq-test.sh', [...strip, ...req.tests], { input: `${key}\n`, timeoutMs: 330_000, maxBytes: 4 * 1024 * 1024, signal: this.abort.signal })).stdout; }
+    catch (error) { if (this.state !== 'OPEN' || /cancel/i.test(error.message)) throw error; ok = false; out = `${error.stdout ?? ''}\n${error.stderr ?? ''}`; }
+    const v = testVerdict(out, { key, tests: req.tests, exitedOk: ok });
+    this.audit('SANDBOX_TEST_COMPLETED', { op: 'test', outcome: v.green ? 'passed' : 'failed', passed: v.passed, failed: v.failed, reason: v.reason ? String(v.reason).slice(0, 200) : undefined });
+    const tail = out.split('\n').filter(l => !/^\s*$/.test(l) && !l.startsWith('HQ-RESULT ')).slice(-60).join('\n');
+    return `Tests run by HQ in the sandbox (no network): ${v.passed} passed, ${v.failed} failed.${v.green ? '' : ` Not accepted: ${v.reason}.`} This is information for you; HQ runs the acceptance tests again itself after you finish.\n--- end of output ---\n${tail}`;
   }
 }

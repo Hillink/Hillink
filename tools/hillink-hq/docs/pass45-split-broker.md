@@ -95,7 +95,7 @@ There is no exec, shell, network, git, install or path-outside-the-tree tool. Pe
 
 - **Cancel:** the task's abort signal closes the broker session at once. Every in-flight and later call is refused, sandbox steps are killed (process group), Claude is terminated, and the sandbox is destroyed.
 - **Crash:** broker sessions live only in HQ's memory, so a restarted HQ has no session. An orphaned Claude process has no reachable broker and cannot touch the sandbox or the repository. Stale `hq-sbx-*` instances are destroyed at start. The Pass 3 recovery parks interrupted runs until it proves they stopped.
-- **Known gap:** the Claude pid is recorded at its first stream event. If HQ crashes in the few hundred milliseconds between spawning Claude and that event, recovery cannot name the pid. The orphan still has no broker, and it exits when its stdin closes.
+- **Orphaned host Claude (repaired after Codex's audit):** an orphan keeps only its old endpoint URL and token, and both die with HQ. A restarted HQ starts with no sessions, so every call gets a 404. The orphan cannot reach the sandbox or the repository (V8). HQ now records a marker before the spawn (the run's private MCP config path, which is on Claude's command line) and the pid right after the spawn. Recovery no longer counts an unregistered sandbox as proof on this route. It needs the host pid to be gone. If the pid was never recorded, it needs a scan of the process table showing that no process carries the marker. Where the table cannot be read (Windows), the run stays parked with an owner action (V8, V9). What remains is resource use only: an orphan can keep spending subscription usage and CPU until it exits.
 - **Concurrency:** each task has its own session id, URL, token, sandbox instance, temp directory and worktree. A token is valid only for its own URL (B7). Calls within a session are serialized.
 
 ## Audit and World
@@ -104,9 +104,26 @@ There is no exec, shell, network, git, install or path-outside-the-tree tool. Pe
 - Events: `BROKER_CREATED`, `SUBSCRIPTION_IMPLEMENTER_STARTED`, `BROKER_READ`, `BROKER_SEARCH`, `BROKER_WRITE_REQUESTED`, `BROKER_WRITE_ALLOWED`, `BROKER_WRITE_REFUSED`, `BROKER_REFUSED`, `SANDBOX_TEST_STARTED`, `SANDBOX_TEST_COMPLETED`, `SUBSCRIPTION_IMPLEMENTATION_COMPLETED`, `BROKER_CLOSED`.
 - World activity (contract v1, additive): `IMPLEMENTATION_STARTED`, `AGENT_WORKING`, `FILE_EDITING`, `TESTING`, `REPAIRING` (a test run after a failed one), `TEST_RESULT`, `IMPLEMENTATION_FINISHED`. None carries a path, code, prompt or credential (B28).
 
+## Repairs after Codex's audit (Pass 4.5 repair)
+
+1. **Forged test results (blocker).** Before this fix, HQ read `# pass`/`# fail` from node:test's TAP and checked the exit code. Repository code shares that process, so it could print a fake report and `process.exit(0)` before the real reporter ran.
+   - HQ now sends a fresh 256-bit run key on stdin to its own runner, `sandbox/guest/hq-test-runner.mjs`. The runner reads the key before any repository code loads and runs the files through node:test's `run()`. It counts the events itself and, only when the run ends normally, writes one line: `HQ-RESULT <json> <mac>`.
+   - HQ (`test-verdict.mjs`) accepts only a single valid, completed, successful result. It fails the run if any unissued `HQ-RESULT` line appears, if the exit is dirty, or if any test failed, was cancelled, skipped or todo. Every acceptance file must also run at least one passing test.
+   - Hardening in the runner:
+     - `--frozen-intrinsics` and the permission model;
+     - heap snapshots, V8 flags, object queries and module hooks are disabled;
+     - `node:test` and `node:assert` are frozen;
+     - stdin is consumed before repository code runs.
+   - The same verdict is used for HQ's acceptance run, for Claude's `run_tests`, and for the metered direct-sandbox route.
+   - Regression tests: V1 to V6. V1 also shows that the old predicate would have accepted the forged output. V6 runs through the real Linux test step.
+2. **Search and list could show what read refuses.** The guest now returns structured entries. HQ applies one rule, `policy.visible()` (exactly what `repo_read` accepts), to every path from `repo_list` and `repo_search`. Hidden entries are audited as counts only. Regression test: V7, with the mechanical invariant that everything listed or found is readable. Before the fix, 11 protected files leaked through a root search.
+3. **Orphan PID.** See "Cancellation, crash recovery, concurrency" above.
+
+Residual risk (inherent to running tests at all): code under test runs inside the test process. It can behave correctly only while being tested, and a Node permission-model bypass (a Node bug) would reach the key. The independent review and Kyle's merge decision remain the controls for that.
+
 ## Tests
 
-`tests/broker-attacks.test.mjs` has 29 tests (B1 to B28, plus B12a). A fake Claude plays the attacker over real HTTP and obeys every injection. The OS isolation claims run against the real Linux namespace sandbox. They cover:
+`tests/broker-attacks.test.mjs` has 38 tests (B1 to B28, B12a, and V1 to V9 from the audit repairs). A fake Claude plays the attacker over real HTTP and obeys every injection. The OS isolation claims run against the real Linux namespace sandbox. They cover:
 
 - **filesystem:** traversal, absolute paths, `.git`, symlinks, scope escape, binary and oversize files;
 - **tool:** unknown tools, extra arguments, `run_tests` arguments, prototype pollution, and a forged built-in tool in the stream;

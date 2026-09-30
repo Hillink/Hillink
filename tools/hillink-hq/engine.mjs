@@ -186,6 +186,7 @@ export class Engine {
     }
     if (payload.kind === 'USAGE' && (!payload.usage || !text(payload.usage.source) || !Number.isFinite(payload.usage.elapsedMs) || payload.usage.elapsedMs < 0)) throw Error('Measured usage source required');
     if (payload.url && !/^https:\/\//.test(payload.url)) throw Error('Evidence links must use HTTPS');
+    if (payload.hostMarker != null && (typeof payload.hostMarker !== 'string' || payload.hostMarker.length > 500)) throw Error('Invalid host process marker');
     // The full answer (bounded) is kept for HQ's handoff validation; summary stays the short display text.
     if (payload.fullText != null && (payload.kind !== 'MODEL_RESULT' || typeof payload.fullText !== 'string' || payload.fullText.length > 30_000)) throw Error('Invalid full model text');
     if (payload.files && (!Array.isArray(payload.files) || payload.files.some(f => !text(f, 500)))) throw Error('Invalid files');

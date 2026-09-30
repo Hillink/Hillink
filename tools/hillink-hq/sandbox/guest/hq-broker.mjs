@@ -58,22 +58,23 @@ const writeFileNoFollow = (abs, content) => {
 const binary = b => b.subarray(0, 8192).includes(0);
 const inScope = (rel, scope) => Array.isArray(scope) && scope.some(s => (s.endsWith('/') ? rel.startsWith(s) : rel === s));
 
+// list and search return structured entries; HQ applies its read policy to every returned path (broker/policy.mjs
+// visible()) and formats the reply, so a listing or search never shows what repo_read would refuse.
 function list(req) {
   const { abs, rel } = resolve(req.path, { allowRoot: true, last: 'dir' });
-  const out = [];
+  const entries = [];
   const walk = (dir, prefix, depth) => {
     for (const e of fs.readdirSync(dir, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
-      if (out.length >= req.max) return;
+      if (entries.length >= req.max) return;
       if (SKIP.has(e.name) || !SEGMENT.test(e.name)) continue;
       const p = prefix ? `${prefix}/${e.name}` : e.name;
       const type = e.isSymbolicLink() ? 'link' : e.isDirectory() ? 'dir' : e.isFile() ? 'file' : 'other';
-      const size = type === 'file' ? fs.lstatSync(path.join(dir, e.name)).size : undefined;
-      out.push(type === 'dir' ? `${p}/` : type === 'file' ? `${p} (${size} bytes)` : `${p} [${type}, not accessible]`);
+      entries.push({ path: p, type, ...(type === 'file' ? { size: fs.lstatSync(path.join(dir, e.name)).size } : {}) });
       if (type === 'dir' && depth > 1) walk(path.join(dir, e.name), p, depth - 1);
     }
   };
   walk(abs, rel, req.depth);
-  reply({ ok: true, text: out.length ? out.join('\n') + (out.length >= req.max ? `\n[listing stopped at ${req.max} entries]` : '') : '(empty directory)' });
+  reply({ ok: true, entries, truncated: entries.length >= req.max });
 }
 function read(req) {
   const { abs, rel } = resolve(req.path, { last: 'file' });
@@ -98,10 +99,10 @@ function search(req) {
     const b = fs.readFileSync(abs);
     if (binary(b)) return;
     const lines = b.toString('utf8').split('\n');
-    for (let i = 0; i < lines.length && hits.length < req.max; i++) if (lines[i].includes(req.query)) hits.push(`${rel}:${i + 1}: ${lines[i].trim().slice(0, 220)}`);
+    for (let i = 0; i < lines.length && hits.length < req.max; i++) if (lines[i].includes(req.query)) hits.push({ path: rel, line: i + 1, text: lines[i].trim().slice(0, 220) });
   };
   visit(start.abs, start.rel);
-  reply({ ok: true, text: hits.length ? hits.join('\n') + (hits.length >= req.max ? `\n[stopped at ${req.max} matches]` : '') : 'No matches.' });
+  reply({ ok: true, hits, truncated: hits.length >= req.max });
 }
 function write(req) {
   const segs = segments(req.path, { allowRoot: false });

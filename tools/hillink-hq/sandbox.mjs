@@ -62,7 +62,7 @@ export class WslSandbox {
   brokerSupport() {
     const a = this.available();
     if (!a.ok) return a;
-    const want = ['hq-broker.sh', 'hq-broker.mjs', 'hq-diff.sh', 'hq-test.sh', 'hq-stage.sh', 'hq-harden.sh'];
+    const want = ['hq-broker.sh', 'hq-broker.mjs', 'hq-diff.sh', 'hq-test.sh', 'hq-test-runner.mjs', 'hq-stage.sh', 'hq-harden.sh'];
     for (const f of want) {
       let local; try { local = crypto.createHash('sha256').update(fs.readFileSync(path.join(GUEST_DIR, f), 'utf8').replace(/\r\n/g, '\n')).digest('hex'); } catch { return { ok: false, reason: `guest script ${f} missing from this checkout` }; }
       if (a.info?.scripts?.[f] !== local) return { ok: false, reason: `the sandbox base image predates the Pass 4.5 broker (${f} differs); rebuild it: node tools/hillink-hq/sandbox/build-base.mjs` };

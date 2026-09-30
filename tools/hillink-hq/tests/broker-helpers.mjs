@@ -48,7 +48,10 @@ export class DirSandbox {
     this.execs.push({ name, script, args });
     const work = path.join(this.dir(name), 'work'), gd = path.join(this.dir(name), 'base.git');
     if (script === 'hq-broker.sh') return runNode([path.join(GUEST_DIR, 'hq-broker.mjs')], { cwd: work, env: { PATH: process.env.PATH, HQ_BROKER_ROOT: work }, input });
-    if (script === 'hq-test.sh') return runNode(['--permission', `--allow-fs-read=${work}`, '--test-isolation=none', '--test', ...args], { cwd: work, env: { PATH: process.env.PATH } });
+    if (script === 'hq-test.sh') {
+      const runner = path.join(GUEST_DIR, 'hq-test-runner.mjs'), flags = args.filter(a => a === '--experimental-strip-types'), files = args.filter(a => !a.startsWith('-'));
+      return runNode(['--frozen-intrinsics', '--no-warnings', ...flags, '--permission', `--allow-fs-read=${work}`, `--allow-fs-read=${runner}`, runner, ...files], { cwd: work, env: { PATH: process.env.PATH }, input });
+    }
     if (script === 'hq-diff.sh') {
       const g = (...a) => execFileSync('git', ['-c', 'safe.directory=*', `--git-dir=${gd}`, `--work-tree=${work}`, '-c', 'core.hooksPath=/dev/null', ...a], { encoding: 'utf8', maxBuffer: 64e6 });
       g('add', '-A', '-f');
@@ -79,11 +82,11 @@ export const toolCall = async (url, token, name, args) => {
 // A fake Claude Code binary for the broker runner. It answers the preflight (--version, auth status), then, for the
 // session, reads HQ's MCP config and runs `plan(call)` against the broker over HTTP exactly as Claude's MCP client
 // would, then reports a result. Options let a test forge what a compromised or misconfigured Claude would report.
-export function brokerClaude(plan = async () => {}, { tools = CLAUDE_TOOL_NAMES, servers = [{ name: 'hq', status: 'connected' }], apiKeySource = 'none', auth = { loggedIn: true, authMethod: 'claude.ai', apiProvider: 'firstParty' }, rateLimit = null, extraToolUse = null, result = 'Done.' } = {}) {
+export function brokerClaude(plan = async () => {}, { tools = CLAUDE_TOOL_NAMES, servers = [{ name: 'hq', status: 'connected' }], apiKeySource = 'none', auth = { loggedIn: true, authMethod: 'claude.ai', apiProvider: 'firstParty' }, rateLimit = null, extraToolUse = null, result = 'Done.', pid = 424242 } = {}) {
   const spawned = [], calls = [];
   const spawn = (command, args, opts) => {
     const child = new EventEmitter();
-    child.pid = 424242; child.stdout = new EventEmitter(); child.stderr = new EventEmitter();
+    child.pid = pid; child.stdout = new EventEmitter(); child.stderr = new EventEmitter();
     let closed = false;
     const close = (code, signal = null) => { if (!closed) { closed = true; child.emit('close', code, signal); } };
     child.kill = () => { setImmediate(() => close(null, 'SIGTERM')); return true; };

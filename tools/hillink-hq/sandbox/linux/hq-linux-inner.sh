@@ -34,9 +34,12 @@ case "$ROLE" in
     cd "$R/work"
     drop 64000 HQ_BROKER_ROOT=/work /opt/node/bin/node /opt/hq/hq-broker.mjs ;;
   test)
+    # HQ's own runner (hq-test-runner.mjs) runs the files and reports an authenticated result; HQ's run key arrives on
+    # stdin. Test output is never trusted. Only --experimental-strip-types and file names are accepted.
     ro "$INST/work" "$R/work"
-    for t in "$@"; do case "$t" in --test-reporter=tap|--experimental-strip-types|--no-warnings) ;; -*|/*|*..*) echo "HQ-SANDBOX: bad test argument" >&2; exit 98;; esac; done
+    FLAGS=(); FILES=()
+    for t in "$@"; do case "$t" in --experimental-strip-types) FLAGS+=("$t") ;; --test-reporter=tap|--no-warnings) ;; -*|/*|*..*) echo "HQ-SANDBOX: bad test argument" >&2; exit 98;; *) FILES+=("$t") ;; esac; done
     cd "$R/work"
-    drop 64001 /usr/bin/timeout --kill-after=10 300 /opt/node/bin/node --permission --allow-fs-read=/work --test-isolation=none --test "$@" ;;
+    drop 64001 /usr/bin/timeout --kill-after=10 300 /opt/node/bin/node --frozen-intrinsics --no-warnings "${FLAGS[@]}" --permission --allow-fs-read=/work --allow-fs-read=/opt/hq/hq-test-runner.mjs /opt/hq/hq-test-runner.mjs "${FILES[@]}" ;;
   *) echo "HQ-SANDBOX: unknown step" >&2; exit 98 ;;
 esac

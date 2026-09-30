@@ -43,6 +43,11 @@ export function readPath(raw, { allowRoot = false } = {}) {
   const p = checkPath(raw, { kind: 'read' });
   return p;
 }
+// The one visibility rule for everything Claude can see: a path is visible exactly when repo_read would accept it.
+// HQ applies it to every path a listing or search returns, so those tools cannot show what a read refuses.
+export function visible(rel, { dir = false } = {}) {
+  try { checkPath(dir ? `${rel.replace(/\/$/, '')}/` : rel, { kind: 'read' }); return true; } catch { return false; }
+}
 // Write scope: a single file inside the task's validated scope (never a directory, never outside it).
 export function writePath(raw, scope) {
   const p = checkPath(raw, { kind: 'write' });

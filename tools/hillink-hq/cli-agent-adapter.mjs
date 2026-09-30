@@ -158,6 +158,8 @@ export class CliAgentAdapter {
     if (this.billing === 'subscription' && this.spec.authCheck && this.healthCache?.result?.auth !== 'subscription') throw Error(`${this.spec.label} subscription sign-in not verified; refusing to start (no metered fallback).`);
     const started = Date.now();
     const child = this.launch(this.spec.args());
+    // Pass 4.5 repair: a host process HQ must be able to find after a crash reports its pid at once, not at its ACK.
+    if (this.announcePid && Number.isInteger(child.pid)) { try { emit({ kind: 'PROGRESS', summary: `${this.spec.label} process started on the host (pid ${child.pid}).`, pid: child.pid, hostProcess: 'claude' }); } catch { /* run closed */ } }
     const run = { billing: this.billing, expectTools: this.spec.expectTools ?? null, expectServer: this.spec.expectServer ?? null, child, closed: false, cancelled: false, timedOut: false, acknowledged: false, steps: 0, finished: null, usage: null, lastMessage: '', rateLimitedUntil: null };
     this.runs.set(runId, run);
     let pending = '', stderr = '';
@@ -167,7 +169,7 @@ export class CliAgentAdapter {
       let message; try { message = JSON.parse(line); } catch { return; } // Non-JSON banner lines are not evidence.
       for (const event of this.spec.parse(message, run)) {
         // The ACK carries the process id HQ spawned, so a restarted HQ can check whether that process still exists.
-        if (event.kind === 'ACK') { if (run.acknowledged) continue; run.acknowledged = true; if (Number.isInteger(child.pid)) event.pid = child.pid; }
+        if (event.kind === 'ACK') { if (run.acknowledged) continue; run.acknowledged = true; if (Number.isInteger(child.pid)) { event.pid = child.pid; if (this.announcePid) event.hostProcess = 'claude'; } }
         else if (!run.acknowledged) continue;
         if (!safeEmit(event)) void this.cancel(runId);
       }

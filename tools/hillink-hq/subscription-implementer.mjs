@@ -65,6 +65,7 @@ export class SubscriptionImplementer extends ClaudeImplementer {
     try {
       const cli = entry.cli = new CliAgentAdapter(cliAgents.claude, { ...this.cliOptions, env: this.env, spawn: this.spawn ?? this.cliOptions.spawn, cwd, operation: 'implement-repo', safety: 'local-worktree-write', framing: 'Task assigned by Hillink HQ (the broker tools are your only access to the repository):\n\n', command: this.claudeBin, shell: false, billing: 'subscription', maxRunMs: this.limits.deadlineMs + 60_000 });
       cli.spec = { ...cliAgents.claude, args: () => brokerArgs(cfg), expectTools: CLAUDE_TOOL_NAMES, expectServer: BROKER_SERVER };
+      cli.announcePid = true;
       // 1. Who pays, proven right now (no model call): Kyle's subscription sign-in, no API key, first-party only.
       const health = await cli.checkHealth();
       if (health.auth !== 'subscription') { emit({ kind: 'BLOCKED', summary: `${health.detail?.startsWith('AUTH_REQUIRED') ? '' : 'AUTH_REQUIRED: '}${health.detail ?? 'Claude Code subscription sign-in could not be verified.'} No metered fallback: the sandbox API route is never used instead. Nothing ran.`.slice(0, 1900), implementation: where, ownerAction: 'Sign Claude Code in with your Claude subscription (no API key), then retry the task.' }); return null; }
@@ -79,11 +80,13 @@ export class SubscriptionImplementer extends ClaudeImplementer {
       entry.abort.signal.addEventListener('abort', () => this.broker.closeSession(opened.session.id, 'cancelled'), { once: true });
       opened.session.audit('SUBSCRIPTION_IMPLEMENTER_STARTED', { outcome: 'started', computeClass: 'SUBSCRIPTION', summary: 'Subscription implementer starting: Claude Code on the host, HQ broker tools only, metered API spend $0.' });
       fs.writeFileSync(cfg, JSON.stringify(opened.mcpConfig), { mode: 0o600 });
+      // Before Claude exists: the marker a restarted HQ can find on its command line if the pid never gets recorded.
+      emit({ kind: 'PROGRESS', summary: 'Claude Code about to start on the host.', hostMarker: cfg });
       stop();
       emit({ kind: 'PROGRESS', summary: 'Claude Code starting on the host with Kyle\'s subscription and HQ broker tools only (no shell, no file or web tools).' });
       // 4. Claude's session. Its terminal event is held until HQ has verified the work (steps() continues after it).
       const end = await new Promise(resolve => {
-        cli.start({ task: { ...task, description: implementationBrief(contract, task.repair, { canRunTests: true }) }, runId, emit: ev => { if (TERMINAL.has(ev.kind)) resolve(ev); else if (ev.kind === 'ACK') emit({ kind: 'MODEL_OUTPUT', summary: `${ev.summary} Broker session ${opened.session.id.slice(0, 8)}.`, pid: ev.pid }); else if (ev.kind !== 'HEARTBEAT') emit(ev); } }).catch(error => resolve({ kind: 'FAILED', summary: `Claude did not start: ${error.message}` }));
+        cli.start({ task: { ...task, description: implementationBrief(contract, task.repair, { canRunTests: true }) }, runId, emit: ev => { if (TERMINAL.has(ev.kind)) resolve(ev); else if (ev.kind === 'ACK') emit({ kind: 'MODEL_OUTPUT', summary: `${ev.summary} Broker session ${opened.session.id.slice(0, 8)}.`, pid: ev.pid, hostProcess: 'claude' }); else if (ev.kind !== 'HEARTBEAT') emit(ev); } }).catch(error => resolve({ kind: 'FAILED', summary: `Claude did not start: ${error.message}` }));
       });
       entry.brokerCounters = { ...opened.session.counters };
       opened.session.audit('SUBSCRIPTION_IMPLEMENTATION_COMPLETED', { outcome: String(end.kind).toLowerCase(), counters: entry.brokerCounters, summary: `Claude's broker session ended (${String(end.kind).toLowerCase()}); HQ now verifies the work independently.` });

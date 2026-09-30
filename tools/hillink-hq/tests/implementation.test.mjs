@@ -136,7 +136,7 @@ test('14. failing acceptance tests are not success: BLOCKED, nothing committed',
   const s = setup({ files: broken }); await s.tick();
   const id = implTask(s); await s.tick();
   const t = await s.done(id);
-  assert.equal(t.stage, 'BLOCKED'); assert.match(t.blocker, /Acceptance tests failed \(0 passed, 1 failed\)/);
+  assert.equal(t.stage, 'BLOCKED'); assert.match(t.blocker, /Acceptance tests failed \(0 passed, 1 failed/);
   assert.equal(t.evidence.find(e => e.kind === 'TEST_RESULT').result, 'failed');
   assert.ok(!t.evidence.some(e => e.kind === 'COMMIT'));
   const branch = git(s.repo, 'branch', '--list', `hq/impl/${id.slice(0, 8)}-*`, '--format=%(refname:short)').trim();
