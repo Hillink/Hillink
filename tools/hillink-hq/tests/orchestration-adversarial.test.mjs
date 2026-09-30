@@ -228,3 +228,13 @@ test('an orchestrator decision the orchestrator never answers escalates to Kyle 
   assert.equal(o.status, 'AWAITING_DECISION');
   assert.match(Object.values(o.decisions).find(d => d.status === 'PENDING').question, /Escalated by HQ \(the orchestrator did not answer\)/);
 });
+
+test('approval gates: prohibitions do not raise gates, requests always do (first real run found the false positive)', () => {
+  const g = (objective, extra = {}) => gatesFor({ objective, requestedActions: [], scope: ['sandbox/x/'], ...extra });
+  assert.deepEqual(g('Add slugify.', { constraints: 'No changes to databases or production. No merge, push or deploy.' }), []);
+  assert.deepEqual(g('Add slugify without touching production; do not deploy.'), []);
+  assert.deepEqual(g('Fix greet() and deploy it to production.'), ['deploy', 'production-change']);
+  assert.deepEqual(g('Do not touch the tests; then merge the branch into main.'), ['merge']);
+  assert.deepEqual(g('Add slugify.', { requestedActions: ['deploy'] }), ['deploy'], 'declared actions always count');
+  assert.deepEqual(g('Run a migration on the production database.'), ['database-change', 'production-change']);
+});

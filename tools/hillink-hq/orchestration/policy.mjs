@@ -78,11 +78,20 @@ export function validateObjectiveInput(input) {
   return out;
 }
 
-// Gates from declared actions plus text signals in the objective, criteria and constraints.
+// Gates from declared actions plus text signals in the objective and its acceptance criteria. Constraints are not
+// scanned: they list what must NOT happen ("no deploy, no production changes"), and HQ has no operation that performs
+// a gated action anyway. A mention negated in the same clause ("do not deploy") is a prohibition, not a request;
+// every other mention raises the gate (over-triggering stays the safe direction). Found in the first real run.
+const NEGATED = /\b(no|not|never|nor|without|don'?t|do not|must not|mustn'?t|avoid|except)\b[^.;:!?\n]*$/i;
+const mentions = (re, text) => {
+  const g = new RegExp(re.source, re.flags.includes('g') ? re.flags : `${re.flags}g`);
+  for (const m of text.matchAll(g)) if (!NEGATED.test(text.slice(Math.max(0, m.index - 60), m.index))) return true;
+  return false;
+};
 export function gatesFor(input) {
-  const text = [input.objective, input.acceptanceCriteria, input.constraints].filter(Boolean).join('\n');
+  const text = [input.objective, input.acceptanceCriteria].filter(Boolean).join('\n');
   const gates = new Set(input.requestedActions);
-  for (const [gate, re] of GATE_SIGNALS) if (re.test(text)) gates.add(gate);
+  for (const [gate, re] of GATE_SIGNALS) if (mentions(re, text)) gates.add(gate);
   if (input.scope.length > 3 || new Set(input.scope.map(p => p.split('/')[0])).size > 2) gates.add('architecture-change');
   return [...gates].sort();
 }
