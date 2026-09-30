@@ -7,6 +7,7 @@
 //   5. only if they pass, HQ commits the in-scope files to the task branch. Nothing is pushed or merged.
 // Each step is HQ evidence; a failure at any step is a truthful FAILED or BLOCKED with the reason.
 import { execFile as nodeExecFile } from 'node:child_process';
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -81,20 +82,34 @@ export class ClaudeImplementer {
       .catch(error => { try { emit({ kind: entry.cancelled ? 'CANCELLED' : 'FAILED', summary: (entry.cancelled ? 'Implementation cancelled.' : `Implementation failed: ${error.message}`).slice(0, 1900) }); } catch { /* run already closed */ } })
       .finally(() => this.runs.delete(runId));
   }
-  async execute(task, runId, contract, entry, emit) {
+  async execute(task, runId, contract, entry, emitLive) {
     // Branch and worktree are per run, so a re-dispatched task never collides with or inherits an earlier attempt.
     const id8 = task.id.slice(0, 8), name = `${id8}-${runId.replace(/[^0-9a-f]/gi, '').slice(0, 6)}`, branch = `hq/impl/${name}`, dir = path.join(this.worktreeRoot, name);
     const stop = () => { if (entry.cancelled) throw Error('cancelled'); };
     const box = this.sandbox ? `${INSTANCE_PREFIX}${name}`.toLowerCase() : null;
-    try { return await this.steps(task, runId, contract, entry, emit, { id8, branch, dir, box, stop }); }
+    // Pass 3: the runner itself acknowledges (it is HQ code and has genuinely started), so sandbox setup, which runs
+    // before Claude exists, is reportable evidence and is covered by liveness. Claude's own session start follows as
+    // MODEL_OUTPUT. The terminal event is held until teardown, so "sandbox destroyed" is part of the run's record.
+    let held = null;
+    const emit = ev => { if (TERMINAL.has(ev.kind)) { held ??= ev; return; } emitLive(ev); };
+    emitLive({ kind: 'ACK', summary: `HQ implementation runner started run ${runId.slice(0, 8)} (${box ? `sandbox ${box}` : 'unsandboxed test mode'}).`, pid: process.pid, sandbox: box });
+    const pulse = setInterval(() => { try { emitLive({ kind: 'HEARTBEAT', summary: 'HQ implementation runner alive.' }); } catch { /* closed */ } }, this.pulseMs);
+    pulse.unref?.();
+    let failure = null;
+    try { await this.steps(task, runId, contract, entry, emit, { id8, branch, dir, box, stop }); }
+    catch (error) { failure = error; }
     finally {
+      clearInterval(pulse);
       // Teardown on every outcome (success, failure, block, cancellation, timeout): the instance and its disk go.
       if (box) {
         let gone = false;
         try { gone = await this.sandbox.destroy(box); } catch { /* reported below */ }
-        try { emit({ kind: gone ? 'PROGRESS' : 'FINDING', summary: gone ? `Sandbox ${box} destroyed.` : `Sandbox ${box} could not be confirmed destroyed; HQ removes stale sandboxes at start.` }); } catch { /* run closed */ }
+        entry.sandboxDestroyed = gone;
+        try { emitLive({ kind: gone ? 'PROGRESS' : 'FINDING', summary: gone ? `Sandbox ${box} destroyed.` : `Sandbox ${box} could not be confirmed destroyed; HQ removes stale sandboxes at start.`, sandbox: box, destroyed: gone }); } catch { /* run closed */ }
       }
     }
+    if (failure) throw failure;
+    if (held) emitLive(box ? { ...held, sandbox: { name: box, destroyed: entry.sandboxDestroyed === true } } : held);
   }
   async steps(task, runId, contract, entry, emit, { id8, branch, dir, box, stop }) {
     // 1. Isolated worktree from the base commit.
@@ -126,7 +141,7 @@ export class ClaudeImplementer {
     // In the sandbox the key is already inside; wsl.exe itself gets no API keys.
     cli.spec = { ...cliAgents.claude, env: box ? [] : cliAgents.claude.env, args: () => launch.args };
     const claudeEnd = await new Promise(resolve => {
-      cli.start({ task: { ...task, description: implementationBrief(contract) }, runId, emit: ev => { if (TERMINAL.has(ev.kind)) resolve(ev); else emit(ev); } }).catch(error => resolve({ kind: 'FAILED', summary: `Claude did not start: ${error.message}` }));
+      cli.start({ task: { ...task, description: implementationBrief(contract, task.repair) }, runId, emit: ev => { if (TERMINAL.has(ev.kind)) resolve(ev); else if (ev.kind === 'ACK') emit({ kind: 'MODEL_OUTPUT', summary: ev.summary, pid: ev.pid }); else if (ev.kind !== 'HEARTBEAT') emit(ev); } }).catch(error => resolve({ kind: 'FAILED', summary: `Claude did not start: ${error.message}` }));
     });
     if (claudeEnd.kind !== 'COMPLETED') { emit({ ...claudeEnd, summary: `${claudeEnd.summary} Nothing committed; worktree kept at ${dir}.`.slice(0, 1900), implementation: where }); return; }
     // Sandboxed: the only thing that leaves the instance is a patch. HQ validates it (no links, submodules, .git,
@@ -147,10 +162,7 @@ export class ClaudeImplementer {
         finally { fs.rmSync(tmp, { recursive: true, force: true }); }
       }
     }
-    // HQ does its own checking from here: liveness while it works.
-    const pulse = setInterval(() => { try { emit({ kind: 'HEARTBEAT', summary: 'HQ verifying the implementation.' }); } catch { /* closed */ } }, this.pulseMs);
-    pulse.unref?.();
-    try {
+    {
       // 3. What actually changed, from git, against the scope.
       // --ignored: gitignored files (.env.local, node_modules, *.log) are changes too; they could steer the tests.
       stop();
@@ -160,6 +172,9 @@ export class ClaudeImplementer {
       const outside = files.filter(f => !inScope(f, contract.scope));
       emit({ kind: 'FINDING', summary: `Changed ${files.length} file(s): ${files.join(', ')}`.slice(0, 1900), files });
       if (outside.length) { emit({ kind: 'BLOCKED', summary: `Scope violation: ${outside.join(', ')} changed outside the authorized scope (${contract.scope.join(', ')}). Nothing committed; worktree kept at ${dir}.`.slice(0, 1900), implementation: { ...where, files, outside }, ownerAction: 'Review the worktree and create a correctly scoped task.' }); return; }
+      // Pass 3: a fingerprint of exactly what would be committed, so HQ can tell a repair that changed nothing.
+      await this.git(['add', '-A', '-f', '--', ...files], dir);
+      const patchHash = crypto.createHash('sha256').update(await this.git(['diff', '--cached', '--binary', '--full-index', '--no-color', '--no-ext-diff', '--no-textconv'], dir)).digest('hex');
       // 4. HQ runs the acceptance tests.
       const missing = contract.tests.filter(t => !fs.existsSync(path.join(dir, t)));
       if (missing.length) { emit({ kind: 'BLOCKED', summary: `Acceptance test file(s) missing: ${missing.join(', ')}. Nothing committed; worktree kept at ${dir}.`, implementation: { ...where, files } }); return; }
@@ -186,7 +201,7 @@ export class ClaudeImplementer {
       const c = testCounts(out), passed = c.passed ?? 0, failed = c.failed ?? (ok ? 0 : 1);
       const green = ok && failed === 0 && passed > 0;
       emit({ kind: 'TEST_RESULT', result: green ? 'passed' : 'failed', summary: `${passed} passed; ${failed} failed.` });
-      if (!green) { emit({ kind: 'BLOCKED', summary: `Acceptance tests failed (${passed} passed, ${failed} failed). Implementation not accepted; nothing committed; worktree kept at ${dir}.`, implementation: { ...where, files, tests: { files: contract.tests, passed, failed } }, ownerAction: 'Inspect the failing tests in the worktree and create a follow-up task.' }); return; }
+      if (!green) { emit({ kind: 'BLOCKED', summary: `Acceptance tests failed (${passed} passed, ${failed} failed). Implementation not accepted; nothing committed; worktree kept at ${dir}.`, implementation: { ...where, files, tests: { files: contract.tests, passed, failed }, patchHash, testOutput: out.split(String.fromCharCode(13)).join('').slice(-1500) }, ownerAction: 'Inspect the failing tests in the worktree and create a follow-up task.' }); return; }
       // 5. Commit on the task branch. Never pushed, never merged. Never after a cancellation.
       stop();
       await this.git(['add', '--', ...files], dir);
@@ -195,8 +210,8 @@ export class ClaudeImplementer {
       await this.git(['commit', '-q', '--no-verify', '-m', subject, '-m', `HQ-Task: ${task.id}\nRequested-By: ${task.requestedBy ? `${task.requestedBy.agentId} (HQ task ${task.requestedBy.taskId})` : 'kyle'}\nScope: ${contract.scope.join(', ')}\nVerified-By: HQ node ${shown} (${passed} passed, 0 failed)\n\nCo-Authored-By: Claude Code <noreply@anthropic.com>`], dir);
       const sha = (await this.git(['rev-parse', 'HEAD'], dir)).trim();
       emit({ kind: 'COMMIT', summary: `Committed ${sha.slice(0, 10)} on ${branch} (local only: not pushed, not merged).`, sha });
-      emit({ kind: 'COMPLETED', summary: `Implementation committed on ${branch} (${sha.slice(0, 10)}); acceptance tests passed (${passed}/${passed}). Not merged: Kyle decides.`, implementation: { ...where, commit: sha, files, tests: { files: contract.tests, passed, failed: 0 } } });
-    } finally { clearInterval(pulse); }
+      emit({ kind: 'COMPLETED', summary: `Implementation committed on ${branch} (${sha.slice(0, 10)}); acceptance tests passed (${passed}/${passed}). Not merged: Kyle decides.`, implementation: { ...where, commit: sha, files, patchHash, tests: { files: contract.tests, passed, failed: 0 } } });
+    }
   }
   async cancel(runId) {
     const entry = this.runs.get(runId);
