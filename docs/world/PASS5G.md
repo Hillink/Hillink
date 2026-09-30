@@ -178,3 +178,109 @@ Layout, placements, derived entities and paths are pure functions of the canonic
 
 - **5H (art)**: final kingdom art, dedicated bodies for RIG_TARGETS, readable district signage, per-archetype animation sets, per-activity Fantasy verbs.
 - **5I**: cinematics and camera moves for summon, activation and construction milestones, plus a shorter or faster travel model for the large kingdom.
+
+## 19. Agent Office reference findings (addendum, research only)
+
+I studied the reference repository `AgentSystemLabs/agent-office` (MIT, commit `665aeec`) read-only, in a scratch clone outside this repository. **No code was copied, no dependency was added, and nothing in 5E, 5F or 5G changed.** It is a reference for ideas, not a blueprint. Hillink's chain `HQ truth → semantic events → World → theme → 2.5D → renderer` stays authoritative.
+
+Classes: **A** = already solved by Hillink · **B** = small safe 5G improvement · **C** = 5H (unified Real + Fantasy art/readability) · **D** = 5I (living world, physical work, interaction) · **E** = 5J (adaptive, declarative World) · **F** = future · **G** = reject.
+
+**Foundational concern: none.** Agent Office's worker state is the most important contrast. It is driven by agent-CLI lifecycle hooks, plus heuristics that parse terminal escapes and screen text, and a turn-end counts as "done". Hillink's state comes from HQ's canonical run evidence (ACK, FINDING, COMPLETED, verdicts) and lifecycle authority. That is stronger ground truth, so nothing here needs correcting before 5H.
+
+**Category B: none.** No finding fits inside 5G without moving its acceptance criteria.
+
+### Findings by topic
+
+**1. Clickable workers and live sessions.**
+- In Agent Office, each visual worker is a real PTY session in a detached host. Clicking attaches a live terminal, a task card, a Changes window (git status and diff against base, commit or open PR) and a "send instruction" box, which is refused while the worker is busy.
+- Hillink already has the click-agent inspector: task, stage, provider, HQ state, and a 5F capability-routed "Ask X to …" command that goes through HQ. So the basic linkage is **A**.
+- Adding a live output stream, files changed, tests, branch or PR, and run evidence to the inspector, all read from HQ run evidence and never from a raw terminal, is **D (5I)**.
+- A raw interactive terminal typed into from the World is **G**. It bypasses HQ authority and ZERO_CREDIT, and any viewer could drive an agent.
+
+**2. Real coding activity → visual activity.**
+- Hooks map to working, needs_input or done. Tool names map to poses (read, edit, test, web). Two failed test or build runs trigger a "despair" pose.
+- The canonical-event approach is **A**, and stronger.
+- The idea worth taking is finer visible actions derived from HQ evidence kinds (editing, running tests, reading, failing checks shown as distress). That is **D**, and the evidence kinds may need adding to HQ first.
+- Deriving state from screen text or regex is **G**. It is heuristic truth.
+- Confetti or "done" on a turn-end is **G**. Hillink celebrates only canonical completion (task DONE, CONSTRUCTION_COMPLETED).
+
+**3. GitHub issues and PRs as physical objects.**
+- Agent Office has Issues and PR boards backed by the `gh` CLI with a 90 s poll, PR windows with checks and merge, a merge "gong", PR-to-worker linking by branch, and an optional leave-on-merge.
+- Hillink should treat an issue as a task board in Real and a quest or work order in Fantasy, and a PR as a review board in Real and an inspection order in Fantasy. It is one canonical object, drawn per theme. That is **D**, and it needs HQ to own the GitHub ingest as canonical events.
+- A merge ceremony is **C**.
+- Auto-dismissing an agent on merge is **F**. It would be an HQ policy, never a World decision.
+- Letting the browser merge PRs is **G**. That action stays with HQ and Kyle.
+
+**4. Isolated worktrees.**
+- Agent Office gives each worker its own `git worktree` on an `office/<name>` branch fetched fresh from base. A multi-repo worker gets the same branch name in each repo, rolled back all-or-nothing.
+- Cleanup refuses to delete dirty or unpushed work, and an offline prune supports dry-run. It has no merge-conflict handling; conflicts surface on the PR.
+- This is a good pattern for HQ running several coding agents at once. It is **F**, an HQ concern and not a World one.
+- The World only shows it: each agent's bench carries its own branch plaque. That part is **D**.
+- Nothing changes in the current workflow.
+
+**5. Agent-to-agent management (hire, message, dismiss).**
+- Agents call a loopback endpoint authenticated by a per-worker token held in the environment. It checks capacity and budget, but there is no owner approval, and bypass-permission agents can hire and dismiss freely.
+- Hillink's authority model (HQ validates, the owner creates and activates, READY ≠ ACTIVE) is **A**, and stronger.
+- "An agent requests another worker → HQ validates → Kyle approves → canonical lifecycle → the World shows the arrival" is **F**. The request would become a new canonical event kind; activation remains Kyle's.
+- A token in the environment that grants hire and dismiss is **G**.
+- The World, or an animation, spawning a worker is **G**. Tests V1 and C already forbid it.
+
+**6. "Needs you" and attention.**
+- Status `needs_input` comes from permission and question hooks, plus a boot timeout.
+- An **ack model** (`acked`, `waitingSince`): "done" nags until someone looks, while "needs input" nags until someone answers.
+- Sticky desktop notifications for needs-input, self-closing ones for done.
+- On the castle map, waiting workers physically **queue before the throne, longest-waiting first**.
+- Hillink's canonical attention states (the attention panel, BLOCKED_REQUIRES_SPEND_APPROVAL, provisioning WAITING, and review verdicts) are **A**.
+- A unified **NEEDS KYLE** concept is **D**: approval, decision, credentials, permission, spend or blocked deploy, with `waitingSince`, shown as the agent visibly waiting in Real and a fairy messenger or a line before the King's Command in Fantasy. It needs a canonical HQ reason field. Separating "seen" from "resolved" (the ack model) belongs with it.
+- The notification sound and tone are **C**.
+
+**7. Projects as physical space.**
+- Agent Office maps one repo to one floor, each with its own palette, desks, boards and queue.
+- Hillink's model (a capability or project becomes a construction site that grows into an established district) is **A** for features.
+- The general hierarchy (major feature → site, separate product → building, separate organization → district or region) is **E (5J)**.
+- Hard-coding one repo per floor is **G**. It would fix the World to repository structure.
+
+**8. Data-driven maps.**
+- JSON `MapConfig` with `extends`, and prototype-pollution-safe merging.
+- Typed validation with readable errors and hard limits: bounds, 40 tables, 400 props, 24 files of 256 KB, reserved ids.
+- The invariant **"every map places the same seat ids"**, so workers keep their seat across map switches.
+- Hillink's metaphor table, the kingdom layout and semantic places (room and station ids carried across themes) are **A**. The 5G switching tests prove the same invariant.
+- Worth taking for **E (5J)**: declarative theme or map definitions loaded as data, with a validator that has limits and human-readable errors. It must stay non-executable, with literal words only and no regex or code, as in 5E and 5F.
+- Scripted theme interactions such as the castle's Kingsguard escort to a dungeon cell are **G**. They display dismissed agents as prisoners indefinitely, which is flavour showing a state HQ doesn't hold. A disabled agent in Hillink simply leaves (test K).
+
+**9. Status readability.**
+- A bulb colour per state (idle blue, working yellow, **needs-you red, pulsing**, done green, asleep grey) plus a small task chip.
+- The bubble shows "PR #n open/merged" when the agent isn't working.
+- A needs-you pose: jump, then crossed arms and a foot tapping.
+- The pose calms when a viewer comes close.
+- These are **C (5H)**, in both Real and Fantasy:
+  - a consistent state-colour language across the state rings and HUD;
+  - a distinct, persistent "needs Kyle" pose and marker;
+  - a PR or quest chip on idle agents;
+  - a calmer pose once acknowledged, driven by canonical ack, not camera proximity.
+- Hillink's state rings, captions and inspector are **A** as a base.
+
+**10. Multi-agent coordination.**
+- Meeting patterns: debate, lead and team, map-reduce, red and blue, review panel. Each has role cards, a shared worktree, and a live wall board.
+- **Turns advance only when the named output file exists.** That is the best idea found: "check the files, not the talk".
+- Living HQ meetings, handoff messages (the fairy in Fantasy) and the canonical AGENT_MESSAGE are **A**.
+- Evidence-gated collaboration is **F**, as HQ policy: a shared task advances on artifacts HQ verifies, and the World shows each step.
+- Role cards over heads and a shared wall board or war-table showing the canonical output are **D**.
+- A "speaking" animation inferred from active turns, not real messages, is **G** for Hillink. Only canonical messages are drawn.
+
+### Carry-forward summary
+- **5H (C):** unified state-colour language; a persistent needs-Kyle marker and pose; a PR or quest chip on idle agents; calm-on-acknowledged poses; a merge or completion ceremony only on canonical completion; attention sound design.
+- **5I (D):** an inspector with live HQ run evidence (output, files, tests, branch, PR); evidence-driven poses (editing, testing, reading, failing checks); issues and PRs as boards in Real and quests or inspection orders in Fantasy; a NEEDS KYLE line or messenger with `waitingSince` and ack; per-agent branch plaques; meeting role cards and a war-table board.
+- **5J (E):** declarative, validated map and theme definitions with limits and readable errors, non-executable; the project → site, building, district or region hierarchy.
+- **Future (F):** per-agent git worktrees in HQ with dirty/unpushed-safe cleanup and a dry-run prune; agent-requested hiring through HQ validation and Kyle's approval; evidence-gated multi-agent sessions; auto-dismiss on merge as an HQ policy.
+- **Rejected (G):**
+  - raw terminal input from the World;
+  - heuristic or screen-parsed state;
+  - celebrating a turn-end;
+  - browser merges;
+  - env-token hiring or dismissing;
+  - World- or animation-spawned workers;
+  - one repo per floor;
+  - the dungeon/prisoner display;
+  - inferred "speaking";
+  - 3D, first-person or WASD, and Agent Office's camera, style and scale.
