@@ -222,7 +222,6 @@ export class Engine {
       }
       await this.recover();
       for (const task of this.runnable()) {
-        if (task.notBefore > this.now()) continue;
         // The local concurrency limit is for local processes. A remote API adapter (the orchestrator) takes no
         // local slot, so a question to ChatGPT never queues behind a long local run, nor blocks one.
         const local = r => !this.adapters[this.state.agents[r.agentId]?.executionAdapter]?.remote;
@@ -269,7 +268,8 @@ export class Engine {
     // Metered compute is considered only when no LOCAL or SUBSCRIPTION route can do this task at all. A free agent that
     // is busy or out of capacity means wait, never "pay instead".
     const pool = (free.length ? free : allowed).sort((x, y) => classRank(x.decision.route.computeClass) - classRank(y.decision.route.computeClass) || (x.agent.routingPriority ?? 0) - (y.agent.routingPriority ?? 0));
-    const ready = pool.find(x => !x.agent.assignment && this.status(x.agent) === 'IDLE');
+    // A task told to wait (capacity reset time) is not dispatched early, but its wait is still recorded below.
+    const ready = task.notBefore > now ? null : pool.find(x => !x.agent.assignment && this.status(x.agent) === 'IDLE');
     if (ready) return ready;
     if (!pool.length) {
       const blocked = decided.find(x => !x.decision.allowed).decision;
