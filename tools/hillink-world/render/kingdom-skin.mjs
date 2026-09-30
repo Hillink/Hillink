@@ -306,7 +306,7 @@ export function createKingdomSkin(layout) {
     const dressed = dress(rig, e.anim), dir = e.dir ?? 'front';
     const fig = { x: e.x, y: e.y, h: e.h, dir, posture: e.posture, state: dressed.clip, prev: d.reduced ? null : dressed.prev, blend: blendOf(e.anim, d.now), props: dressed.props, gait: e.gaitAmount ?? 1, t, time: d.reduced ? 0 : d.T + hash(e.id.length), stride: e.stride ?? 0, look: null, use: e.spotInfo?.use, moving: e.moving, alpha: e.staging?.presence === 'candidate' ? 0.9 : a.activity === 'offline' ? 0.82 : 1 };
     // Pass 5H: the shared character rig (render/art/character.mjs), dressed from the same appearance data.
-    const D = dressFor(a, 'fantasy'), st5 = statusOf(e, a);
+    const D = dressFor(a, 'fantasy'), st5 = statusOf(e, a, env.world);
     Object.assign(fig, { look: D.look, parts: D.parts, heading: e.heading });
     drawStatusRing(ctx, e.x, e.y, e.h, st5, d.T, d.reduced);
     const head = drawCharacter(ctx, fig);

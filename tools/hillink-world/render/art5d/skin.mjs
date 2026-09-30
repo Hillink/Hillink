@@ -742,9 +742,9 @@ export function createArtSkin(layout, skinId = 'real') {
     const dressed = dress(rig, e.anim);
     const fig = { x, y, h: e.h, dir: e.dir ?? 'front', posture: e.posture, state: dressed.clip, prev: d.reduced ? null : dressed.prev, blend: blendOf(e.anim, d.now), props: dressed.props, gait: e.gaitAmount ?? 1, t, time: d.reduced ? 0 : d.T + hash(e.id.length), stride: e.stride ?? 0, look, use: e.spotInfo?.use, moving: e.moving, alpha: a.activity === 'offline' ? 0.82 : 1 };
     if (!e.ride) softShadow(ctx, x, y + 0.5, e.h * 0.2, e.h * 0.07, { alpha: 0.34 }), softShadow(ctx, x + e.h * 0.16, y - e.h * 0.05, e.h * 0.24, e.h * 0.07, { alpha: 0.14 });
-    if (!e.ride) drawStatusRing(ctx, x, y, e.h, statusOf(e, a), d.T, d.reduced);
+    if (!e.ride) drawStatusRing(ctx, x, y, e.h, statusOf(e, a, env.world), d.T, d.reduced);
     // Pass 5H: the shared character rig, dressed by the Real outfit rules (render/art/dress.mjs); status in the shared language.
-    const D = dressFor(a, 'real'), st5 = statusOf(e, a);
+    const D = dressFor(a, 'real'), st5 = statusOf(e, a, env.world);
     Object.assign(fig, { look: D.look, parts: D.parts, heading: e.heading });
     const body = BODIES[e.rig?.body] ?? drawCharacter, head = body(ctx, fig);
     if (st5 === 'completed') drawCeremony(ctx, x, y, e.h, t, 'real', d.reduced);

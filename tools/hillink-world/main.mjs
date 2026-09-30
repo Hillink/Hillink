@@ -436,9 +436,9 @@ if (params.get('camera')) setTimeout(() => focus(params.get('camera')), 50);
 function shotPoint(name) {
   const L = theme.layout, W = L.world, v = L.view, U = L.U;
   const door = Object.values(W.doors ?? {}).find(d => d.status === 'built' && (d.a === 'outside' || d.b === 'outside'));
-  const dp = door ? v.toView((door.seg.x1 + door.seg.x2) / 2, (door.seg.y1 + door.seg.y2) / 2) : null;
+  const dp = door && v ? v.toView((door.seg.x1 + door.seg.x2) / 2, (door.seg.y1 + door.seg.y2) / 2) : null;
   const room = id => { const l = L.locationById?.[id]; return l ? { x: l.x + l.w / 2, y: l.y + l.h / 2 } : null; };
-  const b = Object.values(W.buildings ?? {})[0], r = b ? v.rectToView(b.footprint) : null;
+  const b = Object.values(W.buildings ?? {})[0], r = b && v ? v.rectToView(b.footprint) : null;
   switch (name) {
     case 'overview': { const h = L.home; return h ? { x: h.x + h.w / 2, y: h.y + h.h / 2, zoom: 1.05 } : null; }
     case 'entrance': return dp ? { ...toXY(L.P.at(dp.x * U, dp.z * U - 40, 0, 60)), zoom: 2.4 } : null;

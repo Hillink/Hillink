@@ -4,7 +4,7 @@
 // in both themes by role and colour alone, and two agents with the same definition look the same whatever their ids;
 // missing assets fall back; views are a pure function of heading; drawing a frame in either theme, or switching theme,
 // never changes canonical state; the status language comes from canonical fields only (completion only from a
-// canonical TASK_COMPLETED, NEEDS KYLE never inferred); construction art reads the canonical stage; set dressing never
+// canonical TASK_COMPLETED, NEEDS KYLE only from the canonical issue owner flag); construction art reads the canonical stage; set dressing never
 // stands on a walk, a station or furniture; and depth order is deterministic.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -156,7 +156,7 @@ test('F. drawing full frames in Real and Fantasy, and switching between them, ne
   assert.throws(() => { ro.agents.claude.activity = 'completed'; }, /cannot change canonical state/);
 });
 
-test('G. status language: canonical fields only; celebration only on canonical completion; NEEDS KYLE never inferred', () => {
+test('G. status language: canonical fields only; celebration only on canonical completion; NEEDS KYLE only from the owner flag', () => {
   for (const k of STATUS_ORDER) { const S = STATUS[k]; assert.ok(/^#[0-9a-f]{6}$/i.test(S.color) && S.pose && 'real' in S && 'fantasy' in S, k); }
   assert.equal(new Set(STATUS_ORDER.map(k => STATUS[k].color)).size, STATUS_ORDER.length, 'every status has its own colour');
   const e = (x = {}) => ({ anim: {}, ...x });
@@ -169,7 +169,11 @@ test('G. status language: canonical fields only; celebration only on canonical c
   assert.equal(statusOf(e({ moving: true }), { activity: 'coding', taskId: 't' }), 'travelling');
   assert.equal(statusOf(e({ anim: { intent: 'working' } }), { activity: 'coding', taskId: 't' }), 'working');
   for (const activity of ['idle', 'thinking', 'coordinating', 'coding', 'researching', 'testing', 'reviewing', 'communicating', 'waiting', 'completed', 'error', 'offline'])
-    for (const outcome of [null, 'blocked', 'done', 'failed']) assert.notEqual(statusOf(e(), { activity, lastTask: outcome ? { outcome, detail: 'Needs Kyle approval' } : null }), 'needs-owner');
+    for (const outcome of [null, 'blocked', 'done', 'failed']) assert.notEqual(statusOf(e(), { id: 'codex', activity, lastTask: outcome ? { outcome, detail: 'Needs Kyle approval' } : null }, { issues: { i: { open: true, owner: false, agentId: 'codex', title: 'Needs Kyle' } } }), 'needs-owner', 'text never makes NEEDS KYLE');
+  const issues = open => ({ issues: { i: { open, owner: true, agentId: 'codex', title: 'x' } } });
+  assert.equal(statusOf(e(), { id: 'codex', activity: 'waiting' }, issues(true)), 'needs-owner', 'the canonical owner flag does');
+  assert.equal(statusOf(e(), { id: 'codex', activity: 'waiting' }, issues(false)), 'waiting', 'a resolved issue no longer does');
+  assert.equal(statusOf(e(), { id: 'claude', activity: 'coding' }, issues(true)), 'idle', 'only on the agent the issue names');
   // Work chips: canonical PR ids only.
   const world = { tasks: { t: { prId: 'p1' } }, prs: { p1: { state: 'open' } } };
   assert.equal(workChipOf(world, { taskId: 't' }).prId, 'p1');

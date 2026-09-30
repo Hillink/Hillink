@@ -2,19 +2,20 @@
 // the small emblem's frame does (a rounded monitor chip in Real, a heraldic seal in Fantasy). Everything here reads the
 // canonical agent (activity, taskId, prId, lastTask) and the scene entity's clip/intent, and draws. Nothing here writes.
 //
-// NEEDS KYLE: World truth has no canonical "waiting on the owner" field today (TASK_BLOCKED carries free text only), so
-// statusOf never returns 'needs-owner'. The marker exists (drawEmblem 'needs-owner') for review and for Pass 5I, which
-// must add a canonical hook first (for example a task blocker kind 'owner' set by HQ). Text is never parsed for it.
-import { STATUS } from './tokens.mjs';
-import { OUTLINE } from './tokens.mjs';
+// NEEDS KYLE comes from one canonical field only: an open issue with owner === true on this agent (core/state.mjs
+// ISSUE_FOUND; HQ sets it from its own alert.ownerMustAct, adapters/hq.mjs). Free text (a blocker's detail, a title) is
+// never read for it. Owner approvals that name no agent (HQ's owner-required tasks) stay on the HUD, not on a character.
+import { STATUS, OUTLINE } from './tokens.mjs';
 
 const TAU = Math.PI * 2;
 
 // Canonical status of one agent entity. Same precedence as the Living HQ state ring (render/art5d/skin.mjs stateOf),
 // plus 'candidate' (a provisioned agent that HQ has not activated: READY is never shown as working).
-export function statusOf(e, a) {
+export const needsOwner = (world, a) => !!a && Object.values(world?.issues ?? {}).some(i => i && i.open === true && i.owner === true && i.agentId === a.id);
+export function statusOf(e, a, world = null) {
   if (!a) return 'idle';
   if (e?.staging?.presence === 'candidate') return 'candidate';
+  if (needsOwner(world, a)) return 'needs-owner';
   const st = e?.anim?.state, intent = e?.anim?.intent;
   if (st === 'frustrated' || intent === 'blocked' || intent === 'recovering' || a.activity === 'error') return 'blocked';
   if (a.activity === 'waiting') return a.lastTask?.outcome === 'blocked' ? 'blocked' : 'waiting';

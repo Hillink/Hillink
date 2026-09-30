@@ -5,6 +5,7 @@ import { DEFAULT_DEFINITIONS } from '../core/agents.mjs';
 import { dressFor } from '../render/art/dress.mjs';
 import { drawCharacter } from '../render/art/character.mjs';
 import { STATUS } from '../render/art/tokens.mjs';
+import { drawEmblem, drawStatusRing, drawWorkChip, drawCeremony } from '../render/art/status.mjs';
 
 const q = new URLSearchParams(location.search), theme = q.get('theme') === 'fantasy' ? 'fantasy' : 'real', mode = q.get('mode') ?? 'lineup', zoom = Number(q.get('zoom') ?? 1) || 1;
 const DYNAMIC = [
@@ -45,8 +46,25 @@ function frame() {
     const states = [['idle', 'idle'], ['walk', 'walk'], ['work', 'assemble'], ['carry', 'carry'], ['talk', 'talk'], ['think', 'watch'], ['inspect', 'inspect'], ['waiting', 'waiting'], ['blocked', 'blocked'], ['celebrate', 'celebrate']];
     who.forEach((a, r) => { const d = dressFor(a, theme); label(a.name, 50, 90 + r * (h + 50) + h * 0.6, 13); states.forEach(([n, clip], c) => { const x = 150 + c * (h * 0.85), y = 90 + r * (h + 50) + h; drawCharacter(ctx, { x, y, h, heading: clip === 'walk' || clip === 'carry' ? 0 : Math.PI / 4, state: clip, moving: clip === 'carry', look: d.look, parts: d.parts, time: time + c, t: (time % 2) + 0.4, stride: time * 40, props: theme === 'fantasy' ? { hammer: 'mallet', tablet: 'scroll' } : {} }); if (r === 0) label(n, x, 70, 11); }); });
   }
+  else if (mode === 'status') {
+    // One character per status, in both themes: same colour, same pose, the theme's own emblem frame.
+    const keys = ['working', 'travelling', 'waiting', 'blocked', 'completed', 'idle', 'offline', 'candidate', 'needs-owner'], h = 90 * zoom, who = ROSTER.find(a => a.id === (q.get('ids') ?? 'claude')) ?? ROSTER[0];
+    ['real', 'fantasy'].forEach((th, r) => {
+      const D = dressFor(who, th), y = 90 + h * 1.6 + r * (h * 1.6 + 110);
+      ctx.fillStyle = th === 'fantasy' ? 'rgba(90,150,64,0.55)' : 'rgba(232,228,220,0.9)'; ctx.fillRect(20, y - h - 60, W - 40, h + 110);
+      label(th === 'fantasy' ? 'Fantasy' : 'Real', 60, y - h / 2, 14);
+      keys.forEach((k, c) => {
+        const x = 170 + c * ((W - 220) / keys.length), S = STATUS[k], clip = { working: 'assemble', travelling: 'walk', waiting: 'waiting', blocked: 'blocked', completed: 'celebrate', idle: 'idle', offline: 'offline', candidate: 'waiting', 'needs-owner': 'waiting' }[k];
+        drawStatusRing(ctx, x, y, h, k, time);
+        drawCharacter(ctx, { x, y, h, heading: k === 'travelling' ? 0 : Math.PI / 2, state: clip, look: D.look, parts: D.parts, time: 0.4 + c, t: 0.35, stride: 12, moving: k === 'travelling', alpha: k === 'candidate' ? 0.75 : k === 'offline' ? 0.82 : 1 });
+        if (k === 'completed') drawCeremony(ctx, x, y, h, 0.45, th);
+        drawEmblem(ctx, x, y - h * 1.12, k, th, zoom * 1.1, 0);
+        if (k === 'working') drawWorkChip(ctx, x + 18 * zoom, y - h * 1.12, { prId: 'pr', state: 'open' }, th, zoom * 1.1);
+        label(S.label, x, y + 24, 11); if (r === 0) label(k, x, y - h - 38, 10, '#3a4050');
+      });
+    });
+  }
   if (q.get('animate')) { time += 1 / 60; requestAnimationFrame(frame); }
 }
 frame();
 window.lineupReady = true;
-void STATUS;
