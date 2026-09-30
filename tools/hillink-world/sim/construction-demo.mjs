@@ -53,7 +53,7 @@ export function createConstructionDemo({ siteWorld, store, now = () => Date.now(
     // Applies the next step's HQ facts to the simulated canonical world. Returns what each fact did.
     applyCanonical() {
       const step = DEMO_STEPS[index]; if (!step) return null;
-      return step.hq.map(f => ({ type: f.type, ...applyHqEvent(siteWorld, { v: 1, source: 'hq-simulated', id: `sim-hq-${index}-${++n}`, at: now(), ...f }) }));
+      return step.hq.map(f => ({ type: f.type, ...applyHqEvent(siteWorld, { v: 1, source: 'hq-simulated', id: `sim-hq-${index}-${++n}`, seq: n, at: now(), ...f }) }));
     },
     // Then moves the simulated agents to match.
     applyAgents() { const step = DEMO_STEPS[index]; step?.sim?.(e); index += 1; return step?.label ?? null; },

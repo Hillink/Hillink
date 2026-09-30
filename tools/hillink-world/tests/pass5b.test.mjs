@@ -295,7 +295,7 @@ test('live bridge: a review asking for changes (or rejecting) never becomes oper
     J.review('rev', 'obj-live', verdict); J.objective('obj-live', 'COMPLETE');
     const r = feed(w, J.events);
     assert.equal(p().stage, 'inspection'); assert.equal(p().rework, true, `${verdict} is rework`);
-    assert.equal(r.at(-1).applied, false, 'HQ completing the objective does not complete a rejected build'); assert.match(r.at(-1).reason, /review is not approved/);
+    assert.equal(r.at(-1).applied, false, 'HQ completing the objective does not complete a rejected build'); assert.match(r.at(-1).reason, /rework outstanding|review is not approved/);
     assert.equal(p().completed, false); assert.notEqual(cap().status, 'operational'); assert.notEqual(cap().status, 'built');
   }
 });

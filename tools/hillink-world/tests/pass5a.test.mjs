@@ -33,7 +33,9 @@ const UNKNOWN = [
   { id: 'training-hall', area: 60, traits: ['gathering'] },
   { id: 'robot-foundry', area: 140, traits: ['machines', 'making'] },
 ];
-const hq = (type, fields, id = `${type}-${Math.random().toString(16).slice(2)}`) => ({ v: 1, source: 'hq', id, type, at: 1, ...fields });
+// Facts carry HQ's journal sequence (provenance), as the live feed does: construction orders facts by it.
+let hqSeq = 0;
+const hq = (type, fields, id = `${type}-${Math.random().toString(16).slice(2)}`) => ({ v: 1, source: 'hq', id, type, at: 1, seq: ++hqSeq, ...fields });
 const deepFreeze = o => { if (o && typeof o === 'object' && !Object.isFrozen(o)) { Object.freeze(o); for (const v of Object.values(o)) deepFreeze(v); } return o; };
 const roomsOf = world => Object.values(world.spaces).filter(s => s.primitive === 'room');
 
