@@ -3,7 +3,8 @@
 // the local git clone and the `gh` CLI (adapters/git.mjs), journaled so accepted work survives restarts.
 // /api/commands (Pass 1) is the one write: a same-origin POST becomes an HQ task through HQ's own validation,
 // limited to COMMANDABLE agents and operations, and journaled in commands.jsonl; GET returns that history
-// joined with HQ's task outcome. The World server holds the HQ session server-side (the same local handshake
+// joined with HQ's task outcome. GET /api/site (Pass 5A) serves the persisted canonical procedural world, read-only.
+// The World server holds the HQ session server-side (the same local handshake
 // HQ's own page uses); the browser never receives the HQ token.
 import http from 'node:http';
 import fs from 'node:fs';
@@ -12,11 +13,13 @@ import { fileURLToPath } from 'node:url';
 import os from 'node:os';
 import { execFile } from 'node:child_process';
 import { createConstructionSource } from './adapters/git.mjs';
+import { openWorldFile } from './procgen/persist.mjs';
 
 const root = path.dirname(fileURLToPath(import.meta.url));
 const types = { '.html': 'text/html; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.jpg': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp' };
 const listed = (dir, exts) => { try { return fs.readdirSync(path.join(root, dir)).filter(f => exts.includes(path.extname(f))).map(f => `${dir}/${f}`); } catch { return []; } };
-const allowed = new Set(['index.html', 'style.css', 'main.mjs', ...['core', 'engine', 'render', 'ui', 'sim', 'adapters', 'themes', 'world'].flatMap(dir => listed(dir, ['.mjs']))]);
+const allowed = new Set(['index.html', 'style.css', 'main.mjs', 'site.html', 'site.mjs', 'site.css', ...['core', 'engine', 'render', 'ui', 'sim', 'adapters', 'themes', 'world', 'procgen'].flatMap(dir => listed(dir, ['.mjs']))]);
+for (const f of ['procgen/persist.mjs', 'procgen/evidence.mjs']) allowed.delete(f); // server side only (file system)
 const headers = { 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer', 'Content-Security-Policy': "default-src 'self'; style-src 'self'; script-src 'self'; img-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'" };
 
 // Only what the World draws. Task descriptions, evidence bodies and usage stay in HQ.
@@ -153,7 +156,7 @@ export function constructionFeed({ source, journal, intervalMs = 60000 }) {
   return { get: () => ({ events: journal.all(), status: { ...source.status } }), tick, stop: () => clearInterval(timer) };
 }
 
-export function createServer({ hq = process.env.WORLD_HQ === '0' ? null : hqClient(process.env.HQ_URL || 'http://127.0.0.1:4312'), construction = null, commands = null } = {}) {
+export function createServer({ hq = process.env.WORLD_HQ === '0' ? null : hqClient(process.env.HQ_URL || 'http://127.0.0.1:4312'), construction = null, commands = null, site = null } = {}) {
   const submit = commands && hq?.createTask ? commandHandler({ hq, journal: commands }) : null;
   return http.createServer(async (req, res) => {
     const url = new URL(req.url, 'http://localhost');
@@ -194,6 +197,12 @@ export function createServer({ hq = process.env.WORLD_HQ === '0' ? null : hqClie
       if (!construction) return send(200, JSON.stringify({ events: [], status: { disabled: true } }));
       return send(200, JSON.stringify(construction.get()));
     }
+    if (url.pathname === '/api/site') {
+      const fetchSite = req.headers['sec-fetch-site'];
+      if ((fetchSite && fetchSite !== 'same-origin') || (req.headers.origin && req.headers.origin !== `http://${host}`)) return send(403, '{"error":"Same-origin only"}');
+      if (!site) return send(404, '{"error":"Procedural world disabled"}');
+      return send(200, JSON.stringify({ world: site.world }));
+    }
     const file = url.pathname === '/' ? 'index.html' : decodeURIComponent(url.pathname.slice(1));
     if (!allowed.has(file)) return send(404, 'Not found', 'text/plain');
     send(200, fs.readFileSync(path.join(root, file)), types[path.extname(file)]);
@@ -210,5 +219,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
     intervalMs: Number(process.env.WORLD_GIT_INTERVAL_MS || 60000),
   });
   const commands = process.env.WORLD_HQ === '0' ? null : createJournal(path.join(process.env.WORLD_STATE_DIR || path.join(os.homedir(), '.hillink-world'), 'commands.jsonl'));
-  createServer({ construction, commands }).listen(port, '127.0.0.1', () => console.log(`Hillink World: http://127.0.0.1:${port} (live from HQ at ${process.env.HQ_URL || 'http://127.0.0.1:4312'} when it is running, otherwise simulation)`));
+  // Pass 5A: the canonical procedural world, founded once from WORLD_SEED and then only ever loaded.
+  const site = openWorldFile(path.join(process.env.WORLD_STATE_DIR || path.join(os.homedir(), '.hillink-world'), 'site.json'), { seed: process.env.WORLD_SEED || 'hillink' });
+  createServer({ construction, commands, site }).listen(port, '127.0.0.1', () => console.log(`Hillink World: http://127.0.0.1:${port} (live from HQ at ${process.env.HQ_URL || 'http://127.0.0.1:4312'} when it is running, otherwise simulation)`));
 }

@@ -320,6 +320,10 @@ The runtime lives in HQ (branch `claude/hq-orchestrator`; see "Claude implementa
 
 The World needed no new state: ChatGPT is WAITING on the implementation task through `requestedBy`. Claude is WORKING (coding), then testing while HQ runs the acceptance tests. A BLOCKED outcome (failed tests, a scope violation) shows as Claude NEEDS_ATTENTION with HQ's reason. `tests/pass26.test.mjs` covers this. The live evidence is in `docs/world/evidence/pass26-implementation/`.
 
+## Pass 5A: procedural World architecture (built)
+
+The World is now a generator. `tools/hillink-world/procgen/` founds a deterministic world from a seed (terrain, a district of parcels, an access road, one small building holding HQ's five capabilities, navigation and growth anchors), keeps one canonical model that Real and Fantasy only represent, applies HQ facts through a source-checked contract, and grows through a spatial planner (existing room, subdivide, wing, floor, basement, new building, new district, outdoor plot). Full design, proofs and what is deferred to 5B: [`PASS5A.md`](PASS5A.md).
+
 ## Phases (from the brief) and where this PR stops
 
 | Phase | State |
