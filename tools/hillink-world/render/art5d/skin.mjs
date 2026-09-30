@@ -95,6 +95,7 @@ export function createArtSkin(layout, skinId = 'real') {
   for (const s of spaces.filter(s => finished(s) && furnishing[s.id])) {
     const F = furnishing[s.id], f = s.level, r = rp(s), kind = F.kind, locId = Object.values(layout.locations).find(l => l.spaceId === s.id)?.id ?? s.id;
     flat(f, d => floorOf(d, f, r, null, kind));
+    flat(f, d => roomIdentity(d, f, r, kind, s));
     for (const it0 of F.items) {
       const it = { ...it0, floor: f, x: it0.x * U, z: it0.z * U, w: it0.w * U, d: it0.d * U, h: it0.h * U, room: locId };
       if (it.type === 'rug' || it.type === 'mat') { flat(f, d => PROPS[it.type](d, it)); continue; }
@@ -116,6 +117,12 @@ export function createArtSkin(layout, skinId = 'real') {
     // Pass 5D-A: decor hangs only on a real full-height wall (a room whose rear edge is the building's back wall);
     // a room whose rear is a cut-away low wall has nothing to hang it on.
     const tallBack = wallsOf(f).some(w => w.type === 'back' && Math.abs(w.at - r.z1) < 1 && w.s <= (r.x0 + r.x1) / 2 && w.e >= (r.x0 + r.x1) / 2);
+    if (!tallBack) for (const w0 of F.decor.filter(dd => ['taskBoard', 'statusScreen', 'whiteboard'].includes(dd.type))) {
+      const w = { ...w0, floor: f, x0: w0.x0 * U, x1: w0.x1 * U }, zb = r.z1 - 5;
+      const fb = { x0: w.x0, x1: w.x1, z0: zb - 2, z1: zb + 2 };
+      add(f, { ...fb, sb: boxBounds(P, { ...fb, h1: w.h1 + 6 }, f), draw: d => { for (const x of [w.x0 + 3, w.x1 - 5]) litBox(d, f, { x0: x, x1: x + 2, z0: zb - 1, z1: zb + 1, h1: w.h0 + 2 }, MAT.steel[0], { edge: false }); const dd = Object.create(d); dd.P = { ...P, g: { ...g, depth: zb + 0.2 } }; (DECOR5[w.type] ?? DECOR[w.type])?.(dd, w); } });
+      castShadow(f, fb, w.h1);
+    }
     if (tallBack) for (const w0 of F.decor) {
       const w = { ...w0, floor: f, x0: w0.x0 * U, x1: w0.x1 * U };
       flat(f, d => { const dd = Object.create(d); dd.P = { ...P, g: { ...g, depth: r.z1 } }; (DECOR5[w.type] ?? DECOR[w.type])?.(dd, w); });
@@ -338,6 +345,29 @@ export function createArtSkin(layout, skinId = 'real') {
     ctx.fillStyle = g; ctx.fillRect(r.x0, r.z0, r.x1 - r.x0, r.z1 - r.z0);
     ctx.restore();
   }
+  // Living HQ: each room's purpose reads from its floor and light, physically (no panels): a rug zone in the lounge and
+  // meeting room, a runner in corridors, the Hillink inlay in the lobby, a cool glow in the server room, warm pools in
+  // the lounge, bright task light in the lab. Wall lettering names rooms that have a tall wall.
+  const ROOM_NAME = { lounge: 'LOUNGE', comms: 'MEETING', development: 'ENGINEERING', testing: 'TEST LAB', command: 'OPERATIONS', servers: 'SERVERS', lobby: 'HILLINK' };
+  function roomIdentity(d, f, r, kind, space) {
+    const { ctx } = d;
+    ctx.save(); ctx.transform(...planMatrix(P, f));
+    const inset = (k, x = 0.25) => ({ x0: r.x0 + (r.x1 - r.x0) * x * k, x1: r.x1 - (r.x1 - r.x0) * x * k, z0: r.z0 + (r.z1 - r.z0) * x * k, z1: r.z1 - (r.z1 - r.z0) * x * k });
+    const rug = (b, c1, c2) => { ctx.fillStyle = c1; ctx.beginPath(); ctx.roundRect(b.x0, b.z0, b.x1 - b.x0, b.z1 - b.z0, 6); ctx.fill(); ctx.strokeStyle = c2; ctx.lineWidth = 3; ctx.beginPath(); ctx.roundRect(b.x0 + 5, b.z0 + 5, b.x1 - b.x0 - 10, b.z1 - b.z0 - 10, 4); ctx.stroke(); };
+    if (kind === 'lounge') rug(inset(1, 0.14), '#c8a483', '#e9dcc6');
+    else if (kind === 'comms') rug(inset(1, 0.18), '#5d7896', '#9cb3cc');
+    else if (kind === 'passage') { const along = r.x1 - r.x0 < r.z1 - r.z0; ctx.fillStyle = 'rgba(70,90,120,0.35)'; if (along) ctx.fillRect((r.x0 + r.x1) / 2 - 12, r.z0 + 10, 24, r.z1 - r.z0 - 20); else ctx.fillRect(r.x0 + 10, (r.z0 + r.z1) / 2 - 12, r.x1 - r.x0 - 20, 24); }
+    else if (kind === 'lobby') { const cx = (r.x0 + r.x1) / 2 - (r.x1 - r.x0) * 0.18, cz = (r.z0 + r.z1) / 2; ctx.fillStyle = 'rgba(47,125,246,0.16)'; ctx.beginPath(); ctx.ellipse(cx, cz, 70, 45, 0, 0, TAU); ctx.fill(); ctx.strokeStyle = 'rgba(47,125,246,0.45)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.ellipse(cx, cz, 60, 38, 0, 0, TAU); ctx.stroke(); }
+    ctx.restore();
+    // Accent light by purpose.
+    const [cx, cy] = P.at((r.x0 + r.x1) / 2, (r.z0 + r.z1) / 2, f, 0), tone = { servers: 'rgba(80,150,255,0.16)', lounge: 'rgba(255,214,160,0.14)', testing: 'rgba(235,245,255,0.16)', comms: 'rgba(200,220,255,0.10)' }[kind];
+    if (tone) { const gr = ctx.createRadialGradient(cx, cy, 0, cx, cy, Math.max(r.x1 - r.x0, r.z1 - r.z0) * 0.8); gr.addColorStop(0, tone); gr.addColorStop(1, 'rgba(0,0,0,0)'); ctx.fillStyle = gr; ctx.beginPath(); ctx.ellipse(cx, cy, (r.x1 - r.x0) * 0.8, (r.z1 - r.z0) * 0.45, 0, 0, TAU); ctx.fill(); }
+    // Wall lettering on the room's tall back wall.
+    const name = ROOM_NAME[kind];
+    if (name && wallsOf(f).some(w => w.type === 'back' && Math.abs(w.at - r.z1) < 1 && w.s <= (r.x0 + r.x1) / 2 && w.e >= (r.x0 + r.x1) / 2)) {
+      const [tx, ty] = P.at(r.x0 + 14, r.z1 - 0.4, f, HT - 16); ctx.save(); ctx.font = '800 9px ui-sans-serif, system-ui, sans-serif'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.fillStyle = kind === 'servers' ? 'rgba(160,200,255,0.9)' : 'rgba(47,125,246,0.85)'; ctx.fillText(name, tx, ty); ctx.restore();
+    }
+  }
   // Soft light pools from the ceiling fittings (drawn after the floors, before furniture).
   function lightPools(d, f) {
     const { ctx } = d;
@@ -430,6 +460,71 @@ export function createArtSkin(layout, skinId = 'real') {
     }
   }
   for (const site of sites) add(site.f, { x0: site.u.x0 - 6, x1: site.u.x1 + 6, z0: site.u.z0, z1: site.u.z1, sb: boxBounds(P, { ...site.u, x0: site.u.x0 - 30, x1: site.u.x1 + 30, h1: HT + 60 }, site.f), draw: d => drawSite(d, site) });
+  // Living HQ: refits. A capability placed into a room that already exists is built inside that room, step by step
+  // with its project's canonical stage (the room keeps working around it until the capability is complete). The work
+  // zone is the capability's area, centred towards the back of the room.
+  for (const p of Object.values(projects)) {
+    if (p.completed || spaces.some(s => s.project === p.id && s.primitive !== 'staircase' && s.primitive !== 'elevator')) continue;
+    const cap = world.capabilities[p.id], room = cap && world.spaces[cap.placement?.spaceId];
+    if (!room || room.status !== 'built' || stageIndex(p.stage) < stageIndex('site-preparation')) continue;
+    const r = rp(room), side = Math.sqrt(Math.max(4, cap.area ?? 9)) * U, w = Math.min(side * 1.25, (r.x1 - r.x0) * 0.6), dz = Math.min(side * 0.8, (r.z1 - r.z0) * 0.5);
+    const cx = (r.x0 + r.x1) / 2, u = { x0: cx - w / 2, x1: cx + w / 2, z0: r.z1 - dz - 30, z1: r.z1 - 30 };
+    const refit = { p, f: room.level, u, label: labelOf.get(`room:${room.id}`) ?? room.id, name: cap.name ?? p.id };
+    add(refit.f, { ...u, sb: boxBounds(P, { ...u, x0: u.x0 - 20, x1: u.x1 + 20, h1: HT }, refit.f), draw: d => drawRefit(d, refit) });
+  }
+  function drawRefit(d, { p, f, u, label, name }) {
+    const { ctx } = d, at = k => stageIndex(p.stage) >= stageIndex(k), pp = (x, z, h = 0) => P.at(x, z, f, h), done = at('inspection'), stopped = p.blocked || p.waiting;
+    const H1 = LOW * 1.6;
+    // Site preparation: drop cloths over the floor and tape round the work zone.
+    if (!at('furnishing')) poly(ctx, [pp(u.x0 - 8, u.z0 - 8), pp(u.x1 + 8, u.z0 - 8), pp(u.x1 + 8, u.z1), pp(u.x0 - 8, u.z1)], 'rgba(226,214,188,0.78)');
+    if (!done) { ctx.save(); ctx.setLineDash([5, 4]); ctx.strokeStyle = stopped ? '#e5484d' : '#f2c230'; ctx.lineWidth = 1.4; ctx.beginPath(); [[u.x0 - 10, u.z0 - 10], [u.x1 + 10, u.z0 - 10], [u.x1 + 10, u.z1], [u.x0 - 10, u.z1]].forEach(([x, z], i) => ctx[i ? 'lineTo' : 'moveTo'](...pp(x, z, 0.5))); ctx.stroke(); ctx.restore(); }
+    // Foundation: tool crates and a ladder.
+    if (at('foundation') && !done) {
+      prism(d, f, { x0: u.x0 - 6, x1: u.x0 + 8, z0: u.z0 - 4, z1: u.z0 + 6, h1: 10 }, '#c8a26a');
+      prism(d, f, { x0: u.x0 + 10, x1: u.x0 + 20, z0: u.z0 - 3, z1: u.z0 + 5, h1: 7 }, '#e07a2a');
+      const a0 = pp(u.x1 - 10, u.z0 + 4, 0), b0 = pp(u.x1 - 16, u.z0 + 10, 44);
+      ctx.strokeStyle = '#b0873a'; ctx.lineWidth = 1.4; ctx.beginPath(); ctx.moveTo(...a0); ctx.lineTo(...b0); ctx.moveTo(a0[0] + 5, a0[1]); ctx.lineTo(b0[0] + 5, b0[1]); ctx.stroke();
+      for (let k = 1; k < 5; k++) { const t = k / 5; ctx.beginPath(); ctx.moveTo(a0[0] + (b0[0] - a0[0]) * t, a0[1] + (b0[1] - a0[1]) * t); ctx.lineTo(a0[0] + 5 + (b0[0] - a0[0]) * t, a0[1] + (b0[1] - a0[1]) * t); ctx.stroke(); }
+    }
+    // Structure: a stud frame for the new partition; exterior: its panels (half height until systems, glass once furnished).
+    if (at('structure')) {
+      const H = at('exterior') ? (at('systems') ? H1 : LOW) : 0;
+      for (let x = u.x0; x <= u.x1 + 0.1; x += (u.x1 - u.x0) / 4) prism(d, f, { x0: x - 1, x1: x + 1, z0: u.z0 - 1, z1: u.z0 + 1, h1: H1 }, '#b5b9be', { outline: false });
+      prism(d, f, { x0: u.x0 - 1, x1: u.x0 + 1, z0: u.z0, z1: u.z1, h1: H1 }, '#b5b9be', { outline: false });
+      prism(d, f, { x0: u.x0, x1: u.x1, z0: u.z0 - 1, z1: u.z0 + 1, h0: H1 - 2, h1: H1 }, '#9aa0a6', { outline: false });
+      if (H) {
+        const glass = at('furnishing'), c = glass ? { front: 'rgba(170,205,230,0.55)', side: 'rgba(150,185,210,0.55)', top: '#d8dde2' } : '#dcd6cc';
+        prism(d, f, { x0: u.x0, x1: u.x1, z0: u.z0 - 1.5, z1: u.z0 + 1.5, h1: H }, c);
+        prism(d, f, { x0: u.x0 - 1.5, x1: u.x0 + 1.5, z0: u.z0, z1: u.z1, h1: H }, c);
+      }
+      if (at('exterior') && !at('furnishing')) { ctx.strokeStyle = '#4f7cac'; ctx.lineWidth = 2.2; ctx.beginPath(); ctx.moveTo(...pp(u.x0 + 4, u.z0 - 2, LOW * 0.55)); ctx.lineTo(...pp(u.x0 + 4 + (u.x1 - u.x0 - 8) * (at('systems') ? 1 : 0.55), u.z0 - 2, LOW * 0.55)); ctx.stroke(); } // the paint stripe going on
+    }
+    // Systems: cable reels and a conduit run.
+    if (at('systems') && !done) {
+      for (const k of [0, 1]) { const [rx, ry] = pp(u.x1 + 6 + k * 10, u.z0 + 6 + k * 6, 6); ctx.fillStyle = '#2b3440'; ctx.beginPath(); ctx.ellipse(rx, ry, 6, 6, 0, 0, Math.PI * 2); ctx.fill(); ctx.fillStyle = k ? '#e0a030' : '#4f7cac'; ctx.beginPath(); ctx.ellipse(rx, ry, 3.6, 3.6, 0, 0, Math.PI * 2); ctx.fill(); }
+      ctx.strokeStyle = '#6b7280'; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.moveTo(...pp(u.x0, u.z0, H1)); ctx.lineTo(...pp(u.x1, u.z0, H1)); ctx.stroke();
+    }
+    // Furnishing: the new furniture, crated until inspection, then in place.
+    if (at('furnishing')) {
+      const mx = (u.x0 + u.x1) / 2, mz = (u.z0 + u.z1) / 2;
+      if (!done) for (const k of [-1, 1]) prism(d, f, { x0: mx + k * 14 - 8, x1: mx + k * 14 + 8, z0: mz - 6, z1: mz + 6, h1: 12 }, '#c8a26a');
+      else { prism(d, f, { x0: mx - 2, x1: mx + 2, z0: mz - 2, z1: mz + 2, h1: 13 }, '#6b7280'); prism(d, f, { x0: mx - 14, x1: mx + 14, z0: mz - 8, z1: mz + 8, h0: 13, h1: 15 }, '#d9c7a4'); }
+    }
+    // Inspection: the clipboard on the frame. Stopped work: a barrier across the zone.
+    if (done) { const [sx, sy] = pp(u.x1 - 8, u.z0 - 3, 30); ctx.fillStyle = '#f5f0e0'; ctx.fillRect(sx - 5, sy - 7, 10, 14); ctx.strokeStyle = INK; ctx.lineWidth = 0.7; ctx.strokeRect(sx - 5, sy - 7, 10, 14); }
+    if (stopped) {
+      const c = p.blocked ? '#e5484d' : '#f4a23b';
+      for (const x of [u.x0 - 4, u.x1 + 4]) prism(d, f, { x0: x - 1.5, x1: x + 1.5, z0: u.z0 - 12, z1: u.z0 - 9, h1: 22 }, '#39414b', { outline: false });
+      ctx.save(); ctx.strokeStyle = c; ctx.lineWidth = 3; ctx.setLineDash([6, 5]); ctx.beginPath(); ctx.moveTo(...pp(u.x0 - 4, u.z0 - 10, 20)); ctx.lineTo(...pp(u.x1 + 4, u.z0 - 10, 20)); ctx.stroke(); ctx.restore();
+    }
+    const [lx, ly] = pp((u.x0 + u.x1) / 2, u.z0, H1 + 26);
+    d.late.push(() => {
+      const lines = [`${label}: refit for the ${name}`, STAGE_LABEL[p.stage]];
+      if (p.blocked) lines.push(`Blocked: ${p.blocked}`); else if (p.waiting) lines.push(`Waiting: ${p.waiting}`); else if (p.rework) lines.push('Rework requested by review');
+      if (world.simulated) lines.push('SIMULATED HQ EVENTS');
+      pill(ctx, lx, ly - 14 * lines.length, lines.map(l => l.slice(0, 60)), { dot: p.blocked ? '#ef4b4b' : p.waiting ? '#f4a23b' : p.rework ? '#ff9f43' : done ? '#5ec8ff' : '#f2c230', px: 8.5 });
+    });
+  }
   function drawSite(d, { p, f, u, rs, label }) {
     const { ctx } = d, st = stageIndex(p.stage), at = k => st >= stageIndex(k), pp = (x, z, h = 0) => P.at(x, z, f, h), T = d.T;
     const tape = () => { ctx.save(); ctx.setLineDash([6, 4]); ctx.strokeStyle = '#f2c230'; ctx.lineWidth = 1.6; ctx.beginPath(); [[u.x0 - 6, u.z0 - 6], [u.x1 + 6, u.z0 - 6], [u.x1 + 6, u.z1 + 6], [u.x0 - 6, u.z1 + 6], [u.x0 - 6, u.z0 - 6]].forEach(([x, z], i) => (i ? ctx.lineTo(...pp(x, z, 8)) : ctx.moveTo(...pp(x, z, 8)))); ctx.stroke(); ctx.restore(); for (const [x, z] of [[u.x0 - 6, u.z0 - 6], [u.x1 + 6, u.z0 - 6], [u.x1 + 6, u.z1 + 6], [u.x0 - 6, u.z1 + 6]]) prism(d, f, { x0: x - 1, x1: x + 1, z0: z - 1, z1: z + 1, h1: 10 }, '#c98a2b', { outline: false }); };
@@ -619,6 +714,7 @@ export function createArtSkin(layout, skinId = 'real') {
     const dressed = dress(rig, e.anim);
     const fig = { x, y, h: e.h, dir: e.dir ?? 'front', posture: e.posture, state: dressed.clip, prev: d.reduced ? null : dressed.prev, blend: blendOf(e.anim, d.now), props: dressed.props, gait: e.gaitAmount ?? 1, t, time: d.reduced ? 0 : d.T + hash(e.id.length), stride: e.stride ?? 0, look, use: e.spotInfo?.use, moving: e.moving, alpha: a.activity === 'offline' ? 0.82 : 1 };
     if (!e.ride) softShadow(ctx, x, y + 0.5, e.h * 0.2, e.h * 0.07, { alpha: 0.34 }), softShadow(ctx, x + e.h * 0.16, y - e.h * 0.05, e.h * 0.24, e.h * 0.07, { alpha: 0.14 });
+    stateRing(d, e, a, x, y);
     const head = drawFigure(ctx, fig);
     if (selected || hovered || PRODUCTIVE_STATES.has(st) || SITE_STATES.has(st)) d.late.unshift(() => drawFigure(ctx, { ...fig, alpha: selected ? 0.45 : 0.3 }));
     d.late.push(() => badge(d, e, a, x, head.top, hovered, selected));
@@ -629,18 +725,37 @@ export function createArtSkin(layout, skinId = 'real') {
     softShadow(d.ctx, e.x, e.y + 0.5, e.h * 0.2, e.h * 0.07, { alpha: 0.3 * e.alpha });
     drawFigure(d.ctx, { x: e.x, y: e.y, h: e.h, dir: e.dir ?? 'front', posture: e.posture, state: dressed.clip, prev: d.reduced ? null : dressed.prev, blend: blendOf(e.anim, d.now), props: dressed.props, gait: e.gaitAmount ?? 1, t, time: d.reduced ? 0 : d.T + e.index * 1.7, stride: e.stride ?? 0, look: lookOfNpc(e.index, skinId), use: e.use, moving: e.moving, alpha: 0.92 * e.alpha });
   }
+  // Living HQ: how an agent's real state reads at any zoom, without panels. A soft ring on the floor at its feet in the
+  // state's colour (working, travelling with a task, waiting, blocked, done), a small status pip above the head when
+  // zoomed out, and a compact name chip only when there is room for it (status text on hover or selection).
+  const STATE_COLOR = { working: '#35c486', travelling: '#4aa3ff', waiting: '#f4a23b', blocked: '#e5484d', done: '#5cc98a', idle: null, offline: '#6b7380' };
+  function stateOf(e, a) {
+    const st = e.anim?.state, intent = e.anim?.intent;
+    if (st === 'frustrated' || intent === 'blocked' || intent === 'recovering' || a.activity === 'error') return 'blocked';
+    if (a.activity === 'waiting' || intent === 'attention' || intent === 'waiting') return 'waiting';
+    if (a.activity === 'completed' || st === 'file' || st === 'celebrate') return 'done';
+    if (e.moving && (e.carrying || e.journey || e.agent?.taskId)) return 'travelling';
+    if (['working', 'building', 'investigating', 'testing', 'reviewing', 'meeting'].includes(intent)) return 'working';
+    if (a.activity === 'offline') return 'offline';
+    return 'idle';
+  }
+  function stateRing(d, e, a, x, y) {
+    const c = STATE_COLOR[stateOf(e, a)]; if (!c || e.ride) return;
+    const { ctx } = d, pulse = stateOf(e, a) === 'blocked' && !d.reduced ? 0.55 + 0.35 * Math.sin(d.T * 5) : 0.7;
+    ctx.save(); ctx.globalAlpha = pulse; ctx.strokeStyle = c; ctx.lineWidth = 1.6; ctx.beginPath(); ctx.ellipse(x, y + 0.5, e.h * 0.3, e.h * 0.1, 0, 0, TAU); ctx.stroke();
+    ctx.globalAlpha = pulse * 0.25; ctx.fillStyle = c; ctx.fill(); ctx.restore();
+  }
   function badge(d, e, a, x, top, hovered, selected) {
-    const { ctx, env } = d, zoom = env.zoom, k = Math.min(1.8, Math.max(0.7, 1 / zoom)), cy = top - 4 * k, ring = dotColor(e, a);
-    if (a.activity === 'error') { ctx.beginPath(); ctx.arc(x, cy - 8 * k, 5 * k, 0, TAU); ctx.fillStyle = '#e5484d'; ctx.fill(); text(ctx, '!', x, cy - 7.5 * k, 7.5 * k, '#fff', { weight: 800 }); }
-    else if (a.activity === 'waiting') { ctx.beginPath(); ctx.arc(x, cy - 8 * k, 5 * k, 0, TAU); ctx.fillStyle = '#f4a23b'; ctx.fill(); }
-    if (zoom < 0.7 && !(hovered || selected)) return;
+    const { ctx, env } = d, zoom = env.zoom, k = Math.min(2.2, Math.max(0.6, 1 / zoom)), cy = top - 3 * k, st = stateOf(e, a), c = STATE_COLOR[st];
+    // Zoomed out: a status pip only (the ring and the body carry the rest).
+    if (zoom < 0.95 && !(hovered || selected)) { if (c) { ctx.beginPath(); ctx.arc(x, cy - 4 * k, 3.2 * k, 0, TAU); ctx.fillStyle = c; ctx.fill(); ctx.lineWidth = 1.1 * k; ctx.strokeStyle = 'rgba(255,255,255,0.9)'; ctx.stroke(); } return; }
     const lines = hovered || selected ? [a.name, statusLine(e, env.world, layout)] : [a.name];
-    const s = LABEL_PX / 8 / zoom;
+    const sc = (hovered || selected ? LABEL_PX : 8.5) / 8 / zoom;
     ctx.font = font(8, 700); const w0 = ctx.measureText(lines[0]).width; ctx.font = font(6.5, 500);
-    const w = (Math.max(w0, lines[1] ? ctx.measureText(lines[1]).width : 0) + 19) * s, h = (lines.length * 11 + 5) * s;
-    const base = cy - 16 * k - lines.length * 11 * s, ly = placeLabel(env.claimLabel, x, base, w, h, hovered || selected, 2 * s);
+    const w = (Math.max(w0, lines[1] ? ctx.measureText(lines[1]).width : 0) + 19) * sc, h = (lines.length * 11 + 5) * sc;
+    const base = cy - 10 * k - lines.length * 11 * sc, ly = placeLabel(env.claimLabel, x, base, w, h, hovered || selected, 2 * sc);
     if (ly !== base) { ctx.strokeStyle = '#ffffff66'; ctx.lineWidth = 0.8 / zoom; ctx.beginPath(); ctx.moveTo(x, ly + h); ctx.lineTo(x, base + h * 0.4); ctx.stroke(); }
-    ctx.save(); ctx.translate(x, ly); ctx.scale(s, s); pill(ctx, 0, 0, lines, { dot: ring, px: 8 }); ctx.restore();
+    ctx.save(); ctx.translate(x, ly); ctx.scale(sc, sc); ctx.globalAlpha = hovered || selected ? 1 : 0.88; pill(ctx, 0, 0, lines, { dot: c ?? dotColor(e, a), px: 8, bg: 'rgba(15,22,34,0.78)' }); ctx.restore();
   }
 
   // ---- Per frame. ----
@@ -654,6 +769,10 @@ export function createArtSkin(layout, skinId = 'real') {
       ctx, P, M, T, now, env, lw: 1, art, reduced: env.reducedMotion, late: env.late, clock: Date.now(),
       room: id => env.activity?.rooms?.[id] ?? 0, stationActive: key => !!env.activity?.stations?.[key],
       pointBusy: key => agents.some(a => a.spot === key && !a.moving), systemState: sysState, systemColor: () => '#7c8594',
+      // The state of whoever sits at a station right now: 'working', 'blocked' (the frustrated beat before leaving) or null.
+      stationState: key => { const a = agents.find(x => !x.moving && x.spot && x.spot.endsWith(':' + key)); if (!a) return null; if (a.anim?.state === 'frustrated') return 'blocked'; return PRODUCTIVE_STATES.has(a.anim?.state) ? 'working' : 'present'; },
+      busyUse: use => agents.filter(a => !a.moving && a.spotInfo?.use === use),
+      rushing: Object.values(world0.testRuns ?? {}).some(r => r.state === 'running') || Object.values(world0.deploys ?? {}).some(r => r.state === 'running') || Object.values(world0.builds ?? {}).some(r => r.state === 'running'),
       lastTests: Object.values(world0.testRuns ?? {}).sort((a, b) => (b.startedAt ?? 0) - (a.startedAt ?? 0))[0] ?? null,
       openPrs: Object.values(world0.prs ?? {}).filter(p => p.state !== 'merged'), queued: tasks.filter(t => t.status === 'queued' || t.status === 'blocked'), archived: tasks.filter(t => t.status === 'done').length,
       construction: !!env.activity?.construction, meeting: agents.some(a => a.agent?.meetingId && !a.moving),

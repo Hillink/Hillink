@@ -38,6 +38,11 @@ export function intentOf(e, body, { world = null, projects = {} } = {}) {
     case 'talk': return { intent: e.errand || e.receiving ? 'working' : 'meeting', variant: 'handoff' };
     case 'celebrate': return { intent: 'completed', variant: null };
     case 'offline': return { intent: 'idle', variant: 'offline' };
+    case 'file': return { intent: 'completed', variant: 'filing' };
+    case 'frustrated': return { intent: 'blocked', variant: 'at-desk' };
+    case 'phone': case 'stretch': case 'chat': return { intent: e.spotInfo && ['relax', 'coffee', 'snack', 'table', 'lean', 'look'].includes(e.spotInfo.use) ? 'onBreak' : 'idle', variant: body };
+    case 'watch': return { intent: 'waiting', variant: 'watch' };
+    case 'pickup': if (e.journey) return { intent: 'working', variant: 'taking-task' }; return { intent: 'building', variant: 'materials' };
     case 'blocked': return { intent: 'recovering', variant: 'failed' };
     case 'waiting': {
       const state = a.truth?.state, task = a.taskId ? world?.tasks?.[a.taskId] : null;

@@ -7,12 +7,13 @@ import { WorldView } from './world-view.mjs';
 import { LAYERS } from './scene.mjs';
 import { startPath } from './motion.mjs';
 import { stationPoint } from '../core/behavior.mjs';
-import { hash } from './ambience.mjs';
+import { hash, occasional } from './ambience.mjs';
 import { turnToward } from './motion.mjs';
 import { intentOf, setClip, FACING_ANGLE, BUILD_CLIP, variantOfProject } from './animation.mjs';
 import { publicSpots, npcPlan } from './npcs.mjs';
+import { transitionOf, planJourney, JOURNEY_WORDS } from './journey.mjs';
 
-export const STATES = ['idle', 'react', 'stand', 'sit', 'walk', 'carry', 'work', 'type', 'inspect', 'read', 'talk', 'meeting', 'blocked', 'waiting', 'celebrate', 'offline', 'assemble', 'survey', 'measure', 'dig', 'paint', 'install', 'lift', 'pickup'];
+export const STATES = ['idle', 'react', 'stand', 'sit', 'walk', 'carry', 'work', 'type', 'inspect', 'read', 'talk', 'meeting', 'blocked', 'waiting', 'celebrate', 'offline', 'assemble', 'survey', 'measure', 'dig', 'paint', 'install', 'lift', 'pickup', 'file', 'frustrated', 'phone', 'stretch', 'watch', 'chat'];
 export const PRODUCTIVE_STATES = new Set(['work', 'type', 'inspect', 'read']);
 // Construction clips (Pass 5C): played only at a real site station for a verified activity (resolveState).
 export const SITE_STATES = new Set(['assemble', 'survey', 'measure', 'dig', 'paint', 'install', 'lift', 'pickup']);
@@ -34,6 +35,7 @@ export function resolveState(e, now, layout = null) {
   if (e.errand) return e.errand.phase === 'give' ? 'talk' : 'carry';
   if (e.visit?.phase === 'work' && !e.moving) return e.visit.kind === 'commit' ? 'assemble' : 'survey';
   if (e.loop?.phase === 'work' && !e.moving) return e.loop.clip;
+  if (e.journey && e.journey.phase === 'hold' && !e.moving) return e.journey.legs[e.journey.i]?.clip ?? 'idle';
   if (e.receiving) return 'talk';
   if (e.sitUntil > now) return 'sit';
   const a = e.agent; if (!a) return 'idle';
@@ -54,12 +56,23 @@ export function resolveState(e, now, layout = null) {
     case 'reviewing': case 'testing': return atStation ? 'inspect' : 'idle';
     case 'researching': return atStation ? 'read' : 'idle';
     case 'communicating': return a.meetingId ? (atStation ? 'meeting' : 'idle') : 'talk';
-    case 'waiting': return 'waiting';
+    case 'waiting': return occasional(now / 1000, { every: 13, duration: 2.2, chance: 0.8, seed: seedOf(e) }) >= 0 ? 'watch' : 'waiting';
     case 'error': return 'blocked';
     case 'completed': return now - (e.clipStart ?? 0) < CELEBRATE_MS ? 'celebrate' : 'idle';
     case 'offline': return 'offline';
-    default: return 'idle';
+    default: return idleVariant(e, now);
   }
+}
+// Idle life (cosmetic, only for a truly idle agent standing or sitting at its spot): chatting with another idle agent
+// nearby, checking a phone when seated, now and then a stretch. Deterministic per agent and time window.
+const seedOf = e => { let h = 0; for (const c of String(e.id)) h = (h * 31 + c.charCodeAt(0)) | 0; return (h >>> 0) % 997; };
+function idleVariant(e, now) {
+  if (e.agent?.activity !== 'idle' || e.moving || e.departAt > now || !e.spot) return 'idle';
+  const t = now / 1000, sd = seedOf(e);
+  if (e.chatWith) return occasional(t, { every: 6, duration: 3.2, seed: sd }) >= 0 ? 'chat' : 'idle';
+  if (e.posture === 'sit' && e.spotInfo?.use !== 'coffee' && occasional(t, { every: 22, duration: 8, chance: 0.75, seed: sd }) >= 0) return 'phone';
+  if (e.posture !== 'sit' && occasional(t, { every: 28, duration: 2.6, chance: 0.6, seed: sd + 5 }) >= 0) return 'stretch';
+  return 'idle';
 }
 
 // What the body is doing, in words (never the job: "coding" is not shown while walking to the desk).
@@ -68,10 +81,13 @@ export function actionText(e, layout) {
   const st = e.anim?.state ?? 'idle', a = e.agent;
   const where = e.dest?.location ? layout?.locationById?.[e.dest.location]?.name : null;
   switch (st) {
-    case 'walk': if (e.loop) return e.loop.kind === 'haul' ? (e.loop.phase === 'back' ? 'Carrying materials' : 'Fetching materials') : 'Walking the site';
+    case 'walk': if (e.journey) return e.journey.kind === 'start' && e.carrying ? JOURNEY_WORDS.start : e.journey.kind === 'start' ? 'Going to pick up the task' : e.journey.kind === 'finish' ? 'Taking the finished task to the archive' : 'Walking';
+      if (e.loop) return e.loop.kind === 'haul' ? (e.loop.phase === 'back' ? 'Carrying materials' : 'Fetching materials') : 'Walking the site';
       if (e.visit) return e.visit.phase === 'back' ? 'Walking back from the site' : 'Walking to the construction site';
       return e.ride ? 'Walking to the elevator' : where ? `Walking to ${where}` : 'Walking';
-    case 'carry': if (e.loop) return 'Carrying materials';
+    case 'carry': if (e.journey) return e.journey.kind === 'finish' ? 'Taking the finished task to the archive' : JOURNEY_WORDS.start;
+      if (!e.errand && !e.loop && e.agent?.taskId) return 'Carrying the task to the desk';
+      if (e.loop) return 'Carrying materials';
       return e.errand ? 'Carrying a handoff' : where ? `Carrying to ${where}` : 'Carrying';
     case 'react': return 'Noticed new work';
     case 'stand': return 'Getting up';
@@ -85,7 +101,13 @@ export function actionText(e, layout) {
     case 'paint': return 'Finishing the exterior';
     case 'install': return e.anim?.variant === 'repair' ? 'Reworking after review' : 'Installing systems';
     case 'lift': return 'Fitting furniture';
-    case 'pickup': return e.loop?.kind === 'haul' ? 'Collecting materials' : 'Picking up';
+    case 'pickup': return e.journey ? 'Picking up the task from the board' : e.loop?.kind === 'haul' ? 'Collecting materials' : 'Picking up';
+    case 'file': return 'Filing the finished task';
+    case 'frustrated': return 'Blocked';
+    case 'phone': return 'On break: checking phone';
+    case 'stretch': return 'Stretching';
+    case 'watch': return 'Waiting: checking the time';
+    case 'chat': return 'Chatting';
     case 'survey': return e.visit ? (e.visit?.state === 'changes_requested' ? 'Marking changes on the site' : 'Inspecting the site') : 'Inspecting the construction';
     case 'blocked': return 'Blocked';
     case 'waiting': return 'Waiting';
@@ -217,6 +239,9 @@ export class IsoWorldView extends WorldView {
     }
   }
   syncAgents(world, now, rebuild) {
+    // Living HQ: note which real transition each agent just made, so goTo can turn it into a journey.
+    this.seen ??= {}; this.pendingTransition = {};
+    for (const a of Object.values(world.agents)) { if (!rebuild) this.pendingTransition[a.id] = transitionOf(this.seen[a.id], a); this.seen[a.id] = { activity: a.activity, taskId: a.taskId ?? null }; }
     super.syncAgents(world, now, rebuild);
     for (const e of this.scene.entities.values()) if (e.kind === 'agent') {
       const p = this.places[e.ref.id];
@@ -226,10 +251,36 @@ export class IsoWorldView extends WorldView {
   // Every trip starts with a beat: the character notices, stands up if seated, then sets off.
   goTo(e, place, target, now) {
     e.visit = null; e.pendingVisit = null; e.loop = null; e.carrying = e.errand ? e.carrying : false; // real work always wins over a site visit
+    // A real transition becomes a journey through the places it stands for (engine/journey.mjs).
+    const kind = this.pendingTransition?.[e.ref.id]; e.journey = null;
+    if (kind) {
+      const legs = planJourney(kind, this.layout.fixtures);
+      if (legs.length) {
+        e.journey = { kind, legs, i: 0, final: { place, target }, phase: 'go', since: now };
+        this.startLeg(e, now);
+        return;
+      }
+    }
     // Already standing (or sitting) on the new spot: nothing to walk, so no reaction, no standing up.
     if (!e.moving && !e.ride && Math.hypot(target[0] - e.x, target[1] - e.y) < 1) { e.dest = { location: place.location, target }; return; }
     super.goTo(e, place, target, now);
     this.depart(e, now, true);
+  }
+  // The next leg of a journey (or its final destination): walk there, or hold in place for a beat.
+  startLeg(e, now) {
+    const J = e.journey, leg = J.legs[J.i];
+    if (!leg) { const { place, target } = J.final; e.journey = null; e.dest = { location: place.location, target }; startPath(e, this.layout.route([e.x, e.y], place.location, target), now); this.depart(e, now, false); return; }
+    if (!leg.to) { J.phase = 'hold'; J.until = now + leg.ms; e.carrying = !!leg.carry; return; }
+    J.phase = 'go'; e.carrying = !!leg.carry;
+    e.dest = { location: leg.location, target: leg.to };
+    startPath(e, this.layout.route([e.x, e.y], leg.location, leg.to), now);
+    this.depart(e, now, J.i === 0);
+  }
+  stepJourney(e, now) {
+    const J = e.journey, leg = J.legs[J.i]; if (!leg) return;
+    if (J.phase === 'go' && !e.moving && !e.departAt) { if (leg.face) e.faceGoal = leg.face; J.phase = 'turn'; }
+    else if (J.phase === 'turn' && !e.faceGoal) { J.phase = 'hold'; J.until = now + leg.ms; }
+    else if (J.phase === 'hold' && now >= J.until) { e.carrying = !!leg.carryAfter; J.i += 1; this.startLeg(e, now); }
   }
   chase(from, to, now) { super.chase(from, to, now); if (!from.departAt) this.depart(from, now, false); }
   depart(e, now, react) {
@@ -276,6 +327,9 @@ export class IsoWorldView extends WorldView {
       else { turnToward(e, FACING_ANGLE[e.faceGoal], dt); if (Math.abs(Math.atan2(Math.sin(e.heading - FACING_ANGLE[e.faceGoal]), Math.cos(e.heading - FACING_ANGLE[e.faceGoal]))) < 0.02) { e.dir = e.faceGoal; e.faceGoal = null; } }
     }
     if (!e.faceGoal && e.pendingSit) { e.pendingSit = false; if (e.posture !== 'sit') { e.posture = 'sit'; if (!instant) e.sitUntil = now + SIT_MS; } }
+    if (!instant && now > (e.chatCheck ?? 0)) { e.chatCheck = now + 900; e.chatWith = null; if (e.agent?.activity === 'idle' && !e.moving && e.spot) for (const o of this.scene.entities.values()) if (o !== e && o.kind === 'agent' && o.agent?.activity === 'idle' && !o.moving && o.spot && o.spotInfo?.room === e.spotInfo?.room && Math.hypot(o.x - e.x, o.y - e.y) < this.size.agent[1] * 2.4) { e.chatWith = o.id; if (!e.faceGoal && e.posture !== 'sit') { const dx = o.x - e.x; e.faceGoal = Math.abs(dx) > 2 ? (dx < 0 ? 'left' : 'right') : e.dir; } break; } }
+    if (e.journey) this.stepJourney(e, now);
+    else if (e.carrying && !e.errand && !e.loop && !e.moving && e.spot && e.spot === e.placeKey) e.carrying = false; // set the task down at the desk
     if (e.visit) this.visitStep(e, now);
     else if (e.pendingVisit) { const pv = e.pendingVisit; e.pendingVisit = null; if (now < pv.until) this.visitSite(pv.ev, pv.pass, pv.s, now); }
     if (!instant) this.siteLoop(e, now);

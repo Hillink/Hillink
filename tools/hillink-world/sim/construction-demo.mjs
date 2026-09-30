@@ -6,14 +6,16 @@ import { makeEvent } from '../core/events.mjs';
 import { applyHqEvent } from '../procgen/contract.mjs';
 
 export const DEMO_CAPABILITY = { id: 'meeting-room', kind: 'meeting-space', area: 30, traits: ['gathering'] };
-const TASK = 'sim-build-meeting-room', OBJECTIVE = 'sim-objective-meeting-room', CAP = DEMO_CAPABILITY.id;
+// Living HQ: a small capability the planner fits into an existing room (room-2), so it is built as a refit inside it.
+export const REFIT_CAPABILITY = { id: 'focus-booth', kind: 'meeting-space', area: 12, traits: ['gathering'], name: 'focus booth' };
+const TASK = 'sim-build-meeting-room', OBJECTIVE = 'sim-objective-meeting-room';
 const hq = (type, fields = {}) => ({ type, ...fields });
 
 // Each step: what happened (label), the HQ facts, and what the simulated agents do.
-export const DEMO_STEPS = [
-  { label: 'Kyle asks for a meeting room; the planner chooses a site (planning and survey)',
-    hq: [hq('OBJECTIVE_CREATED', { objectiveId: OBJECTIVE, title: 'We need a meeting room' }), hq('CAPABILITY_REQUESTED', { capability: DEMO_CAPABILITY, objectiveId: OBJECTIVE, taskId: TASK })],
-    sim: e => e('TASK_CREATED', { taskId: TASK, title: 'Build the meeting room' }) },
+export const stepsFor = (DEMO_CAPABILITY, CAP = DEMO_CAPABILITY.id, name = DEMO_CAPABILITY.name ?? 'meeting room') => [
+  { label: `Kyle asks for a ${name}; the planner chooses a site (planning and survey)`,
+    hq: [hq('OBJECTIVE_CREATED', { objectiveId: OBJECTIVE, title: `We need a ${name}` }), hq('CAPABILITY_REQUESTED', { capability: DEMO_CAPABILITY, objectiveId: OBJECTIVE, taskId: TASK })],
+    sim: e => e('TASK_CREATED', { taskId: TASK, title: `Build the ${name}` }) },
   { label: 'HQ assigns the build to Claude; site preparation',
     hq: [hq('CONSTRUCTION_REQUESTED', { capabilityId: CAP }), hq('TASK_ASSIGNED', { taskId: TASK, agentId: 'claude', objectiveId: OBJECTIVE }), hq('IMPLEMENTATION_STARTED', { agentId: 'claude', taskId: TASK })],
     sim: e => e('TASK_STARTED', { taskId: TASK, agentId: 'claude', activity: 'coding', progress: { kind: 'stage', stage: 'Implementing' } }) },
@@ -43,7 +45,9 @@ export const DEMO_STEPS = [
     sim: e => e('MEETING_STARTED', { meetingId: 'sim-first-meeting', agentIds: ['claude', 'codex'], topic: 'First meeting in the new room' }) },
 ];
 
-export function createConstructionDemo({ siteWorld, store, now = () => Date.now() }) {
+export const DEMO_STEPS = stepsFor(DEMO_CAPABILITY);
+export function createConstructionDemo({ siteWorld, store, now = () => Date.now(), capability = DEMO_CAPABILITY }) {
+  const CAP = capability.id, DEMO_STEPS = stepsFor(capability);
   let index = 0, n = 0;
   const e = (type, fields) => store.dispatch(makeEvent(type, fields, { source: 'sim', at: now() }));
   return {

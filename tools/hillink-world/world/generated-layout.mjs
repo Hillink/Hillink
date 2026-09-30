@@ -143,6 +143,31 @@ export function createGeneratedLayout(world, { theme = 'real' } = {}) {
     locations.push(loc);
   }
 
+  // Living HQ: a refit. A capability the planner put into a room that already exists (and is walkable) has no new
+  // structure to build; its project still moves through the same canonical stages, so the room becomes a refit site:
+  // builders work inside it, at free cells of its own walk grid reached from its own door, while the room keeps its
+  // previous purpose until the capability is complete (Pass 5B finding 4). Only from requested construction on.
+  function refitSite(p) {
+    const cap = world.capabilities[p.id], room = cap && world.spaces[cap.placement?.spaceId];
+    if (!room || room.status !== 'built' || !furnishing[room.id] || stageIndex(p.stage) < stageIndex('site-preparation')) return;
+    const G = furnishing[room.id].grid, loc = locationOf[room.id]; if (!G || !loc) return;
+    const doorCell = [...G.startDoor].find(([, d]) => plan[`${room.id}~in~${d}`])?.[0], doorId = doorCell != null ? G.startDoor.get(doorCell) : null;
+    if (doorCell == null) return;
+    const lid = `site:${p.id}`, R = view.rectToView(room.rect), floor = room.level, stations = {};
+    for (const [key, fx, fz, use] of [['build1', 0.35, 0.45, 'build'], ['build2', 0.65, 0.55, 'build'], ['inspect1', 0.5, 0.3, 'site-inspect']]) {
+      const k = approachCell(G, { x: R.x0 + (R.x1 - R.x0) * fx, z: R.z0 + (R.z1 - R.z0) * fz }); if (k === -1) continue;
+      const pts = gridWalk(G, doorCell, k); if (!pts) continue;
+      const sid = `${lid}:${key}`, end = pts.at(-1), ids = [`${room.id}~in~${doorId}`, ...pts.slice(1, -1).map((pt, i) => node(`${sid}~${i}`, pt.x, pt.z, floor))];
+      node(sid, end.x, end.z, floor); ids.push(sid); chain(ids, room.id);
+      stations[sid] = navNodes[sid];
+      const pp = toPlan(end.x, end.z);
+      stationInfo[`${lid}:${sid}`] = { id: sid, room: lid, x: pp.x, z: pp.z, pose: 'stand', facing: 'back', use, floor, point: navNodes[sid] };
+    }
+    const ids = Object.keys(stations); if (!ids.length) return;
+    const Rp = rectPlan(R);
+    locations.push({ id: lid, name: `${title(labels.get(`room:${room.id}`) ?? p.id)}: refit, ${STAGE_LABEL[p.stage]}`, represents: `Refit of ${room.id} for ${p.id}`, floor, stations, door: navNodes[ids[0]], site: true, refit: true, reachable: true, gate: navNodes[`${room.id}~in~${doorId}`], project: p, room: { ...Rp, floor, spaceId: null, kind: 'site', site: true }, spaceId: null });
+    siteStations[p.id] = { build: ids.filter(i => stationInfo[`${lid}:${i}`].use === 'build'), inspect: ids.filter(i => stationInfo[`${lid}:${i}`].use === 'site-inspect') };
+  }
   // Construction sites (projects not yet complete): a location for the project, entered only through the real openings
   // into it (the site gates found above: doors from walkable spaces, reached on their grids, on a storey the built lift
   // serves) and walked on the project's own furnishing grid, room to room through its doors. Builder and inspector
@@ -152,7 +177,7 @@ export function createGeneratedLayout(world, { theme = 'real' } = {}) {
   for (const p of Object.values(projects)) {
     if (p.completed) continue;
     const parts = all.filter(s => s.project === p.id && s.primitive !== 'staircase' && s.primitive !== 'elevator');
-    if (!parts.length) continue;
+    if (!parts.length) { refitSite(p); continue; }
     const level = Math.max(...parts.map(s => s.level));
     const rs = parts.filter(s => s.level === level).map(s => view.rectToView(s.rect));
     const r = { x0: Math.min(...rs.map(q => q.x0)), x1: Math.max(...rs.map(q => q.x1)), z0: Math.min(...rs.map(q => q.z0)), z1: Math.max(...rs.map(q => q.z1)) };
@@ -359,6 +384,16 @@ export function createGeneratedLayout(world, { theme = 'real' } = {}) {
   const metric = (a, b) => { const dy = b[1] - a[1], dz = -dy / g.sky, dx = b[0] - a[0] - dz * g.skx; return Math.hypot(dx, dz); };
 
   // Task board, archive shelf and the spots systems report from.
+  // Living HQ: fixtures the journeys visit (engine/journey.mjs). The task board where queued work waits (a point in
+  // front of it, on its storey) and the archive shelf where finished work is filed (a real reading station).
+  const fixtures = {};
+  {
+    const bd = Object.values(furnishing).flatMap(F => F.decor.map(dd => ({ ...dd, F }))).find(dd => dd.type === 'taskBoard');
+    const bs = bd && world.spaces[bd.spaceId], loc = bs && locationOf[bs.id];
+    if (bs && loc) { const R = view.rectToView(bs.rect), x = (bd.x0 + bd.x1) / 2, z = R.z1 - 0.95; fixtures.taskBoard = { point: P.at(x * U, z * U, bs.level), location: loc.id, facing: 'back', spaceId: bs.id }; }
+    const rd = Object.values(stationInfo).find(i => i.use === 'read');
+    if (rd) fixtures.archive = { point: rd.point, location: rd.room, facing: rd.facing };
+  }
   const decorOf = type => Object.values(furnishing).flatMap(F => F.decor.map(d => ({ ...d, F }))).find(d => d.type === type);
   const itemOf = type => Object.values(furnishing).flatMap(F => F.items).find(i => i.type === type && world.spaces[i.spaceId]?.status === 'built');
   const itemTop = it => (it ? P.at(it.x * U, (it.z - it.d / 2) * U, it.level, it.h * U + 10) : null);
@@ -390,7 +425,7 @@ export function createGeneratedLayout(world, { theme = 'real' } = {}) {
     entityScale: 0.5, overflowStep: AGENT.footprint.w + 2, walkSpeed: AGENT.walkSpeed, arriveDistance: AGENT.arriveDistance, characterHeight: AGENT.height,
     spawn: locationById.plaza ? 'plaza' : 'queue',
     locations, locationById, navNodes, navEdges, edgeSpace, nodePlan: plan, locationAt, planAt, route, lifts, liftOf, stationInfo,
-    places, placeFor, projects, taskSlots, systemSpots, signals: {},
+    places, placeFor, projects, taskSlots, systemSpots, fixtures, signals: {},
     def: { FURNITURE: meetingTable ? [{ id: 'table', x: meetingTable.x * U, z: meetingTable.z * U, floor: meetingTable.level, h: meetingTable.h * U }] : [] },
   };
 }

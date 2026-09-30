@@ -14,7 +14,7 @@ import { hoverText, inspectHTML } from './ui/inspect.mjs';
 import { summarize, feedHTML, attentionHTML, rosterHTML, paintFaces } from './ui/hud.mjs';
 import { connectHq, hqAvailable } from './adapters/hq-client.mjs';
 import { explainAgent, STATE_LABEL } from './core/truth.mjs';
-import { createConstructionDemo, DEMO_STEPS } from './sim/construction-demo.mjs';
+import { createConstructionDemo, DEMO_STEPS, REFIT_CAPABILITY } from './sim/construction-demo.mjs';
 import { STAGE_LABEL as PROJECT_STAGE } from './procgen/construction.mjs';
 import { loadSite, createSiteSync, sourceLabel } from './ui/site-sync.mjs';
 import { worldFingerprint } from './procgen/world.mjs';
@@ -368,7 +368,8 @@ if (params.get('world') !== 'legacy') {
   const r = await loadSite(fetchSite, { attempts: 3, wait: k => new Promise(res => setTimeout(res, 400 * k)) });
   siteWorld = r.world; siteSource = r.world ? 'generated' : 'unavailable'; siteError = r.error;
 }
-const demoMode = params.get('demo') === 'construction' && !!siteWorld;
+const demoKind = ['construction', 'refit'].includes(params.get('demo')) ? params.get('demo') : null; // refit: a capability built inside an existing room
+const demoMode = !!demoKind && !!siteWorld;
 if (demoMode) { siteWorld = structuredClone(siteWorld); siteWorld.simulated = true; } // never saved; refuses live HQ events
 applyTheme(params.get('theme') ?? storage.get('hlw:theme') ?? 'real');
 mode = demoMode || requested === 'sim' ? 'sim' : requested === 'hq' || await hqAvailable() ? 'hq' : 'sim';
@@ -386,7 +387,7 @@ if (mode === 'hq') {
 if (demoMode) {
   // ?demo=construction[&step=N][&walk=1]: jump to step N (agents placed), or with walk=1 leave the last step's walks running.
   $('sim-toggle').hidden = false; store.flush();
-  demo = createConstructionDemo({ siteWorld, store });
+  demo = createConstructionDemo({ siteWorld, store, ...(demoKind === 'refit' ? { capability: REFIT_CAPABILITY } : {}) });
   const target = Math.min(DEMO_STEPS.length, Number(params.get('step') ?? 0));
   const walk = params.get('walk') === '1';
   for (let k = 0; k < target; k++) { const last = k === target - 1; demo.applyCanonical(); if (last && walk) rebuildWorld(); demo.applyAgents(); store.flush(); }
@@ -396,7 +397,7 @@ if (demoMode) {
   siteSync = createSiteSync({ fetchSite, source: siteSource, world: siteWorld, apply: w => { siteWorld = w; rebuildWorld(); showSource(); }, report: showSource });
   pollSite();
 }
-if (params.get('demo') === 'construction' && !demoMode) $('sim-note').textContent = 'The construction demo needs the generated world, which is unavailable right now.';
+if (demoKind && !demoMode) $('sim-note').textContent = 'The construction demo needs the generated world, which is unavailable right now.';
 showSource();
 // ?camera=room:<id>|agent:<id>|overview|building: frame a view on load (reproducible screenshots).
 // Pass 5C: watchable scenarios. ?play=office|workstation|meeting loops a scripted, clearly simulated sequence (only in

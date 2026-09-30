@@ -71,6 +71,8 @@ export function prop(ctx, kind, hx, hy, s, look, T, lw) {
   } else if (kind === 'scroll') {
     shape(ctx, round(hx - s * 0.1, hy - s * 0.12, s * 0.2, s * 0.13, s * 0.03), '#ecdcae', lw * 0.7);
     ctx.fillStyle = 'rgba(90,60,30,0.6)'; for (let i = 0; i < 3; i++) ctx.fillRect(hx - s * 0.07, hy - s * 0.09 + i * s * 0.03, s * 0.14, s * 0.008);
+  } else if (kind === 'phone') {
+    shape(ctx, round(hx - s * 0.025, hy - s * 0.05, s * 0.05, s * 0.08, s * 0.01), '#1d2431', lw * 0.5); ctx.fillStyle = 'rgba(120,190,255,0.9)'; ctx.fillRect(hx - s * 0.018, hy - s * 0.042, s * 0.036, s * 0.06);
   } else if (kind === 'crate') {
     shape(ctx, round(hx - s * 0.13, hy - s * 0.15, s * 0.26, s * 0.17, s * 0.012), look.crate ?? '#b58a52', lw);
     ctx.strokeStyle = 'rgba(60,40,20,0.55)'; ctx.lineWidth = lw * 0.6; ctx.beginPath(); ctx.moveTo(hx - s * 0.13, hy - s * 0.15); ctx.lineTo(hx + s * 0.13, hy + s * 0.02); ctx.moveTo(hx + s * 0.13, hy - s * 0.15); ctx.lineTo(hx - s * 0.13, hy + s * 0.02); ctx.stroke();
@@ -147,6 +149,13 @@ export function poseFor(state, P) {
     case 'lift': { const k = (Math.sin(T * 1.6) + 1) / 2; arms = [[-h * 0.1, h * 0.28 - k * h * 0.16], [h * 0.1, h * 0.28 - k * h * 0.16]]; held = 'crate'; crouch = (1 - k) * 0.45; lean = h * (1 - k) * 0.04; break; }
     case 'pickup': { const k = Math.min(1, t / 0.6), up = t > 0.9 ? Math.min(1, (t - 0.9) / 0.4) : 0; arms = [[-h * 0.1, h * (0.3 - up * 0.16)], [h * 0.1, h * (0.3 - up * 0.16)]]; held = up > 0 ? 'crate' : null; crouch = 0.6 * k * (1 - up); lean = h * 0.05 * k * (1 - up); break; }
     case 'read': arms = [[reach * h * 0.14 - h * 0.09, h * 0.12], [reach * h * 0.14 + h * 0.09, h * 0.12]]; held = 'book'; break;
+    // Living HQ beats and idle variety.
+    case 'file': { const k = Math.min(1, t / 0.5), out = t > 0.9; arms = [[(f || 1) * h * 0.12 * k - h * 0.05, h * (0.12 - 0.14 * k)], [(f || 1) * h * 0.18 * k + h * 0.05, h * (0.12 - 0.16 * k)]]; held = out ? null : 'package'; break; }
+    case 'frustrated': { const k = Math.min(1, t / 0.3); arms = [[-h * 0.12, h * (0.18 - 0.38 * k)], [h * 0.12, h * (0.18 - 0.38 * k)]]; lean = -h * 0.015 * k; break; }
+    case 'phone': arms = [[-h * 0.06, h * 0.12], [h * 0.05, h * 0.02 + wave(T, 0.8, x) * h * 0.005]]; held = 'phone'; lean = h * 0.012; break;
+    case 'stretch': { const k = Math.sin(Math.min(1, t / 2.4) * Math.PI); arms = [[-h * 0.1 - k * h * 0.06, h * 0.2 - k * h * 0.5], [h * 0.1 + k * h * 0.06, h * 0.2 - k * h * 0.5]]; lean = -k * h * 0.01; break; }
+    case 'watch': arms = [[-h * 0.02, h * 0.06], [h * 0.07, h * 0.05]]; break;
+    case 'chat': { const speak = Math.sin(T * 0.9 + x * 0.07) > 0; arms = [[-h * 0.2, h * 0.2], [h * 0.12 + (speak ? wave(T, 3.1) * h * 0.05 : 0), speak ? h * 0.07 + wave(T, 4.3) * h * 0.04 : h * 0.2]]; break; }
     case 'talk': case 'meeting': { const speak = state === 'talk' || Math.sin(T * 0.6 + x * 0.05) > 0.2; arms = [[-h * 0.2, h * 0.2], [h * 0.14 + (speak ? wave(T, 3.2) * h * 0.06 : 0), speak ? h * 0.06 + wave(T, 4.1) * h * 0.05 : h * 0.2]]; break; }
     case 'blocked': arms = [[-h * 0.12, -h * 0.2], [h * 0.12, -h * 0.2]]; lean = -h * 0.01; break;
     case 'waiting': arms = Math.sin(T * 0.5 + x) > 0.75 ? [[-h * 0.2, h * 0.2], [h * 0.04, h * 0.02]] : [[-h * 0.2, h * 0.19], [h * 0.2, h * 0.19]]; break;
