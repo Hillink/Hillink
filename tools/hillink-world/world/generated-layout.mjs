@@ -18,7 +18,7 @@ import { UNITS_PER_METRE } from '../procgen/units.mjs';
 import { represent } from '../procgen/themes.mjs';
 import { STAGE_LABEL, stageIndex, buildersWork } from '../procgen/construction.mjs';
 import { frames } from '../procgen/camera.mjs';
-import { placeKind as placeKindOf } from '../procgen/furnish.mjs';
+import { placeKind as placeKindOf, usableCapability } from '../procgen/furnish.mjs';
 import { hull, inPolygon } from '../engine/iso.mjs';
 import { AGENT, ARCH } from './scale.mjs';
 
@@ -57,7 +57,7 @@ export function createGeneratedLayout(world, { theme = 'real' } = {}) {
   // Inside each walkable space: door nodes, the entry cell behind each door, door-to-door walks, and a walk from the
   // nearest door to every anchor (and to a hall's lift landing).
   const locations = [], locationOf = {}, stationInfo = {}, siteStations = {};
-  const lifts = {}, liftOf = {};
+  const lifts = {}, liftOf = {}, siteGates = [];
   const builtDoors = Object.values(world.doors).filter(d => d.status === 'built');
   // The biggest room of each kind takes the semantic id (so a new, larger meeting room becomes the meeting room).
   const area = s => s.rect.w * s.rect.h;
@@ -102,6 +102,17 @@ export function createGeneratedLayout(world, { theme = 'real' } = {}) {
       const end = reachTo(landing, 'lift');
       if (end) { const lid = `lift:${lift.buildingId}`, n = node(`${lid}@${floor}`, landing.x, landing.z, floor); link(end, n, s.id); liftOf[n] = lid; (lifts[lid] ||= { id: lid, buildingId: lift.buildingId, levels: [], landings: {}, shaft: rectPlan(L) }).levels.push(floor); lifts[lid].landings[floor] = n; }
     }
+    // A construction site is entered only through a real opening: the door (itself still being built) between this
+    // walkable space and a space of an unfinished project. The walk to it follows this space's grid.
+    for (const [cell, doorId] of grid.startDoor) {
+      const d = world.doors[doorId], other = d && (d.a === s.id ? d.b : d.a), part = world.spaces[other];
+      if (!d || d.status === 'built' || !part?.project || world.projects?.[part.project]?.completed) continue;
+      const from = nearestDoor(cell); if (!from) continue;
+      const end = walk(from, cell, `sd:${doorId}`); if (!end) continue;
+      const fd = F.doors.find(x => x.id === doorId), gate = node(`sitegate:${doorId}`, fd.c.x, fd.c.z, floor);
+      link(end, gate, s.id);
+      siteGates.push({ doorId, gate, partId: other, floor });
+    }
     loc.door = doorIds.length ? navNodes[`door:${doorIds[0]}`] : Object.values(loc.stations)[0] ?? P.at((R.x0 + R.x1) / 2, (R.z0 + R.z1) / 2, floor);
     locationOf[s.id] = loc; locations.push(loc);
   }
@@ -132,8 +143,11 @@ export function createGeneratedLayout(world, { theme = 'real' } = {}) {
     locations.push(loc);
   }
 
-  // Construction sites (projects not yet complete): a location with builder stations just inside the site's front edge,
-  // reached along one access edge from the nearest walkable node on its storey (or the storey below).
+  // Construction sites (projects not yet complete): a location for the project, entered only through the real openings
+  // into it (the site gates found above: doors from walkable spaces, reached on their grids, on a storey the built lift
+  // serves) and walked on the project's own furnishing grid, room to room through its doors. Builder and inspector
+  // stations are free cells of that grid. A site with no such entrance gets no stations: it is unreachable (fail
+  // closed), and nobody is sent there.
   const projects = world.projects ?? {};
   for (const p of Object.values(projects)) {
     if (p.completed) continue;
@@ -142,29 +156,45 @@ export function createGeneratedLayout(world, { theme = 'real' } = {}) {
     const level = Math.max(...parts.map(s => s.level));
     const rs = parts.filter(s => s.level === level).map(s => view.rectToView(s.rect));
     const r = { x0: Math.min(...rs.map(q => q.x0)), x1: Math.max(...rs.map(q => q.x1)), z0: Math.min(...rs.map(q => q.z0)), z1: Math.max(...rs.map(q => q.z1)) };
-    const lid = `site:${p.id}`, w = r.x1 - r.x0, stations = {};
-    const spots = [['build1', r.x0 + w * 0.3, 'build'], ['build2', r.x0 + w * 0.7, 'build'], ['inspect1', r.x0 + w * 0.5, 'site-inspect']];
-    for (const [key, x, use] of spots) {
-      const sid = `${lid}:${key}`; node(sid, x, r.z0 + 0.6, level);
-      stations[sid] = navNodes[sid];
-      stationInfo[`${lid}:${sid}`] = { id: sid, room: lid, x: toPlan(x, 0).x, z: toPlan(0, r.z0 + 0.6).z, pose: 'stand', facing: 'back', use, floor: level, point: navNodes[sid] };
+    const lid = `site:${p.id}`, stations = {}, isPart = id => parts.some(q => q.id === id);
+    const entered = {}, queue = siteGates.filter(gt => isPart(gt.partId)).map(gt => ({ partId: gt.partId, doorId: gt.doorId, from: gt.gate }));
+    while (queue.length) {
+      const { partId, doorId, from } = queue.shift();
+      if (entered[partId]) continue;
+      const part = world.spaces[partId], G = furnishing[partId]?.grid; if (!G) continue;
+      const cell = [...G.startDoor].find(([, d]) => d === doorId)?.[0]; if (cell == null) continue;
+      const c = G.centreOf(cell), inId = node(`${lid}~${partId}~in~${doorId}`, c.x, c.z, part.level);
+      link(from, inId, partId);
+      entered[partId] = { cell, id: inId, G, part };
+      for (const [c2, d2] of G.startDoor) {
+        const dd = world.doors[d2], next = dd && (dd.a === partId ? dd.b : dd.a);
+        if (d2 === doorId || !isPart(next) || entered[next]) continue;
+        const pts = gridWalk(G, cell, c2); if (!pts) continue;
+        const ids = [inId, ...pts.slice(1).map((pt, k) => node(`${lid}~${partId}~sd:${d2}~${k}`, pt.x, pt.z, part.level))];
+        chain(ids, partId);
+        const fd = furnishing[partId].doors.find(x => x.id === d2), gate = node(`sitegate:${d2}`, fd.c.x, fd.c.z, part.level);
+        link(ids.at(-1), gate, partId);
+        queue.push({ partId: next, doorId: d2, from: gate });
+      }
     }
-    const ids = Object.keys(stations);
-    chain(ids, lid);
-    const access = nearestNode(plan[ids[0]], level, true) ?? nearestNode(plan[ids[0]], level - 1, true);
-    if (access) link(access, ids[0], lid);
-    const R = rectPlan(r);
-    locations.push({ id: lid, name: `${title(labels.get(`room:${parts[0].id}`) ?? p.id)}: ${STAGE_LABEL[p.stage]}`, represents: `Construction for ${p.id}`, floor: level, stations, door: navNodes[ids[0]], site: true, project: p, room: { ...R, floor: level, spaceId: null, kind: 'site', site: true }, spaceId: null });
-    siteStations[p.id] = { build: ids.slice(0, 2), inspect: ids.slice(2) };
-  }
-  function nearestNode(pt, floor, skipSites = false) {
-    let best = null, bestD = Infinity;
-    for (const [id, n] of Object.entries(plan)) {
-      if (n.floor !== floor || liftOf[id] || (skipSites && id.startsWith('site:'))) continue;
-      const d = Math.hypot(n.x - pt.x, n.z - pt.z);
-      if (d < bestD) { bestD = d; best = id; }
+    const target = entered[world.capabilities[p.id]?.placement?.spaceId] ?? Object.values(entered).sort((a, b) => b.part.level - a.part.level || (a.part.id < b.part.id ? -1 : 1))[0] ?? null;
+    const floor = target?.part.level ?? level;
+    if (target) {
+      const T = view.rectToView(target.part.rect);
+      for (const [key, fx, fz, use] of [['build1', 0.3, 0.5, 'build'], ['build2', 0.7, 0.5, 'build'], ['inspect1', 0.5, 0.3, 'site-inspect']]) {
+        const k = approachCell(target.G, { x: T.x0 + (T.x1 - T.x0) * fx, z: T.z0 + (T.z1 - T.z0) * fz }); if (k === -1) continue;
+        const pts = gridWalk(target.G, target.cell, k); if (!pts) continue;
+        const sid = `${lid}:${key}`, end = pts.at(-1);
+        const ids = [target.id, ...pts.slice(1, -1).map((pt, i) => node(`${sid}~${i}`, pt.x, pt.z, floor))];
+        node(sid, end.x, end.z, floor); ids.push(sid); chain(ids, target.part.id);
+        stations[sid] = navNodes[sid];
+        const pp = toPlan(end.x, end.z);
+        stationInfo[`${lid}:${sid}`] = { id: sid, room: lid, x: pp.x, z: pp.z, pose: 'stand', facing: 'back', use, floor, point: navNodes[sid] };
+      }
     }
-    return best;
+    const ids = Object.keys(stations), R = rectPlan(r), reachable = ids.length > 0;
+    locations.push({ id: lid, name: `${title(labels.get(`room:${parts[0].id}`) ?? p.id)}: ${STAGE_LABEL[p.stage]}`, represents: `Construction for ${p.id}${reachable ? '' : ' (no built entrance yet: unreachable)'}`, floor, stations, door: reachable ? navNodes[ids[0]] : P.at((R.x0 + R.x1) / 2, (R.z0 + R.z1) / 2, level), site: true, reachable, project: p, room: { ...R, floor: level, spaceId: null, kind: 'site', site: true }, spaceId: null });
+    if (reachable) siteStations[p.id] = { build: ids.filter(i => stationInfo[`${lid}:${i}`].use === 'build'), inspect: ids.filter(i => stationInfo[`${lid}:${i}`].use === 'site-inspect') };
   }
 
   // Screen boxes for picking and focus.
@@ -199,9 +229,11 @@ export function createGeneratedLayout(world, { theme = 'real' } = {}) {
   function placeFor(agent) {
     if (!agent?.taskId || !PRODUCTIVE.has(agent.activity)) return null;
     const p = Object.values(projects).find(q => q.taskIds.includes(agent.taskId));
-    if (!p || p.completed || p.blocked || p.waiting || !siteStations[p.id]) return null;
+    if (!p || p.completed || p.blocked || p.waiting || !siteStations[p.id]) return null; // no reachable site: not sent
     const inspecting = ['testing', 'reviewing'].includes(agent.activity) || p.stage === 'inspection';
     if (!inspecting && !buildersWork(p)) return null;
+    const stations = inspecting ? [...siteStations[p.id].inspect, ...siteStations[p.id].build] : siteStations[p.id].build;
+    if (!stations.length) return null;
     return { location: `site:${p.id}`, stations: inspecting ? [...siteStations[p.id].inspect, ...siteStations[p.id].build] : siteStations[p.id].build, clip: inspecting ? 'review' : 'work' };
   }
 
@@ -222,18 +254,36 @@ export function createGeneratedLayout(world, { theme = 'real' } = {}) {
     const hit = locations.find(l => l.floor === p.floor && !l.exterior && p.x >= l.room.x0 - 2 && p.x <= l.room.x1 + 2 && p.z >= l.room.z0 - 2 && p.z <= l.room.z1 + 2);
     return hit ?? locations.find(l => !l.exterior && inPolygon(l.poly, x, y)) ?? null;
   }
-  function nearestTo(pt) {
-    const p = planAt(pt[0], pt[1]);
-    let best = null, bestD = Infinity;
-    for (const [id, n] of Object.entries(plan)) {
-      if (n.floor !== p.floor) continue;
-      const d = Math.hypot(n.x - p.x, n.z - p.z);
-      if (d < bestD) { bestD = d; best = id; }
+  // Connectors: the stretch between an arbitrary point (where a character stands, or an overflow spot beside a
+  // station) and a graph node is walked only if it is checked: inside one furnished space, every sample of it must be
+  // a free cell of that space's walk grid; outdoors, no sample may enter any space. Otherwise it is not used.
+  const spaceGrids = Object.entries(furnishing).map(([id, F]) => ({ id, floor: world.spaces[id].level, G: F.grid, r: rectPlan(F.grid.R) }));
+  const inRect = (q, r) => q.x >= r.x0 && q.x <= r.x1 && q.z >= r.z0 && q.z <= r.z1;
+  function connectorClear(a, b, floor) {
+    const len = Math.hypot(b.x - a.x, b.z - a.z);
+    if (len < 1) return true; // the same spot
+    const inside = spaceGrids.filter(s => s.floor === floor && (inRect(a, s.r) || inRect(b, s.r)));
+    const n = Math.ceil(len / (U * 0.05));
+    if (inside.length === 1 && inRect(a, inside[0].r) && inRect(b, inside[0].r)) {
+      const { G } = inside[0];
+      for (let k = 0; k <= n; k++) {
+        const x = (a.x + (b.x - a.x) * k / n) / U, z = (a.z + (b.z - a.z) * k / n) / U, [i, j] = G.cellOf({ x, z });
+        if (!G.free[j * G.nx + i]) return false;
+      }
+      return true;
     }
-    if (best) return best;
-    for (const [id, q] of Object.entries(navNodes)) { const d = dist(q, pt); if (d < bestD) { bestD = d; best = id; } }
-    return best;
+    if (inside.length) return false; // across a wall, or from one space into another without its door
+    for (let k = 0; k <= n; k++) { const q = { x: a.x + (b.x - a.x) * k / n, z: a.z + (b.z - a.z) * k / n }; if (spaceGrids.some(s => s.floor === floor && inRect(q, s.r))) return false; }
+    return true;
   }
+  // The nearest node a point can reach by a checked connector (or that stands on it), or null.
+  function attach(pt) {
+    const p = planAt(pt[0], pt[1]);
+    const near = Object.entries(plan).filter(([, n]) => n.floor === p.floor).map(([id, n]) => ({ id, d: Math.hypot(n.x - p.x, n.z - p.z) })).sort((a, b) => a.d - b.d || (a.id < b.id ? -1 : 1));
+    for (const c of near.slice(0, 60)) if (c.d < 1 || connectorClear(p, plan[c.id], p.floor)) return { id: c.id, at: p };
+    return null;
+  }
+  // Shortest path on the graph, or null when the goal is not connected to the start (never a made-up straight line).
   function shortest(start, goal) {
     const d = { [start]: 0 }, prev = {}, open = new Set([start]);
     while (open.size) {
@@ -245,21 +295,27 @@ export function createGeneratedLayout(world, { theme = 'real' } = {}) {
         if (alt < (d[v] ?? Infinity)) { d[v] = alt; prev[v] = u; open.add(v); }
       }
     }
+    if (start !== goal && prev[goal] === undefined) return null;
     const path = []; for (let n = goal; n; n = prev[n]) { path.unshift(n); if (n === start) break; }
-    return path[0] === start ? path : [start, goal];
+    return path[0] === start ? path : null;
   }
+  // A route: projected waypoints, each carrying its plan position (.at: floor, x, z). null when the destination cannot
+  // be reached through the navigation graph and checked connectors: the caller must keep the character where it is.
   function route(from, toLocationId, toPoint) {
-    const start = nearestTo(from), goal = nearestTo(toPoint);
-    const path = shortest(start, goal), out = [];
+    const s = attach(from), e = attach(toPoint);
+    if (!s || !e) return null;
+    const path = shortest(s.id, e.id); if (!path) return null;
+    const out = [];
     path.forEach((n, i) => {
       const ride = i > 0 && liftOf[n] && liftOf[n] === liftOf[path[i - 1]];
       if (ride && i + 1 < path.length && liftOf[path[i + 1]] === liftOf[n]) return;
       if (i === 0 && dist(navNodes[n], from) < 0.5) return;
       const p = [...navNodes[n]];
       if (ride) p.lift = liftOf[n];
+      p.at = { floor: plan[n].floor, x: plan[n].x, z: plan[n].z, node: n };
       out.push(p);
     });
-    if (!out.length || dist(out.at(-1), toPoint) > 0.5) out.push([toPoint[0], toPoint[1]]);
+    if (!out.length || dist(out.at(-1), toPoint) > 0.5) { const p = [toPoint[0], toPoint[1]]; p.at = { floor: e.at.floor, x: e.at.x, z: e.at.z, node: null }; out.push(p); }
     return out;
   }
   const metric = (a, b) => { const dy = b[1] - a[1], dz = -dy / g.sky, dx = b[0] - a[0] - dz * g.skx; return Math.hypot(dx, dz); };
@@ -310,6 +366,8 @@ function semanticId(world, s, taken) {
 }
 function represents(world, s) {
   const caps = s.capabilities.map(id => world.capabilities[id]).filter(Boolean);
-  if (caps.length) return `Capability: ${caps.map(c => `${c.id} (${c.status})`).join(', ')}`;
+  // A capability that is not usable yet is named as planned work, never as what the room is for.
+  const usable = caps.filter(usableCapability), pending = caps.filter(c => !usableCapability(c));
+  if (caps.length) return [usable.length ? `Capability: ${usable.map(c => `${c.id} (${c.status})`).join(', ')}` : null, pending.length ? `Planned: ${pending.map(c => `${c.id} (${c.status}, not usable yet)`).join(', ')}` : null].filter(Boolean).join('; ');
   return s.primitive === 'hallway' ? 'Circulation' : s.vacant ? 'Spare space, ready for a capability' : s.primitive;
 }

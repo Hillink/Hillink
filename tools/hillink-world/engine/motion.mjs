@@ -10,7 +10,11 @@ const ARRIVE_PACE = 0.55;
 const euclid = (a, b) => Math.hypot(b[0] - a[0], b[1] - a[1]);
 const LIFT_PATIENCE = 25; // seconds; a rider never waits forever if a lift is jammed
 
+// waypoints null: the layout found no route (fail closed). The character stays where it is, marked unreachable,
+// rather than walking a made-up line through walls.
 export function startPath(entity, waypoints, now) {
+  entity.unreachable = !waypoints;
+  if (!waypoints) { entity.path = []; entity.pathStart = now; entity.moving = false; return; }
   entity.path = waypoints.map(p => Object.assign([p[0], p[1]], p.lift ? { lift: p.lift } : {}));
   entity.pathStart = now;
   entity.moving = entity.path.length > 0;

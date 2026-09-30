@@ -24,9 +24,17 @@ const m = type => { const s = SIZES[type]; return { w: toMetres(s.w ?? 0), d: to
 // The semantic place a room stands for. Known capability kinds keep the old World's location ids, so its
 // behaviour (who goes where) and props (which desk lights up) work unchanged on generated rooms.
 export const PLACE_OF_KIND = { engineering: 'development', review: 'testing', 'meeting-space': 'comms', 'break-space': 'lounge', command: 'command', 'compute-infrastructure': 'servers', reception: 'queue', archive: 'archive', storage: 'storage' };
+// A capability shapes a room only once it is usable (built or operational). While it is planned or being built it may
+// shape only a room that is itself still under construction (the site shows its own furniture arriving); a room that
+// already exists keeps its previous purpose, furniture and place in the World until the new capability is ready.
+export const usableCapability = c => Boolean(c) && (c.status === 'built' || c.status === 'operational');
+export function purposeOf(world, space) {
+  const caps = space.capabilities.map(id => world.capabilities[id]).filter(Boolean);
+  return caps.find(usableCapability) ?? (space.status === 'built' ? null : caps[0] ?? null);
+}
 export function placeKind(world, space) {
   if (space.primitive === 'hallway') return space.id.endsWith('-hall') && space.level === 0 ? 'lobby' : 'passage';
-  const cap = space.capabilities.map(id => world.capabilities[id]).find(Boolean);
+  const cap = purposeOf(world, space);
   if (cap) return PLACE_OF_KIND[cap.spec.kind] ?? byTraits(cap.spec);
   return space.vacant ? 'spare' : 'spare';
 }
