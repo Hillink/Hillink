@@ -1,0 +1,102 @@
+{
+  "base": "http://127.0.0.1:4332",
+  "at": "2026-09-30T18:27:22.591Z",
+  "clips": [
+    {
+      "name": "1-office-life-5d",
+      "path": "/?source=sim&theme=real&art=5d&play=office",
+      "seconds": 44.96,
+      "frames": 1356,
+      "capturedFps": 30.2,
+      "world": {
+        "source": "generated",
+        "simulated": false,
+        "generator": "5a.1",
+        "seed": "hillink",
+        "schema": 1,
+        "fingerprint": "d205978be510b24b217f936fefb87454",
+        "historyLength": 1,
+        "layout": "generated",
+        "error": null
+      },
+      "note": null
+    },
+    {
+      "name": "2-follow-claude-to-desk-5d",
+      "path": "/?source=sim&theme=real&art=5d&play=workstation",
+      "seconds": 48,
+      "frames": 1843,
+      "capturedFps": 38.4,
+      "world": {
+        "source": "generated",
+        "simulated": false,
+        "generator": "5a.1",
+        "seed": "hillink",
+        "schema": 1,
+        "fingerprint": "d205978be510b24b217f936fefb87454",
+        "historyLength": 1,
+        "layout": "generated",
+        "error": null
+      },
+      "note": null
+    },
+    {
+      "name": "3-street-and-entrance-5d",
+      "path": "/?source=sim&theme=real&art=5d&play=office",
+      "seconds": 29.87,
+      "frames": 934,
+      "capturedFps": 31.3,
+      "world": {
+        "source": "generated",
+        "simulated": false,
+        "generator": "5a.1",
+        "seed": "hillink",
+        "schema": 1,
+        "fingerprint": "d205978be510b24b217f936fefb87454",
+        "historyLength": 1,
+        "layout": "generated",
+        "error": null
+      },
+      "note": null
+    },
+    {
+      "name": "cmp-5c",
+      "path": "/?source=sim&theme=real&play=office",
+      "seconds": 29.95,
+      "frames": 928,
+      "capturedFps": 31,
+      "world": {
+        "source": "generated",
+        "simulated": false,
+        "generator": "5a.1",
+        "seed": "hillink",
+        "schema": 1,
+        "fingerprint": "d205978be510b24b217f936fefb87454",
+        "historyLength": 1,
+        "layout": "generated",
+        "error": null
+      },
+      "note": null
+    },
+    {
+      "name": "cmp-5d",
+      "path": "/?source=sim&theme=real&art=5d&play=office",
+      "seconds": 30.01,
+      "frames": 940,
+      "capturedFps": 31.3,
+      "world": {
+        "source": "generated",
+        "simulated": false,
+        "generator": "5a.1",
+        "seed": "hillink",
+        "schema": 1,
+        "fingerprint": "d205978be510b24b217f936fefb87454",
+        "historyLength": 1,
+        "layout": "generated",
+        "error": null
+      },
+      "note": null
+    }
+  ],
+  "failures": []
+}

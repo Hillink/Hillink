@@ -1,0 +1,6 @@
+1-office-life-5d.mp4  45.0 s, 1356 frames (30.2 fps captured)  [world: generated, 5a.1 d205978be510]
+2-follow-claude-to-desk-5d.mp4  48.0 s, 1843 frames (38.4 fps captured)  [world: generated, 5a.1 d205978be510]
+3-street-and-entrance-5d.mp4  29.9 s, 934 frames (31.3 fps captured)  [world: generated, 5a.1 d205978be510]
+cmp-5c.mp4  29.9 s, 928 frames (31.0 fps captured)  [world: generated, 5a.1 d205978be510]
+cmp-5d.mp4  30.0 s, 940 frames (31.3 fps captured)  [world: generated, 5a.1 d205978be510]
+exit 0

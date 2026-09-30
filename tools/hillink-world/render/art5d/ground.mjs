@@ -115,7 +115,7 @@ export function createGround(layout) {
     ctx.save(); ctx.transform(...planMatrix(P, 0));
     ctx.fillStyle = MAT.meadow[0]; ctx.fillRect(box.x0 - 2e4, box.z0 - 2e4, 4e4 + (box.x1 - box.x0), 4e4 + (box.z1 - box.z0));
     ctx.imageSmoothingEnabled = true; ctx.drawImage(baked.c, box.x0, box.z0, box.x1 - box.x0, box.z1 - box.z0);
-    if (!d.reduced) { ctx.globalAlpha = 0.42; ctx.fillStyle = TEX.grass(ctx); ctx.fillRect(box.x0, box.z0, box.x1 - box.x0, box.z1 - box.z0); ctx.globalAlpha = 1; }
+    if (!d.reduced) { ctx.globalAlpha = 0.3; ctx.fillStyle = TEX.grass(ctx); ctx.fillRect(box.x0, box.z0, box.x1 - box.x0, box.z1 - box.z0); ctx.globalAlpha = 1; }
     // Planting beds (mulch with a steel edge).
     for (const b of beds) { ctx.fillStyle = MAT.mulch[0]; ctx.fillRect(b.x0, b.z0, b.x1 - b.x0, b.z1 - b.z0); ctx.strokeStyle = 'rgba(40,40,40,0.35)'; ctx.lineWidth = 0.8; ctx.strokeRect(b.x0, b.z0, b.x1 - b.x0, b.z1 - b.z0); }
     drawWays(ctx);
