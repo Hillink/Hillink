@@ -102,7 +102,7 @@ test('ATTACK 5: a hooks path in repo config cannot make HQ execute Claude-writte
 });
 
 test('ATTACK 6: a symlink in the base inside the scope is refused before Claude runs', async () => {
-  const s = setup(inScope, { repoExtra: dir => { fs.mkdirSync(path.join(dir, 'sandbox/hq-implementation'), { recursive: true }); fs.writeFileSync(path.join(dir, 'sandbox/hq-implementation/link'), '../../../outside'); git(dir, 'add', '-A'); const blob = execFileSync('git', ['hash-object', '-w', '--stdin'], { cwd: dir, input: '../../../outside', encoding: 'utf8' }).trim(); git(dir, 'update-index', '--add', '--cacheinfo', `120000,${blob},sandbox/hq-implementation/link`); } });
+  const s = setup(inScope, { repoExtra: dir => { fs.mkdirSync(path.join(dir, 'sandbox/hq-implementation'), { recursive: true }); fs.writeFileSync(path.join(dir, 'sandbox/hq-implementation/link'), '../../../outside'); git(dir, 'add', '-A'); const blob = execFileSync('git', ['hash-object', '-w', '--stdin'], { cwd: dir, input: '../../../outside', encoding: 'utf8' }).trim(); git(dir, 'update-index', '--add', '--cacheinfo', `120000,${blob},sandbox/hq-implementation/link`); git(dir, 'config', 'core.symlinks', 'false'); } });
   const t = await s.run();
   assert.equal(t.stage, 'BLOCKED'); assert.match(t.blocker ?? '', /symbolic link/);
   assert.equal(s.fake.spawned.length, 0, 'Claude never started');
