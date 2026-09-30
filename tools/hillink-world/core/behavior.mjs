@@ -42,13 +42,16 @@ export function placeAgents(agents, current, layout, rules = null) {
     }
   }
   // Pass 2: everyone else takes the first free station (ordered, so conversation partners sit at adjacent tables).
+  const overflows = {};
   for (const a of ordered) {
     if (result[a.id]) continue;
     const own = ruleForAgent(a, layout, rules), rule = own.stay ? ruleFor('idle', layout) : own;
     const loc = layout.locationById[rule.location];
     let station = rule.stations.find(s => !taken.has(`${loc.id}:${s}`));
     let overflow = 0;
-    if (!station) { station = rule.stations[0]; overflow = [...taken].filter(k => k.startsWith(`${loc.id}:${station}`)).length; }
+    // Pass 5F: a layout that knows its rooms' free standing spots (layout.overflowSpots) numbers overflow per room, so
+    // every extra agent gets its own reachable spot; other layouts keep fanning out beside the first station.
+    if (!station) { station = rule.stations[0]; overflow = layout.overflowSpots ? (overflows[loc.id] = (overflows[loc.id] ?? 0) + 1) : [...taken].filter(k => k.startsWith(`${loc.id}:${station}`)).length; }
     const key = overflow ? `${loc.id}:${station}#${overflow}` : `${loc.id}:${station}`;
     taken.add(key);
     result[a.id] = { location: loc.id, station, overflow, clip: a.activity === 'completed' ? 'success' : a.activity === 'error' ? 'error' : rule.clip };
@@ -57,6 +60,7 @@ export function placeAgents(agents, current, layout, rules = null) {
 }
 
 export function stationPoint(place, layout) {
+  if (place.overflow && layout.overflowSpots) { const spot = layout.overflowSpots(place.location)[place.overflow - 1]; if (spot) return spot; }
   const loc = layout.locationById[place.location];
   const [x, y] = loc.stations[place.station];
   // Overflow agents fan out in a row instead of stacking.

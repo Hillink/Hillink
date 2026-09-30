@@ -385,6 +385,28 @@ export function createGeneratedLayout(world, { theme = 'real' } = {}) {
     return out.length ? out : [Object.assign([toPoint[0], toPoint[1]], { at: { floor: e.at.floor, x: e.at.x, z: e.at.z, node: null } })];
   }
   const metric = (a, b) => { const dy = b[1] - a[1], dz = -dy / g.sky, dx = b[0] - a[0] - dz * g.skx; return Math.hypot(dx, dz); };
+  // Pass 5F: standing spots for agents a room's stations cannot seat (more agents than stations). Only cells of the room's
+  // walk grid that a door reaches, a body's width apart from every station, doorway and other spot, and attached to the
+  // navigation graph by a checked connector: an overflow agent always stands somewhere reachable, never on another
+  // agent and never outside the room. Nearest the room's centre first. Deterministic; computed once per location.
+  const overflowCache = {};
+  function overflowSpots(locationId) {
+    if (overflowCache[locationId]) return overflowCache[locationId];
+    const loc = locationById[locationId], F = loc && !loc.exterior && furnishing[loc.spaceId], out = [];
+    overflowCache[locationId] = out;
+    if (!F) return out;
+    const G = F.grid, gap = AGENT.footprint.w + 2, R = loc.room, cx = (R.x0 + R.x1) / 2, cz = (R.z0 + R.z1) / 2;
+    const keep = [...Object.keys(loc.stations), ...Object.keys(plan).filter(id => id.startsWith(`${loc.spaceId}~in~`) || (id.startsWith('door:') && plan[id].floor === loc.floor))].map(id => plan[id]).filter(Boolean);
+    const cells = [];
+    for (let k = 0; k < G.nx * G.nz; k++) if (G.free[k] && G.seen[k] !== -1) { const c = G.centreOf(k), p = toPlan(c.x, c.z); cells.push({ k, x: p.x, z: p.z, d: Math.hypot(p.x - cx, p.z - cz) }); }
+    cells.sort((a, b) => a.d - b.d || a.k - b.k);
+    for (const c of cells) {
+      if ([...keep, ...out.map(o => o.at)].some(q => q.floor === loc.floor && Math.hypot(q.x - c.x, q.z - c.z) < gap)) continue;
+      const pt = P.at(c.x, c.z, loc.floor); if (!attach(pt)) continue;
+      pt.at = { floor: loc.floor, x: c.x, z: c.z, node: null }; out.push(pt);
+    }
+    return out;
+  }
 
   // Task board, archive shelf and the spots systems report from.
   // Living HQ: fixtures the journeys visit (engine/journey.mjs). The task board where queued work waits (a point in
@@ -427,7 +449,7 @@ export function createGeneratedLayout(world, { theme = 'real' } = {}) {
     id: 'generated', kind: 'iso', generated: true, world, view, U, P, g, pitch, levels: levelsOf, furnishing, home, bounds, metric,
     entityScale: 0.5, overflowStep: AGENT.footprint.w + 2, walkSpeed: AGENT.walkSpeed, arriveDistance: AGENT.arriveDistance, characterHeight: AGENT.height,
     spawn: locationById.plaza ? 'plaza' : 'queue',
-    locations, locationById, navNodes, navEdges, edgeSpace, nodePlan: plan, locationAt, planAt, route, lifts, liftOf, stationInfo,
+    locations, locationById, navNodes, navEdges, edgeSpace, nodePlan: plan, locationAt, planAt, route, overflowSpots, lifts, liftOf, stationInfo,
     places, placeFor, projects, taskSlots, systemSpots, fixtures, signals: {},
     def: { FURNITURE: meetingTable ? [{ id: 'table', x: meetingTable.x * U, z: meetingTable.z * U, floor: meetingTable.level, h: meetingTable.h * U }] : [] },
   };

@@ -1,0 +1,842 @@
+[
+ {
+  "at": "2026-09-30T21:17:03.158Z",
+  "k": "create-without-session",
+  "v": 401
+ },
+ {
+  "at": "2026-09-30T21:17:03.169Z",
+  "k": "create-escalation",
+  "v": {
+   "status": 400,
+   "body": {
+    "error": "Permission \"write-repo\" is refused: HQ-created agents may hold only read-repo, run-local-checks"
+   }
+  }
+ },
+ {
+  "at": "2026-09-30T21:17:03.175Z",
+  "k": "create-hostile-appearance",
+  "v": {
+   "status": 400,
+   "body": {
+    "error": "appearance.palette.primary must be a #rrggbb colour"
+   }
+  }
+ },
+ {
+  "at": "2026-09-30T21:17:06.449Z",
+  "k": "created",
+  "v": [
+   [
+    201,
+    "agent-5f-unknown-927"
+   ],
+   [
+    201,
+    "tester-5f-86b797"
+   ],
+   [
+    201,
+    "agent-5f-bad-model"
+   ],
+   [
+    201,
+    "agent-5f-no-permission"
+   ],
+   [
+    201,
+    "agent-5f-codex-reviewer"
+   ],
+   [
+    201,
+    "agent-5f-claude-reviewer"
+   ]
+  ]
+ },
+ {
+  "at": "2026-09-30T21:17:08.264Z",
+  "k": "screenshot",
+  "v": "1-candidates-onboarding.png"
+ },
+ {
+  "at": "2026-09-30T21:17:08.322Z",
+  "k": "world-during-provisioning",
+  "v": {
+   "family": "live",
+   "sim": null,
+   "rejected": [],
+   "agents": {},
+   "entities": [
+    {
+     "id": "chatgpt",
+     "presence": "member",
+     "place": null,
+     "caption": null
+    },
+    {
+     "id": "claude",
+     "presence": "member",
+     "place": null,
+     "caption": null
+    },
+    {
+     "id": "codex",
+     "presence": "member",
+     "place": null,
+     "caption": null
+    },
+    {
+     "id": "gemma",
+     "presence": "member",
+     "place": null,
+     "caption": null
+    },
+    {
+     "id": "hq-verifier",
+     "presence": "member",
+     "place": null,
+     "caption": null
+    },
+    {
+     "id": "qwen",
+     "presence": "member",
+     "place": null,
+     "caption": null
+    }
+   ]
+  }
+ },
+ {
+  "at": "2026-09-30T21:17:10.424Z",
+  "k": "lifecycle:scout",
+  "v": [
+   "REQUESTED: Created by Kyle in HQ; provisioning starts with real checks.",
+   "CONFIGURING: Checking the definition against what HQ can configure.",
+   "CONNECTING_PROVIDER: CONFIGURING passed: Definition valid for Local Node.js processes (HQ allowlisted checks): inspect-repo.",
+   "CONNECTING_TOOLS: CONNECTING_PROVIDER passed: Local Node worker launcher available; no model credits source.",
+   "TESTING: CONNECTING_TOOLS passed: Bound inspect-repo -> inspect-repo (LOCAL).",
+   "READY: TESTING passed: Trial inspect-repo passed: Inspected 164 repository source paths in app/ and lib/. File inventory only; not a code-quality verdict."
+  ]
+ },
+ {
+  "at": "2026-09-30T21:17:10.424Z",
+  "k": "lifecycle:tester",
+  "v": [
+   "REQUESTED: Created by Kyle in HQ; provisioning starts with real checks.",
+   "CONFIGURING: Checking the definition against what HQ can configure.",
+   "CONNECTING_PROVIDER: CONFIGURING passed: Definition valid for Local Node.js processes (HQ allowlisted checks): verify-hq.",
+   "CONNECTING_TOOLS: CONNECTING_PROVIDER passed: Local Node worker launcher available; no model credits source.",
+   "TESTING: CONNECTING_TOOLS passed: Bound verify-hq -> verify-hq (LOCAL).",
+   "READY: TESTING passed: Trial inspect-repo passed: Inspected 164 repository source paths in app/ and lib/. File inventory only; not a code-quality verdict."
+  ]
+ },
+ {
+  "at": "2026-09-30T21:17:10.424Z",
+  "k": "lifecycle:cfg",
+  "v": [
+   "REQUESTED: Created by Kyle in HQ; provisioning starts with real checks.",
+   "CONFIGURING: Checking the definition against what HQ can configure.",
+   "ERROR: CONFIGURING failed: Claude Code CLI with Kyle's subscription sign-in (read-only tools) runs the signed-in tool's own default model; HQ cannot select model some-model for it. Remove the model, or pick a backend that takes one."
+  ]
+ },
+ {
+  "at": "2026-09-30T21:17:10.424Z",
+  "k": "lifecycle:perm",
+  "v": [
+   "REQUESTED: Created by Kyle in HQ; provisioning starts with real checks.",
+   "CONFIGURING: Checking the definition against what HQ can configure.",
+   "CONNECTING_PROVIDER: CONFIGURING passed: Definition valid for Local Node.js processes (HQ allowlisted checks): inspect-repo.",
+   "CONNECTING_TOOLS: CONNECTING_PROVIDER passed: Local Node worker launcher available; no model credits source.",
+   "ERROR: CONNECTING_TOOLS failed: Tool file-inventory needs permission read-repo, which was not granted. Without it the agent cannot become READY."
+  ]
+ },
+ {
+  "at": "2026-09-30T21:17:10.425Z",
+  "k": "lifecycle:codex",
+  "v": [
+   "REQUESTED: Created by Kyle in HQ; provisioning starts with real checks.",
+   "CONFIGURING: Checking the definition against what HQ can configure.",
+   "CONNECTING_PROVIDER: CONFIGURING passed: Definition valid for Codex CLI with Kyle's ChatGPT sign-in (read-only sandbox): review-repo.",
+   "WAITING: Codex CLI with Kyle's ChatGPT sign-in (read-only sandbox) is OFFLINE: Codex CLI not found on PATH (ENOENT). Install and sign in, then restart HQ."
+  ]
+ },
+ {
+  "at": "2026-09-30T21:17:10.425Z",
+  "k": "lifecycle:claude",
+  "v": [
+   "REQUESTED: Created by Kyle in HQ; provisioning starts with real checks.",
+   "CONFIGURING: Checking the definition against what HQ can configure.",
+   "CONNECTING_PROVIDER: CONFIGURING passed: Definition valid for Claude Code CLI with Kyle's subscription sign-in (read-only tools): review-repo.",
+   "CONNECTING_TOOLS: CONNECTING_PROVIDER passed: Claude Code 2.1.286 (Claude Code): signed in with the subscription (oauth_token). Remaining subscription capacity is UNKNOWN until a run reports it.",
+   "TESTING: CONNECTING_TOOLS passed: Bound review-repo -> review-repo (SUBSCRIPTION).",
+   "READY: TESTING passed: Sign-in verified as the subscription and every capability routes to $0 compute. No model call was made (a trial review would use subscription capacity)."
+  ]
+ },
+ {
+  "at": "2026-09-30T21:17:11.039Z",
+  "k": "screenshot",
+  "v": "2-ready-and-failed.png"
+ },
+ {
+  "at": "2026-09-30T21:17:11.093Z",
+  "k": "world-after-provisioning",
+  "v": {
+   "family": "live",
+   "sim": null,
+   "rejected": [],
+   "agents": {
+    "agent-5f-unknown-927": {
+     "state": "READY",
+     "activity": "offline",
+     "taskId": null,
+     "name": "Scout 927"
+    },
+    "tester-5f-86b797": {
+     "state": "READY",
+     "activity": "offline",
+     "taskId": null,
+     "name": "Tester 5F"
+    },
+    "agent-5f-bad-model": {
+     "state": "ERROR",
+     "activity": "offline",
+     "taskId": null,
+     "name": "Bad Model"
+    },
+    "agent-5f-no-permission": {
+     "state": "ERROR",
+     "activity": "offline",
+     "taskId": null,
+     "name": "No Permission"
+    },
+    "agent-5f-codex-reviewer": {
+     "state": "WAITING",
+     "activity": "offline",
+     "taskId": null,
+     "name": "Codex Reviewer"
+    },
+    "agent-5f-claude-reviewer": {
+     "state": "READY",
+     "activity": "offline",
+     "taskId": null,
+     "name": "Claude Reviewer"
+    }
+   },
+   "entities": [
+    {
+     "id": "chatgpt",
+     "presence": "member",
+     "place": null,
+     "caption": null
+    },
+    {
+     "id": "claude",
+     "presence": "member",
+     "place": null,
+     "caption": null
+    },
+    {
+     "id": "codex",
+     "presence": "member",
+     "place": null,
+     "caption": null
+    },
+    {
+     "id": "gemma",
+     "presence": "member",
+     "place": null,
+     "caption": null
+    },
+    {
+     "id": "hq-verifier",
+     "presence": "member",
+     "place": null,
+     "caption": null
+    },
+    {
+     "id": "qwen",
+     "presence": "member",
+     "place": null,
+     "caption": null
+    },
+    {
+     "id": "agent-5f-unknown-927",
+     "presence": "candidate",
+     "place": "onboarding",
+     "caption": "Onboarding complete: waiting to join"
+    },
+    {
+     "id": "tester-5f-86b797",
+     "presence": "candidate",
+     "place": "onboarding",
+     "caption": "Onboarding complete: waiting to join"
+    },
+    {
+     "id": "agent-5f-bad-model",
+     "presence": "candidate",
+     "place": "onboarding",
+     "caption": "Onboarding failed"
+    },
+    {
+     "id": "agent-5f-no-permission",
+     "presence": "candidate",
+     "place": "onboarding",
+     "caption": "Onboarding failed"
+    },
+    {
+     "id": "agent-5f-codex-reviewer",
+     "presence": "candidate",
+     "place": "onboarding",
+     "caption": "Onboarding paused: waiting on setup"
+    },
+    {
+     "id": "agent-5f-claude-reviewer",
+     "presence": "candidate",
+     "place": "onboarding",
+     "caption": "Onboarding complete: waiting to join"
+    }
+   ]
+  }
+ },
+ {
+  "at": "2026-09-30T21:17:11.098Z",
+  "k": "task-before-activation",
+  "v": {
+   "status": 400,
+   "body": {
+    "error": "Scout 927 is not an active agent (READY); it cannot take work"
+   }
+  }
+ },
+ {
+  "at": "2026-09-30T21:17:11.101Z",
+  "k": "activate:agent-5f-unknown-927",
+  "v": {
+   "status": 200,
+   "body": {
+    "state": "ACTIVE"
+   }
+  }
+ },
+ {
+  "at": "2026-09-30T21:17:11.103Z",
+  "k": "activate:tester-5f-86b797",
+  "v": {
+   "status": 200,
+   "body": {
+    "state": "ACTIVE"
+   }
+  }
+ },
+ {
+  "at": "2026-09-30T21:17:14.471Z",
+  "k": "screenshot",
+  "v": "3-activated-joined.png"
+ },
+ {
+  "at": "2026-09-30T21:17:14.475Z",
+  "k": "world-commandable",
+  "v": {
+   "chatgpt": "orchestrate",
+   "claude": "review-repo",
+   "codex": "review-repo",
+   "gemma": "summarize-local",
+   "hq-verifier": "inspect-repo",
+   "agent-5f-unknown-927": "inspect-repo",
+   "tester-5f-86b797": "verify-hq"
+  }
+ },
+ {
+  "at": "2026-09-30T21:17:14.675Z",
+  "k": "world-command",
+  "v": {
+   "status": 201,
+   "body": {
+    "id": "cmd-pass5f-live-1",
+    "at": 1790803034500,
+    "agentId": "agent-5f-unknown-927",
+    "instruction": "Inventory the repository source for Pass 5F",
+    "operation": "inspect-repo",
+    "taskId": "fb2e6f9f-d756-4534-be19-c4cf572bed90",
+    "error": null
+   }
+  }
+ },
+ {
+  "at": "2026-09-30T21:17:16.234Z",
+  "k": "screenshot",
+  "v": "4-working.png"
+ },
+ {
+  "at": "2026-09-30T21:17:16.296Z",
+  "k": "world-while-working",
+  "v": {
+   "family": "live",
+   "sim": null,
+   "rejected": [],
+   "agents": {
+    "agent-5f-unknown-927": {
+     "state": "ACTIVE",
+     "activity": "idle",
+     "taskId": null,
+     "name": "Scout 927"
+    },
+    "tester-5f-86b797": {
+     "state": "ACTIVE",
+     "activity": "idle",
+     "taskId": null,
+     "name": "Tester 5F"
+    },
+    "agent-5f-bad-model": {
+     "state": "ERROR",
+     "activity": "offline",
+     "taskId": null,
+     "name": "Bad Model"
+    },
+    "agent-5f-no-permission": {
+     "state": "ERROR",
+     "activity": "offline",
+     "taskId": null,
+     "name": "No Permission"
+    },
+    "agent-5f-codex-reviewer": {
+     "state": "WAITING",
+     "activity": "offline",
+     "taskId": null,
+     "name": "Codex Reviewer"
+    },
+    "agent-5f-claude-reviewer": {
+     "state": "READY",
+     "activity": "offline",
+     "taskId": null,
+     "name": "Claude Reviewer"
+    }
+   },
+   "entities": [
+    {
+     "id": "chatgpt",
+     "presence": "member",
+     "place": null,
+     "caption": null
+    },
+    {
+     "id": "claude",
+     "presence": "member",
+     "place": null,
+     "caption": null
+    },
+    {
+     "id": "codex",
+     "presence": "member",
+     "place": null,
+     "caption": null
+    },
+    {
+     "id": "gemma",
+     "presence": "member",
+     "place": null,
+     "caption": null
+    },
+    {
+     "id": "hq-verifier",
+     "presence": "member",
+     "place": null,
+     "caption": null
+    },
+    {
+     "id": "qwen",
+     "presence": "member",
+     "place": null,
+     "caption": null
+    },
+    {
+     "id": "agent-5f-unknown-927",
+     "presence": "member",
+     "place": null,
+     "caption": null
+    },
+    {
+     "id": "tester-5f-86b797",
+     "presence": "member",
+     "place": null,
+     "caption": null
+    },
+    {
+     "id": "agent-5f-bad-model",
+     "presence": "candidate",
+     "place": "onboarding",
+     "caption": "Onboarding failed"
+    },
+    {
+     "id": "agent-5f-no-permission",
+     "presence": "candidate",
+     "place": "onboarding",
+     "caption": "Onboarding failed"
+    },
+    {
+     "id": "agent-5f-codex-reviewer",
+     "presence": "candidate",
+     "place": "onboarding",
+     "caption": "Onboarding paused: waiting on setup"
+    },
+    {
+     "id": "agent-5f-claude-reviewer",
+     "presence": "candidate",
+     "place": "onboarding",
+     "caption": "Onboarding complete: waiting to join"
+    }
+   ]
+  }
+ },
+ {
+  "at": "2026-09-30T21:17:16.296Z",
+  "k": "task:World request: Inventory the repository source for Pass 5F",
+  "v": {
+   "stage": "DONE",
+   "agentId": "agent-5f-unknown-927",
+   "evidence": [
+    "FINDING: Inspected 164 repository source paths in app/ and lib/. File inventory only; not a code-quality verdict.",
+    "COMPLETED: Local process exited 0"
+   ]
+  }
+ },
+ {
+  "at": "2026-09-30T21:17:16.296Z",
+  "k": "task:Run HQ foundation tests",
+  "v": {
+   "stage": "DONE",
+   "agentId": "tester-5f-86b797",
+   "evidence": [
+    "TEST_RESULT: 30 passed; 0 failed.",
+    "COMPLETED: Local process exited 0"
+   ]
+  }
+ },
+ {
+  "at": "2026-09-30T21:17:21.403Z",
+  "k": "screenshot",
+  "v": "5-finished.png"
+ },
+ {
+  "at": "2026-09-30T21:17:22.016Z",
+  "k": "disable-mid-work",
+  "v": {
+   "status": 200,
+   "body": {
+    "state": "DISABLED",
+    "requeued": "a6a7912f-f391-4f8c-9aeb-b9868290b7d0",
+    "parked": null
+   }
+  }
+ },
+ {
+  "at": "2026-09-30T21:17:22.016Z",
+  "k": "interrupted-task",
+  "v": {
+   "stage": "READY",
+   "agentId": null,
+   "preferredAgentId": null,
+   "runTerminal": "CANCELLED",
+   "testerAssignment": null
+  }
+ },
+ {
+  "at": "2026-09-30T21:17:25.063Z",
+  "k": "screenshot",
+  "v": "6-disabled-left.png"
+ },
+ {
+  "at": "2026-09-30T21:17:25.114Z",
+  "k": "world-after-disable",
+  "v": {
+   "family": "live",
+   "sim": null,
+   "rejected": [],
+   "agents": {
+    "agent-5f-unknown-927": {
+     "state": "ACTIVE",
+     "activity": "idle",
+     "taskId": null,
+     "name": "Scout 927"
+    },
+    "tester-5f-86b797": {
+     "state": "DISABLED",
+     "activity": "offline",
+     "taskId": null,
+     "name": "Tester 5F"
+    },
+    "agent-5f-bad-model": {
+     "state": "ERROR",
+     "activity": "offline",
+     "taskId": null,
+     "name": "Bad Model"
+    },
+    "agent-5f-no-permission": {
+     "state": "ERROR",
+     "activity": "offline",
+     "taskId": null,
+     "name": "No Permission"
+    },
+    "agent-5f-codex-reviewer": {
+     "state": "WAITING",
+     "activity": "offline",
+     "taskId": null,
+     "name": "Codex Reviewer"
+    },
+    "agent-5f-claude-reviewer": {
+     "state": "READY",
+     "activity": "offline",
+     "taskId": null,
+     "name": "Claude Reviewer"
+    }
+   },
+   "entities": [
+    {
+     "id": "chatgpt",
+     "presence": "member",
+     "place": null,
+     "caption": null
+    },
+    {
+     "id": "claude",
+     "presence": "member",
+     "place": null,
+     "caption": null
+    },
+    {
+     "id": "codex",
+     "presence": "member",
+     "place": null,
+     "caption": null
+    },
+    {
+     "id": "gemma",
+     "presence": "member",
+     "place": null,
+     "caption": null
+    },
+    {
+     "id": "hq-verifier",
+     "presence": "member",
+     "place": null,
+     "caption": null
+    },
+    {
+     "id": "qwen",
+     "presence": "member",
+     "place": null,
+     "caption": null
+    },
+    {
+     "id": "agent-5f-unknown-927",
+     "presence": "member",
+     "place": null,
+     "caption": null
+    },
+    {
+     "id": "agent-5f-bad-model",
+     "presence": "candidate",
+     "place": "onboarding",
+     "caption": "Onboarding failed"
+    },
+    {
+     "id": "agent-5f-no-permission",
+     "presence": "candidate",
+     "place": "onboarding",
+     "caption": "Onboarding failed"
+    },
+    {
+     "id": "agent-5f-codex-reviewer",
+     "presence": "candidate",
+     "place": "onboarding",
+     "caption": "Onboarding paused: waiting on setup"
+    },
+    {
+     "id": "agent-5f-claude-reviewer",
+     "presence": "candidate",
+     "place": "onboarding",
+     "caption": "Onboarding complete: waiting to join"
+    }
+   ]
+  }
+ },
+ {
+  "at": "2026-09-30T21:17:25.115Z",
+  "k": "requeued-task-finished-by",
+  "v": "hq-verifier"
+ },
+ {
+  "at": "2026-09-30T21:17:25.116Z",
+  "k": "hq",
+  "v": "stopped"
+ },
+ {
+  "at": "2026-09-30T21:17:26.865Z",
+  "k": "restart-identical-definition-and-lifecycle",
+  "v": true
+ },
+ {
+  "at": "2026-09-30T21:17:31.633Z",
+  "k": "screenshot",
+  "v": "7-after-restart-and-reload.png"
+ },
+ {
+  "at": "2026-09-30T21:17:31.708Z",
+  "k": "world-after-restart",
+  "v": {
+   "family": "live",
+   "sim": null,
+   "rejected": [],
+   "agents": {
+    "agent-5f-unknown-927": {
+     "state": "ACTIVE",
+     "activity": "idle",
+     "taskId": null,
+     "name": "Scout 927"
+    },
+    "tester-5f-86b797": {
+     "state": "DISABLED",
+     "activity": "offline",
+     "taskId": null,
+     "name": "Tester 5F"
+    },
+    "agent-5f-bad-model": {
+     "state": "ERROR",
+     "activity": "offline",
+     "taskId": null,
+     "name": "Bad Model"
+    },
+    "agent-5f-no-permission": {
+     "state": "ERROR",
+     "activity": "offline",
+     "taskId": null,
+     "name": "No Permission"
+    },
+    "agent-5f-codex-reviewer": {
+     "state": "WAITING",
+     "activity": "offline",
+     "taskId": null,
+     "name": "Codex Reviewer"
+    },
+    "agent-5f-claude-reviewer": {
+     "state": "READY",
+     "activity": "offline",
+     "taskId": null,
+     "name": "Claude Reviewer"
+    }
+   },
+   "entities": [
+    {
+     "id": "chatgpt",
+     "presence": "member",
+     "place": null,
+     "caption": null
+    },
+    {
+     "id": "claude",
+     "presence": "member",
+     "place": null,
+     "caption": null
+    },
+    {
+     "id": "codex",
+     "presence": "member",
+     "place": null,
+     "caption": null
+    },
+    {
+     "id": "gemma",
+     "presence": "member",
+     "place": null,
+     "caption": null
+    },
+    {
+     "id": "hq-verifier",
+     "presence": "member",
+     "place": null,
+     "caption": null
+    },
+    {
+     "id": "qwen",
+     "presence": "member",
+     "place": null,
+     "caption": null
+    },
+    {
+     "id": "agent-5f-unknown-927",
+     "presence": "member",
+     "place": null,
+     "caption": null
+    },
+    {
+     "id": "agent-5f-bad-model",
+     "presence": "candidate",
+     "place": "onboarding",
+     "caption": "Onboarding failed"
+    },
+    {
+     "id": "agent-5f-no-permission",
+     "presence": "candidate",
+     "place": "onboarding",
+     "caption": "Onboarding failed"
+    },
+    {
+     "id": "agent-5f-codex-reviewer",
+     "presence": "candidate",
+     "place": "onboarding",
+     "caption": "Onboarding paused: waiting on setup"
+    },
+    {
+     "id": "agent-5f-claude-reviewer",
+     "presence": "candidate",
+     "place": "onboarding",
+     "caption": "Onboarding complete: waiting to join"
+    }
+   ]
+  }
+ },
+ {
+  "at": "2026-09-30T21:17:32.118Z",
+  "k": "work-after-restart",
+  "v": {
+   "stage": "DONE",
+   "agentId": "agent-5f-unknown-927"
+  }
+ },
+ {
+  "at": "2026-09-30T21:17:32.185Z",
+  "k": "sim-event-in-live-page",
+  "v": {
+   "state": "ACTIVE",
+   "rejected": "AGENT_RETIRED: a live World refuses sim events"
+  }
+ },
+ {
+  "at": "2026-09-30T21:17:32.191Z",
+  "k": "retire",
+  "v": {
+   "status": 200,
+   "body": {
+    "state": "RETIRED",
+    "requeued": null,
+    "parked": null
+   }
+  }
+ },
+ {
+  "at": "2026-09-30T21:17:32.194Z",
+  "k": "retired-cannot-return",
+  "v": {
+   "status": 400,
+   "body": {
+    "error": "Tester 5F cannot go from RETIRED to ACTIVE."
+   }
+  }
+ },
+ {
+  "at": "2026-09-30T21:17:32.194Z",
+  "k": "page-errors",
+  "v": []
+ }
+]

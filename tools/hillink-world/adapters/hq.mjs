@@ -12,7 +12,24 @@ const make = makeEvent;
 
 // What an agent visibly does for a task, from the HQ operation's capability.
 // Pass 5E: the agent definition fields HQ reports, when it reports them (core/agents.mjs normalizes and bounds them).
-const hqDefinition = a => Object.fromEntries(Object.entries({ provider: a.provider, model: a.model, team: a.team, roleDescription: a.description, capabilities: a.capabilities, tools: a.tools, meta: a.attribution != null ? { attribution: a.attribution } : undefined }).filter(([, v]) => v != null));
+const hqDefinition = a => (a.definition && a.lifecycle ? worldDefinitionOf(a.definition) : Object.fromEntries(Object.entries({ provider: a.provider, model: a.model, team: a.team, roleDescription: a.description, capabilities: a.capabilities, tools: a.tools, meta: a.attribution != null ? { attribution: a.attribution } : undefined }).filter(([, v]) => v != null)));
+// Pass 5F: an agent Kyle created in HQ carries HQ's canonical definition (tools/hillink-hq/agents.mjs, already validated
+// and bounded there). This is the part the World shows; HQ-only fields (instructions, custom metadata) never come here.
+// HQ's appearance is already in the World's schema (base plus per-theme overrides under `themes`).
+export function worldDefinitionOf(d) {
+  if (!d || typeof d !== 'object') return {};
+  return Object.fromEntries(Object.entries({
+    name: d.name, kind: 'agent', provider: d.provider, model: d.model, role: d.role, roleDescription: d.description, responsibilities: d.responsibilities,
+    capabilities: d.capabilities, tools: d.tools, permissions: d.permissions, team: d.team, reportsTo: d.reportsTo, coordinatesWith: d.coordinatesWith,
+    workstation: d.workstation, appearance: d.appearance, meta: { createdIn: 'hq', backend: d.backend, ...(d.attribution ? { attribution: d.attribution } : {}) },
+  }).filter(([, v]) => v != null));
+}
+// HQ lifecycle state -> the World's lifecycle event (core/agents.mjs LIFECYCLE_EVENTS). HQ decides every transition.
+const LIFECYCLE_EVENT = { REQUESTED: 'AGENT_REQUESTED', WAITING: 'AGENT_PROVISIONING_WAITING', ERROR: 'AGENT_PROVISIONING_FAILED', READY: 'AGENT_READY', ACTIVE: 'AGENT_ACTIVATED', DISABLED: 'AGENT_DISABLED', RETIRED: 'AGENT_RETIRED' };
+const STAGES = new Set(['CONFIGURING', 'CONNECTING_PROVIDER', 'CONNECTING_TOOLS', 'GENERATING_APPEARANCE', 'TESTING']);
+export const lifecycleEvent = (state, fields) => (STAGES.has(state) ? ['AGENT_PROVISIONING', { ...fields, stage: state }] : LIFECYCLE_EVENT[state] ? [LIFECYCLE_EVENT[state], fields] : null);
+// The HQ agent registry's old display words (real/fantasy) are per-theme labels, not the base appearance (5F fix).
+const legacyAppearance = a => ({ themes: Object.fromEntries(['real', 'fantasy'].filter(t => typeof a[t] === 'string').map(t => [t, { label: a[t] }])) });
 // 5E correction (B6): the agents an HQ snapshot defines, as registry definitions (for attribution on the server).
 export const hqDefinitions = snap => Object.fromEntries((snap?.agents ?? []).filter(a => a && typeof a.id === 'string').map(a => [a.id, normalizeDefinition({ id: a.id, name: a.name, role: a.role, ...hqDefinition(a) })]).filter(([, d]) => d));
 export function activityForCapability(capability = '') {
@@ -126,9 +143,17 @@ export class HqTranslator {
     out.push(make(id('hq'), 'SYSTEM_REGISTERED', at, { systemId: 'hq', name: 'HQ controller', kind: 'hq', state: healthState(snap.health) }));
     const tasksById = Object.fromEntries((snap.tasks ?? []).map(t => [t.id, t]));
     for (const a of snap.agents ?? []) {
+      // Pass 5F: an agent created in HQ restates its lifecycle as HQ journaled it, step by step, at HQ's own times: the
+      // World's registry checks every transition again, so a snapshot can never skip one (READY is not ACTIVE).
+      const history = a.lifecycle && Array.isArray(a.lifecycle.history) ? a.lifecycle.history : null;
+      if (history?.length && a.definition) {
+        out.push(make(id('agent', a.id), 'AGENT_REQUESTED', history[0].at ?? at, { agentId: a.id, definition: worldDefinitionOf(a.definition), detail: clip(history[0].detail, 300) }));
+        history.slice(1).forEach((h, i) => { const m = lifecycleEvent(h.state, { agentId: a.id, detail: clip(h.detail, 300), order: i + 1 }); if (m) out.push(make(id('lc', a.id, i + 1), m[0], h.at ?? at, m[1])); });
+        continue;
+      }
       out.push(make(id('agent', a.id), 'AGENT_REGISTERED', at, {
         agentId: a.id, name: a.name, role: clip(a.role, 120), activity: activityForStatus(a, tasksById[a.assignment]),
-        appearance: { real: a.real, fantasy: a.fantasy }, detail: clip(a.detail), definition: hqDefinition(a),
+        appearance: legacyAppearance(a), detail: clip(a.detail), definition: hqDefinition(a),
       }));
     }
     for (const t of snap.tasks ?? []) {
@@ -158,8 +183,11 @@ export class HqTranslator {
     const push = (type, fields) => out.push(make(`hq-${e.id}-${out.length}`, type, at, { ...fields, order: e.seq * 1000 + out.length }));
     switch (e.type) {
       case 'AGENT_REGISTERED':
-        push('AGENT_REGISTERED', { agentId: d.id, name: d.name, role: clip(d.role, 120), activity: 'offline', appearance: { real: d.real, fantasy: d.fantasy }, definition: hqDefinition(d) });
+        push('AGENT_REGISTERED', { agentId: d.id, name: d.name, role: clip(d.role, 120), activity: 'offline', appearance: legacyAppearance(d), definition: hqDefinition(d) });
         break;
+      // Pass 5F: Kyle created an agent in HQ; it enters the World as a request, never as a member.
+      case 'AGENT_CREATED': push('AGENT_REQUESTED', { agentId: d.id, definition: worldDefinitionOf(d.definition), detail: clip(d.detail, 300) }); break;
+      case 'AGENT_LIFECYCLE': { const m = lifecycleEvent(d.to, { agentId: d.agentId, detail: clip(d.detail, 300) }); if (m) push(m[0], m[1]); break; }
       case 'AGENT_OBSERVED': {
         // HQ observes only unassigned agents, so an observation never interrupts a live run.
         const type = { IDLE: 'AGENT_IDLE', RATE_LIMITED: 'AGENT_WAITING' }[d.status] ?? 'AGENT_OFFLINE';
@@ -215,7 +243,8 @@ export class HqTranslator {
       case 'MODEL_OUTPUT': push('TASK_PROGRESS', { taskId, detail: summary }); break;
       case 'MODEL_RESULT': push('TASK_PROGRESS', { taskId, progress: { kind: 'stage', stage: 'answer ready' }, detail: clip(d.summary, 200) }); break;
       case 'COMPLETED': push('TASK_COMPLETED', { taskId, detail: summary }); break;
-      case 'FAILED': case 'CANCELLED': push('TASK_FAILED', { taskId, detail: summary }); break;
+      // A run HQ stopped because Kyle disabled or retired its agent is not a failed task: HQ requeues it next (TASK_QUEUED).
+      case 'FAILED': case 'CANCELLED': if (!(d.kind === 'CANCELLED' && d.requeue === true)) push('TASK_FAILED', { taskId, detail: summary }); break;
       case 'BLOCKED': push('TASK_BLOCKED', { taskId, detail: summary }); break;
       case 'RATE_LIMITED':
         push('TASK_BLOCKED', { taskId, detail: summary });

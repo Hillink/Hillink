@@ -5,8 +5,9 @@ import { ORCHESTRATION_EVENTS, reduceOrchestration } from './orchestration/state
 import { COMPUTE_EVENTS, reduceCompute, emptyCompute, computeLedger } from './compute/state.mjs';
 import { decideVariants, issueGrant, classRank, capacityOf, validateSpendAuthorization, authorizationStatus, DEFAULT_MODE, MODES } from './compute/policy.mjs';
 import { routeFor } from './compute/registry.mjs';
+import { validateAgentInput, canTransition, isWorking, CHECKS, STAGES, PROVISIONING, bindingFor } from './agents.mjs';
 
-export const defaults = { computeMode: DEFAULT_MODE, heartbeatMs: 15_000, progressMs: 120_000, adapterTimeoutMs: 3000, quarantineMs: 60_000, observationJournalMs: 300_000, maxAttempts: 2, maxLocalWorkers: 1 };
+export const defaults = { provisionRecheckMs: 15_000, provisionTimeoutMs: 30_000, trialTimeoutMs: 60_000, maxProvisioningAttempts: 20, computeMode: DEFAULT_MODE, heartbeatMs: 15_000, progressMs: 120_000, adapterTimeoutMs: 3000, quarantineMs: 60_000, observationJournalMs: 300_000, maxAttempts: 2, maxLocalWorkers: 1 };
 async function bounded(call, timeoutMs) {
   let timer;
   try { return await Promise.race([Promise.resolve().then(call), new Promise((_, reject) => { timer = setTimeout(() => reject(Error('Adapter response timed out')), timeoutMs); })]); }
@@ -14,7 +15,7 @@ async function bounded(call, timeoutMs) {
 }
 const progressKinds = new Set(['PROGRESS', 'COMMIT', 'TEST_PROGRESS', 'TEST_RESULT', 'PR', 'REVIEW', 'FINDING', 'HANDOFF', 'COMPLETED', 'MODEL_OUTPUT', 'MODEL_RESULT']);
 const liveStages = new Set(['CLAIMED', 'IMPLEMENTING', 'TESTING', 'REVIEW']);
-const eventTypes = new Set(['AGENT_REGISTERED', 'AGENT_CONFIGURED', 'AGENT_OBSERVED', 'TASK_CREATED', 'DISPATCHED', 'WORKER_EVENT', 'RECOVERY', 'TASK_REQUEUED', 'TASK_PARKED', 'ALERT_OPENED', 'ALERT_RESOLVED', 'ALERT_ACKNOWLEDGED', 'NOTIFICATION_DELIVERED', 'NOTIFICATION_FAILED', 'OWNER_CONFIRMED_TERMINATION', ...ORCHESTRATION_EVENTS, ...COMPUTE_EVENTS]);
+const eventTypes = new Set(['AGENT_REGISTERED', 'AGENT_CONFIGURED', 'AGENT_OBSERVED', 'TASK_CREATED', 'DISPATCHED', 'WORKER_EVENT', 'RECOVERY', 'TASK_REQUEUED', 'TASK_PARKED', 'ALERT_OPENED', 'ALERT_RESOLVED', 'ALERT_ACKNOWLEDGED', 'NOTIFICATION_DELIVERED', 'NOTIFICATION_FAILED', 'OWNER_CONFIRMED_TERMINATION', 'AGENT_CREATED', 'AGENT_LIFECYCLE', 'AGENT_WAITING_UPDATED', ...ORCHESTRATION_EVENTS, ...COMPUTE_EVENTS]);
 // Stages after which a task never runs again. CANCELLED (Pass 3) is final: later worker evidence cannot reopen it.
 export const FINAL_STAGES = new Set(['DONE', 'BLOCKED', 'CANCELLED']);
 const text = (value, max = 2000) => typeof value === 'string' && value.trim().length > 0 && value.length <= max;
@@ -28,6 +29,21 @@ export function reduce(state, event) {
   state.events.push(event);
   if (type === 'AGENT_REGISTERED') state.agents[d.id] = { ...d, observedStatus: 'UNKNOWN', observedAt: null, lastMeaningfulAt: null, assignment: null, usage: null };
   if (type === 'AGENT_CONFIGURED') Object.assign(state.agents[d.agentId], d.configuration);
+  // Pass 5F: an agent Kyle created in HQ (agents.mjs). It starts REQUESTED and gets an execution binding only at READY.
+  if (type === 'AGENT_CREATED') {
+    const def = d.definition;
+    state.agents[d.id] = { id: d.id, name: def.name, provider: def.provider, model: def.model ?? null, role: def.role, description: def.description ?? null, team: def.team ?? null, capabilities: [...def.capabilities], tools: [...def.tools], permissions: [...def.permissions], ...(def.attribution ? { attribution: def.attribution } : {}), workstation: 'Assigned by the World layout', real: 'New team member', fantasy: 'Adventurer', executionAdapter: null, telemetryAdapter: null, usageSource: null, definition: def, createdBy: d.by, createdAt: at, lifecycle: { state: 'REQUESTED', since: at, detail: d.detail ?? null, ownerAction: null, stage: null, history: [{ state: 'REQUESTED', at, detail: d.detail ?? null }], readied: false, attempts: 1 }, observedStatus: 'UNKNOWN', observedAt: null, lastMeaningfulAt: null, assignment: null, usage: null };
+  }
+  // A waiting agent whose reason changed (the daemon came up but the model is still missing): same state, new reason.
+  if (type === 'AGENT_WAITING_UPDATED') Object.assign(state.agents[d.agentId].lifecycle, { detail: d.detail ?? null, ownerAction: d.ownerAction ?? null });
+  if (type === 'AGENT_LIFECYCLE') {
+    const a = state.agents[d.agentId], lc = a.lifecycle;
+    lc.history.push({ state: d.to, at, detail: d.detail ?? null, ...(d.stage ? { stage: d.stage } : {}), ...(d.by ? { by: d.by } : {}) });
+    Object.assign(lc, { state: d.to, since: at, detail: d.detail ?? null, ownerAction: d.ownerAction ?? null, stage: d.stage ?? null, readied: lc.readied || d.to === 'READY' });
+    if (d.bindings) a.bindings = d.bindings;
+    if (d.binding) Object.assign(a, d.binding);
+    if (d.to === 'REQUESTED') { lc.attempts += 1; Object.assign(a, { executionAdapter: null, telemetryAdapter: null, usageSource: null, bindings: null }); }
+  }
   if (type === 'AGENT_OBSERVED') Object.assign(state.agents[d.agentId], { observedStatus: d.status, observedAt: at, detail: d.detail, retryAt: d.retryAt ?? null });
   if (type === 'AGENT_OBSERVED' && d.quarantineUntil) state.agents[d.agentId].quarantineUntil = d.quarantineUntil;
   if (type === 'TASK_CREATED') state.tasks[d.id] = { ...d, stage: d.safety === 'owner-required' ? 'BLOCKED' : 'READY', createdAt: at, attempts: 0, runId: null, evidence: [], handoffs: [], blocker: d.ownerAction || null };
@@ -64,7 +80,7 @@ export function reduce(state, event) {
     }
   }
   if (type === 'RECOVERY') state.tasks[d.taskId].recovery = { ...d, at };
-  if (type === 'TASK_REQUEUED') Object.assign(state.tasks[d.taskId], { stage: 'READY', runId: null, agentId: null, blocker: null, ownerAction: null, recoveryPending: false, notBefore: d.notBefore ?? null, spendBlocked: false });
+  if (type === 'TASK_REQUEUED') Object.assign(state.tasks[d.taskId], { stage: 'READY', runId: null, agentId: null, blocker: null, ownerAction: null, recoveryPending: false, notBefore: d.notBefore ?? null, spendBlocked: false }, d.releasePreference ? { preferredAgentId: null } : {});
   if (type === 'TASK_PARKED') {
     const task = state.tasks[d.taskId];
     Object.assign(task, { stage: 'BLOCKED', blocker: d.reason, ownerAction: d.ownerAction ?? null, recoveryPending: false });
@@ -101,7 +117,7 @@ export function agentStatus(state, agent, now, config = defaults, seenAt = null)
 
 export class Engine {
   constructor({ store, adapters = {}, now = Date.now, config = {} }) {
-    this.store = store; this.adapters = adapters; this.now = now; this.config = { ...defaults, ...config }; this.busy = false; this.seen = {};
+    this.store = store; this.adapters = adapters; this.now = now; this.config = { ...defaults, ...config }; this.busy = false; this.seen = {}; this.jobs = new Map(); this.checkedAt = {}; this.provisioning = {};
     // Fail closed: an unknown mode is ZERO_CREDIT, never something more permissive.
     if (!MODES.includes(this.config.computeMode)) this.config.computeMode = DEFAULT_MODE;
     this.state = store.read().reduce(reduce, emptyState());
@@ -124,7 +140,7 @@ export class Engine {
       const run = this.state.runs[task.runId];
       if (run && !run.endedAt) this.emit('TASK_PARKED', { taskId: task.id, reason: 'Controller restarted; previous worker termination is unconfirmed.', ownerAction: 'Confirm the previous process has stopped before resolving this run. It will not be dispatched twice.' });
     }
-    for (const agent of Object.values(this.state.agents)) if (!this.adapters[agent.executionAdapter] && agent.observedStatus !== 'UNKNOWN') this.emit('AGENT_OBSERVED', { agentId: agent.id, status: 'UNKNOWN', detail: 'Execution adapter is not connected in this controller.' });
+    for (const agent of Object.values(this.state.agents)) if (isWorking(agent) && !this.adapters[agent.executionAdapter] && agent.observedStatus !== 'UNKNOWN') this.emit('AGENT_OBSERVED', { agentId: agent.id, status: 'UNKNOWN', detail: 'Execution adapter is not connected in this controller.' });
   }
   configureAgent(agentId, configuration) {
     const agent = this.state.agents[agentId];
@@ -162,6 +178,9 @@ export class Engine {
     if (input.safety === 'owner-required' && !text(input.ownerAction)) throw Error('Exact owner action required');
     if (!Number.isInteger(input.priority) || input.priority < 0 || input.priority > 100) throw Error('Priority must be 0–100');
     if (input.preferredAgentId && !this.state.agents[input.preferredAgentId]?.capabilities.includes(operations[input.operation].capability)) throw Error('Selected worker cannot perform this operation');
+    // Pass 5F: only a working member takes work. An agent still provisioning, READY but not activated, disabled or
+    // retired is refused here, so no task can wait on it looking accepted.
+    if (input.preferredAgentId && !isWorking(this.state.agents[input.preferredAgentId])) { const a = this.state.agents[input.preferredAgentId]; throw Error(`${a.name} is not an active agent (${a.lifecycle.state}); it cannot take work`); }
     // Pass 3 role boundary, independent of capability data: implementation is Claude's alone.
     if (implementing && input.preferredAgentId !== 'claude') throw Error('Implementation tasks go to Claude only');
     const id = randomUUID();
@@ -214,7 +233,7 @@ export class Engine {
       // Only a connected adapter can supply an availability observation.
       for (const agent of Object.values(this.state.agents)) {
         const adapter = this.adapters[agent.executionAdapter];
-        if (!adapter || agent.assignment || agent.quarantineUntil > this.now() || (agent.observedStatus === 'RATE_LIMITED' && (!agent.retryAt || this.now() < agent.retryAt))) continue;
+        if (!adapter || !isWorking(agent) || agent.assignment || agent.quarantineUntil > this.now() || (agent.observedStatus === 'RATE_LIMITED' && (!agent.retryAt || this.now() < agent.retryAt))) continue;
         let observation;
         try {
           observation = await bounded(() => adapter.health(), this.config.adapterTimeoutMs);
@@ -223,6 +242,7 @@ export class Engine {
         if (agent.observedStatus !== observation.status || agent.detail !== observation.detail || !agent.observedAt || this.now() - agent.observedAt > this.config.observationJournalMs) this.emit('AGENT_OBSERVED', { agentId: agent.id, ...observation });
         this.seen[agent.id] = this.now();
       }
+      this.provision(); // Pass 5F: real provisioning checks run beside the queue, never blocking it
       await this.recover();
       for (const task of this.runnable()) {
         // The local concurrency limit is for local processes. A remote API adapter (the orchestrator) takes no
@@ -260,7 +280,7 @@ export class Engine {
   // Chooses the agent and compute route for one READY task, or records why it cannot run for free now.
   selectCompute(task) {
     const now = this.now(), mode = this.config.computeMode;
-    const capable = Object.values(this.state.agents).filter(a => (!task.preferredAgentId || a.id === task.preferredAgentId) && a.capabilities.includes(task.capability) && this.adapters[a.executionAdapter]);
+    const capable = Object.values(this.state.agents).filter(a => isWorking(a) && (!task.preferredAgentId || a.id === task.preferredAgentId) && a.capabilities.includes(task.capability) && this.adapters[a.executionAdapter]);
     if (!capable.length) return null; // no connected worker: the watchdog reports it
     // Pass 3 role boundary before any cost reasoning: implementation is Claude's alone, whatever the journal says.
     const intruder = task.operation === 'implement-repo' && capable.find(a => a.id !== 'claude');
@@ -286,7 +306,10 @@ export class Engine {
     // is busy or out of capacity means wait, never "pay instead".
     const pool = (free.length ? free : allowed).sort((x, y) => classRank(x.decision.route.computeClass) - classRank(y.decision.route.computeClass) || (x.agent.routingPriority ?? 0) - (y.agent.routingPriority ?? 0));
     // A task told to wait (capacity reset time) is not dispatched early, but its wait is still recorded below.
-    const ready = task.notBefore > now ? null : pool.find(x => !x.agent.assignment && this.status(x.agent) === 'IDLE');
+    // Pass 5F: agents may share one backend adapter (an HQ-created reviewer on the same signed-in CLI); a busy adapter
+    // is busy for all of them.
+    const adapterBusy = agent => Object.values(this.state.agents).some(b => b.id !== agent.id && b.assignment && b.executionAdapter === agent.executionAdapter);
+    const ready = task.notBefore > now ? null : pool.find(x => !x.agent.assignment && !adapterBusy(x.agent) && this.status(x.agent) === 'IDLE');
     if (ready) return ready;
     if (!pool.length) {
       let blocked = decided.find(x => !x.decision.allowed).decision;
@@ -369,7 +392,7 @@ export class Engine {
       this.emit('AGENT_OBSERVED', { agentId: agent.id, status: 'OFFLINE', detail: 'Recovery quarantine; awaiting cooldown and fresh health check', quarantineUntil: this.now() + this.config.quarantineMs });
       // Different worker handoff is preferred; no blind repetition or arbitrary shell retries.
       if (task.link) { this.emit('TASK_PARKED', { taskId: task.id, reason: `Watchdog: the worker was ${ackExpired ? 'not acknowledged in time' : status} (timed out) and was stopped.`, ownerAction: null }); continue; }
-      const alternate = Object.values(this.state.agents).find(a => a.id !== agent.id && (!task.preferredAgentId || a.id === task.preferredAgentId) && a.capabilities.includes(task.capability) && !a.assignment && this.adapters[a.executionAdapter] && this.status(a) === 'IDLE');
+      const alternate = Object.values(this.state.agents).find(a => a.id !== agent.id && isWorking(a) && (!task.preferredAgentId || a.id === task.preferredAgentId) && a.capabilities.includes(task.capability) && !a.assignment && this.adapters[a.executionAdapter] && this.status(a) === 'IDLE');
       if (alternate && task.attempts < this.config.maxAttempts) {
         this.emit('RECOVERY', { taskId: task.id, step: 'handoff', reason: `Retry with ${alternate.name}`, from: agent.id, to: alternate.id });
         this.emit('TASK_REQUEUED', { taskId: task.id });
@@ -389,10 +412,11 @@ export class Engine {
     // Queued work waiting behind the intentional local concurrency limit is healthy.
     if (snapshot.counts.ready && snapshot.unresolvedRuns < this.config.maxLocalWorkers) {
       for (const agent of snapshot.agents) {
+        if (!isWorking(agent)) continue;
         if (!this.runnable().some(t => (!t.preferredAgentId || t.preferredAgentId === agent.id) && agent.capabilities.includes(t.capability))) continue;
         if (['IDLE', 'OFFLINE', 'STALLED', 'RATE_LIMITED', 'UNKNOWN'].includes(agent.status)) add(`capacity:${agent.id}`, agent.adapterAvailable ? `UNEXPECTED_${agent.status}` : 'ADAPTER_UNAVAILABLE', agent, null, agent.adapterAvailable ? null : `Connect an execution/telemetry adapter for ${agent.name}, or route to a capable connected worker.`, agent.detail || 'Runnable work exists without verified execution on this worker.');
       }
-      if (!snapshot.agents.some(a => a.adapterAvailable && this.runnable().some(t => (!t.preferredAgentId || t.preferredAgentId === a.id) && a.capabilities.includes(t.capability)))) add('queue:no-adapter', 'ADAPTER_UNAVAILABLE', null, null, 'Connect a capable execution adapter for the queued operation.', 'No connected worker can execute the safe queue.');
+      if (!snapshot.agents.some(a => isWorking(a) && a.adapterAvailable && this.runnable().some(t => (!t.preferredAgentId || t.preferredAgentId === a.id) && a.capabilities.includes(t.capability)))) add('queue:no-adapter', 'ADAPTER_UNAVAILABLE', null, null, 'Connect a capable execution adapter for the queued operation.', 'No connected worker can execute the safe queue.');
     }
     if (snapshot.cycleComplete) add('cycle:complete', 'HANDOFF_READY', null, null, null, 'READY=0, WORKING=0, REVIEW=0; remaining tasks have explicit blockers.');
     for (const [key, alert] of desired) {
@@ -401,6 +425,104 @@ export class Engine {
     }
     for (const alert of Object.values(this.state.alerts)) if (alert.active && !desired.has(alert.key)) this.emit('ALERT_RESOLVED', { key: alert.key });
   }
+  // ---- Pass 5F: agents created in HQ (agents.mjs). Creation and every owner step are Kyle's (the owner HTTP API passes
+  // by: 'kyle'); provisioning is HQ's, one checked stage at a time.
+  createAgent(input, { by } = {}) {
+    if (by !== 'kyle') throw Error('Only Kyle can create agents.');
+    const { id, definition } = validateAgentInput(input, this.state);
+    this.emit('AGENT_CREATED', { id, definition, by: 'kyle', detail: 'Created by Kyle in HQ; provisioning starts with real checks.' });
+    return id;
+  }
+  transitionAgent(agentId, to, fields = {}) {
+    const a = this.state.agents[agentId];
+    if (!a?.lifecycle) throw Error('Only agents created in HQ have a lifecycle.');
+    if (!canTransition(a, to)) throw Error(`${a.name} cannot go from ${a.lifecycle.state} to ${to}${a.lifecycle.state === 'DISABLED' && to === 'ACTIVE' ? ' (it was never READY; retry provisioning)' : ''}.`);
+    this.emit('AGENT_LIFECYCLE', { agentId, to, ...fields });
+  }
+  ownerAgent(agentId, by) {
+    if (by !== 'kyle') throw Error('Only Kyle can change an agent\'s lifecycle.');
+    const a = this.state.agents[agentId];
+    if (!a) throw Error('Unknown agent.');
+    if (!a.lifecycle) throw Error(`${a.name} is a built-in HQ agent without a lifecycle; it is configured in registry.mjs.`);
+    return a;
+  }
+  // READY -> ACTIVE (joins the team), or DISABLED -> ACTIVE for an agent that was READY before.
+  activateAgent(agentId, { by } = {}) {
+    this.ownerAgent(agentId, by);
+    this.transitionAgent(agentId, 'ACTIVE', { by: 'kyle', detail: 'Activated by Kyle.' });
+    return { state: 'ACTIVE' };
+  }
+  // ERROR or DISABLED -> REQUESTED: provisioning runs again from the start, with fresh checks.
+  retryAgent(agentId, { by } = {}) {
+    const a = this.ownerAgent(agentId, by);
+    if (!['ERROR', 'DISABLED'].includes(a.lifecycle.state)) throw Error(`${a.name} is ${a.lifecycle.state}; only a failed or disabled agent is provisioned again.`);
+    if (a.lifecycle.attempts >= this.config.maxProvisioningAttempts) throw Error(`${a.name} has used ${a.lifecycle.attempts} provisioning attempts; create a corrected agent instead.`);
+    this.transitionAgent(agentId, 'REQUESTED', { by: 'kyle', detail: `Provisioning attempt ${a.lifecycle.attempts + 1}, requested by Kyle.` });
+    return { state: 'REQUESTED' };
+  }
+  async disableAgent(agentId, { by, reason = null } = {}) { return this.leave(agentId, 'DISABLED', by, reason); }
+  async retireAgent(agentId, { by, reason = null } = {}) { return this.leave(agentId, 'RETIRED', by, reason); }
+  // Disabling or retiring stops the agent's work first: a live run is cancelled through its adapter and, once the
+  // adapter confirms the process ended, the task goes back to the queue for any capable active agent. Without that
+  // proof the task is parked (the lease stays held, as everywhere in HQ) and Kyle confirms termination.
+  async leave(agentId, to, by, reason) {
+    const a = this.ownerAgent(agentId, by);
+    if (!canTransition(a, to)) throw Error(`${a.name} cannot go from ${a.lifecycle.state} to ${to}.`);
+    this.jobs.get(agentId)?.cancel?.();
+    const word = to === 'RETIRED' ? 'retired' : 'disabled';
+    let requeued = null, parked = null;
+    const task = this.state.tasks[a.assignment], run = this.state.runs[task?.runId];
+    if (task && run && !run.endedAt) {
+      let stopped = false;
+      try { stopped = await bounded(() => this.adapters[a.executionAdapter]?.cancel(run.runId), Math.max(this.config.adapterTimeoutMs, 30_000)); } catch { /* unproven */ }
+      if (stopped === true) {
+        if (!this.state.runs[run.runId].endedAt) this.workerEvent(run.runId, { kind: 'CANCELLED', summary: `${a.name} was ${word} by Kyle; the adapter confirmed the worker stopped.`, requeue: true });
+        if (this.state.tasks[task.id].stage !== 'CANCELLED') { this.emit('TASK_REQUEUED', { taskId: task.id, releasePreference: true, reason: `${a.name} was ${word}; the task is back in the queue.` }); requeued = task.id; }
+      } else {
+        this.emit('TASK_PARKED', { taskId: task.id, reason: `${a.name} was ${word} mid-run and its worker did not confirm it stopped.`, ownerAction: 'Confirm the previous worker has stopped before this task runs again.' });
+        parked = task.id;
+      }
+    }
+    this.transitionAgent(agentId, to, { by: 'kyle', detail: `${to === 'RETIRED' ? 'Retired' : 'Disabled'} by Kyle${reason ? `: ${String(reason).slice(0, 200)}` : '.'}` });
+    return { state: to, requeued, parked };
+  }
+  // One provisioning check per agent at a time, started from tick() and never awaited there. A check result applies
+  // only if the agent is still where the check started (Kyle may have disabled or retired it meanwhile).
+  provision() {
+    const ctx = { engine: this, ollama: this.provisioning.ollama ?? null, trialTimeoutMs: this.config.trialTimeoutMs };
+    for (const a of Object.values(this.state.agents)) {
+      const s = a.lifecycle?.state;
+      if (!s || !PROVISIONING.has(s) || this.jobs.has(a.id)) continue;
+      if (s === 'REQUESTED') { this.transitionAgent(a.id, 'CONFIGURING', { detail: 'Checking the definition against what HQ can configure.' }); continue; }
+      const stage = s === 'WAITING' ? a.lifecycle.stage : s;
+      if (s === 'WAITING' && this.now() - (this.checkedAt[a.id] ?? a.lifecycle.since) < this.config.provisionRecheckMs) continue;
+      const since = a.lifecycle.since, limit = stage === 'TESTING' ? this.config.trialTimeoutMs + 10_000 : this.config.provisionTimeoutMs;
+      let cancelled = false;
+      const job = bounded(() => CHECKS[stage](a, ctx), limit).catch(error => ({ ok: false, detail: `The ${stage} check did not finish: ${error.message}` })).then(r => {
+        this.jobs.delete(a.id); this.checkedAt[a.id] = this.now();
+        if (!cancelled) this.finishStage(a.id, s, since, stage, r);
+      });
+      job.cancel = () => { cancelled = true; };
+      this.jobs.set(a.id, job);
+    }
+  }
+  finishStage(agentId, from, since, stage, r) {
+    const a = this.state.agents[agentId];
+    if (!a || a.lifecycle.state !== from || a.lifecycle.since !== since || r.defer) return;
+    const detail = String(r.detail ?? '').slice(0, 600);
+    if (r.wait) {
+      const ownerAction = String(r.ownerAction ?? '').slice(0, 400) || null;
+      if (from !== 'WAITING') this.transitionAgent(agentId, 'WAITING', { stage, detail, ownerAction });
+      else if (a.lifecycle.detail !== detail) this.emit('AGENT_WAITING_UPDATED', { agentId, detail, ownerAction });
+      return;
+    }
+    if (!r.ok) { this.transitionAgent(agentId, 'ERROR', { stage, detail: `${stage} failed: ${detail}`, ownerAction: 'Correct the definition or the environment, then retry provisioning in HQ.' }); return; }
+    // A waiting check that now passes resumes its stage (and runs it again there); a passed stage moves on.
+    if (from === 'WAITING') { this.transitionAgent(agentId, stage, { stage, detail: `Resumed: ${detail}` }); return; }
+    const next = stage === 'TESTING' ? 'READY' : STAGES[STAGES.indexOf(stage) + 1];
+    this.transitionAgent(agentId, next, { stage, detail: `${stage} passed: ${detail}`, ...(r.bindings ? { bindings: r.bindings } : {}), ...(next === 'READY' ? { binding: bindingFor(a) } : {}) });
+  }
+  async provisioningIdle() { while (this.jobs.size) await Promise.all([...this.jobs.values()]); }
   acknowledgeAlert(key) {
     if (!this.state.alerts[key]) throw Error('Unknown alert');
     if (!this.state.alerts[key].acknowledgedAt) this.emit('ALERT_ACKNOWLEDGED', { key });

@@ -70,7 +70,7 @@ test('coordinating never sends the orchestrator on a trip: it works where it sta
 
 test('the World server refuses a command for an agent HQ says is not connected', async () => {
   const created = [];
-  const hq = Object.assign(async () => ({ seq: 1 }), { createTask: async i => { created.push(i); return 't'; }, raw: async () => ({ agents: [{ id: 'chatgpt', name: 'ChatGPT', adapterAvailable: false, detail: 'OpenAI runtime not configured' }], tasks: [] }) });
+  const hq = Object.assign(async () => ({ seq: 1 }), { createTask: async i => { created.push(i); return 't'; }, raw: async () => ({ agents: [{ id: 'chatgpt', name: 'ChatGPT', capabilities: ['plan', 'coordinate'], adapterAvailable: false, detail: 'OpenAI runtime not configured' }], tasks: [] }) });
   const server = createServer({ hq, commands: createJournal(path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'hlw-')), 'c.jsonl')) });
   await new Promise(r => server.listen(0, '127.0.0.1', r));
   try {

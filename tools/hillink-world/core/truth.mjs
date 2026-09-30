@@ -94,6 +94,10 @@ export function reconcileAgents(world, at, setActivity) {
     }
     // 5E correction (B2): runtime facts never give work or activity to an agent that is not a working member.
     if (!canWork(a)) { if (moved) changed.push(a.id); continue; }
+    // Pass 5F (found by the live Living HQ test): HQ's runtime report is per poll, but a task's end arrives as an event
+    // in the same poll just before it. A report that still says WORKING on a task the World already saw end is stale:
+    // it must not pull the agent back to work (and so skip the finish walk to the archive). The next report settles it.
+    if (truth.state === 'WORKING' && truth.taskId && ['done', 'failed'].includes(world.tasks[truth.taskId]?.status)) { if (moved) changed.push(a.id); continue; }
     if (truth.state !== 'WORKING' && a.taskId && truth.taskId !== a.taskId && !['WAITING', 'NEEDS_ATTENTION'].includes(truth.state)) a.taskId = null;
     if (truth.state === 'WORKING' && truth.taskId) a.taskId = truth.taskId;
     if (activity !== a.activity) { setActivity(a, activity, { type: 'AGENT_RUNTIME', at, detail: truth.reason, source: 'hq' }); changed.push(a.id); }

@@ -25,20 +25,28 @@ const allowed = new Set(['index.html', 'style.css', 'main.mjs', 'site.html', 'si
 for (const f of ['procgen/persist.mjs', 'procgen/evidence.mjs']) allowed.delete(f); // server side only (file system)
 const headers = { 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer', 'Content-Security-Policy': "default-src 'self'; style-src 'self'; script-src 'self'; img-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'" };
 
+// Pass 5F: the part of an HQ-created agent's definition the World may see: no instructions, no custom metadata.
+export const publicDefinition = d => (d && typeof d === 'object' ? Object.fromEntries(Object.entries(d).filter(([k]) => k !== 'instructions' && k !== 'meta')) : null);
 // Only what the World draws. Task descriptions, evidence bodies and usage stay in HQ.
 export function trimSnapshot(s) {
   const pick = (o, keys) => Object.fromEntries(keys.filter(k => o[k] !== undefined).map(k => [k, o[k]]));
   const data = e => {
     const d = e.data ?? {};
     if (e.type === 'TASK_CREATED') return pick(d, ['id', 'title', 'operation', 'capability', 'safety', 'ownerAction']);
-    if (e.type === 'WORKER_EVENT') return pick(d, ['runId', 'kind', 'summary', 'result', 'completedTests', 'url', 'toAgentId', 'retryAt']);
+    if (e.type === 'WORKER_EVENT') return pick(d, ['runId', 'kind', 'summary', 'result', 'completedTests', 'url', 'toAgentId', 'retryAt', 'requeue']);
+    // Pass 5F: agent creation and lifecycle. The definition is HQ-validated; HQ-only fields stay in HQ.
+    if (e.type === 'AGENT_CREATED') return { id: d.id, definition: publicDefinition(d.definition), detail: d.detail ?? null };
+    if (e.type === 'AGENT_LIFECYCLE') return pick(d, ['agentId', 'to', 'stage', 'detail']);
     if (e.type === 'AGENT_REGISTERED') return pick(d, ['id', 'name', 'role', 'real', 'fantasy', 'provider', 'model', 'team', 'description', 'capabilities', 'tools', 'attribution']);
     return pick(d, ['agentId', 'taskId', 'runId', 'status', 'detail', 'retryAt', 'reason', 'key', 'kind', 'ownerMustAct', 'ownerAction']);
   };
   return {
     seq: s.seq, now: s.now,
     health: { controller: s.health?.controller ?? null, lastError: s.health?.lastError ?? null },
-    agents: (s.agents ?? []).map(a => pick(a, ['id', 'name', 'role', 'real', 'fantasy', 'status', 'assignment', 'detail', 'retryAt', 'executionAdapter', 'adapterAvailable', 'attribution'])),
+    agents: (s.agents ?? []).map(a => ({
+      ...pick(a, ['id', 'name', 'role', 'real', 'fantasy', 'status', 'assignment', 'detail', 'retryAt', 'executionAdapter', 'adapterAvailable', 'attribution', 'provider', 'model', 'capabilities']),
+      ...(a.lifecycle ? { lifecycle: { state: a.lifecycle.state, since: a.lifecycle.since, detail: a.lifecycle.detail ?? null, readied: Boolean(a.lifecycle.readied), history: (a.lifecycle.history ?? []).map(h => ({ state: h.state, at: h.at, detail: typeof h.detail === 'string' ? h.detail.slice(0, 300) : null })) }, definition: publicDefinition(a.definition) } : {}),
+    })),
     tasks: (s.tasks ?? []).map(t => ({
       ...pick(t, ['id', 'title', 'stage', 'agentId', 'runId', 'capability', 'operation', 'safety', 'preferredAgentId', 'requestedBy', 'blocker', 'ownerAction', 'createdAt', 'claimedAt', 'endedAt']),
       // The last few evidence lines (kind, short summary, time) so a reload keeps the task's story; raw payloads stay in HQ.
@@ -122,13 +130,33 @@ export function siteFeed({ hq, site, cursorFile, intervalMs = 15000, writeCursor
   return { tick, status, stop: () => clearInterval(timer) };
 }
 
-// Agents the World may send commands to, and the only HQ operation a command becomes. Pass 1 wires one real
-// loop: Claude through HQ's read-only repository review (the signed-in Claude CLI with Read, Grep and Glob only).
-export const COMMANDABLE = {
-  claude: { operation: 'review-repo', safety: 'local-read-only', priority: 50, label: 'Ask Claude a read-only question about the repository', limits: 'Claude can only read files for this: no edits, shell, deploys or database access.' },
-  // Pass 2.5: ChatGPT, the orchestrator. HQ runs it through the OpenAI adapter with its narrow HQ tools.
-  chatgpt: { operation: 'orchestrate', safety: 'local-read-only', priority: 60, label: 'Ask ChatGPT, the orchestrator', limits: 'ChatGPT reads HQ and can queue read-only reviews by Claude or Codex, or ask you to decide. It cannot edit code or run commands.' },
-};
+// The HQ operations a World command may become (all read-only), in preference order, each keyed by the HQ capability
+// that performs it. Pass 5F: which agents take commands, and which operation, follows from HQ's agent configuration
+// (capabilities and lifecycle), never from an agent's id; a new agent HQ activates with a capability here is
+// commandable with no change to this file. Whether its backend can actually run is HQ's call: HQ queues the task for
+// that agent only (preferredAgentId), so a command never quietly moves to another agent.
+export const COMMAND_OPERATIONS = [
+  // Pass 2.5: the orchestrator. HQ runs it through its adapter with narrow HQ tools.
+  { capability: 'coordinate', operation: 'orchestrate', priority: 60, label: n => `Ask ${n}, the orchestrator`, limits: n => `${n} reads HQ and can queue read-only reviews or ask you to decide. It cannot edit code or run commands.` },
+  // Pass 1: a read-only repository review (a signed-in CLI with Read, Grep and Glob only).
+  { capability: 'review-repo', operation: 'review-repo', priority: 50, label: n => `Ask ${n} a read-only question about the repository`, limits: n => `${n} can only read files for this: no edits, shell, deploys or database access.` },
+  { capability: 'summarize', operation: 'summarize-local', priority: 50, label: n => `Ask ${n} to summarize text (local model)`, limits: n => `${n} summarizes only the text you send: no tools, files or network.` },
+  { capability: 'inspect-repo', operation: 'inspect-repo', priority: 50, label: n => `Ask ${n} to inventory the repository source`, limits: n => `${n} lists source files in app/ and lib/; your text is recorded with the task but does not change the check.` },
+  { capability: 'verify-unit', operation: 'verify-unit', priority: 50, label: n => `Ask ${n} to run the Hillink unit tests`, limits: n => `${n} runs the existing unit tests locally; no edits, network or credentials.` },
+  { capability: 'verify-hq', operation: 'verify-hq', priority: 50, label: n => `Ask ${n} to run the HQ foundation tests`, limits: n => `${n} runs HQ's engine and store tests locally; no edits, network or credentials.` },
+];
+// agentId -> command spec, from HQ's agent list. Only working members: an HQ-created agent must be ACTIVE.
+export function commandableOf(agents) {
+  const out = {};
+  for (const a of Array.isArray(agents) ? agents : []) {
+    if (!a || typeof a.id !== 'string' || !Array.isArray(a.capabilities)) continue;
+    if (a.lifecycle && a.lifecycle.state !== 'ACTIVE') continue;
+    const op = COMMAND_OPERATIONS.find(o => a.capabilities.includes(o.capability));
+    const name = typeof a.name === 'string' ? a.name.slice(0, 60) : a.id;
+    if (op) out[a.id] = { operation: op.operation, safety: 'local-read-only', priority: op.priority, label: op.label(name), limits: op.limits(name) };
+  }
+  return out;
+}
 const COMMAND_ID = /^[A-Za-z0-9-]{8,64}$/;
 const TERMINAL_KINDS = new Set(['COMPLETED', 'FAILED', 'CANCELLED', 'RATE_LIMITED', 'BLOCKED', 'UNCERTAIN']);
 
@@ -156,14 +184,19 @@ export function commandHandler({ hq, journal, now = Date.now }) {
     const existing = journal.get(commandId);
     if (existing) return { code: 200, body: { ...existing, duplicate: true } };
     if (inflight.has(commandId)) return { code: 200, body: { ...(await inflight.get(commandId)), duplicate: true } };
-    const spec = COMMANDABLE[agentId];
-    if (!spec) return { code: 400, body: { error: `${agentId || 'That agent'} cannot take commands from the World yet.` } };
     if (!instruction || instruction.length > 2000) return { code: 400, body: { error: 'The instruction must be 1 to 2000 characters.' } };
+    // HQ's current agent list decides who is commandable (Pass 5F); unknown means nobody.
+    let agents;
+    try { agents = hq.raw ? (await hq.raw()).agents ?? [] : []; } catch (error) { return { code: 502, body: { error: `HQ is not reachable: ${String(error.cause?.code ?? error.message).slice(0, 160)}` } }; }
+    const spec = commandableOf(agents)[agentId];
+    if (!spec) return { code: 400, body: { error: `${agentId || 'That agent'} cannot take commands from the World (it is not an active HQ agent with a command capability).` } };
+    if (journal.get(commandId)) return { code: 200, body: { ...journal.get(commandId), duplicate: true } };
+    if (inflight.has(commandId)) return { code: 200, body: { ...(await inflight.get(commandId)), duplicate: true } };
     const work = (async () => {
       const record = { id: commandId, at: now(), agentId, instruction, operation: spec.operation, taskId: null, error: null };
       try {
         // Never queue work for an agent HQ says is not connected: it would sit there looking accepted.
-        if (hq.raw) { const a = (await hq.raw()).agents?.find(x => x.id === agentId); if (a && a.adapterAvailable === false) throw Error(`${a.name} is not connected in HQ: ${String(a.detail ?? 'no runtime').slice(0, 160)}`); }
+        const a = agents.find(x => x.id === agentId); if (a && a.adapterAvailable === false) throw Error(`${a.name} is not connected in HQ: ${String(a.detail ?? 'no runtime').slice(0, 160)}`);
         record.taskId = await hq.createTask({ title: `World request: ${instruction.replace(/\s+/g, ' ').slice(0, 120)}`, description: instruction, operation: spec.operation, safety: spec.safety, priority: spec.priority, preferredAgentId: agentId });
       } catch (error) { record.error = String(error.cause?.code ?? error.message).slice(0, 300); }
       journal.add([record]); // refusals are history too
@@ -223,9 +256,9 @@ export function createServer({ hq = process.env.WORLD_HQ === '0' ? null : hqClie
       }
       if (req.method !== 'GET') return send(405, '{"error":"GET or POST only"}');
       const list = commands ? commands.all().slice(-20) : [];
-      let tasks = null, hqError = null;
-      if (list.length && hq?.raw) { try { tasks = (await hq.raw()).tasks ?? []; } catch (error) { hqError = String(error.cause?.code ?? error.message).slice(0, 200); } }
-      return send(200, JSON.stringify({ commandable: submit ? COMMANDABLE : {}, hqError, commands: list.map(r => commandView(r, tasks)).reverse() }));
+      let tasks = null, agents = [], hqError = null;
+      if ((list.length || submit) && hq?.raw) { try { const raw = await hq.raw(); tasks = raw.tasks ?? []; agents = raw.agents ?? []; } catch (error) { hqError = String(error.cause?.code ?? error.message).slice(0, 200); } }
+      return send(200, JSON.stringify({ commandable: submit ? commandableOf(agents) : {}, hqError, commands: list.map(r => commandView(r, tasks)).reverse() }));
     }
     if (req.method !== 'GET') return send(405, '{"error":"Read-only"}');
     if (url.pathname === '/api/hq') {

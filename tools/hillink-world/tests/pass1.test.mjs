@@ -8,7 +8,7 @@ import { makeEvent } from '../core/events.mjs';
 import { WorldStore, emptyWorld } from '../core/state.mjs';
 import { deriveAgentState, explainAgent, PRODUCTIVE_ACTIVITIES } from '../core/truth.mjs';
 import { HqTranslator } from '../adapters/hq.mjs';
-import { createServer, createJournal, commandHandler, commandView, COMMANDABLE } from '../serve.mjs';
+import { createServer, createJournal, commandHandler, commandView, commandableOf } from '../serve.mjs';
 import { inspectHTML, commandStatus } from '../ui/inspect.mjs';
 
 const agent = (id, status, extra = {}) => ({ id, name: id[0].toUpperCase() + id.slice(1), role: 'Worker', real: 'Engineer', fantasy: 'Dwarf', status, assignment: null, executionAdapter: `cli-${id}`, adapterAvailable: true, ...extra });
@@ -95,7 +95,7 @@ test('10. an agent with no runtime connected in HQ is shown as not connected, ne
   const g = store.world.agents.chatgpt;
   assert.equal(g.truth.state, 'NOT_CONNECTED');
   assert.equal(g.activity, 'offline');
-  const html = inspectHTML({ type: 'agent', id: 'chatgpt' }, store.world, 10_000, null, {}, { command: COMMANDABLE.chatgpt ?? null, commands: [] });
+  const html = inspectHTML({ type: 'agent', id: 'chatgpt' }, store.world, 10_000, null, {}, { command: commandableOf(HQ_AGENTS).chatgpt ?? null, commands: [] });
   assert.match(html, /Not connected/); assert.doesNotMatch(html, /cmd-text/, 'no command box for an unconnected agent');
   assert.equal(explainAgent(store.world, 'chatgpt').basis, 'hq');
 });
@@ -110,9 +110,12 @@ test('simulated agents keep their scripted activity and say so', () => {
 
 // --- The command loop -------------------------------------------------------------------------------------
 const tmpJournal = () => path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'hlw-cmd-')), 'commands.jsonl');
+// HQ's agents as its snapshot lists them (Pass 5F: commandability follows capabilities, not ids). Codex has no
+// review-repo capability here: HQ adds it only when the Codex CLI bridge is connected.
+const HQ_AGENTS = [{ id: 'chatgpt', name: 'ChatGPT', capabilities: ['plan', 'coordinate'] }, { id: 'claude', name: 'Claude', capabilities: ['implement', 'review', 'review-repo'] }, { id: 'codex', name: 'Codex', capabilities: ['test', 'security', 'review', 'investigate'] }];
 function fakeHq() {
   const created = [];
-  return { created, createTask: async input => { created.push(input); await new Promise(r => setTimeout(r, 5)); return `task-${created.length}`; } };
+  return { created, raw: async () => ({ agents: HQ_AGENTS, tasks: [] }), createTask: async input => { created.push(input); await new Promise(r => setTimeout(r, 5)); return `task-${created.length}`; } };
 }
 
 test('7. a World command becomes exactly one HQ read-only review task for Claude', async () => {
@@ -150,7 +153,7 @@ test('8. the real outcome comes back: HQ task result joins the command history',
 });
 
 test('world server: the command route accepts only same-origin JSON and journals history', async () => {
-  const hq = Object.assign(async () => ({ seq: 1 }), fakeHq(), { raw: async () => ({ tasks: [task('task-1', 'READY')] }) });
+  const hq = Object.assign(async () => ({ seq: 1 }), fakeHq(), { raw: async () => ({ agents: HQ_AGENTS, tasks: [task('task-1', 'READY')] }) });
   const server = createServer({ hq, commands: createJournal(tmpJournal()) });
   await new Promise(r => server.listen(0, '127.0.0.1', r));
   const base = `http://127.0.0.1:${server.address().port}/api/commands`, body = JSON.stringify({ commandId: 'cmd-http-001', agentId: 'claude', instruction: 'hi' });
@@ -161,7 +164,7 @@ test('world server: the command route accepts only same-origin JSON and journals
     const ok = await fetch(base, { method: 'POST', body, headers: { 'content-type': 'application/json', 'sec-fetch-site': 'same-origin' } });
     assert.equal(ok.status, 201);
     const list = await (await fetch(base)).json();
-    assert.deepEqual(Object.keys(list.commandable), ['claude', 'chatgpt']);
+    assert.deepEqual(Object.keys(list.commandable).sort(), ['chatgpt', 'claude']);
     assert.equal(list.commands[0].taskId, 'task-1'); assert.equal(list.commands[0].hq.stage, 'READY');
     assert.equal(hq.created.length, 1);
   } finally { server.close(); }

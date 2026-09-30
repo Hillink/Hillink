@@ -24,6 +24,7 @@ import { worldActivity, worldSnapshot, WORLD_CONTRACT_VERSION } from './orchestr
 import { resolveMode } from './compute/policy.mjs';
 import { computeLedger } from './compute/state.mjs';
 import { allRoutes, agentProfiles } from './compute/registry.mjs';
+import { catalog, rebindAdapters } from './agents.mjs';
 
 // Metered credentials HQ knows about. Only their presence is ever reported, never a value.
 export const METERED_CREDENTIALS = ['OPENAI_API_KEY', 'ANTHROPIC_API_KEY', 'HQ_SANDBOX_ANTHROPIC_API_KEY', 'CODEX_API_KEY', 'ANTHROPIC_AUTH_TOKEN'];
@@ -106,6 +107,10 @@ export async function createHQ({ port = 4312, directory = path.join(here, '.stat
     try { await connectOllama(engine); ollamaStatus = 'DISCOVERED'; }
     catch (error) { ollamaStatus = `UNAVAILABLE: ${error.message}`; }
   }
+  // Pass 5F: provisioning checks for agents Kyle creates here use the same opt-in bridges; an agent whose backend bridge
+  // is off waits (WAITING) for it. Adapters HQ created during an earlier provisioning are created again after a restart.
+  engine.provisioning = { ollama: { enabled: Boolean(ollama), request } };
+  rebindAdapters(engine, engine.provisioning);
   // Pass 3: the conductor turns objectives into planned, routed, verified work. HQ verifies every commit itself from
   // git and requires the sandbox to have been destroyed. After a restart it proves interrupted runs stopped (pids
   // gone, sandbox unregistered) before any step is retried; what it cannot prove stays parked.
@@ -168,6 +173,15 @@ export async function createHQ({ port = 4312, directory = path.join(here, '.stat
         const since = Number(url.searchParams.get('since') ?? 0);
         if (!Number.isSafeInteger(since) || since < 0) throw Error('Invalid since');
         return json(200, { contract: WORLD_CONTRACT_VERSION, snapshot: worldSnapshot(engine.snapshot()), activity: worldActivity(engine.state.events, { since }) });
+      }
+      // Pass 5F: agent creation and lifecycle. Owner API only (loopback, same-origin, session token), like spend.
+      if (req.method === 'GET' && url.pathname === '/api/agents/catalog') return json(200, catalog());
+      if (req.method === 'POST' && url.pathname === '/api/agents') return json(201, { id: engine.createAgent(await body(req), { by: 'kyle' }) });
+      if (req.method === 'POST' && /^\/api\/agents\/(activate|retry|disable|retire)$/.test(url.pathname)) {
+        const b = await body(req), id = String(b?.id ?? ''), op = url.pathname.split('/').pop(), reason = typeof b?.reason === 'string' ? b.reason : null;
+        if (op === 'activate') return json(200, engine.activateAgent(id, { by: 'kyle' }));
+        if (op === 'retry') return json(200, engine.retryAgent(id, { by: 'kyle' }));
+        return json(200, await (op === 'disable' ? engine.disableAgent(id, { by: 'kyle', reason }) : engine.retireAgent(id, { by: 'kyle', reason })));
       }
       if (req.method === 'POST' && url.pathname === '/api/alerts/ack') { engine.acknowledgeAlert((await body(req)).key); return json(200, { ok: true }); }
       if (req.method === 'POST' && url.pathname === '/api/runs/reconcile') {
