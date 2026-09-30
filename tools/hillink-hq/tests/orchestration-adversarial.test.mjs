@@ -238,3 +238,41 @@ test('approval gates: prohibitions do not raise gates, requests always do (first
   assert.deepEqual(g('Add slugify.', { requestedActions: ['deploy'] }), ['deploy'], 'declared actions always count');
   assert.deepEqual(g('Run a migration on the production database.'), ['database-change', 'production-change']);
 });
+
+test('restart after a crash mid-implementation (found in the real crash test): sandbox wired, stale instance removed, proof only from a real listing', async () => {
+  const { createHQ } = await import('../server.mjs');
+  const { MemoryStore } = await import('../store.mjs');
+  const { Engine } = await import('../engine.mjs');
+  const { probeTermination } = await import('../orchestration/recovery.mjs');
+  const box = 'hq-sbx-deadbeef-000001';
+  const hang = { health: async () => ({ status: 'IDLE' }), start: async ({ emit }) => { emit({ kind: 'ACK', summary: 'HQ implementation runner started.', pid: 999_999, sandbox: box }); }, cancel: async () => false };
+  const store = new MemoryStore();
+  const e1 = new Engine({ store, adapters: { 'cli-claude': hang }, config: { heartbeatMs: 600_000, progressMs: 600_000 } });
+  e1.initialize();
+  e1.configureAgent('claude', { capabilities: ['review-repo', 'implement-repo'], executionAdapter: 'cli-claude' });
+  e1.createTask({ title: 'impl', description: 'd', operation: 'implement-repo', safety: 'local-worktree-write', priority: 50, preferredAgentId: 'claude', implementation: { objective: 'x', scope: ['sandbox/x/'], acceptanceCriteria: 'y', constraints: 'z', tests: ['sandbox/x/a.test.mjs'] } });
+  await e1.tick();
+  const runId = Object.keys(e1.state.runs)[0];
+  assert.ok(runId && !e1.state.runs[runId].endedAt);
+  // No sandbox handle: the probe must not treat "no listing" as "no sandbox".
+  assert.equal((await probeTermination(e1, e1.state.runs[runId], { alive: () => false })).stopped, false);
+  // Restart with a sandbox whose listing fails: implementation is wired, but nothing is proven.
+  const fakeClaude = { health: async () => ({ status: 'IDLE' }), start: async () => {}, cancel: async () => false };
+  const registered = new Set(['Ubuntu', box]);
+  let cleaned = 0;
+  const failing = await createHQ({ port: 0, store, intervalMs: 20, adapters: { 'local-checks': fakeClaude, 'cli-claude': fakeClaude }, implementation: true, env: { HQ_CLAUDE_BIN: 'claude.exe' }, sandboxFactory: () => ({ available: () => ({ ok: true }), cleanupStale: async () => [], list: async () => { throw Error('wsl unavailable'); } }) });
+  await new Promise(r => setTimeout(r, 150));
+  assert.equal(failing.engine.state.runs[runId].endedAt, null, 'unproven: still parked');
+  await failing.close();
+  // Restart with a working sandbox: the stale instance is destroyed at start, then HQ proves the run stopped.
+  const hq = await createHQ({ port: 0, store, intervalMs: 20, adapters: { 'local-checks': fakeClaude, 'cli-claude': fakeClaude }, implementation: true, env: { HQ_CLAUDE_BIN: 'claude.exe' }, sandboxFactory: () => ({ available: () => ({ ok: true }), cleanupStale: async () => { cleaned += 1; registered.delete(box); return [box]; }, list: async () => [...registered] }) });
+  await new Promise(r => setTimeout(r, 150));
+  assert.equal(cleaned, 1);
+  const res = await fetch(`${hq.origin}/api/session`, { headers: { 'x-hq-client': 'command-center' } }).then(r => r.json());
+  const state = await fetch(`${hq.origin}/api/state`, { headers: { 'x-hq-client': 'command-center', authorization: `Bearer ${res.token}` } }).then(r => r.json());
+  assert.equal(state.health.implementation, 'CONFIGURED', 'implementation is wired even though Claude held the crashed run');
+  const task = Object.values(hq.engine.state.tasks)[0];
+  assert.ok(hq.engine.state.runs[runId].endedAt, 'reconciled');
+  assert.match(task.interrupted.evidence, /sandbox\(es\) hq-sbx-deadbeef-000001 are unregistered/);
+  await hq.close();
+});

@@ -44,7 +44,10 @@ export async function createHQ({ port = 4312, directory = path.join(here, '.stat
   // Pass 2.6: Claude may take bounded implementation tasks (implement-repo) through a separate runtime with
   // task-specific permissions. Its review adapter is unchanged; a router picks the runtime per task.
   let implementationStatus = 'DISABLED', sandboxRef = null;
-  if (implementation && engine.adapters['cli-claude'] && !engine.state.agents.claude.assignment) {
+  // A restart can find Claude still holding a crashed run (parked until HQ proves it stopped). The sandbox handle,
+  // stale-instance cleanup and the runner are wired regardless, so recovery can prove termination and the retry can
+  // run; only the capability change waits for an unassigned agent (found in the first real crash test).
+  if (implementation && engine.adapters['cli-claude']) {
     const claudeBin = findClaudeBinary({ env, execFileSync });
     // Pass 2.7: implementation exists only with the OS sandbox. No sandbox image, no implement-repo capability.
     const sandbox = sandboxFactory({ env });
@@ -56,7 +59,7 @@ export async function createHQ({ port = 4312, directory = path.join(here, '.stat
       sandbox.cleanupStale().catch(() => {}); // instances left by a crash are disposable
       const implementer = new ClaudeImplementer({ repoRoot: path.resolve(here, '../..'), worktreeRoot: env.HQ_WORKTREE_DIR || undefined, claudeBin, env, sandbox });
       engine.adapters['cli-claude'] = new ClaudeRouter(engine.adapters['cli-claude'], implementer);
-      engine.configureAgent('claude', { capabilities: [...new Set([...engine.state.agents.claude.capabilities, 'implement-repo'])] });
+      if (!engine.state.agents.claude.assignment) engine.configureAgent('claude', { capabilities: [...new Set([...engine.state.agents.claude.capabilities, 'implement-repo'])] });
       implementationStatus = 'CONFIGURED';
     }
   }
@@ -84,7 +87,7 @@ export async function createHQ({ port = 4312, directory = path.join(here, '.stat
     if (!parked || engine.now() - lastProbe < 10_000) return;
     lastProbe = engine.now();
     // A sandbox listing that fails throws, so the probe proves nothing and the run stays parked.
-    await reconcileInterrupted(engine, { sandboxes: async () => (sandboxRef ? sandboxRef.list({ strict: true }) : []) }).catch(() => []);
+    await reconcileInterrupted(engine, { sandboxes: async () => { if (!sandboxRef) throw Error('implementation sandbox not configured in this HQ'); return sandboxRef.list({ strict: true }); } }).catch(() => []);
   };
   const conductor = new Conductor(engine, { verifier: verifier ?? new CommitVerifier({ repoRoot: path.resolve(here, '../..') }), recovery, ...conductorOptions });
   engine.conductor = conductor;

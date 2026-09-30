@@ -12,7 +12,9 @@ export const processAlive = pid => {
   try { process.kill(pid, 0); return true; } catch (error) { return error.code === 'EPERM'; }
 };
 
-export async function probeTermination(engine, run, { alive = processAlive, sandboxes = async () => [], controllerPid = process.pid } = {}) {
+// sandboxes() must list registered WSL instances or throw. There is deliberately no default: "no listing" is never
+// "no sandbox" (found in the first real crash test, where a missing handle read as an empty list).
+export async function probeTermination(engine, run, { alive = processAlive, sandboxes = async () => { throw Error('no sandbox handle'); }, controllerPid = process.pid } = {}) {
   const task = engine.state.tasks[run.taskId], agent = engine.state.agents[run.agentId];
   const ev = task.evidence.filter(e => e.runId === run.runId);
   const pids = [...new Set(ev.map(e => e.pid).filter(p => Number.isInteger(p) && p !== controllerPid))];
@@ -27,7 +29,9 @@ export async function probeTermination(engine, run, { alive = processAlive, sand
   const living = pids.filter(pid => alive(pid));
   if (living.length) return { stopped: false, evidence: `Process(es) ${living.join(', ')} still exist.` };
   if (boxes.length) {
-    const listed = await sandboxes();
+    let listed;
+    try { listed = await sandboxes(); if (!Array.isArray(listed)) throw Error('invalid listing'); }
+    catch (error) { return { stopped: false, evidence: `Cannot list sandbox instances (${String(error.message).slice(0, 120)}); termination of ${boxes.join(', ')} is unproven.` }; }
     const left = boxes.filter(b => listed.includes(b));
     if (left.length) return { stopped: false, evidence: `Sandbox instance(s) ${left.join(', ')} still registered.` };
   }
