@@ -47,7 +47,7 @@ let hover = null, selected = null, follow = null, lastFrame = performance.now(),
 // Themes: same World state, different layout and art. Switching rebuilds only the view.
 function applyTheme(id, { keepCamera = false } = {}) {
   const cam0 = keepCamera && theme ? camera.toJSON() : null;
-  theme = loadTheme(THEME_ORDER.includes(id) ? id : 'real', { world: siteWorld, art: params.get('art') });
+  theme = loadTheme(THEME_ORDER.includes(id) ? id : 'real', { world: siteWorld, art: params.get('art') ?? '5d' });
   const places = view?.places ?? {}; // Semantic places (room + station ids) carry across themes.
   scene = new Scene(); view = new IsoWorldView(scene, effects, theme.layout, theme.scenery, theme.interpreter); view.places = places;
   Object.assign(camera, { bounds: theme.layout.bounds, home: theme.layout.home ?? null, minZoom: theme.camera.minZoom, maxZoom: theme.camera.maxZoom });
@@ -317,7 +317,10 @@ $('scenarios').addEventListener('click', e => {
   invalidate();
 });
 // v2: worlds saved by older builds (v1) are discarded rather than replayed into the new state shape.
-setInterval(() => { if (mode === 'sim') storage.set('hlw:sim-world', { v: 2, world: store.world }); }, 2000);
+// Pass 5H fix: save only after boot has seeded or restored the simulation (a slow boot, such as the first build of the
+// Real art skin, used to save the empty pre-boot World and then restore it, leaving the simulation without agents).
+let simBooted = false;
+setInterval(() => { if (mode === 'sim' && simBooted) storage.set('hlw:sim-world', { v: 2, world: store.world }); }, 2000);
 
 function savePrefs() { cameraTouched = true; clearTimeout(savePrefs.t); savePrefs.t = setTimeout(() => storage.set(`hlw:camera:${theme.id}${siteWorld ? ':gen' : ''}`, camera.toJSON()), 300); }
 
@@ -388,7 +391,8 @@ if (mode === 'hq') {
 } else {
   showMode('sim');
   const saved = demoMode ? null : storage.get('hlw:sim-world');
-  if (saved?.v === 2) store.replace(saved.world); else sim.seed();
+  if (saved?.v === 2 && Object.keys(saved.world?.agents ?? {}).length) store.replace(saved.world); else sim.seed();
+  simBooted = true;
 }
 if (demoMode) {
   // ?demo=construction[&step=N][&walk=1]: jump to step N (agents placed), or with walk=1 leave the last step's walks running.

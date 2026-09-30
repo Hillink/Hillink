@@ -15,7 +15,9 @@
 // to in themes/fantasy/metaphor.mjs). Nothing here is keyed by an agent id.
 import { depthSort, boxBounds } from '../engine/iso.mjs';
 import { AGENT } from '../world/scale.mjs';
-import { drawFigure } from './figure.mjs';
+import { drawCharacter } from './art/character.mjs';
+import { dressFor, npcLook } from './art/dress.mjs';
+import { statusOf, workChipOf, drawStatusRing, drawEmblem, drawWorkChip, drawCeremony } from './art/status.mjs';
 import { prism, poly, shade, glow, INK } from './props.mjs';
 import { MATERIALS } from './looks.mjs';
 import { rigFor, dress } from './rigs.mjs';
@@ -29,9 +31,15 @@ import { PRODUCTIVE_ACTIVITIES as WORKING } from '../core/truth.mjs';
 import { definitionOf } from '../core/agents.mjs';
 import { resolveAppearance, figureLookOf } from './appearance.mjs';
 import { stageIndex } from '../procgen/construction.mjs';
-import { ARCHETYPES, DOMAIN_ARCHETYPE, archetypeId, domainOf, CONSTRUCTION_PHASES } from '../themes/fantasy/metaphor.mjs';
+import { ARCHETYPES, CONSTRUCTION_PHASES } from '../themes/fantasy/metaphor.mjs';
+import { kingdomLook } from './art/dress.mjs';
+import { dressDistrict, KPROPS, WALL_DRESSING, drawWallPiece, tree, tuft, hash as h2 } from './art/kingdom-props.mjs';
 
 const TAU = Math.PI * 2;
+// Pass 5H: theme creatures dressed through the shared character rig (not agents: no status, no badge).
+const GIANT_LOOK = { skin: '#c9955e', shirt: '#7a6a4a', sleeve: '#c9955e', pants: '#4a3a24', shoes: '#3a2a1a', hair: '#5a3a22', beard: '#5a3a22', beardLong: true, wide: 1.4, belt: '#3a2618' };
+const GIANT_PARTS = { hair: 'shaggy', overlays: ['apron'] };
+const RANGER_PARTS = { hair: 'short', overlays: ['bow', 'elf-ears', 'quiver'] };
 export const KINGDOM_LAYERS = ['farBackground', 'background', 'ground', 'building', 'agent', 'foreground', 'overlay'];
 const RANK = { farBackground: 0, background: 1, ground: 2, building: 3, agent: 3, foreground: 4, overlay: 5 };
 // Painter's order for the kingdom (pure; tested): layers in order; the building and agent planes are one depth-sorted
@@ -43,18 +51,7 @@ export function depthOrder(items) {
   return [...bands.keys()].sort((a, b) => a - b).flatMap(r => (r === RANK.building ? depthSort(bands.get(r)) : bands.get(r)));
 }
 
-const OVERLAY_ITEMS = new Set(['wings', 'bow', 'bionic-eye', 'armor', 'goblin-ears', 'coin-pouch', 'hood-glow', 'cyclops-eye', 'shaggy', 'book', 'satchel', 'hammer', 'regal-glow', 'rune-core']);
-// A hero's kingdom look: { look (figure data), archetype, overlays, domain }. THEME, derived from the definition only.
-export function kingdomLook(agent) {
-  const def = definitionOf(agent ?? {}), own = def?.appearance?.themes?.fantasy, dom = domainOf(def);
-  const named = r => [...(r?.effects ?? []), ...(r?.equipment ?? []), ...(r?.accessories ?? [])].filter(x => typeof x === 'string' && OVERLAY_ITEMS.has(x));
-  if (own && typeof own === 'object') {
-    const res = resolveAppearance(def.appearance, 'fantasy'), arch = archetypeId(own.archetype);
-    return { look: figureLookOf(res, 'fantasy'), archetype: arch, overlays: [...new Set([...(arch ? ARCHETYPES[arch].overlays : []), ...named(res)])], domain: dom.domain };
-  }
-  const arch = DOMAIN_ARCHETYPE[dom.domain] ?? 'human', base = def?.appearance ?? {}, accent = typeof base.palette?.primary === 'string' && /^#[0-9a-f]{6}$/i.test(base.palette.primary) ? base.palette.primary : null;
-  return { look: { ...ARCHETYPES[arch].figure, ...(accent ? { badge: accent } : {}), package: 'scroll' }, archetype: arch, overlays: [...ARCHETYPES[arch].overlays, ...named(base)], domain: dom.domain };
-}
+export { kingdomLook };
 
 const font = (px, weight = 600) => `${weight} ${px}px ui-sans-serif, system-ui, sans-serif`;
 function text(ctx, s, x, y, px, color, { align = 'center', weight = 600 } = {}) { ctx.font = font(px, weight); ctx.fillStyle = color; ctx.textAlign = align; ctx.textBaseline = 'middle'; ctx.fillText(s, x, y); }
@@ -113,11 +110,41 @@ export function createKingdomSkin(layout) {
       flat(d, D, D.established || D.always ? GROUND[D.structure] : 'rgba(120,100,70,0.55)', INK);
       if (!D.established && !D.always) { ctx.save(); ctx.setLineDash([6, 5]); flat(d, { x0: D.x0 + 10, x1: D.x1 - 10, z0: D.z0 + 10, z1: D.z1 - 10 }, null, '#e8d9a8'); ctx.restore(); }
     }
+    // Pass 5H: floors by trade (flagstones in the halls, planks in the Academy, cobbles at the Gate, packed earth with
+    // soot in the Forge, a meadow with flowers in the Commons), carpets and rugs, and grass tufts on the lawns.
+    for (const D of Object.values(districts)) if (D.established || D.always) floorOf(d, D);
+    for (let k = 0; k < 420; k++) { const x = W0 + 250 + (W1 - W0 - 500) * h2(k * 1.91), z = -260 + 1480 * h2(k * 7.13); if ((z > road.z0 - 4 && z < road.z1 + 4 && x > road.x0 && x < road.x1) || Object.values(districts).some(D => x > D.x0 - 4 && x < D.x1 + 4 && z > D.z0 - 4 && z < D.z1 + 4)) continue; const [sx, sy] = P.at(x, z, 0); if (k % 9 === 0) { ctx.fillStyle = ['#ff6b8a', '#ffd36b', '#ffffff', '#b58cff'][k % 4]; ctx.beginPath(); ctx.arc(sx, sy - 2, 1.8, 0, TAU); ctx.fill(); } else if (k % 13 === 0) { ctx.fillStyle = '#8d8a84'; ctx.beginPath(); ctx.ellipse(sx, sy, 3.5, 2, 0, 0, TAU); ctx.fill(); } else tuft(d, sx, sy, 3 + h2(k) * 2, k); }
+    // A stream across the front meadow (scenery; nobody walks there), with a plank bridge.
+    { const pts = []; for (let x = W0; x <= W1; x += 40) pts.push([x, -150 + Math.sin(x * 0.004) * 30]); const up = pts.map(([x, z]) => P.at(x, z + 16, 0)), dn = pts.map(([x, z]) => P.at(x, z - 16, 0)).reverse();
+      poly(ctx, [...up, ...dn], '#4f93c4', '#3a6f93', 1.2); ctx.strokeStyle = 'rgba(255,255,255,0.35)'; ctx.lineWidth = 1; for (let k = 0; k < 40; k++) { const x = W0 + (W1 - W0) * h2(k * 3.7), z = -150 + Math.sin(x * 0.004) * 30 + (h2(k) - 0.5) * 18, [sx, sy] = P.at(x + (d.reduced ? 0 : (d.T * 12) % 40), z, 0); ctx.beginPath(); ctx.moveTo(sx - 5, sy); ctx.lineTo(sx + 5, sy); ctx.stroke(); }
+      const bx = (road.x0 + road.x1) / 2 - 200, bz = -150 + Math.sin(bx * 0.004) * 30; for (let k = -3; k <= 3; k++) prism(d, 0, { x0: bx - 30, x1: bx + 30, z0: bz + k * 6 - 3, z1: bz + k * 6 + 3, h0: 3, h1: 6 }, col(k % 2 ? '#9b6b3f' : '#a8774a')); }
     // The summoning circle's runes, brighter while candidates are being summoned.
     const S = districts.summoning, cx = (S.x0 + S.x1) / 2, cz = S.z1 - (S.z1 - S.z0) * 0.55, live = [...(d.env.scene?.entities.values() ?? [])].filter(e => e.kind === 'portal').length;
     for (const [rr, col] of [[120, '#b58cff'], [90, '#7ff0ff'], [58, '#b58cff']]) { ctx.strokeStyle = col; ctx.globalAlpha = 0.35 + (live ? 0.35 + 0.2 * Math.sin(d.T * 2) : 0); ctx.lineWidth = 2; ctx.beginPath(); for (let k = 0; k <= 48; k++) { const a = k / 48 * TAU, [sx, sy] = P.at(cx + Math.cos(a) * rr, cz + Math.sin(a) * rr * 0.8, 0); k ? ctx.lineTo(sx, sy) : ctx.moveTo(sx, sy); } ctx.stroke(); ctx.globalAlpha = 1; }
     for (const z of layout.locations.filter(l => l.zone)) { ctx.save(); ctx.setLineDash([3, 4]); flat(d, { x0: z.room.x0 + 3, x1: z.room.x1 - 3, z0: z.room.z0 + 3, z1: z.room.z1 - 3 }, 'rgba(181,140,255,0.08)', 'rgba(181,140,255,0.45)'); ctx.restore(); }
     for (const pl of plots) { ctx.save(); ctx.setLineDash([5, 4]); flat(d, pl.rect, pl.guild ? '#a39a8c' : '#7a6448', '#f2c230'); ctx.restore(); }
+  }
+
+  function floorOf(d, D) {
+    const { ctx } = d, r = { x0: D.x0 + 2, x1: D.x1 - 2, z0: D.z0 + 2, z1: D.z1 - 2 }, st = D.structure, seed = D.x0 * 0.01;
+    const line = (a, b, c, w = 0.8) => { ctx.strokeStyle = c; ctx.lineWidth = w; ctx.beginPath(); ctx.moveTo(...P.at(a[0], a[1], 0)); ctx.lineTo(...P.at(b[0], b[1], 0)); ctx.stroke(); };
+    if (D.row === 'back' || st === 'circle' || st === 'gatehouse') {
+      const t = st === 'gatehouse' ? 16 : 28, dark = 'rgba(40,30,20,0.28)';
+      for (let z = r.z0, row = 0; z < r.z1; z += t, row++) { line([r.x0, z], [r.x1, z], dark); for (let x = r.x0 + (row % 2 ? t / 2 : 0); x < r.x1; x += t) { line([x, z], [x, Math.min(r.z1, z + t)], dark, 0.6); const v = h2(x * 0.37 + z * 0.11 + seed); if (v > 0.8) flat(d, { x0: x + 1, x1: Math.min(r.x1, x + t - 1), z0: z + 1, z1: Math.min(r.z1, z + t - 1) }, v > 0.9 ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.07)'); } }
+    } else if (st === 'academy') {
+      for (let z = r.z0; z < r.z1; z += 12) line([r.x0, z], [r.x1, z], 'rgba(60,40,20,0.3)');
+      for (let k = 0; k < 40; k++) { const z = r.z0 + Math.floor(h2(k + seed) * (r.z1 - r.z0) / 12) * 12, x = r.x0 + h2(k * 3 + seed) * (r.x1 - r.x0); line([x, z], [x, z + 12], 'rgba(60,40,20,0.3)', 0.6); }
+    } else if (st === 'forge' || st === 'yard') {
+      for (let k = 0; k < 90; k++) { const x = r.x0 + h2(k * 1.3 + seed) * (r.x1 - r.x0), z = r.z0 + h2(k * 2.9 + seed) * (r.z1 - r.z0), [sx, sy] = P.at(x, z, 0); ctx.fillStyle = k % 3 ? 'rgba(40,30,25,0.35)' : 'rgba(150,140,120,0.5)'; ctx.beginPath(); ctx.ellipse(sx, sy, 2 + h2(k) * 3, 1 + h2(k) * 1.4, 0, 0, TAU); ctx.fill(); }
+      if (st === 'yard') for (const dz of [-8, 8]) { const z = (r.z0 + r.z1) / 2 + dz; line([r.x0, z], [r.x1, z], 'rgba(60,45,30,0.35)', 2); }
+    } else if (st === 'commons') {
+      for (let k = 0; k < 70; k++) { const x = r.x0 + h2(k * 1.7 + seed) * (r.x1 - r.x0), z = r.z0 + h2(k * 4.1 + seed) * (r.z1 - r.z0), [sx, sy] = P.at(x, z, 0); if (k % 4) tuft(d, sx, sy, 3, k); else { ctx.fillStyle = ['#ff6b8a', '#ffd36b', '#ffffff'][k % 3]; ctx.beginPath(); ctx.arc(sx, sy - 2, 1.6, 0, TAU); ctx.fill(); } }
+    }
+    // Carpets and rugs (flat, ground plane).
+    const rug = (x0, x1, z0, z1, c, trim) => { flat(d, { x0, x1, z0, z1 }, trim); flat(d, { x0: x0 + 4, x1: x1 - 4, z0: z0 + 4, z1: z1 - 4 }, c); };
+    const W = D.x1 - D.x0, Dp = D.z1 - D.z0;
+    if (st === 'keep') { rug(D.x0 + W * 0.47, D.x0 + W * 0.53, D.z0 + 4, D.z0 + Dp * 0.62, '#8e2a2a', '#d9b44a'); rug(D.x0 + W * 0.58, D.x0 + W * 0.86, D.z0 + Dp * 0.62, D.z0 + Dp * 0.86, '#8e2a2a', '#d9b44a'); }
+    if (st === 'library' || st === 'tower' || st === 'dome') { const c = st === 'tower' ? '#4b2f6e' : st === 'dome' ? '#2a3f6e' : '#6b2f2a'; rug(D.x0 + W * 0.3, D.x0 + W * 0.7, D.z0 + Dp * 0.3, D.z0 + Dp * 0.62, c, '#c8a24a'); }
   }
 
   // ---- Building plane (static pieces). ----
@@ -184,7 +211,7 @@ export function createKingdomSkin(layout) {
     pedestal: (d, b) => { prism(d, 0, { ...b, h1: b.h }, col('#8f80a8')); const [sx, sy] = P.at((b.x0 + b.x1) / 2, (b.z0 + b.z1) / 2, 0, b.h + 7); d.ctx.fillStyle = 'rgba(181,140,255,0.85)'; d.ctx.beginPath(); d.ctx.arc(sx, sy, 7, 0, TAU); d.ctx.fill(); glow(d, sx, sy, 18, 'rgba(181,140,255,0.4)'); },
     crystal: (d, b) => { prism(d, 0, { ...b, h1: 14 }, col('#6d6a7e')); const [sx, sy] = P.at((b.x0 + b.x1) / 2, (b.z0 + b.z1) / 2, 0, 14); poly(d.ctx, [[sx, sy - 40 - 3 * Math.sin(d.T)], [sx + 12, sy - 14], [sx, sy], [sx - 12, sy - 14]], 'rgba(181,140,255,0.9)', INK, 0.8); glow(d, sx, sy - 20, 40, 'rgba(181,140,255,0.35)'); },
     'council-table': (d, b) => { prism(d, 0, { ...b, h1: b.h }, col('#6b4226')); flat(d, { x0: b.x0 + 8, x1: b.x1 - 8, z0: b.z0 + 6, z1: b.z1 - 6 }, '#e9dcb8'); },
-    throne: (d, b) => { prism(d, 0, { ...b, h1: 24 }, col('#8e2a2a')); prism(d, 0, { x0: b.x0, x1: b.x1, z0: b.z1 - 6, z1: b.z1, h1: b.h }, col('#c8a24a')); },
+    throne: (d, b) => { prism(d, 0, { x0: b.x0 - 8, x1: b.x1 + 8, z0: b.z0 - 6, z1: b.z1, h1: 6 }, col('#a8977c')); prism(d, 0, { x0: b.x0 + 4, x1: b.x1 - 4, z0: b.z1 - 7, z1: b.z1, h0: 6, h1: b.h - 14 }, col('#c8a24a')); const [tx, ty] = P.at((b.x0 + b.x1) / 2, b.z1 - 7, 0, b.h - 14); poly(d.ctx, [[tx - 16, ty + 2], [tx - 16, ty - 6], [tx - 9, ty], [tx, ty - 12], [tx + 9, ty], [tx + 16, ty - 6], [tx + 16, ty + 2]], '#f2c94c', INK, 1); d.ctx.fillStyle = '#b3262c'; d.ctx.beginPath(); d.ctx.arc(tx, ty - 4, 2.5, 0, TAU); d.ctx.fill(); poly(d.ctx, [P.at(b.x0 + 8, b.z1 - 7.5, 0, 22), P.at(b.x1 - 8, b.z1 - 7.5, 0, 22), P.at(b.x1 - 8, b.z1 - 7.5, 0, b.h - 20), P.at(b.x0 + 8, b.z1 - 7.5, 0, b.h - 20)], '#8e2a2a', INK, 0.8); for (const x of [b.x0, b.x1 - 8]) prism(d, 0, { x0: x, x1: x + 8, z0: b.z0, z1: b.z1 - 2, h0: 6, h1: 30 }, col('#c8a24a')); prism(d, 0, { x0: b.x0 + 8, x1: b.x1 - 8, z0: b.z0, z1: b.z1 - 7, h0: 6, h1: 22 }, col('#8e2a2a')); glow(d, tx, ty - 4, 30, 'rgba(242,201,76,0.25)'); },
     'counting-table': (d, b) => { prism(d, 0, { ...b, h1: b.h }, col('#6b4226')); for (let k = 0; k < 4; k++) { const [sx, sy] = P.at(b.x0 + 8 + k * 8, (b.z0 + b.z1) / 2, 0, b.h + 3); d.ctx.fillStyle = '#f5c542'; d.ctx.beginPath(); d.ctx.ellipse(sx, sy, 3.5, 2, 0, 0, TAU); d.ctx.fill(); } },
     'vault-door': (d, b) => { prism(d, 0, { ...b, h1: b.h }, col('#4f4b45')); const [sx, sy] = P.at((b.x0 + b.x1) / 2, b.z0, 0, b.h / 2); d.ctx.strokeStyle = '#c8a24a'; d.ctx.lineWidth = 3; d.ctx.beginPath(); d.ctx.arc(sx, sy, 22, 0, TAU); d.ctx.stroke(); },
     telescope: (d, b) => { prism(d, 0, { x0: b.x0 + 8, x1: b.x1 - 8, z0: b.z0 + 8, z1: b.z1 - 8, h1: 20 }, col('#5a5650')); const [sx, sy] = P.at((b.x0 + b.x1) / 2, (b.z0 + b.z1) / 2, 0, 20); d.ctx.strokeStyle = '#c8a24a'; d.ctx.lineWidth = 6; d.ctx.beginPath(); d.ctx.moveTo(sx - 10, sy + 6); d.ctx.lineTo(sx + 22, sy - 40); d.ctx.stroke(); },
@@ -199,6 +226,25 @@ export function createKingdomSkin(layout) {
     well: (d, b) => { prism(d, 0, { ...b, h1: b.h }, col('#8d8a84')); flat(d, { x0: b.x0 + 4, x1: b.x1 - 4, z0: b.z0 + 4, z1: b.z1 - 4 }, '#3f6f8f'); },
   };
   for (const s of solids) add({ layer: 'building', x0: s.x0, x1: s.x1, z0: s.z0, z1: s.z1, sb: bb(s, s.h + 60), draw: d => (DRAW[s.type] ?? S(s, '#8a7a60', s.h))(d, s) });
+  // Pass 5H: set dressing (COSMETIC, static): each district's quiet edges filled with the props of its trade, never on a
+  // walk (render/art/kingdom-props.mjs dressDistrict), and wall pieces (torches, banners, windows) on the halls' far walls.
+  const nodes = Object.values(layout.nodePlan ?? {}), walks = (layout.navEdges ?? []).map(([a, b]) => [layout.nodePlan[a], layout.nodePlan[b]]).filter(([a, b]) => a && b);
+  const zoneRects = layout.locations.filter(l => l.zone).map(l => l.room);
+  for (const D of Object.values(districts)) {
+    if (!D.established && !D.always) continue;
+    const inD = q => q.x >= D.x0 - 2 && q.x <= D.x1 + 2 && q.z >= D.z0 - 2 && q.z <= D.z1 + 2;
+    const dressing = dressDistrict(D, { solids: solids.filter(o => o.district === D.id), stations: nodes.filter(inD), plots: D.id === 'yard' ? plots.map(p => p.rect) : [], zones: D.id === 'summoning' ? zoneRects : [], walks: walks.filter(([a, b]) => inD(a) || inD(b)) });
+    for (const q of dressing) add({ layer: 'building', x0: q.x0, x1: q.x1, z0: q.z0, z1: q.z1, sb: bb(q, q.h + 50), dressing: q.kind, draw: d => KPROPS[q.kind]?.(d, q) });
+    if (D.row === 'back') {
+      const pieces = WALL_DRESSING[D.structure] ?? [], n = pieces.length, zw = D.z1 + 0.5;
+      pieces.forEach((kind, i) => { const x = D.x0 + (D.x1 - D.x0) * (i + 1) / (n + 1), b = { x0: x - 14, x1: x + 14, z0: zw - 1, z1: zw }; add({ layer: 'building', ...b, bias: -1, sb: bb(b, 150), dressing: `wall-${kind}`, draw: d => drawWallPiece(d, kind, x, zw, 150, D.structure, i) }); });
+    }
+  }
+  // Scenery trees at the kingdom's flanks and along the front meadow (never where anyone walks).
+  for (let k = 0; k < 26; k++) {
+    const side = k % 2, x = side ? road.x1 + 60 + hash(k * 3.3) * 300 : road.x0 - 60 - hash(k * 3.3) * 300, z = 40 + hash(k * 5.1) * 900, b = { x0: x - 10, x1: x + 10, z0: z - 6, z1: z + 6 };
+    add({ layer: 'building', ...b, sb: bb(b, 120), draw: d => { const [sx, sy] = P.at(x, z, 0, 0); tree(d, sx, sy, 34 + hash(k) * 18, k, k % 3 ? 'round' : 'pine'); } });
+  }
   // Unclaimed plots: a tent and a sign, never a hall.
   for (const D of Object.values(districts)) if (!D.established && !D.always) {
     const cx = (D.x0 + D.x1) / 2, cz = D.inward > 0 ? D.z1 - 60 : D.z0 + 60, b = { x0: cx - 30, x1: cx + 30, z0: cz - 20, z1: cz + 20 };
@@ -206,7 +252,7 @@ export function createKingdomSkin(layout) {
   }
   // Foreground: hedges and a signpost in front of each front-row district.
   for (const D of Object.values(districts).filter(D => D.row === 'front')) {
-    for (let x = D.x0 + 10; x < D.x1 - 10; x += 70) { const b = { x0: x, x1: x + 24, z0: 22, z1: 38 }; add({ layer: 'foreground', ...b, sb: bb(b, 30), draw: d => prism(d, 0, { ...b, h1: 18 + 8 * hash(x) }, col('#3d7a3a')) }); }
+    for (let x = D.x0 + 10; x < D.x1 - 10; x += 70) { const b = { x0: x, x1: x + 24, z0: 22, z1: 38 }; add({ layer: 'foreground', ...b, sb: bb(b, 30), draw: d => KPROPS[hash(x) > 0.75 ? 'flowers' : 'bush']?.(d, { ...b, h: 16 + 8 * hash(x), seed: x * 0.1 }) }); }
     const sx = D.x0 + 26, b = { x0: sx - 3, x1: sx + 3, z0: 44, z1: 50 };
     add({ layer: 'foreground', ...b, sb: bb(b, 60), draw: d => { prism(d, 0, { ...b, h1: 44 }, col('#6b4226')); const [px, py] = P.at(sx, 44, 0, 44); d.late.push(() => pill(d.ctx, px + 30, py - 6, [D.name, D.established || D.always ? D.represents : 'Unclaimed plot: no such capability in HQ'].map(s => s.slice(0, 48)), { px: 7 })); } });
   }
@@ -214,7 +260,7 @@ export function createKingdomSkin(layout) {
   // ---- Construction (canonical stage), per plot. ----
   const plotItems = plots.map(pl => {
     const r = pl.rect, u = { x0: r.x0 + 16, x1: r.x1 - 16, z0: r.z0 + 10, z1: r.z0 + (r.z1 - r.z0) * 0.45 };
-    return { layer: 'building', ...u, sb: bb({ ...u, x0: u.x0 - 20, x1: u.x1 + 20 }, 200), draw: d => site(d, pl, u) };
+    return { layer: 'building', ...u, site: pl.project.id, sb: bb({ ...u, x0: u.x0 - 20, x1: u.x1 + 20 }, 200), draw: d => site(d, pl, u) };
   });
   items.push(...plotItems);
   function site(d, pl, u) {
@@ -254,42 +300,26 @@ export function createKingdomSkin(layout) {
   // ---- Characters. ----
   function drawHero(d, e) {
     const a = e.agent; if (!a) return;
-    const { ctx, env } = d, st = e.anim?.state ?? 'idle', t = (d.now - (e.anim?.since ?? d.now)) / 1000, K = kingdomLook(a);
+    const { ctx, env } = d, st = e.anim?.state ?? 'idle', t = (d.now - (e.anim?.since ?? d.now)) / 1000;
     const hovered = env.hoverId === e.id, selected = env.selectedId === e.id;
     if (hovered || selected) { ctx.beginPath(); ctx.ellipse(e.x, e.y + 0.5, e.h * 0.34, e.h * 0.1, 0, 0, TAU); ctx.lineWidth = 2; ctx.strokeStyle = selected ? '#ffd76b' : '#ffffff'; ctx.stroke(); }
     const dressed = dress(rig, e.anim), dir = e.dir ?? 'front';
-    const fig = { x: e.x, y: e.y, h: e.h, dir, posture: e.posture, state: dressed.clip, prev: d.reduced ? null : dressed.prev, blend: blendOf(e.anim, d.now), props: dressed.props, gait: e.gaitAmount ?? 1, t, time: d.reduced ? 0 : d.T + hash(e.id.length), stride: e.stride ?? 0, look: K.look, use: e.spotInfo?.use, moving: e.moving, alpha: e.staging?.presence === 'candidate' ? 0.9 : a.activity === 'offline' ? 0.82 : 1 };
-    overlaysBehind(d, K.overlays, e, dir);
-    const head = drawFigure(ctx, fig);
-    overlaysFront(d, K.overlays, head, e, dir);
-    if (selected || hovered || PRODUCTIVE_STATES.has(st) || SITE_STATES.has(st)) d.late.unshift(() => drawFigure(ctx, { ...fig, alpha: selected ? 0.45 : 0.3 }));
+    const fig = { x: e.x, y: e.y, h: e.h, dir, posture: e.posture, state: dressed.clip, prev: d.reduced ? null : dressed.prev, blend: blendOf(e.anim, d.now), props: dressed.props, gait: e.gaitAmount ?? 1, t, time: d.reduced ? 0 : d.T + hash(e.id.length), stride: e.stride ?? 0, look: null, use: e.spotInfo?.use, moving: e.moving, alpha: e.staging?.presence === 'candidate' ? 0.9 : a.activity === 'offline' ? 0.82 : 1 };
+    // Pass 5H: the shared character rig (render/art/character.mjs), dressed from the same appearance data.
+    const D = dressFor(a, 'fantasy'), st5 = statusOf(e, a);
+    Object.assign(fig, { look: D.look, parts: D.parts, heading: e.heading });
+    drawStatusRing(ctx, e.x, e.y, e.h, st5, d.T, d.reduced);
+    const head = drawCharacter(ctx, fig);
+    if (st5 === 'completed') drawCeremony(ctx, e.x, e.y, e.h, t, 'fantasy', d.reduced);
+    if (selected || hovered || PRODUCTIVE_STATES.has(st) || SITE_STATES.has(st)) d.late.unshift(() => drawCharacter(ctx, { ...fig, alpha: selected ? 0.45 : 0.3 }));
     if (st === 'work' && e.spotInfo?.use === 'work' && !d.reduced && Math.sin(d.T * 8 + e.x) > 0.55) { ctx.fillStyle = '#ffd36b'; for (let k = 0; k < 4; k++) ctx.fillRect(e.x + (dir === 'left' ? -10 : 8) + Math.sin(d.T * 30 + k) * 5, e.y - e.h * 0.35 + Math.cos(d.T * 25 + k) * 4, 1.8, 1.8); }
-    d.late.push(() => badge(d, e, a, head.top, hovered, selected));
-  }
-  function overlaysBehind(d, list, e, dir) {
-    const { ctx } = d;
-    if (list.includes('wings')) { const flap = d.reduced ? 0 : Math.sin(d.T * 9) * 0.3; for (const s of [-1, 1]) { ctx.save(); ctx.translate(e.x + s * e.h * 0.1, e.y - e.h * 0.62); ctx.rotate(s * (0.6 + flap)); ctx.fillStyle = 'rgba(255,255,255,0.85)'; ctx.strokeStyle = '#e88aae'; ctx.lineWidth = 0.8; ctx.beginPath(); ctx.ellipse(s * e.h * 0.16, 0, e.h * 0.18, e.h * 0.09, 0, 0, TAU); ctx.fill(); ctx.stroke(); ctx.restore(); } }
-    if (list.includes('regal-glow')) glow(d, e.x, e.y - e.h * 0.55, e.h * 0.8, 'rgba(217,180,74,0.18)');
-    if (list.includes('hammer') && dir !== 'back') { ctx.strokeStyle = '#6b4226'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(e.x - e.h * 0.2, e.y - e.h * 0.25); ctx.lineTo(e.x - e.h * 0.05, e.y - e.h * 0.62); ctx.stroke(); ctx.fillStyle = '#9aa6b4'; ctx.fillRect(e.x - e.h * 0.1, e.y - e.h * 0.68, e.h * 0.14, e.h * 0.08); }
-  }
-  function overlaysFront(d, list, head, e, dir) {
-    const { ctx } = d, { headX: hx, headY: hy, r } = head, f = dir === 'left' ? -1 : dir === 'right' ? 1 : 0;
-    if (dir === 'back') return;
-    if (list.includes('bionic-eye') && f >= 0) { const ex = f ? hx + r * 0.42 : hx + r * 0.36, ey = hy + r * 0.12; ctx.fillStyle = '#9fb3cc'; ctx.beginPath(); ctx.arc(ex, ey, r * 0.26, 0, TAU); ctx.fill(); ctx.strokeStyle = INK; ctx.lineWidth = 0.6; ctx.stroke(); ctx.fillStyle = '#ff2a2a'; ctx.beginPath(); ctx.arc(ex, ey, r * 0.13, 0, TAU); ctx.fill(); glow(d, ex, ey, r * 0.7, `rgba(255,42,42,${d.reduced ? 0.4 : 0.3 + 0.2 * Math.sin(d.T * 4)})`); }
-    if (list.includes('armor')) { ctx.fillStyle = 'rgba(159,179,204,0.9)'; for (const s of [-1, 1]) { ctx.beginPath(); ctx.ellipse(hx + s * r * 1.05, hy + r * 1.35, r * 0.42, r * 0.26, 0, 0, TAU); ctx.fill(); ctx.strokeStyle = INK; ctx.lineWidth = 0.6; ctx.stroke(); } }
-    if (list.includes('goblin-ears')) for (const s of [-1, 1]) { if (f && s !== f) continue; poly(ctx, [[hx + s * r * 0.8, hy - r * 0.1], [hx + s * r * 1.7, hy - r * 0.55], [hx + s * r * 0.9, hy + r * 0.3]], '#6fae3f', INK, 0.6); }
-    if (list.includes('cyclops-eye') && !f) { ctx.fillStyle = '#fffbe8'; ctx.beginPath(); ctx.arc(hx, hy + r * 0.05, r * 0.36, 0, TAU); ctx.fill(); ctx.strokeStyle = INK; ctx.lineWidth = 0.7; ctx.stroke(); ctx.fillStyle = '#3a2a1a'; ctx.beginPath(); ctx.arc(hx + (d.reduced ? 0 : Math.sin(d.T * 0.7) * r * 0.1), hy + r * 0.05, r * 0.15, 0, TAU); ctx.fill(); }
-    if (list.includes('hood-glow')) for (const s of f ? [f * 0.42] : [-0.36, 0.36]) { ctx.fillStyle = '#d6b8ff'; ctx.beginPath(); ctx.arc(hx + s * r, hy + r * 0.12, r * 0.1, 0, TAU); ctx.fill(); glow(d, hx + s * r, hy + r * 0.12, r * 0.35, 'rgba(181,140,255,0.4)'); }
-    if (list.includes('bow')) { ctx.strokeStyle = '#c98a2b'; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.arc(hx - r * 1.6, hy + r * 2.4, r * 1.1, -1.2, 1.2); ctx.stroke(); }
-    if (list.includes('coin-pouch')) { ctx.fillStyle = '#d4a23a'; ctx.beginPath(); ctx.arc(hx + r * 0.9, hy + r * 3.1, r * 0.35, 0, TAU); ctx.fill(); }
-    if (list.includes('book')) { ctx.fillStyle = '#8e2a2a'; ctx.fillRect(hx - r * 1.4, hy + r * 2.2, r * 0.7, r * 0.9); }
-    if (list.includes('satchel')) { ctx.fillStyle = '#6b4226'; ctx.fillRect(hx + r * 0.6, hy + r * 2.6, r * 0.8, r * 0.7); }
+    d.late.push(() => { const k = Math.min(1.6, Math.max(0.7, 1 / d.env.zoom)); drawEmblem(ctx, e.x, head.top - 9 * k, st5, 'fantasy', k, d.T); const chip = workChipOf(d.env.world, a); if (chip) drawWorkChip(ctx, e.x + 14 * k, head.top - 9 * k, chip, 'fantasy', k); });
+    d.late.push(() => badge(d, e, a, head.top - 16 * Math.min(1.6, Math.max(0.7, 1 / d.env.zoom)), hovered, selected));
   }
   function badge(d, e, a, top, hovered, selected) {
     const { ctx, env } = d, zoom = env.zoom, k = Math.min(1.8, Math.max(0.7, 1 / zoom)), cy = top - 4 * k;
     const cand = e.staging?.presence === 'candidate';
     const ring = cand ? '#b58cff' : PRODUCTIVE_STATES.has(e.anim?.state) ? '#34d27b' : WORKING.has(a.activity) ? (e.moving ? '#4aa3ff' : STATUS.idle) : STATUS[a.activity] ?? STATUS.idle;
-    if (a.activity === 'error' || e.staging?.clip === 'blocked') { ctx.beginPath(); ctx.arc(e.x, cy - 8 * k, 5 * k, 0, TAU); ctx.fillStyle = '#e5484d'; ctx.fill(); text(ctx, '!', e.x, cy - 7.5 * k, 7.5 * k, '#fff', { weight: 800 }); }
     if (zoom < 0.6 && !(hovered || selected || cand)) return;
     const job = jobOf(env.world, a), action = cand ? e.staging.caption : actionText(e, layout);
     const lines = hovered || selected || cand ? [a.name, job?.stage && !cand ? `${action} · ${job.stage}` : action] : [a.name];
@@ -301,7 +331,8 @@ export function createKingdomSkin(layout) {
   }
   function drawAmbient(d, e) {
     const dressed = dress(rig, e.anim), t = (d.now - (e.anim?.since ?? d.now)) / 1000;
-    drawFigure(d.ctx, { x: e.x, y: e.y, h: e.h, dir: e.dir ?? 'front', posture: e.posture, state: dressed.clip, prev: d.reduced ? null : dressed.prev, blend: blendOf(e.anim, d.now), props: dressed.props, gait: e.gaitAmount ?? 1, t, time: d.reduced ? 0 : d.T + e.index * 1.7, stride: e.stride ?? 0, look: lookOfNpc(e.index, 'fantasy'), use: e.use, moving: e.moving, alpha: 0.9 * e.alpha });
+    const N = npcLook(e.index, 'fantasy', lookOfNpc(e.index, 'fantasy'));
+    drawCharacter(d.ctx, { x: e.x, y: e.y, h: e.h, dir: e.dir ?? 'front', heading: e.heading, posture: e.posture, state: dressed.clip, prev: d.reduced ? null : dressed.prev, blend: blendOf(e.anim, d.now), props: dressed.props, gait: e.gaitAmount ?? 1, t, time: d.reduced ? 0 : d.T + e.index * 1.7, stride: e.stride ?? 0, look: N.look, parts: N.parts, use: e.use, moving: e.moving, alpha: 0.9 * e.alpha });
   }
   // Theme entities (DERIVED or COSMETIC): their motion is a function of time only, never a fact.
   const lerp = (a, b, k) => ({ x: a.x + (b.x - a.x) * k, z: a.z + (b.z - a.z) * k });
@@ -314,15 +345,32 @@ export function createKingdomSkin(layout) {
   function drawThing(d, e, q) {
     const { ctx } = d, s = e.derived, [x, y] = P.at(q.x, q.z, 0), T = d.reduced ? 0 : d.T;
     switch (s.kind) {
-      case 'giant': { const clip = s.work === 'excavating' ? 'dig' : s.work === 'placing stones' ? 'lift' : 'assemble'; drawFigure(ctx, { x, y, h: e.h, dir: 'left', state: clip, t: T, time: T, look: ARCHETYPES.giant.figure, props: rig.props, alpha: 1 }); if (clip === 'lift') { ctx.fillStyle = '#8d8a84'; ctx.beginPath(); ctx.arc(x - e.h * 0.2, y - e.h * 0.95 + Math.sin(T * 1.5) * 6, e.h * 0.12, 0, TAU); ctx.fill(); ctx.strokeStyle = INK; ctx.stroke(); } d.late.push(() => { if (d.env.zoom > 0.8) pill(ctx, x, y - e.h - 22, [`Giant: ${s.work}`], { px: 7 }); }); break; }
-      case 'worker': drawFigure(ctx, { x, y, h: e.h, dir: q.dir, state: q.carrying ? 'carry' : 'walk', stride: T * 30, gait: 0.8, t: T, time: T, look: { shirt: '#6f7f5b', pants: '#3a2f22', hair: '#c9b27a', skin: '#e8b890', hat: 'hood', hatColor: '#8e2a2a', beard: '#e9e4d8', package: 'crate' }, alpha: 1, moving: true }); break;
+      case 'giant': { const clip = s.work === 'excavating' ? 'dig' : s.work === 'placing stones' ? 'lift' : 'assemble'; drawCharacter(ctx, { x, y, h: e.h, dir: 'left', state: clip, t: T, time: T, look: GIANT_LOOK, parts: GIANT_PARTS, props: rig.props, alpha: 1 }); if (clip === 'lift') { ctx.fillStyle = '#8d8a84'; ctx.beginPath(); ctx.arc(x - e.h * 0.2, y - e.h * 0.95 + Math.sin(T * 1.5) * 6, e.h * 0.12, 0, TAU); ctx.fill(); ctx.strokeStyle = INK; ctx.stroke(); } d.late.push(() => { if (d.env.zoom > 0.8) pill(ctx, x, y - e.h - 22, [`Giant: ${s.work}`], { px: 7 }); }); break; }
+      case 'worker': { const N = npcLook(hash(e.id.length) * 97 | 0, 'fantasy', { shirt: '#6f7f5b', pants: '#3a2f22', hair: '#c9b27a', skin: '#e8b890', package: 'crate' }); drawCharacter(ctx, { x, y, h: e.h, dir: q.dir, state: q.carrying ? 'carry' : 'walk', stride: T * 30, gait: 0.8, t: T, time: T, look: N.look, parts: N.parts, alpha: 1, moving: true }); break; }
       case 'cart': { prism(d, 0, { x0: q.x - 18, x1: q.x + 18, z0: q.z - 9, z1: q.z + 9, h0: 6, h1: 16 }, col('#7a5534')); for (const sx of [-12, 12]) { const [wx, wy] = P.at(q.x + sx, q.z - 9, 0, 6); ctx.strokeStyle = INK; ctx.fillStyle = '#5b3a22'; ctx.beginPath(); ctx.arc(wx, wy, 6, 0, TAU); ctx.fill(); ctx.stroke(); } prism(d, 0, { x0: q.x - 14, x1: q.x + 8, z0: q.z - 6, z1: q.z + 6, h0: 16, h1: 24 }, col('#8d8a84')); break; }
       case 'portal': { const [c, a] = PORTAL[s.state] ?? PORTAL.kindling, flick = s.state === 'unstable' ? 0.5 + 0.5 * Math.abs(Math.sin(T * 13)) : 1; ctx.save(); ctx.globalAlpha = a * flick; ctx.strokeStyle = c; ctx.lineWidth = 3; ctx.beginPath(); ctx.ellipse(x, y - 30, 16, 28, 0, 0, TAU); ctx.stroke(); ctx.fillStyle = `${c}33`; ctx.fill(); if (s.state !== 'dim') for (let k = 0; k < 3; k++) { const ang = T * 2 + k * TAU / 3; ctx.fillStyle = c; ctx.beginPath(); ctx.arc(x + Math.cos(ang) * 10, y - 30 + Math.sin(ang) * 20, 2, 0, TAU); ctx.fill(); } ctx.restore(); glow(d, x, y - 30, 40, `${c}44`); break; }
-      case 'ranger': drawFigure(ctx, { x, y, h: e.h, dir: q.dir, state: q.moving ? 'walk' : 'watch', stride: T * 40, gait: 0.7, t: T, time: T, look: ARCHETYPES.ranger.figure, alpha: 1, moving: q.moving }); if (s.alert) d.late.push(() => pill(ctx, x, y - e.h - 20, ['Ranger: watching (open issue)'], { px: 7, dot: '#ef4b4b' })); break;
-      case 'golem': { const w = e.h * 0.34; prism(d, 0, { x0: q.x - w / 2, x1: q.x + w / 2, z0: q.z - 8, z1: q.z + 8, h1: e.h * 0.62 }, col('#8d8a84')); prism(d, 0, { x0: q.x - w * 0.35, x1: q.x + w * 0.35, z0: q.z - 6, z1: q.z + 6, h0: e.h * 0.62, h1: e.h * 0.9 }, col('#9a968e')); const [cx, cy] = P.at(q.x, q.z - 8, 0, e.h * 0.4); ctx.fillStyle = s.alert ? '#ff4b4b' : '#7ff0ff'; ctx.beginPath(); ctx.arc(cx, cy, 4, 0, TAU); ctx.fill(); glow(d, cx, cy, 16, s.alert ? 'rgba(255,75,75,0.5)' : 'rgba(127,240,255,0.35)'); break; }
+      case 'ranger': drawCharacter(ctx, { x, y, h: e.h, dir: q.dir, state: q.moving ? 'walk' : 'watch', stride: T * 40, gait: 0.7, t: T, time: T, look: ARCHETYPES.ranger.figure, parts: RANGER_PARTS, alpha: 1, moving: q.moving }); if (s.alert) d.late.push(() => pill(ctx, x, y - e.h - 20, ['Ranger: watching (open issue)'], { px: 7, dot: '#ef4b4b' })); break;
+      case 'golem': drawGolem(d, x, y, e.h, s.alert, T); break;
       case 'creature': { ctx.fillStyle = '#3a2a1a'; ctx.beginPath(); ctx.ellipse(x, y - 4, 7, 4, 0, 0, TAU); ctx.fill(); ctx.beginPath(); ctx.arc(x + 6, y - 7, 3, 0, TAU); ctx.fill(); poly(ctx, [[x + 4, y - 9], [x + 5, y - 13], [x + 7, y - 9]], '#3a2a1a'); ctx.strokeStyle = '#3a2a1a'; ctx.lineWidth = 1.4; ctx.beginPath(); ctx.moveTo(x - 7, y - 4); ctx.quadraticCurveTo(x - 12, y - 10 + Math.sin(T * 2) * 2, x - 9, y - 13); ctx.stroke(); break; }
       default: break;
     }
+  }
+
+  // The Gate Golem (Pass 5H): stacked, rune-cut stone blocks, a glowing core and eyes (cyan at rest, red on a canonical
+  // open-issue alert). Deliberately not humanoid-soft like the Giant: square, heavy, still.
+  function drawGolem(d, x, y, h, alert, T) {
+    const { ctx } = d, glowC = alert ? '#ff4b4b' : '#7ff0ff', sway = d.reduced ? 0 : Math.sin(T * 0.8) * h * 0.01, stone = '#8d8a84';
+    const blk = (cx, cy, w, hh, c = stone) => { ctx.beginPath(); ctx.roundRect(cx - w / 2, cy - hh, w, hh, Math.min(w, hh) * 0.18); ctx.fillStyle = c; ctx.fill(); ctx.lineWidth = 1; ctx.strokeStyle = INK; ctx.stroke(); ctx.fillStyle = 'rgba(255,255,255,0.12)'; ctx.fillRect(cx - w / 2 + 2, cy - hh + 2, w * 0.35, 2); };
+    ctx.fillStyle = 'rgba(12,10,20,0.32)'; ctx.beginPath(); ctx.ellipse(x, y + 1, h * 0.36, h * 0.09, 0, 0, TAU); ctx.fill();
+    for (const s of [-1, 1]) blk(x + s * h * 0.12, y, h * 0.17, h * 0.3, '#77746f');
+    blk(x + sway, y - h * 0.28, h * 0.5, h * 0.36);
+    for (const s of [-1, 1]) blk(x + s * h * 0.33 + sway, y - h * 0.2, h * 0.15, h * 0.4, '#9a968e');
+    blk(x + sway * 1.4, y - h * 0.63, h * 0.3, h * 0.24, '#a4a19a');
+    ctx.fillStyle = glowC; for (const s of [-1, 1]) { ctx.beginPath(); ctx.arc(x + sway * 1.4 + s * h * 0.06, y - h * 0.76, h * 0.025, 0, TAU); ctx.fill(); }
+    glow(d, x + sway * 1.4, y - h * 0.76, h * 0.2, alert ? 'rgba(255,75,75,0.45)' : 'rgba(127,240,255,0.3)');
+    ctx.strokeStyle = glowC; ctx.lineWidth = 1.4; ctx.beginPath(); ctx.moveTo(x + sway - h * 0.06, y - h * 0.5); ctx.lineTo(x + sway, y - h * 0.42); ctx.lineTo(x + sway + h * 0.06, y - h * 0.5); ctx.moveTo(x + sway, y - h * 0.42); ctx.lineTo(x + sway, y - h * 0.34); ctx.stroke();
+    glow(d, x + sway, y - h * 0.44, h * 0.16, alert ? 'rgba(255,75,75,0.35)' : 'rgba(127,240,255,0.25)');
+    for (const [dx, dy] of [[-0.14, -0.4], [0.16, -0.32], [-0.05, -0.2]]) { ctx.fillStyle = '#5d8a4a'; ctx.beginPath(); ctx.ellipse(x + sway + dx * h, y + dy * h, h * 0.04, h * 0.018, 0, 0, TAU); ctx.fill(); }
   }
 
   // ---- Per frame. ----
@@ -361,9 +409,14 @@ export function createKingdomSkin(layout) {
     const a = env.scene?.get(fx.from), b = env.scene?.get(fx.to); if (!a || !b) return;
     const k = Math.max(0, Math.min(1, (env.time - fx.start) / fx.duration)), x = a.x + (b.x - a.x) * k, y = a.y - a.h * 1.1 + (b.y - a.y) * k - Math.sin(k * Math.PI) * 60;
     const { ctx } = env, T = env.reducedMotion ? 0 : env.time / 1000;
-    glow({ ctx }, x, y, 20, 'rgba(159,232,255,0.5)');
-    for (const s of [-1, 1]) { ctx.save(); ctx.translate(x, y); ctx.rotate(s * (0.5 + Math.sin(T * 20) * 0.4)); ctx.fillStyle = 'rgba(255,255,255,0.85)'; ctx.beginPath(); ctx.ellipse(s * 6, 0, 6, 3, 0, 0, TAU); ctx.fill(); ctx.restore(); }
-    ctx.fillStyle = '#fff2a8'; ctx.beginPath(); ctx.arc(x, y, 3.5, 0, TAU); ctx.fill(); ctx.fillStyle = '#e9dcb8'; ctx.fillRect(x - 3, y + 3, 6, 4);
+    // Pass 5H fairy: a tiny glowing messenger (hair bun, leaf dress, four wings) with a sparkle trail, carrying a letter.
+    glow({ ctx }, x, y, 22, 'rgba(159,232,255,0.5)');
+    for (let k = 1; k <= 5; k++) { const kk = Math.max(0, k - k * 0.02), px = x - (b.x - a.x) * 0.02 * kk, py = y - (b.y - a.y) * 0.02 * kk + Math.sin(T * 6 + k) * 2; ctx.fillStyle = `rgba(255,243,176,${0.7 - k * 0.12})`; ctx.fillRect(px - 1, py - 1, 2, 2); }
+    for (const [s, dy, r] of [[-1, -2, 6], [1, -2, 6], [-1, 3, 4], [1, 3, 4]]) { ctx.save(); ctx.translate(x, y + dy); ctx.rotate(s * (0.5 + Math.sin(T * 22) * 0.45)); ctx.fillStyle = 'rgba(220,245,255,0.8)'; ctx.strokeStyle = 'rgba(120,180,220,0.9)'; ctx.lineWidth = 0.6; ctx.beginPath(); ctx.ellipse(s * r, 0, r, r * 0.5, 0, 0, TAU); ctx.fill(); ctx.stroke(); ctx.restore(); }
+    poly(ctx, [[x - 3, y + 7], [x + 3, y + 7], [x + 1.5, y + 1], [x - 1.5, y + 1]], '#6fd08a', INK, 0.6);
+    ctx.fillStyle = '#f6d2b0'; ctx.beginPath(); ctx.arc(x, y - 2, 2.8, 0, TAU); ctx.fill(); ctx.strokeStyle = INK; ctx.lineWidth = 0.6; ctx.stroke();
+    ctx.fillStyle = '#ffd36b'; ctx.beginPath(); ctx.arc(x, y - 5, 1.6, 0, TAU); ctx.fill();
+    ctx.fillStyle = '#f3e3bf'; ctx.fillRect(x + 2, y + 1, 5, 3.5); ctx.strokeStyle = INK; ctx.strokeRect(x + 2, y + 1, 5, 3.5); ctx.fillStyle = '#b3262c'; ctx.fillRect(x + 4, y + 2, 1.4, 1.4);
   }
 
   return {

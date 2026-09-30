@@ -10,6 +10,10 @@
 import { depthSort, boxBounds } from '../../engine/iso.mjs';
 import { AGENT, ARCH, STREET_SCALE, SIZES } from '../../world/scale.mjs';
 import { drawFigure5d as drawFigure } from './figure.mjs';
+import { drawCharacter } from '../art/character.mjs';
+import { dressRoom, RPROPS } from './dressing.mjs';
+import { dressFor, npcLook } from '../art/dress.mjs';
+import { statusOf, workChipOf, drawStatusRing, drawEmblem, drawWorkChip, drawCeremony } from '../art/status.mjs';
 import { MAT, SUN, SHADOW, lit, mix, litBox, litBlob, softShadow } from './light.mjs';
 import { TEX, planMatrix, makeCanvas, hash2 } from './textures.mjs';
 import { createGround, drawPlant, plantHeight } from './ground.mjs';
@@ -68,7 +72,7 @@ function vehicleRoutesOf(layout) {
 export const STATE_COLOR = { working: '#35c486', travelling: '#4aa3ff', waiting: '#f4a23b', blocked: '#e5484d', done: '#5cc98a', idle: null, offline: '#6b7380' };
 // Pass 5E: bodies by rig profile (render/appearance.mjs RIG_PROFILES[].body). Only the humanoid figure exists today; a new
 // rig adds its drawer here (same interface as drawFigure) and every agent whose appearance names that rig uses it.
-const BODIES = { figure: drawFigure };
+const BODIES = { figure: drawCharacter };
 export function stateOf(e, a) {
   const st = e.anim?.state, intent = e.anim?.intent;
   if (st === 'frustrated' || intent === 'blocked' || intent === 'recovering' || a.activity === 'error') return 'blocked';
@@ -131,6 +135,12 @@ export function createArtSkin(layout, skinId = 'real') {
       add(f, { ...b, sb: boxBounds(P, { ...b, h1: h }, f), draw: d => (FURN5[it.type] ?? PROPS[it.type])?.(d, it) });
       if (!it.on) castShadow(f, b, it.type === 'plant' ? it.h * 0.6 : it.h);
     }
+    // Pass 5H: set dressing along the room's quiet walls (render/art5d/dressing.mjs), clear of walks and doors.
+    { const sc = q => ({ x0: q.x0 * U, x1: q.x1 * U, z0: q.z0 * U, z1: q.z1 * U });
+      const inR = q => q.floor === f && q.x >= r.x0 - 2 && q.x <= r.x1 + 2 && q.z >= r.z0 - 2 && q.z <= r.z1 + 2;
+      const nodes = Object.values(layout.nodePlan ?? {}).filter(inR), walks = (layout.navEdges ?? []).map(([a, b]) => [layout.nodePlan[a], layout.nodePlan[b]]).filter(([a, b]) => a && b && (inR(a) || inR(b)));
+      const avoid = [...F.items.map(it0 => ({ x0: (it0.x - it0.w / 2) * U, x1: (it0.x + it0.w / 2) * U, z0: (it0.z - it0.d / 2) * U, z1: (it0.z + it0.d / 2) * U })), ...(F.keepouts ?? []).map(sc)];
+      for (const q of dressRoom(kind, r, { avoid, nodes, walks, seed: r.x0 * 0.013 + f })) { add(f, { ...q, sb: boxBounds(P, { ...q, h1: q.h + 30 }, f), dressing: q.kind, draw: d => RPROPS[q.kind]?.(d, f, q) }); castShadow(f, q, q.h * 0.8); } }
     // Wall decor hangs on this room's back wall.
     // Pass 5D-A: decor hangs only on a real full-height wall (a room whose rear edge is the building's back wall);
     // a room whose rear is a cut-away low wall has nothing to hang it on.
@@ -732,26 +742,26 @@ export function createArtSkin(layout, skinId = 'real') {
     const dressed = dress(rig, e.anim);
     const fig = { x, y, h: e.h, dir: e.dir ?? 'front', posture: e.posture, state: dressed.clip, prev: d.reduced ? null : dressed.prev, blend: blendOf(e.anim, d.now), props: dressed.props, gait: e.gaitAmount ?? 1, t, time: d.reduced ? 0 : d.T + hash(e.id.length), stride: e.stride ?? 0, look, use: e.spotInfo?.use, moving: e.moving, alpha: a.activity === 'offline' ? 0.82 : 1 };
     if (!e.ride) softShadow(ctx, x, y + 0.5, e.h * 0.2, e.h * 0.07, { alpha: 0.34 }), softShadow(ctx, x + e.h * 0.16, y - e.h * 0.05, e.h * 0.24, e.h * 0.07, { alpha: 0.14 });
-    stateRing(d, e, a, x, y);
-    const body = BODIES[e.rig?.body] ?? drawFigure, head = body(ctx, fig);
+    if (!e.ride) drawStatusRing(ctx, x, y, e.h, statusOf(e, a), d.T, d.reduced);
+    // Pass 5H: the shared character rig, dressed by the Real outfit rules (render/art/dress.mjs); status in the shared language.
+    const D = dressFor(a, 'real'), st5 = statusOf(e, a);
+    Object.assign(fig, { look: D.look, parts: D.parts, heading: e.heading });
+    const body = BODIES[e.rig?.body] ?? drawCharacter, head = body(ctx, fig);
+    if (st5 === 'completed') drawCeremony(ctx, x, y, e.h, t, 'real', d.reduced);
     if (selected || hovered || PRODUCTIVE_STATES.has(st) || SITE_STATES.has(st)) d.late.unshift(() => body(ctx, { ...fig, alpha: selected ? 0.45 : 0.3 }));
-    d.late.push(() => badge(d, e, a, x, head.top, hovered, selected));
+    d.late.push(() => { if (e.ride) return; const k = Math.min(2, Math.max(0.7, 1 / env.zoom)); drawEmblem(ctx, x, head.top - 8 * k, st5, 'real', k, d.T); const chip = workChipOf(env.world, a); if (chip) drawWorkChip(ctx, x + 14 * k, head.top - 8 * k, chip, 'real', k); });
+    d.late.push(() => badge(d, e, a, x, head.top - (st5 === 'idle' ? 0 : 16 * Math.min(2, Math.max(0.7, 1 / env.zoom))), hovered, selected));
   }
   // Pass 5C: ambient people (engine/npcs.mjs): same figures and locomotion, muted clothes, no name or status badge.
   function drawAmbient(d, e) {
     const dressed = dress(rig, e.anim), t = (d.now - (e.anim?.since ?? d.now)) / 1000;
     softShadow(d.ctx, e.x, e.y + 0.5, e.h * 0.2, e.h * 0.07, { alpha: 0.3 * e.alpha });
-    drawFigure(d.ctx, { x: e.x, y: e.y, h: e.h, dir: e.dir ?? 'front', posture: e.posture, state: dressed.clip, prev: d.reduced ? null : dressed.prev, blend: blendOf(e.anim, d.now), props: dressed.props, gait: e.gaitAmount ?? 1, t, time: d.reduced ? 0 : d.T + e.index * 1.7, stride: e.stride ?? 0, look: lookOfNpc(e.index, skinId), use: e.use, moving: e.moving, alpha: 0.92 * e.alpha });
+    const N = npcLook(e.index, 'real', lookOfNpc(e.index, skinId));
+    drawCharacter(d.ctx, { x: e.x, y: e.y, h: e.h, dir: e.dir ?? 'front', heading: e.heading, posture: e.posture, state: dressed.clip, prev: d.reduced ? null : dressed.prev, blend: blendOf(e.anim, d.now), props: dressed.props, gait: e.gaitAmount ?? 1, t, time: d.reduced ? 0 : d.T + e.index * 1.7, stride: e.stride ?? 0, look: N.look, parts: N.parts, use: e.use, moving: e.moving, alpha: 0.92 * e.alpha });
   }
   // Living HQ: how an agent's real state reads at any zoom, without panels. A soft ring on the floor at its feet in the
   // state's colour (working, travelling with a task, waiting, blocked, done), a small status pip above the head when
   // zoomed out, and a compact name chip only when there is room for it (status text on hover or selection).
-  function stateRing(d, e, a, x, y) {
-    const c = STATE_COLOR[stateOf(e, a)]; if (!c || e.ride) return;
-    const { ctx } = d, pulse = stateOf(e, a) === 'blocked' && !d.reduced ? 0.55 + 0.35 * Math.sin(d.T * 5) : 0.7;
-    ctx.save(); ctx.globalAlpha = pulse; ctx.strokeStyle = c; ctx.lineWidth = 1.6; ctx.beginPath(); ctx.ellipse(x, y + 0.5, e.h * 0.3, e.h * 0.1, 0, 0, TAU); ctx.stroke();
-    ctx.globalAlpha = pulse * 0.25; ctx.fillStyle = c; ctx.fill(); ctx.restore();
-  }
   function badge(d, e, a, x, top, hovered, selected) {
     const { ctx, env } = d, zoom = env.zoom, k = Math.min(2.2, Math.max(0.6, 1 / zoom)), cy = top - 3 * k, st = stateOf(e, a), c = STATE_COLOR[st];
     // Zoomed out: a status pip only (the ring and the body carry the rest).
