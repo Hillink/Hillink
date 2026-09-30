@@ -30,7 +30,8 @@ const GATE_SIGNALS = [
   ['database-change', /\b(migration|migrate|drop table|alter table|truncate|supabase db|database schema|prod(uction)? (db|database))\b/i],
   ['destructive', /\b(delete|remove|wipe|purge|drop|force[- ]push|reset --hard|rm -rf|erase)\b.*\b(data|history|branch|table|records?|files?|users?|repo)\b/i],
   ['credential-change', /\b(api[_ -]?key|secret|credential|password|token|oauth|ssh key|rotate)\b/i],
-  ['security-policy-change', /\b(sandbox|permission model|allowlist|security policy|disable (the )?(check|guard|scope|sandbox)|bypass)\b/i],
+  // "sandbox" alone is a common directory name; the gate is about HQ's own isolation and permission policy.
+  ['security-policy-change', /\b(sandbox (policy|security|isolation|boundary|config(uration)?|permissions?|escape|network)|(disable|weaken|turn off|remove|loosen) (the |hq'?s? )?(sandbox|check|guard|scope|approval|review)|permission model|allowlist|security policy|bypass)\b/i],
   ['architecture-change', /\b(rewrite|re-architect|rearchitect|migrate (the )?(framework|stack)|replace (the )?(framework|database|auth))\b/i],
 ];
 const HIGH_RISK_AREAS = /^(app\/api\/|lib\/(supabase|stripe|auth|payments?)|middleware|supabase\/|scripts\/)/i;
