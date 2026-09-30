@@ -51,9 +51,72 @@ Set `HQ_AGENTS_ENABLED=1` before starting the server (PowerShell: `$env:HQ_AGENT
 - **Claude** runs `claude -p --output-format stream-json` with only the `Read`, `Grep` and `Glob` tools, no MCP servers and no saved session.
 - **Codex** runs `codex exec --json --sandbox read-only -c approval_policy=never --ephemeral`. Its read-only guarantee is Codex's own sandbox.
 
-Queue **Ask Claude or Codex to review the repo (read-only)** and optionally pick the worker. The task description is sent over stdin, never on a command line. The child gets only PATH, profile/home and proxy variables plus that provider's own credential variable (`ANTHROPIC_API_KEY`/`CLAUDE_CONFIG_DIR` or `OPENAI_API_KEY`/`CODEX_HOME`); Supabase, Stripe and other secrets are not inherited.
+Queue **Ask Claude or Codex to review the repo (read-only)** and optionally pick the worker. The task description is sent over stdin, never on a command line. The child gets only PATH, profile/home and proxy variables plus that provider's own configuration (`CLAUDE_CONFIG_DIR` for Claude, which never gets `ANTHROPIC_API_KEY` so reviews use your Claude Code sign-in rather than API billing; `OPENAI_API_KEY`/`CODEX_HOME` for Codex); Supabase, Stripe and other secrets are not inherited.
 
-Evidence is real: the CLI's session start is the ACK, the live process sends heartbeats, and each agent step (tool use, message) is progress. The final answer, the token counts the CLI reports and exit status close the run. A missing CLI shows OFFLINE. A CLI that exits before starting a session fails with a sign-in hint. A usage limit becomes RATE_LIMITED with the reported reset time. Runs are stopped after 20 minutes. Cancellation needs observed process close (SIGTERM then SIGKILL; `taskkill /T` then `/T /F` on Windows, where the npm shim runs through a shell). Answers are model output, not verified implementation. Edit-capable runs are not implemented; that needs an owner decision on worktrees and review gates. ChatGPT has no local runner and stays UNKNOWN.
+Evidence is real: the CLI's session start is the ACK, the live process sends heartbeats, and each agent step (tool use, message) is progress. The final answer, the token counts the CLI reports and exit status close the run. A missing CLI shows OFFLINE. A CLI that exits before starting a session fails with a sign-in hint. A usage limit becomes RATE_LIMITED with the reported reset time. Runs are stopped after 20 minutes. Cancellation needs observed process close (SIGTERM then SIGKILL; `taskkill /T` then `/T /F` on Windows, where the npm shim runs through a shell). Answers are model output, not verified implementation. Edit-capable runs are not implemented; that needs an owner decision on worktrees and review gates.
+
+## ChatGPT orchestrator (OpenAI)
+
+With `HQ_AGENTS_ENABLED=1` (or `HQ_ORCHESTRATOR_ENABLED=1`) and `OPENAI_API_KEY` in HQ's environment, ChatGPT becomes a real HQ agent: the orchestrator. Queue **Ask ChatGPT, the orchestrator** (operation `orchestrate`). Without a key it stays not connected, with the reason "OpenAI runtime not configured". A rejected key or unavailable model shows OFFLINE with the reason.
+
+- **Runtime:** OpenAI Responses API over REST with streaming (`orchestrator-adapter.mjs`). There's no SDK, so HQ keeps zero dependencies. The model is `OPENAI_ORCHESTRATOR_MODEL`, default `gpt-6.1-sol`. The instructions live in `prompts/orchestrator.md`.
+- **Tools:** `orchestrator-tools.mjs` is the complete list:
+  - `get_hq_state` and `get_task` read HQ.
+  - `request_repo_review` queues a read-only review for Claude or Codex. It's refused when the agent is not connected, offline or rate limited.
+  - `request_kyle_approval` creates an owner-required task, which HQ never runs.
+  - There is no shell, file, network or configuration tool. Arguments are validated in HQ before anything happens, and delegated tasks record `requestedBy`, which the HTTP API cannot set.
+- **Evidence:** the ACK is OpenAI's `response.created`. Heartbeats come only while a request is in flight. Tool calls are `MODEL_OUTPUT` or `HANDOFF` evidence (a handoff carries `delegatedTaskId`). The answer is `MODEL_RESULT`, with OpenAI's token counts as `USAGE`. A rejected key, an OpenAI outage, a timeout (60 s), a rate limit or more than 6 tool rounds becomes a truthful FAILED or RATE_LIMITED outcome.
+- **Context:** one OpenAI Conversation per HQ. Its ID is in `.state/orchestrator.json`, which holds no secrets. HQ, not the conversation, is the source of truth.
+- **Scheduling:** it's a remote adapter, so it takes no local-process slot. A question to ChatGPT never waits behind a local run.
+- **The key:** read from HQ's environment and sent only to api.openai.com. It is never journaled, logged or returned, and OpenAI error text is redacted.
+
+## Claude implementation tasks (Pass 2.6)
+
+With `HQ_AGENTS_ENABLED=1` (or `HQ_IMPLEMENTATION_ENABLED=1`), Claude can take bounded implementation tasks, operation `implement-repo`. The safety class is `local-worktree-write`, which only this operation may use. ChatGPT asks through `request_implementation`, which can only go to Claude. The engine also refuses the operation for any agent without the `implement-repo` capability, which only Claude gets, so Codex can never be assigned one.
+
+- **Contract** (`implementation-policy.mjs`, validated in `engine.createTask` whichever way a task is created):
+  - objective, scope (1 to 5 repository-relative paths), acceptance criteria, constraints, and 1 to 3 `*.test.(mjs|js|ts)` files
+  - scope paths are refused if they are absolute or drive paths, use `..`, `~`, wildcards, backslashes or shell characters, or point at a directory less than two levels deep
+  - scope paths are also refused inside `.git`, `.github`, `.claude`, `.vscode`, `node_modules`, `tools/hillink-hq`, `supabase`, `.vercel` or `.next`, if they are package manifests or root config files, or if they look like secrets
+- **Run** (`implementation-runner.mjs`):
+  1. A fresh `git worktree` on a new branch `hq/impl/<task>` from `origin/main`, under `~/.hillink-hq/worktrees` (`HQ_WORKTREE_DIR` to move it).
+  2. Claude Code launched directly, with no shell. It gets `--tools Read,Grep,Glob,Edit,Write` (no Bash, no web), `--permission-mode dontAsk`, and `Edit(./<scope>)`/`Write(./<scope>)` as the only pre-approved edits. `--setting-sources user` stops project settings from widening that.
+  3. HQ lists what git says changed; anything outside the scope blocks the task.
+  4. HQ, not Claude, runs `node --test <tests>` in the worktree with a minimal environment.
+  5. Only if the tests pass does HQ commit the in-scope files to the task branch, with `HQ-Task`, `Requested-By` and `Verified-By` trailers. Nothing is pushed or merged.
+- **Evidence:** ACK (Claude's session and its tools), Claude's steps and answer, FINDING (changed files), TEST_STARTED and TEST_RESULT (HQ's counts), COMMIT (SHA), and COMPLETED with `implementation: { branch, base, worktree, commit, files, tests }`.
+- **Blocked outcomes:** failed tests, a scope violation, missing test files or no changes end BLOCKED with the reason and an owner action. Nothing is committed, and the worktree is kept for inspection.
+- **Permissions:** chosen per task by `ClaudeRouter`. Review tasks use the unchanged read-only adapter in the repository, so nothing carries over from one task to the next.
+
+## OS sandbox for implementation (Pass 2.7)
+
+Implementation runs only inside a disposable WSL2 instance (`sandbox.mjs`). Without the sandbox base image HQ does not offer `implement-repo` at all, and withdraws the capability if an earlier start recorded it.
+
+- **Setup (once):** `node tools/hillink-hq/sandbox/build-base.mjs` builds `~/.hillink-hq/sandbox/base.tar` (Ubuntu Base 24.04, Node 24, Claude Code pinned, all downloads checksum-verified) and records its sha256. Set `HQ_SANDBOX_ANTHROPIC_API_KEY` in your Windows user environment; it is the only key the sandbox receives (`ANTHROPIC_API_KEY` and every other credential stay out).
+- **Per task:** the image checksum is verified, a fresh instance `hq-sbx-<task>` is imported, the base commit is streamed in with `git archive` (no Windows path is mounted), and the key goes in on stdin, readable only by root. Drive automount and Windows interop are off, WSL's shared mounts are hidden, there is no sudo and no setuid binary.
+- **Claude** runs as the unprivileged `claude` user in its own network namespace. Its only way out is a root-owned proxy that allows `CONNECT api.anthropic.com:443` and refuses and logs everything else. bubblewrap gives it its own PID/IPC namespaces with user namespaces disabled.
+- **Tests** run as a second user, `runner`, with no network at all, the key deleted, `/work` read-only, and `node --permission` on top.
+- **Return path:** only a patch leaves the instance. HQ rejects symlinks, submodules, `.git`, traversal and anything that looks like a secret, applies it with hardened git, then every Pass 2.6 check runs (scope, tests, local commit only).
+- **Teardown:** the instance is unregistered on every outcome, and stale `hq-sbx-*` instances are removed when HQ starts.
+- **Attack tests:** `node tools/hillink-hq/sandbox/attack-tests.mjs` runs a hostile "Claude" and a hostile test file through the real wrappers and checks every escape attempt fails.
+
+## Objective orchestration (Pass 3)
+
+Kyle → ChatGPT → HQ → specialist agents → verification → handoff. ChatGPT hands HQ a whole objective (`submit_objective`, or `POST /api/objectives` for Kyle). HQ's conductor (`orchestration/`) plans it, routes each step, validates every handoff, verifies the work itself, and keeps going while the next step is safe. It stops at approval, decision, loop and failure boundaries. Agents reason; HQ controls.
+
+- **Modules:** `policy` (gates, risk, eligibility, budgets), `planner` (the machine-readable plan), `routing` (who may do what), `handoff` (structured, validated agent output), `retry` (failure classes, bounded retries, loop guards), `verify` (HQ's git checks), `recovery` (restart proof), `state` (lifecycle reducer over the same journal), `activity` (the World contract), `conductor` (the control loop).
+- **Plan:** objective, type (`investigate`, `review`, `fix`, `implement`), system, approved scope, risk and reasons, gates, required evidence per step, agents, dependencies, implementation eligibility, verification and completion criteria. It is journaled, so after a restart HQ knows what happened, what remains, who is next, and why.
+- **Lifecycle:** QUEUED → PLANNING → INVESTIGATING → READY_FOR_IMPLEMENTATION → IMPLEMENTING → VERIFYING → REVIEWING → COMPLETE. Stop states are WAITING_FOR_EVIDENCE, AWAITING_DECISION, AWAITING_APPROVAL, BLOCKED, FAILED and CANCELLED. Every transition is checked against a table before it is journaled. BLOCKED, FAILED, CANCELLED and COMPLETE are final: a new attempt is a new objective.
+- **Routing:** investigation goes to Codex (a read-only Claude session when Codex is out). Review goes to Codex; a same-provider Claude review is allowed only at low risk, or with Kyle's decision. Implementation goes to Claude only, in the sandbox; the engine, dispatcher, routing table and conductor each refuse anything else. Verification is HQ's own. ChatGPT decides above the loop and is never routed a step.
+- **Handoffs:** agents end with a fenced `hq-handoff` JSON block. HQ parses it as data and checks every field: typed, bounded, no unknown fields, and paths through HQ's path policy. Attribution comes from HQ's record of the run, never from the handoff. The implementation handoff is built by HQ from git and runner evidence.
+- **Verification:** HQ re-derives the facts from git. The commit is the head of the task branch and sits on the recorded base. It carries the task id. Every changed file is in scope and matches the runner's evidence. The tests are in the tree, and HQ ran them with at least one real test passing: a file that defines no tests fails, and spoofed summary lines can only lower the count. The sandbox was confirmed destroyed.
+- **Disagreement:** one bounded repair, then one response from each side. HQ records both positions, their evidence and the remaining uncertainty, then the orchestrator decides (Kyle at high risk).
+- **Retries:** classified as usage limit, timeout, infrastructure, agent failure, malformed handoff, test failure, review changes, interrupted, policy refusal, missing dependency, implementation failure or cancelled. Each class has a maximum (0 or 1, 2 for usage limits) and a recorded strategy. A usage limit reroutes to another approved agent, but never silently lowers an independent review.
+- **Loop guards:** maximum steps, agent calls and retries, a deadline, and detection of repeated identical handoffs and identical patches. When one trips, the objective is BLOCKED with the reason.
+- **Approval gates:** merge, deploy, production change, database change, destructive, credential change, security-policy change, spend and architecture change. Pre-work gates stop before anything runs. Merge and deploy stop after verified work, and Kyle performs them himself: HQ has no such operation. Only `POST /api/objectives/approve` (Kyle) decides a gate, and ChatGPT has no approval tool. Gates come from declared actions and positive mentions; constraints and negated mentions ("do not deploy") are prohibitions.
+- **Cancellation:** `POST /api/objectives/cancel` or ChatGPT's `cancel_objective` stops pending steps and running agents, including the sandbox, and prevents any later commit. Every task is recorded CANCELLED only with confirmed termination; otherwise its lease stays held.
+- **Restart:** unresolved runs are parked (Pass 2). HQ then tries to prove each one stopped: the reported pids are gone, and a sandboxed run's instance is unregistered according to a strict WSL listing. It never assumes success. A proven stop becomes one `interrupted` retry in a fresh branch and sandbox; anything unproven stays parked.
+- **World contract (v1):** `GET /api/world?since=<seq>` returns a snapshot of agents (activity, current objective and step), objectives (status, progress, steps, dependencies, whether Kyle is needed) and construction (earned only by completed objectives and HQ-verified commits), plus activity since a journal sequence number. It is a pure function of the journal and carries HQ-authored summaries only, never model text.
 
 ## Notifications
 

@@ -12,7 +12,9 @@ const framing = 'You are a read-only reviewer launched by Hillink HQ. Answer the
 export const cliAgents = {
   claude: {
     agentId: 'claude', adapterId: 'cli-claude', command: 'claude', label: 'Claude Code', routingPriority: 10,
-    env: ['ANTHROPIC_API_KEY', 'CLAUDE_CONFIG_DIR'],
+    // No ANTHROPIC_API_KEY: reviews use Kyle's Claude Code sign-in (subscription), never API billing. The sandbox
+    // has its own dedicated key (HQ_SANDBOX_ANTHROPIC_API_KEY, sandbox.mjs).
+    env: ['CLAUDE_CONFIG_DIR'],
     args: () => ['-p', '--output-format', 'stream-json', '--verbose', '--tools', 'Read,Grep,Glob', '--strict-mcp-config', '--no-session-persistence', '--max-turns', '40'],
     parse(message, run) {
       if (message.type === 'system' && message.subtype === 'init') return [{ kind: 'ACK', summary: `Claude Code session started with tools: ${(message.tools || []).join(', ').slice(0, 200)}.` }];
@@ -58,15 +60,17 @@ export const cliAgents = {
 const limited = text => /rate.?limit|usage limit|quota|too many requests|429/i.test(text);
 
 export class CliAgentAdapter {
-  constructor(spec, { spawn = nodeSpawn, platform = process.platform, env = process.env, cwd = repoRoot, graceMs = 2000, maxRunMs = 20 * 60_000, healthCacheMs = 60_000 } = {}) {
-    Object.assign(this, { spec, spawn, platform, sourceEnv: env, cwd, graceMs, maxRunMs, healthCacheMs });
+  // operation/safety/framing default to the read-only review. The implementation runner (Pass 2.6) builds a
+  // per-task instance with its own operation, framing, working directory and a direct binary (no shell).
+  constructor(spec, { spawn = nodeSpawn, platform = process.platform, env = process.env, cwd = repoRoot, graceMs = 2000, maxRunMs = 20 * 60_000, healthCacheMs = 60_000, operation = 'review-repo', safety = 'local-read-only', framing: taskFraming = framing, command = null, shell = null } = {}) {
+    Object.assign(this, { spec, spawn, platform, sourceEnv: env, cwd, graceMs, maxRunMs, healthCacheMs, operation, safety, framing: taskFraming, command, shell });
     this.runs = new Map(); this.healthCache = null;
   }
   env() { return Object.fromEntries([...baseEnv, ...this.spec.env].filter(k => this.sourceEnv[k]).map(k => [k, this.sourceEnv[k]])); }
   launch(args) {
     // Windows npm shims are .cmd files, which Node only starts through a shell. Arguments are fixed constants;
     // owner text travels over stdin.
-    return this.spawn(this.spec.command, args, { cwd: this.cwd, env: this.env(), windowsHide: true, shell: this.platform === 'win32', stdio: ['pipe', 'pipe', 'pipe'] });
+    return this.spawn(this.command ?? this.spec.command, args, { cwd: this.cwd, env: this.env(), windowsHide: true, shell: this.shell ?? this.platform === 'win32', stdio: ['pipe', 'pipe', 'pipe'] });
   }
   async health() {
     if (this.runs.size) return { status: 'IDLE', detail: `${this.spec.label} available.` };
@@ -85,7 +89,7 @@ export class CliAgentAdapter {
     return result;
   }
   async start({ task, runId, emit }) {
-    if (task.operation !== 'review-repo' || task.safety !== 'local-read-only') throw Error(`${this.spec.label} adapter accepts read-only repository reviews only`);
+    if (task.operation !== this.operation || task.safety !== this.safety) throw Error(this.operation === 'review-repo' ? `${this.spec.label} adapter accepts read-only repository reviews only` : `${this.spec.label} runner accepts ${this.operation} tasks only`);
     if (this.runs.size) throw Error(`${this.spec.label} already has an unresolved run`);
     const started = Date.now();
     const child = this.launch(this.spec.args());
@@ -97,7 +101,8 @@ export class CliAgentAdapter {
       if (!line.trim()) return;
       let message; try { message = JSON.parse(line); } catch { return; } // Non-JSON banner lines are not evidence.
       for (const event of this.spec.parse(message, run)) {
-        if (event.kind === 'ACK') { if (run.acknowledged) continue; run.acknowledged = true; }
+        // The ACK carries the process id HQ spawned, so a restarted HQ can check whether that process still exists.
+        if (event.kind === 'ACK') { if (run.acknowledged) continue; run.acknowledged = true; if (Number.isInteger(child.pid)) event.pid = child.pid; }
         else if (!run.acknowledged) continue;
         if (!safeEmit(event)) void this.cancel(runId);
       }
@@ -120,7 +125,8 @@ export class CliAgentAdapter {
       if (pending) consume(pending);
       run.closed = true; this.runs.delete(runId);
       const elapsedMs = Date.now() - started;
-      if (run.acknowledged && run.finished?.text) safeEmit({ kind: 'MODEL_RESULT', summary: run.finished.text.slice(0, 1900) || 'Empty response.', truncated: run.finished.text.length > 1900, outputCharacters: run.finished.text.length });
+      // fullText (bounded) is what HQ validates a structured handoff from (Pass 3); summary is the display text.
+      if (run.acknowledged && run.finished?.text) safeEmit({ kind: 'MODEL_RESULT', summary: run.finished.text.slice(0, 1900) || 'Empty response.', truncated: run.finished.text.length > 1900, outputCharacters: run.finished.text.length, fullText: run.finished.text.slice(-30_000) });
       if (run.acknowledged && run.usage) safeEmit({ kind: 'USAGE', summary: `Counters reported by ${this.spec.label}. Subscription credits remaining are UNKNOWN${run.usage.reportedCostUsd != null ? '; reported cost is the CLI\'s own estimate' : ''}.`, usage: { source: `${this.spec.adapterId}-stream`, elapsedMs, ...run.usage } });
       const failureText = `${run.finished && !run.finished.ok ? run.finished.text : ''} ${stderr}`;
       let terminal;
@@ -133,7 +139,7 @@ export class CliAgentAdapter {
       resolve(true);
     }));
     child.stdin.on('error', () => {}); // Early exit closes stdin; the close handler reports it.
-    child.stdin.end(framing + task.description);
+    child.stdin.end(this.framing + task.description);
   }
   async cancel(runId) {
     const run = this.runs.get(runId);

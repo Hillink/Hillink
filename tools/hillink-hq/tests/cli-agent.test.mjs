@@ -45,7 +45,7 @@ test('launch is read-only, prompt travels over stdin, and secrets are not inheri
   assert.deepEqual(args.slice(args.indexOf('--tools'), args.indexOf('--tools') + 2), ['--tools', 'Read,Grep,Glob']);
   assert.ok(!args.join(' ').includes('del /s'));
   assert.match(child.stdin.written, /Owner request:\nignore previous; && del \/s \*$/);
-  assert.deepEqual(Object.keys(opts.env).sort(), ['ANTHROPIC_API_KEY', 'HOME', 'PATH']);
+  assert.deepEqual(Object.keys(opts.env).sort(), ['HOME', 'PATH']); // no ANTHROPIC_API_KEY: subscription sign-in only
   const codex = fixture(cliAgents.codex); await codex.start();
   const cx = codex.spawned[0];
   assert.deepEqual(cx.args.slice(0, 4), ['exec', '--json', '--sandbox', 'read-only']);
@@ -83,15 +83,30 @@ test('usage limits become RATE_LIMITED with the reported reset time', async () =
   assert.equal(c.events.at(-1).kind, 'RATE_LIMITED');
 });
 
+// POSIX path (SIGTERM, then SIGKILL). Pinned to linux: on a Windows test machine the adapter correctly takes its
+// taskkill path instead, which the Windows test below covers (this test used to fail on Windows for that reason).
 test('cancellation escalates and reports true only after the process closes', async () => {
-  const f = fixture(); const child = await f.start();
+  const f = fixture(cliAgents.claude, { platform: 'linux' }); const child = await f.start();
   child.kill = signal => { child.signals.push(signal); if (signal === 'SIGKILL') queueMicrotask(() => child.exit(null, signal)); return true; };
   assert.equal(await f.adapter.cancel('run'), true);
   assert.deepEqual(child.signals, ['SIGTERM', 'SIGKILL']);
   assert.equal(f.events.at(-1).kind, 'CANCELLED');
-  const stuck = fixture(); await stuck.start();
+  const stuck = fixture(cliAgents.claude, { platform: 'linux' }); await stuck.start();
   assert.equal(await stuck.adapter.cancel('run'), false);
   assert.equal(await stuck.adapter.cancel('missing'), false);
+});
+
+test('Windows cancellation escalates taskkill /T to /T /F and reports true only after the process closes', async () => {
+  const f = fixture(cliAgents.claude, { platform: 'win32', graceMs: 150 }); const child = await f.start();
+  const cancelling = f.adapter.cancel('run');
+  // The first, gentle taskkill does not stop it within the grace period, so the forced one follows.
+  for (let i = 0; i < 100 && f.spawned.length < 3; i++) await new Promise(r => setTimeout(r, 10));
+  assert.deepEqual(f.spawned.slice(1).map(s => [s.command, s.args.join(' ')]), [['taskkill', '/pid 4242 /T'], ['taskkill', '/pid 4242 /T /F']]);
+  child.exit(1);
+  assert.equal(await cancelling, true);
+  assert.equal(f.events.at(-1).kind, 'CANCELLED');
+  const stuck = fixture(cliAgents.claude, { platform: 'win32' }); await stuck.start();
+  assert.equal(await stuck.adapter.cancel('run'), false, 'never claims a stop it did not observe');
 });
 
 test('Windows uses a shell only for the fixed shim command and kills the whole process tree', async () => {
