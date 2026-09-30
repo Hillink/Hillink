@@ -121,6 +121,26 @@ There is no exec, shell, network, git, install or path-outside-the-tree tool. Pe
 
 Residual risk (inherent to running tests at all): code under test runs inside the test process. It can behave correctly only while being tested, and a Node permission-model bypass (a Node bug) would reach the key. The independent review and Kyle's merge decision remain the controls for that.
 
+## Re-audit (Claude, 2026-09-30) and what is still open
+
+**OPEN BLOCKER, not fixed: Area 1, the authenticated test result.** The runner counts node:test events in the same
+process as repository code. Repository code can change shared, mutable objects on that path (for example stream
+prototypes), so it can change what the runner counts before the result is signed. The signature proves the runner
+wrote the result, not that the result is faithful. Automated agents (Claude and Codex) were stopped by safety checks
+while working on this fix, so it needs a person to build it. Proposed design:
+1. One Node process per acceptance file, each with its own key derived from HQ's run key.
+2. A controller process that never loads repository code checks each child's signed result, attributes it to the
+   file by process (not by the file name node:test reports), and issues the one result HQ verifies.
+3. Inside each child, freeze the test framework's objects and prototypes before repository code loads.
+The auditor's proof of concept is the regression test: it must come back red.
+
+**Fixed: crash-recovery gaps** (not security blockers; an orphan has no broker session):
+- The host process scan matches the marker anywhere in the raw command line, so shell-wrapped processes are found (V10).
+- On the host Claude route HQ always scans for the marker, even when the pid was recorded, so a re-exec'd or child
+  process is not missed (V11). Where the process table cannot be read (Windows) the recorded pid remains the proof.
+- A lost compute record no longer hides a host Claude run: a cli-claude run with a host marker or host pid is treated
+  as a host run (V12).
+
 ## Tests
 
 `tests/broker-attacks.test.mjs` has 38 tests (B1 to B28, B12a, and V1 to V9 from the audit repairs). A fake Claude plays the attacker over real HTTP and obeys every injection. The OS isolation claims run against the real Linux namespace sandbox. They cover:

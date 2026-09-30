@@ -19,7 +19,9 @@ export async function hostProcessesWith(markers, { procDir = '/proc', fsImpl } =
   const found = [];
   for (const n of names) {
     let cmd; try { cmd = fs.readFileSync(`${procDir}/${n}/cmdline`, 'utf8'); } catch { continue; } // exited meanwhile
-    if (markers.some(m => cmd.split('\0').includes(m))) found.push(Number(n));
+    // Substring match on the raw command line: a shell or wrapper that embeds the path inside a longer argument
+    // (for example `bash -c "claude --mcp-config <path> ..."`) still counts.
+    if (markers.some(m => cmd.includes(m))) found.push(Number(n));
   }
   return found;
 }
@@ -43,17 +45,23 @@ export async function probeTermination(engine, run, { alive = processAlive, sand
     if (!run.acknowledgedAt && ['cli-claude', 'cli-codex', 'local-checks'].includes(agent?.executionAdapter)) return { stopped: false, evidence: 'Run was dispatched but reported no process id; termination cannot be proven.' };
     return { stopped: false, evidence: 'No process or sandbox evidence for this run.' };
   }
-  const hostClaude = engine.state.compute?.runs?.[run.runId]?.variant === 'split-broker';
   const hostPids = [...new Set(ev.filter(e => e.hostProcess === 'claude' && Number.isInteger(e.pid)).map(e => e.pid))];
   const markers = [...new Set(ev.map(e => e.hostMarker).filter(m => typeof m === 'string' && m.length > 8))];
+  // A host run is recognised from its compute record, or, if that record was lost, from a cli-claude run that
+  // recorded a host marker or host pid.
+  const computeRun = engine.state.compute?.runs?.[run.runId];
+  const hostClaude = computeRun ? computeRun.variant === 'split-broker' : agent?.executionAdapter === 'cli-claude' && (markers.length > 0 || hostPids.length > 0);
   let scanned = null;
-  if (hostClaude && !hostPids.length) {
+  if (hostClaude) {
+    // Always scan, even when a pid was recorded: Claude Code can re-exec or spawn children that carry the same
+    // config path under another pid.
     // The broker died with the old HQ, so such an orphan has no tool that reaches the sandbox or the repository,
     // but HQ still does not call it stopped without proof.
     const found = markers.length ? await hostScan(markers).catch(() => null) : null;
-    if (found === null) return { stopped: false, evidence: 'Claude Code ran on the host (split broker) and its process id was never recorded; HQ cannot prove it stopped. It holds no broker session (the endpoint ended with the old HQ), so it cannot reach the sandbox or the repository. End any leftover claude process, then reconcile.' };
-    if (found.length) return { stopped: false, evidence: `Claude Code host process(es) ${found.join(', ')} from this run still exist (found by its private config path); they hold no broker session.` };
-    scanned = 'no host process carries this run\'s private config path';
+    if (found === null && !hostPids.length) return { stopped: false, evidence: 'Claude Code ran on the host (split broker) and its process id was never recorded; HQ cannot prove it stopped. It holds no broker session (the endpoint ended with the old HQ), so it cannot reach the sandbox or the repository. End any leftover claude process, then reconcile.' };
+    if (found?.length) return { stopped: false, evidence: `Claude Code host process(es) ${found.join(', ')} from this run still exist (found by its private config path); they hold no broker session.` };
+    // Where the process table cannot be read (Windows) a recorded pid remains the proof, as before.
+    if (found) scanned = 'no host process carries this run\'s private config path';
   }
   const living = pids.filter(pid => alive(pid));
   if (living.length) return { stopped: false, evidence: `Process(es) ${living.join(', ')} still exist.` };

@@ -757,3 +757,52 @@ test('V9. the host process scan finds a live process by its marker and stops fin
   await new Promise(r => child.on('exit', r));
   assert.deepEqual(await hostProcessesWith([marker]), []);
 });
+
+// ---------------------------------------------------------------- recovery hardening (Claude's re-audit, area 3)
+test('V10. the host scan finds a wrapped process whose command line embeds the marker inside a longer argument (real /proc)', { skip: process.platform === 'linux' ? false : 'reads /proc (Linux)' }, async () => {
+  const { spawn } = await import('node:child_process');
+  const { hostProcessesWith } = await import('../orchestration/recovery.mjs');
+  const marker = path.join(os.tmpdir(), `hq-broker-v10-${process.pid}`, 'mcp.json');
+  // One argv element that contains the marker, as `bash -c "claude --mcp-config <path>"` would produce.
+  const child = spawn(process.execPath, ['-e', 'setTimeout(() => {}, 30000)', `claude --mcp-config ${marker} --strict-mcp-config`], { stdio: 'ignore' });
+  try {
+    await new Promise(r => setTimeout(r, 200));
+    assert.deepEqual(await hostProcessesWith([marker]), [child.pid]);
+  } finally { child.kill('SIGKILL'); }
+  await new Promise(r => child.on('exit', r));
+  assert.deepEqual(await hostProcessesWith([marker]), []);
+});
+
+test('V11. with the host pid recorded and gone, recovery still scans for other processes carrying the marker', async () => {
+  const h = await brokerHQ(async () => { await new Promise(r => setTimeout(r, 300)); });
+  try {
+    const id = h.create(); await h.engine.tick();
+    for (let i = 0; i < 100 && !h.engine.state.tasks[id].evidence.some(e => e.hostProcess === 'claude' && Number.isInteger(e.pid)); i++) await new Promise(r => setTimeout(r, 10));
+    const run = h.engine.state.runs[h.engine.state.tasks[id].runId];
+    let scans = 0;
+    const child = await probeTermination(h.engine, run, { alive: () => false, sandboxes: async () => [], hostScan: async () => { scans++; return [555]; } });
+    assert.equal(scans, 1, 'scan runs even though a pid was recorded');
+    assert.equal(child.stopped, false); assert.match(child.evidence, /555 from this run still exist/);
+    const clean = await probeTermination(h.engine, run, { alive: () => false, sandboxes: async () => [], hostScan: async () => [] });
+    assert.equal(clean.stopped, true); assert.match(clean.evidence, /no host process carries/);
+    // No process table (Windows): the recorded pid is still accepted as proof, as before.
+    const noTable = await probeTermination(h.engine, run, { alive: () => false, sandboxes: async () => [], hostScan: async () => null });
+    assert.equal(noTable.stopped, true);
+    await h.settle(id);
+  } finally { await h.close(); }
+});
+
+test('V12. a lost compute record does not hide a host Claude run from the host checks', async () => {
+  const n = await brokerHQ(async () => { await new Promise(r => setTimeout(r, 300)); }, { fake: { pid: null } });
+  try {
+    const id = n.create(); await n.engine.tick();
+    for (let i = 0; i < 100 && !n.engine.state.tasks[id].evidence.some(e => e.hostMarker); i++) await new Promise(r => setTimeout(r, 10));
+    const run = n.engine.state.runs[n.engine.state.tasks[id].runId];
+    if (n.engine.state.compute?.runs) delete n.engine.state.compute.runs[run.runId];
+    const noScan = await probeTermination(n.engine, run, { alive: () => false, sandboxes: async () => [], hostScan: async () => null });
+    assert.equal(noScan.stopped, false, 'sandbox gone is still not proof for a host run'); assert.match(noScan.evidence, /never recorded/);
+    const still = await probeTermination(n.engine, run, { alive: () => false, sandboxes: async () => [], hostScan: async () => [777] });
+    assert.equal(still.stopped, false);
+    await n.settle(id);
+  } finally { await n.close(); }
+});
