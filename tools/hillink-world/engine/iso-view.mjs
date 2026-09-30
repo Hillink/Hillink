@@ -82,7 +82,7 @@ const PRODUCTIVE_WORDS = { coordinating: 'Coordinating', coding: 'Typing', think
 export function actionText(e, layout) {
   const st = e.anim?.state ?? 'idle', a = e.agent;
   const where = e.dest?.location ? layout?.locationById?.[e.dest.location]?.name : null;
-  if (e.staging?.presence === 'candidate') return e.moving ? `${e.staging.caption} (arriving)` : e.staging.caption;
+  if (e.staging?.presence === 'candidate') { const dev = a?.definition?.meta?.fixture ? ' [dev harness, simulated]' : ''; return (e.moving ? `${e.staging.caption} (arriving)` : e.staging.caption) + dev; }
   switch (st) {
     case 'walk': if (e.journey) return e.journey.kind === 'start' && e.carrying ? JOURNEY_WORDS.start : e.journey.kind === 'start' ? 'Going to pick up the task' : e.journey.kind === 'finish' ? 'Taking the finished task to the archive' : 'Walking';
       if (e.loop) return e.loop.kind === 'haul' ? (e.loop.phase === 'back' ? 'Carrying materials' : 'Fetching materials') : 'Walking the site';

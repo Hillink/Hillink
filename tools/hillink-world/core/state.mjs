@@ -316,8 +316,10 @@ export class WorldStore {
   }
   // Rebuild from a snapshot's events in one step, so views place everything directly instead of animating a replay.
   reset(events) {
-    const world = emptyWorld(), ids = [];
+    const world = emptyWorld(), ids = [], once = new Set();
     for (const event of [...events].sort((a, b) => a.at - b.at)) {
+      if (once.has(event.id)) continue; // a replay is idempotent by event id, like flush (Pass 5E)
+      once.add(event.id);
       try { applyEvent(world, event); ids.push(event.id); }
       catch (error) { this.rejected.push({ event, error: error.message }); if (this.rejected.length > 50) this.rejected.shift(); }
     }
