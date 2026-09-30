@@ -8,6 +8,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { Engine } from '../../hillink-hq/engine.mjs';
 import { MemoryStore } from '../../hillink-hq/store.mjs';
+import { LocalAdapter } from '../../hillink-hq/local-adapter.mjs';
 import { TRANSITIONS as HQ_TRANSITIONS, LIFECYCLE as HQ_LIFECYCLE } from '../../hillink-hq/agents.mjs';
 import { trimSnapshot, commandableOf, commandHandler, createJournal } from '../serve.mjs';
 import { HqTranslator } from '../adapters/hq.mjs';
@@ -34,7 +35,9 @@ function fakeLocal() {
       runs.set(runId, { task, emit });
       if (runId.startsWith('trial-')) setImmediate(() => { emit({ kind: 'ACK', summary: 'trial up' }); emit({ kind: 'FINDING', summary: 'Inspected 12 source paths.' }); emit({ kind: 'COMPLETED', summary: 'exit 0' }); });
     },
-    cancel: async runId => runs.has(runId),
+    // Like the real adapters (local-adapter.mjs, cli-agent-adapter.mjs): a confirmed stop is reported by the adapter's
+    // own terminal CANCELLED (on process close) before cancel() resolves true.
+    cancel: async runId => { const r = runs.get(runId); if (!r) return false; runs.delete(runId); try { r.emit({ kind: 'CANCELLED', summary: 'Worker termination confirmed by process close.' }); } catch { /* already terminal */ } return true; },
   };
 }
 // The live path: HQ engine -> trimSnapshot -> HqTranslator -> live WorldStore (family locked to 'live').
@@ -323,4 +326,36 @@ test('13: World commands follow HQ capabilities and lifecycle, never ids; a new 
   const refused = await submit({ commandId: 'cmd-5f-00002', agentId: r, instruction: 'Again?' });
   assert.equal(refused.code, 400, 'a disabled agent takes no commands');
   assert.equal(created.length, 1);
+});
+
+test('B1: a real adapter\'s own CANCELLED on disable or retire mid-run reaches the World as a requeue, never a failure', async () => {
+  for (const leave of ['disableAgent', 'retireAgent']) {
+    // The audit path exactly: the real LocalAdapter runs real verify-hq; its close handler emits CANCELLED first.
+    const h = live({ adapters: { 'local-checks': new LocalAdapter() } }); h.sync();
+    const id = create(h, { capabilities: ['verify-hq'] });
+    for (let i = 0; i < 12 && h.engine.state.agents[id].lifecycle.state !== 'READY'; i++) { await h.step(); await new Promise(r => setTimeout(r, 50)); }
+    assert.equal(h.engine.state.agents[id].lifecycle.state, 'READY');
+    h.engine.activateAgent(id, { by: 'kyle' }); h.sync();
+    h.engine.emit('AGENT_OBSERVED', { agentId: 'hq-verifier', status: 'OFFLINE', detail: 'kept out of this test', quarantineUntil: h.clock + 3_600_000 });
+    const t = h.engine.createTask({ title: 'Verify', description: 'x', operation: 'verify-hq', safety: 'local-read-only', priority: 50, preferredAgentId: id });
+    await h.step();
+    const runId = h.engine.state.tasks[t].runId;
+    for (let i = 0; i < 400 && !h.engine.state.runs[runId].acknowledgedAt; i++) await new Promise(r => setTimeout(r, 5));
+    assert.ok(h.engine.state.runs[runId].acknowledgedAt, 'the real worker acknowledged');
+    h.sync();
+    const r = await h.engine[leave](id, { by: 'kyle' }); h.sync();
+    assert.equal(r.requeued, t);
+    const cancelled = h.engine.state.tasks[t].evidence.filter(e => e.kind === 'CANCELLED');
+    assert.equal(cancelled.length, 1);
+    assert.equal(cancelled[0].summary, 'Worker termination confirmed by process close.', 'the adapter\'s own terminal event landed first');
+    assert.equal(cancelled[0].requeue, true);
+    const task = h.store.world.tasks[t], a = W(h, id);
+    assert.equal(task.status, 'queued'); assert.equal(task.agentId, null);
+    assert.notEqual(task.outcome, 'failed');
+    assert.ok(!task.history.some(x => x.type === 'TASK_FAILED'), 'no TASK_FAILED for a stop caused by the agent leaving');
+    assert.notEqual(a.lastTask?.outcome, 'failed');
+    assert.equal(a.lastTask?.outcome, 'requeued');
+    assert.equal(a.lifecycle.state, leave === 'disableAgent' ? 'DISABLED' : 'RETIRED');
+    noRejections(h);
+  }
 });

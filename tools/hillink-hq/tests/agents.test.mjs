@@ -256,6 +256,52 @@ test('H: a run whose stop is not confirmed is parked, never requeued (no double 
   assert.match(engine.state.tasks[t].ownerAction, /Confirm the previous worker has stopped/);
 });
 
+test('B1: the adapter\'s own terminal CANCELLED is tagged as the leave requeue; unconfirmed stops, completed work and other cancellations are not', async () => {
+  // Like the real adapters: a confirmed stop emits the adapter's own CANCELLED (on process close) before cancel() resolves.
+  const realistic = (mode = 'close') => { const a = localAdapter(); a.cancel = async runId => { a.cancelled.push(runId); const r = a.runs.get(runId); if (mode === 'false') return false; if (mode === 'throw') throw Error('kill failed'); if (mode === 'complete') { r.emit({ kind: 'COMPLETED', summary: 'exit 0 just before the stop' }); return true; } r.emit({ kind: 'CANCELLED', summary: 'Worker termination confirmed by process close.' }); return true; }; return a; };
+  const run = async (mode, leave = 'disableAgent') => {
+    const { engine } = setup({ adapters: { 'local-checks': realistic(mode) } });
+    const id = engine.createAgent(scout(), { by: 'kyle' });
+    await tick(engine, 6); engine.activateAgent(id, { by: 'kyle' });
+    const t = engine.createTask({ title: 'Inspect', description: 'x', operation: 'inspect-repo', safety: 'local-read-only', priority: 50, preferredAgentId: id });
+    await tick(engine);
+    const runId = engine.state.tasks[t].runId;
+    engine.adapters['local-checks'].runs.get(runId).emit({ kind: 'ACK', summary: 'up' });
+    const r = await engine[leave](id, { by: 'kyle' });
+    return { engine, id, t, runId, r, task: engine.state.tasks[t], evidence: engine.state.tasks[t].evidence.filter(e => ['CANCELLED', 'COMPLETED'].includes(e.kind)) };
+  };
+  for (const leave of ['disableAgent', 'retireAgent']) {
+    const { r, t, task, evidence, engine } = await run('close', leave);
+    assert.equal(r.requeued, t); assert.equal(task.stage, 'READY');
+    assert.deepEqual(evidence.map(e => [e.summary, e.requeue]), [['Worker termination confirmed by process close.', true]], 'one CANCELLED: the adapter\'s own, tagged');
+    assert.equal(engine.leaving.size, 0, 'the tag is released once the stop is settled');
+  }
+  for (const mode of ['false', 'throw']) {
+    const { r, t, task, evidence, engine } = await run(mode);
+    assert.deepEqual(r, { state: 'DISABLED', requeued: null, parked: t }, `${mode}: unconfirmed stop is parked`);
+    assert.equal(task.stage, 'BLOCKED'); assert.deepEqual(evidence, [], 'no CANCELLED, no requeue tag');
+    assert.ok(!engine.state.events.some(e => e.type === 'TASK_REQUEUED'));
+    assert.equal(engine.leaving.size, 0);
+  }
+  { // The run completes in the race with the stop: the task stays DONE and is never requeued.
+    const { r, task, evidence, engine } = await run('complete');
+    assert.deepEqual(r, { state: 'DISABLED', requeued: null, parked: null });
+    assert.equal(task.stage, 'DONE'); assert.deepEqual(evidence.map(e => e.kind), ['COMPLETED']);
+    assert.ok(!engine.state.events.some(e => e.type === 'TASK_REQUEUED'));
+  }
+  { // A cancellation that is not an agent leaving (Kyle cancels the task) is never tagged as a requeue.
+    const { engine } = setup({ adapters: { 'local-checks': realistic('close') } });
+    const id = engine.createAgent(scout(), { by: 'kyle' });
+    await tick(engine, 6); engine.activateAgent(id, { by: 'kyle' });
+    const t = engine.createTask({ title: 'Inspect', description: 'x', operation: 'inspect-repo', safety: 'local-read-only', priority: 50, preferredAgentId: id });
+    await tick(engine);
+    engine.adapters['local-checks'].runs.get(engine.state.tasks[t].runId).emit({ kind: 'ACK', summary: 'up' });
+    await engine.cancelTask(t, { by: 'kyle' });
+    assert.equal(engine.state.tasks[t].stage, 'CANCELLED');
+    assert.ok(engine.state.tasks[t].evidence.filter(e => e.kind === 'CANCELLED').every(e => !e.requeue));
+  }
+});
+
 test('J: two HQ-created agents on different backends coexist, both ACTIVE, each getting its own kind of work; a shared adapter never runs two at once', async () => {
   const request = async (url, opts) => url.endsWith('/api/tags') ? { ok: true, json: async () => ({ models: [{ name: 'qwen3:4b', details: { family: 'qwen3' }, size: 1 }] }) } : { ok: true, body: (async function* () { const m = JSON.parse(opts.body).model; yield new TextEncoder().encode(`${JSON.stringify({ model: m, response: 'ok', done: false })}\n${JSON.stringify({ model: m, response: '', done: true })}\n`); })() };
   const { engine } = setup({ ollama: { enabled: true, request } });

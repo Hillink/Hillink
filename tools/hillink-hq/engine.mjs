@@ -117,7 +117,7 @@ export function agentStatus(state, agent, now, config = defaults, seenAt = null)
 
 export class Engine {
   constructor({ store, adapters = {}, now = Date.now, config = {} }) {
-    this.store = store; this.adapters = adapters; this.now = now; this.config = { ...defaults, ...config }; this.busy = false; this.seen = {}; this.jobs = new Map(); this.checkedAt = {}; this.provisioning = {};
+    this.store = store; this.adapters = adapters; this.now = now; this.config = { ...defaults, ...config }; this.busy = false; this.seen = {}; this.jobs = new Map(); this.checkedAt = {}; this.leaving = new Set(); this.provisioning = {};
     // Fail closed: an unknown mode is ZERO_CREDIT, never something more permissive.
     if (!MODES.includes(this.config.computeMode)) this.config.computeMode = DEFAULT_MODE;
     this.state = store.read().reduce(reduce, emptyState());
@@ -210,6 +210,9 @@ export class Engine {
     if (payload.fullText != null && (payload.kind !== 'MODEL_RESULT' || typeof payload.fullText !== 'string' || payload.fullText.length > 30_000)) throw Error('Invalid full model text');
     if (payload.files && (!Array.isArray(payload.files) || payload.files.some(f => !text(f, 500)))) throw Error('Invalid files');
     if (payload.kind === 'RATE_LIMITED' && payload.retryAt != null && (!Number.isFinite(payload.retryAt) || payload.retryAt <= this.now())) throw Error('Future retry time required');
+    // Pass 5F (B1): the adapter's own terminal CANCELLED for a run HQ is stopping because Kyle disabled or retired its
+    // agent is that stop, not a failure. Only CANCELLED is tagged; a COMPLETED or FAILED that wins the race stays itself.
+    if (payload.kind === 'CANCELLED' && this.leaving.has(runId)) payload = { ...payload, requeue: true };
     this.emit('WORKER_EVENT', { ...payload, runId });
     // A metered run that used up its authorization is recorded once, so Kyle and the World see it.
     const c = this.state.compute.runs[runId];
@@ -474,10 +477,13 @@ export class Engine {
     const task = this.state.tasks[a.assignment], run = this.state.runs[task?.runId];
     if (task && run && !run.endedAt) {
       let stopped = false;
-      try { stopped = await bounded(() => this.adapters[a.executionAdapter]?.cancel(run.runId), Math.max(this.config.adapterTimeoutMs, 30_000)); } catch { /* unproven */ }
+      // Recorded before cancel, so the adapter's own terminal CANCELLED (it lands first) is tagged as this stop (B1).
+      this.leaving.add(run.runId);
+      try { stopped = await bounded(() => this.adapters[a.executionAdapter]?.cancel(run.runId), Math.max(this.config.adapterTimeoutMs, 30_000)); } catch { /* unproven */ } finally { this.leaving.delete(run.runId); }
       if (stopped === true) {
         if (!this.state.runs[run.runId].endedAt) this.workerEvent(run.runId, { kind: 'CANCELLED', summary: `${a.name} was ${word} by Kyle; the adapter confirmed the worker stopped.`, requeue: true });
-        if (this.state.tasks[task.id].stage !== 'CANCELLED') { this.emit('TASK_REQUEUED', { taskId: task.id, releasePreference: true, reason: `${a.name} was ${word}; the task is back in the queue.` }); requeued = task.id; }
+        // Only a run that ended CANCELLED is requeued: work that completed (or failed) in the race keeps its outcome.
+        if (this.state.runs[run.runId].terminal === 'CANCELLED' && this.state.tasks[task.id].stage !== 'CANCELLED') { this.emit('TASK_REQUEUED', { taskId: task.id, releasePreference: true, reason: `${a.name} was ${word}; the task is back in the queue.` }); requeued = task.id; }
       } else {
         this.emit('TASK_PARKED', { taskId: task.id, reason: `${a.name} was ${word} mid-run and its worker did not confirm it stopped.`, ownerAction: 'Confirm the previous worker has stopped before this task runs again.' });
         parked = task.id;
