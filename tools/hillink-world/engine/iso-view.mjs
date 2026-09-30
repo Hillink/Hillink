@@ -110,7 +110,7 @@ export class IsoWorldView extends WorldView {
     this.ambientSpots = publicSpots(L);
     if (!plaza || this.ambientSpots.length < 2) { this.ambient = []; return; }
     this.ambientSpots.push({ key: 'plaza:outside', room: 'plaza', point: plaza, pose: 'stand', facing: 'front', use: 'look' });
-    const n = Math.min(4, Math.max(2, Math.floor(this.ambientSpots.length / 3)));
+    const n = L.ambientCount ?? Math.min(4, Math.max(2, Math.floor(this.ambientSpots.length / 3))); // a layout may ask for more
     this.ambient = Array.from({ length: n }, (_, i) => this.scene.add({ id: `ambient:${i}`, kind: 'ambient', layer: LAYERS.agent, x: plaza[0], y: plaza[1], w: this.size.agent[0], h: this.size.agent[1], anchor: 'feet', index: i, plan: npcPlan(i, L.world?.seed?.length ?? 0), phase: 'away', trip: 0, trips: 0, alpha: 0, facing: 1, dir: 'front', heading: Math.PI / 2 }));
   }
   stepAmbient(e, dt, now, instant, stepPath) {
