@@ -1,0 +1,13 @@
+{
+  "id": "pass-02",
+  "order": 2,
+  "title": "Pass 2: truthful state and pass-by-pass construction",
+  "summary": "Labels separate action from task stage; tasks keep evidence and outcomes; failures are actionable; construction follows real commits, CI, reviews and the merge. Built as the Operations annex beside the entrance.",
+  "branch": "claude/world-engine",
+  "pr": 35,
+  "since": "6471351fd7d42ce54ab321788e9461876882fc6a",
+  "scope": ["tools/hillink-world", "docs/world"],
+  "structures": [
+    { "id": "ops-annex", "kind": "annex", "name": "Operations annex", "floor": 0, "x0": 690, "x1": 796, "z0": 40, "z1": 98, "h": 84, "sitePoints": ["site1", "site2"] }
+  ]
+}

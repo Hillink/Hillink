@@ -1,0 +1,214 @@
+// Local server for Hillink World. Loopback only, allowlisted static files, and these routes:
+// GET /api/hq relays a trimmed HQ snapshot; GET /api/construction serves construction evidence read from
+// the local git clone and the `gh` CLI (adapters/git.mjs), journaled so accepted work survives restarts.
+// /api/commands (Pass 1) is the one write: a same-origin POST becomes an HQ task through HQ's own validation,
+// limited to COMMANDABLE agents and operations, and journaled in commands.jsonl; GET returns that history
+// joined with HQ's task outcome. The World server holds the HQ session server-side (the same local handshake
+// HQ's own page uses); the browser never receives the HQ token.
+import http from 'node:http';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import os from 'node:os';
+import { execFile } from 'node:child_process';
+import { createConstructionSource } from './adapters/git.mjs';
+
+const root = path.dirname(fileURLToPath(import.meta.url));
+const types = { '.html': 'text/html; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.jpg': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp' };
+const listed = (dir, exts) => { try { return fs.readdirSync(path.join(root, dir)).filter(f => exts.includes(path.extname(f))).map(f => `${dir}/${f}`); } catch { return []; } };
+const allowed = new Set(['index.html', 'style.css', 'main.mjs', ...['core', 'engine', 'render', 'ui', 'sim', 'adapters', 'themes', 'world'].flatMap(dir => listed(dir, ['.mjs']))]);
+const headers = { 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer', 'Content-Security-Policy': "default-src 'self'; style-src 'self'; script-src 'self'; img-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'" };
+
+// Only what the World draws. Task descriptions, evidence bodies and usage stay in HQ.
+export function trimSnapshot(s) {
+  const pick = (o, keys) => Object.fromEntries(keys.filter(k => o[k] !== undefined).map(k => [k, o[k]]));
+  const data = e => {
+    const d = e.data ?? {};
+    if (e.type === 'TASK_CREATED') return pick(d, ['id', 'title', 'operation', 'capability', 'safety', 'ownerAction']);
+    if (e.type === 'WORKER_EVENT') return pick(d, ['runId', 'kind', 'summary', 'result', 'completedTests', 'url', 'toAgentId', 'retryAt']);
+    if (e.type === 'AGENT_REGISTERED') return pick(d, ['id', 'name', 'role', 'real', 'fantasy']);
+    return pick(d, ['agentId', 'taskId', 'runId', 'status', 'detail', 'retryAt', 'reason', 'key', 'kind', 'ownerMustAct', 'ownerAction']);
+  };
+  return {
+    seq: s.seq, now: s.now,
+    health: { controller: s.health?.controller ?? null, lastError: s.health?.lastError ?? null },
+    agents: (s.agents ?? []).map(a => pick(a, ['id', 'name', 'role', 'real', 'fantasy', 'status', 'assignment', 'detail', 'retryAt', 'executionAdapter', 'adapterAvailable'])),
+    tasks: (s.tasks ?? []).map(t => ({
+      ...pick(t, ['id', 'title', 'stage', 'agentId', 'runId', 'capability', 'operation', 'safety', 'preferredAgentId', 'requestedBy', 'blocker', 'ownerAction', 'createdAt', 'claimedAt', 'endedAt']),
+      // The last few evidence lines (kind, short summary, time) so a reload keeps the task's story; raw payloads stay in HQ.
+      ...(Array.isArray(t.evidence) && t.evidence.length ? { evidence: t.evidence.slice(-6).map(e => ({ kind: String(e.kind ?? ''), summary: typeof e.summary === 'string' ? e.summary.slice(0, 200) : null, at: e.at ?? null, ...(typeof e.delegatedTaskId === 'string' ? { delegatedTaskId: e.delegatedTaskId } : {}) })) } : {}),
+    })),
+    runs: Object.fromEntries(Object.entries(s.runs ?? {}).map(([id, r]) => [id, pick(r, ['taskId', 'agentId', 'endedAt', 'acknowledgedAt', 'heartbeatAt', 'lastMeaningfulAt', 'terminal'])])),
+    alerts: Object.fromEntries(Object.entries(s.alerts ?? {}).map(([k, a]) => [k, pick(a, ['key', 'kind', 'agentId', 'taskId', 'ownerMustAct', 'ownerAction', 'detail', 'active', 'openedAt'])])),
+    events: (s.events ?? []).map(e => ({ seq: e.seq, id: e.id, at: e.at, type: e.type, data: data(e) })),
+  };
+}
+
+export function hqClient(base = 'http://127.0.0.1:4312', { fetchImpl = fetch, timeoutMs = 3000 } = {}) {
+  let token = null;
+  const call = (p, { auth, method = 'GET', body } = {}) => fetchImpl(new URL(p, base), {
+    method, body: body === undefined ? undefined : JSON.stringify(body),
+    headers: { 'x-hq-client': 'command-center', ...(auth ? { authorization: `Bearer ${token}` } : {}), ...(body === undefined ? {} : { 'content-type': 'application/json' }) },
+    signal: AbortSignal.timeout(timeoutMs),
+  });
+  // One authenticated request, opening a new session once if HQ restarted.
+  async function authed(p, opts) {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      if (!token) { const r = await call('/api/session'); if (!r.ok) throw Error(`HQ session refused (${r.status})`); token = (await r.json()).token; }
+      const r = await call(p, { ...opts, auth: true });
+      if (r.status === 401) { token = null; continue; } // HQ restarted: new session
+      return r;
+    }
+    throw Error('HQ session rejected');
+  }
+  async function raw() { const r = await authed('/api/state'); if (!r.ok) throw Error(`HQ state failed (${r.status})`); return r.json(); }
+  const state = async () => trimSnapshot(await raw());
+  state.raw = raw;
+  // The only write: a task through HQ's own validated POST /api/tasks (allowlisted operations, explicit safety
+  // class, capability check). HQ, not the World, decides whether, when and how it runs.
+  state.createTask = async input => {
+    const r = await authed('/api/tasks', { method: 'POST', body: input });
+    const body = await r.json().catch(() => ({}));
+    if (!r.ok) throw Error(body.error ?? `HQ refused the task (${r.status})`);
+    return body.id;
+  };
+  return state;
+}
+
+// Agents the World may send commands to, and the only HQ operation a command becomes. Pass 1 wires one real
+// loop: Claude through HQ's read-only repository review (the signed-in Claude CLI with Read, Grep and Glob only).
+export const COMMANDABLE = {
+  claude: { operation: 'review-repo', safety: 'local-read-only', priority: 50, label: 'Ask Claude a read-only question about the repository', limits: 'Claude can only read files for this: no edits, shell, deploys or database access.' },
+  // Pass 2.5: ChatGPT, the orchestrator. HQ runs it through the OpenAI adapter with its narrow HQ tools.
+  chatgpt: { operation: 'orchestrate', safety: 'local-read-only', priority: 60, label: 'Ask ChatGPT, the orchestrator', limits: 'ChatGPT reads HQ and can queue read-only reviews by Claude or Codex, or ask you to decide. It cannot edit code or run commands.' },
+};
+const COMMAND_ID = /^[A-Za-z0-9-]{8,64}$/;
+const TERMINAL_KINDS = new Set(['COMPLETED', 'FAILED', 'CANCELLED', 'RATE_LIMITED', 'BLOCKED', 'UNCERTAIN']);
+
+// A command joined with HQ's task record: what was asked, which HQ task it became, and what actually happened.
+export function commandView(record, hqTasks) {
+  const t = record.taskId && hqTasks ? hqTasks.find(x => x.id === record.taskId) : null;
+  const ev = t?.evidence ?? [], result = ev.filter(e => e.kind === 'MODEL_RESULT').at(-1), terminal = ev.filter(e => TERMINAL_KINDS.has(e.kind)).at(-1);
+  return {
+    ...record,
+    hq: t ? {
+      stage: t.stage, agentId: t.agentId ?? null, runId: t.runId ?? null, blocker: t.blocker ?? null, claimedAt: t.claimedAt ?? null, endedAt: t.endedAt ?? null,
+      result: typeof result?.summary === 'string' ? result.summary.slice(0, 1900) : null,
+      outcome: terminal ? { kind: terminal.kind, summary: String(terminal.summary ?? '').slice(0, 400), at: terminal.at ?? null } : null,
+    } : null,
+  };
+}
+
+// POST /api/commands. Idempotent by commandId: a repeat (double click, retry, reload) returns the first
+// record and never creates a second HQ task.
+export function commandHandler({ hq, journal, now = Date.now }) {
+  const inflight = new Map();
+  return async function submit(input) {
+    const commandId = String(input?.commandId ?? ''), agentId = String(input?.agentId ?? ''), instruction = typeof input?.instruction === 'string' ? input.instruction.trim() : '';
+    if (!COMMAND_ID.test(commandId)) return { code: 400, body: { error: 'commandId required' } };
+    const existing = journal.get(commandId);
+    if (existing) return { code: 200, body: { ...existing, duplicate: true } };
+    if (inflight.has(commandId)) return { code: 200, body: { ...(await inflight.get(commandId)), duplicate: true } };
+    const spec = COMMANDABLE[agentId];
+    if (!spec) return { code: 400, body: { error: `${agentId || 'That agent'} cannot take commands from the World yet.` } };
+    if (!instruction || instruction.length > 2000) return { code: 400, body: { error: 'The instruction must be 1 to 2000 characters.' } };
+    const work = (async () => {
+      const record = { id: commandId, at: now(), agentId, instruction, operation: spec.operation, taskId: null, error: null };
+      try {
+        // Never queue work for an agent HQ says is not connected: it would sit there looking accepted.
+        if (hq.raw) { const a = (await hq.raw()).agents?.find(x => x.id === agentId); if (a && a.adapterAvailable === false) throw Error(`${a.name} is not connected in HQ: ${String(a.detail ?? 'no runtime').slice(0, 160)}`); }
+        record.taskId = await hq.createTask({ title: `World request: ${instruction.replace(/\s+/g, ' ').slice(0, 120)}`, description: instruction, operation: spec.operation, safety: spec.safety, priority: spec.priority, preferredAgentId: agentId });
+      } catch (error) { record.error = String(error.cause?.code ?? error.message).slice(0, 300); }
+      journal.add([record]); // refusals are history too
+      return record;
+    })();
+    inflight.set(commandId, work);
+    try { const record = await work; return { code: record.taskId ? 201 : 502, body: record }; } finally { inflight.delete(commandId); }
+  };
+}
+
+// Append-only construction journal (outside the repo). Each line is one evidence event with its source time,
+// so a restart, a reload or HQ reconnecting never resets the building; replay is the file in order.
+export function createJournal(file) {
+  const events = new Map();
+  try { for (const line of fs.readFileSync(file, 'utf8').split('\n')) if (line.trim()) { try { const e = JSON.parse(line); if (e?.id) events.set(e.id, e); } catch { /* skip a torn line */ } } } catch { /* first run */ }
+  return {
+    add(list) {
+      const fresh = list.filter(e => e?.id && !events.has(e.id));
+      if (!fresh.length) return 0;
+      for (const e of fresh) events.set(e.id, e);
+      try { fs.mkdirSync(path.dirname(file), { recursive: true }); fs.appendFileSync(file, fresh.map(e => JSON.stringify(e)).join('\n') + '\n'); } catch { /* still served from memory */ }
+      return fresh.length;
+    },
+    all: () => [...events.values()].sort((a, b) => a.at - b.at),
+    get: id => events.get(id) ?? null,
+  };
+}
+
+// Polls the construction source on an interval and keeps the journal; get() is what /api/construction serves.
+export function constructionFeed({ source, journal, intervalMs = 60000 }) {
+  let busy = false;
+  const tick = async () => { if (busy) return; busy = true; try { journal.add(await source.poll()); } catch (e) { source.status.error = String(e.message).slice(0, 200); } finally { busy = false; } };
+  tick(); const timer = setInterval(tick, intervalMs); timer.unref?.();
+  return { get: () => ({ events: journal.all(), status: { ...source.status } }), tick, stop: () => clearInterval(timer) };
+}
+
+export function createServer({ hq = process.env.WORLD_HQ === '0' ? null : hqClient(process.env.HQ_URL || 'http://127.0.0.1:4312'), construction = null, commands = null } = {}) {
+  const submit = commands && hq?.createTask ? commandHandler({ hq, journal: commands }) : null;
+  return http.createServer(async (req, res) => {
+    const url = new URL(req.url, 'http://localhost');
+    const host = req.headers.host ?? '', port = req.socket.localPort;
+    const send = (code, body, type = 'application/json') => { res.writeHead(code, { ...headers, 'Content-Type': type }); res.end(body); };
+    // Exact loopback Host defeats DNS rebinding; the data route also refuses cross-site browser requests.
+    if (host !== `127.0.0.1:${port}` && host !== `localhost:${port}`) return send(403, '{"error":"Invalid host"}');
+    if (url.pathname === '/api/commands') {
+      const site = req.headers['sec-fetch-site'];
+      if ((site && site !== 'same-origin') || (req.headers.origin && req.headers.origin !== `http://${host}`)) return send(403, '{"error":"Same-origin only"}');
+      if (req.method === 'POST') {
+        // A write needs a browser same-origin fetch with a JSON body; a cross-site form or link cannot send one.
+        if (!submit) return send(503, '{"error":"Commands disabled"}');
+        if (site !== 'same-origin' || !/^application\/json\b/.test(req.headers['content-type'] ?? '')) return send(403, '{"error":"Same-origin JSON only"}');
+        let raw = '';
+        for await (const chunk of req) { raw += chunk; if (raw.length > 8192) return send(413, '{"error":"Too large"}'); }
+        let input; try { input = JSON.parse(raw); } catch { return send(400, '{"error":"Invalid JSON"}'); }
+        const { code, body } = await submit(input);
+        return send(code, JSON.stringify(body));
+      }
+      if (req.method !== 'GET') return send(405, '{"error":"GET or POST only"}');
+      const list = commands ? commands.all().slice(-20) : [];
+      let tasks = null, hqError = null;
+      if (list.length && hq?.raw) { try { tasks = (await hq.raw()).tasks ?? []; } catch (error) { hqError = String(error.cause?.code ?? error.message).slice(0, 200); } }
+      return send(200, JSON.stringify({ commandable: submit ? COMMANDABLE : {}, hqError, commands: list.map(r => commandView(r, tasks)).reverse() }));
+    }
+    if (req.method !== 'GET') return send(405, '{"error":"Read-only"}');
+    if (url.pathname === '/api/hq') {
+      const site = req.headers['sec-fetch-site'];
+      if ((site && site !== 'same-origin') || (req.headers.origin && req.headers.origin !== `http://${host}`)) return send(403, '{"error":"Same-origin only"}');
+      if (!hq) return send(404, '{"error":"HQ feed disabled"}');
+      // HQ being down is a normal state for this page (it falls back to simulation), so it is data, not an HTTP error.
+      try { return send(200, JSON.stringify(await hq())); } catch (error) { return send(200, JSON.stringify({ offline: true, error: String(error.cause?.code ?? error.message).slice(0, 200) })); }
+    }
+    if (url.pathname === '/api/construction') {
+      const site = req.headers['sec-fetch-site'];
+      if ((site && site !== 'same-origin') || (req.headers.origin && req.headers.origin !== `http://${host}`)) return send(403, '{"error":"Same-origin only"}');
+      if (!construction) return send(200, JSON.stringify({ events: [], status: { disabled: true } }));
+      return send(200, JSON.stringify(construction.get()));
+    }
+    const file = url.pathname === '/' ? 'index.html' : decodeURIComponent(url.pathname.slice(1));
+    if (!allowed.has(file)) return send(404, 'Not found', 'text/plain');
+    send(200, fs.readFileSync(path.join(root, file)), types[path.extname(file)]);
+  });
+}
+
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  const port = Number(process.env.WORLD_PORT || 4320);
+  const repo = path.resolve(root, '../..');
+  const run = (cmd, args) => new Promise((resolve, reject) => execFile(cmd, args, { cwd: repo, timeout: 30000, maxBuffer: 8e6, windowsHide: true }, (e, out) => (e ? reject(e) : resolve(out))));
+  const construction = process.env.WORLD_GIT === '0' ? null : constructionFeed({
+    source: createConstructionSource({ run }),
+    journal: createJournal(path.join(process.env.WORLD_STATE_DIR || path.join(os.homedir(), '.hillink-world'), 'construction.jsonl')),
+    intervalMs: Number(process.env.WORLD_GIT_INTERVAL_MS || 60000),
+  });
+  const commands = process.env.WORLD_HQ === '0' ? null : createJournal(path.join(process.env.WORLD_STATE_DIR || path.join(os.homedir(), '.hillink-world'), 'commands.jsonl'));
+  createServer({ construction, commands }).listen(port, '127.0.0.1', () => console.log(`Hillink World: http://127.0.0.1:${port} (live from HQ at ${process.env.HQ_URL || 'http://127.0.0.1:4312'} when it is running, otherwise simulation)`));
+}

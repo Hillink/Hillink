@@ -23,6 +23,8 @@
     "test:all": "npm run security:api-auth ; npm run test:seed ; npm run test:e2e",
     "security:api-auth": "node scripts/assert-api-auth-guards.mjs",
     "test:unit": "node --test --experimental-strip-types --no-warnings tests/unit/*.test.ts",
+    "world": "node tools/hillink-world/serve.mjs",
+    "test:world": "node --test tools/hillink-world/tests/*.test.mjs",
     "test:payments:local": "node --test --experimental-strip-types --no-warnings --import ./tests/integration/register.mjs tests/integration/*.test.ts"
   },
   "dependencies": {
