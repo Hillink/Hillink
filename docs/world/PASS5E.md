@@ -178,7 +178,7 @@ Capture metadata (paths, world fingerprint, fps): `notes.json`, `shots.json`, `c
 
 ## Tests
 
-`tools/hillink-world/tests/pass5e.test.mjs` (11 tests) covers the registry and schema, default migration (the default agents render identically), lifecycle transitions and fail closed refusal, READY only from events, source family separation, the interpreter's read-only boundary, replay idempotency, and dynamic agents end to end. The Living HQ regressions are `hq-life.test.mjs` and `truth.test.mjs`. Run everything with `npm run test:world` (17 files, 162 tests by static count).
+`tools/hillink-world/tests/pass5e.test.mjs` (11 tests) covers the registry and schema, default migration (the default agents render identically), lifecycle transitions and fail closed refusal, READY only from events, source family separation, the interpreter's read-only boundary, replay idempotency, and dynamic agents end to end. The Living HQ regressions are `hq-life.test.mjs` and `truth.test.mjs`. Run everything with `npm run test:world` (17 files): **162 passed, 0 failed** on 2026-09-30 at head 802ea45, Living HQ regressions included.
 
 ## Limitations
 
