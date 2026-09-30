@@ -1,0 +1,463 @@
+{
+  "base": "http://127.0.0.1:4332",
+  "at": "2026-09-30T11:14:16.169Z",
+  "shots": [
+    {
+      "name": "A1-generated-hq-inhabited-real",
+      "path": "/?source=sim&theme=real",
+      "world": {
+        "source": "generated",
+        "simulated": false,
+        "generator": "5a.1",
+        "seed": "hillink",
+        "schema": 1,
+        "fingerprint": "d205978be510b24b217f936fefb87454",
+        "historyLength": 1,
+        "layout": "generated",
+        "error": null
+      },
+      "note": "claude type at development:room-7:officeChair2; codex inspect at testing:room-5:reviewConsole6@-0.4"
+    },
+    {
+      "name": "A2-generated-hq-inhabited-fantasy",
+      "path": "/?source=sim&theme=fantasy",
+      "world": {
+        "source": "generated",
+        "simulated": false,
+        "generator": "5a.1",
+        "seed": "hillink",
+        "schema": 1,
+        "fingerprint": "d205978be510b24b217f936fefb87454",
+        "historyLength": 1,
+        "layout": "generated",
+        "error": null
+      },
+      "note": null
+    },
+    {
+      "name": "B1-agent-sitting-typing-at-generated-desk",
+      "path": "/?source=sim&theme=real&camera=room:development",
+      "world": {
+        "source": "generated",
+        "simulated": false,
+        "generator": "5a.1",
+        "seed": "hillink",
+        "schema": 1,
+        "fingerprint": "d205978be510b24b217f936fefb87454",
+        "historyLength": 1,
+        "layout": "generated",
+        "error": null
+      },
+      "note": "claude type posture sit at development:room-7:officeChair2"
+    },
+    {
+      "name": "B2-agent-using-printer",
+      "path": "/?source=sim&theme=real",
+      "world": {
+        "source": "generated",
+        "simulated": false,
+        "generator": "5a.1",
+        "seed": "hillink",
+        "schema": 1,
+        "fingerprint": "d205978be510b24b217f936fefb87454",
+        "historyLength": 1,
+        "layout": "generated",
+        "error": null
+      },
+      "note": "codex read using print (room-7:printer59)"
+    },
+    {
+      "name": "B3-break-room-rest",
+      "path": "/?source=sim&theme=real",
+      "world": {
+        "source": "generated",
+        "simulated": false,
+        "generator": "5a.1",
+        "seed": "hillink",
+        "schema": 1,
+        "fingerprint": "d205978be510b24b217f936fefb87454",
+        "historyLength": 1,
+        "layout": "generated",
+        "error": null
+      },
+      "note": "claude idle sit at relax; codex idle sit at relax"
+    },
+    {
+      "name": "C1-agent-riding-generated-elevator",
+      "path": "/?source=sim&theme=real",
+      "world": {
+        "source": "generated",
+        "simulated": false,
+        "generator": "5a.1",
+        "seed": "hillink",
+        "schema": 1,
+        "fingerprint": "d205978be510b24b217f936fefb87454",
+        "historyLength": 1,
+        "layout": "generated",
+        "error": null
+      },
+      "note": "claude gait ride, lift lift:bldg-1 floors 0,1"
+    },
+    {
+      "name": "D1-traffic-on-generated-road",
+      "path": "/?source=sim&theme=real",
+      "world": {
+        "source": "generated",
+        "simulated": false,
+        "generator": "5a.1",
+        "seed": "hillink",
+        "schema": 1,
+        "fingerprint": "d205978be510b24b217f936fefb87454",
+        "historyLength": 1,
+        "layout": "generated",
+        "error": null
+      },
+      "note": null
+    },
+    {
+      "name": "E01-construction-planning-survey",
+      "path": "/?demo=construction&step=1&theme=real",
+      "world": {
+        "source": "generated",
+        "simulated": true,
+        "generator": "5a.1",
+        "seed": "hillink",
+        "schema": 1,
+        "fingerprint": "8cc8a33c24b0d51ff68557856a178e43",
+        "historyLength": 3,
+        "layout": "generated",
+        "error": null
+      },
+      "note": null
+    },
+    {
+      "name": "E02-construction-site-preparation-builder-walking",
+      "path": "/?demo=construction&step=2&walk=1&theme=real",
+      "world": {
+        "source": "generated",
+        "simulated": true,
+        "generator": "5a.1",
+        "seed": "hillink",
+        "schema": 1,
+        "fingerprint": "5628b35f169562acfd0e16801d9384a6",
+        "historyLength": 6,
+        "layout": "generated",
+        "error": null
+      },
+      "note": "claude walk walking to the site"
+    },
+    {
+      "name": "E03-construction-foundation-builder-at-work",
+      "path": "/?demo=construction&step=3&theme=real",
+      "world": {
+        "source": "generated",
+        "simulated": true,
+        "generator": "5a.1",
+        "seed": "hillink",
+        "schema": 1,
+        "fingerprint": "fc234388d42b6e8fda27e557dc7e1b2e",
+        "historyLength": 7,
+        "layout": "generated",
+        "error": null
+      },
+      "note": "claude assemble at site:meeting-room:site:meeting-room:build1"
+    },
+    {
+      "name": "E03b-builder-route-enters-site-through-its-door",
+      "path": "/?demo=construction&step=3&theme=real",
+      "world": {
+        "source": "generated",
+        "simulated": true,
+        "generator": "5a.1",
+        "seed": "hillink",
+        "schema": 1,
+        "fingerprint": "20b9e0ea6581f531bda8871e626995bd",
+        "historyLength": 7,
+        "layout": "generated",
+        "error": null
+      },
+      "note": "route lobby -> site: bldg-1-L0-corridor~in~door-1 > bldg-1-L0-corridor~sd:door-12~0 > bldg-1-L0-corridor~sd:door-12~1 > sitegate:door-12 > site:meeting-room~room-9~in~door-12 > site:meeting-room:build1~0 > site:meeting-room:build1"
+    },
+    {
+      "name": "E04a-construction-structure-wide",
+      "path": "/?demo=construction&step=4&theme=real",
+      "world": {
+        "source": "generated",
+        "simulated": true,
+        "generator": "5a.1",
+        "seed": "hillink",
+        "schema": 1,
+        "fingerprint": "a3d58731c6511161cb7ce58acf121f5b",
+        "historyLength": 8,
+        "layout": "generated",
+        "error": null
+      },
+      "note": null
+    },
+    {
+      "name": "E04-construction-structure",
+      "path": "/?demo=construction&step=4&theme=real",
+      "world": {
+        "source": "generated",
+        "simulated": true,
+        "generator": "5a.1",
+        "seed": "hillink",
+        "schema": 1,
+        "fingerprint": "a4e13833262ec542e5b53d26d749581b",
+        "historyLength": 8,
+        "layout": "generated",
+        "error": null
+      },
+      "note": null
+    },
+    {
+      "name": "E05-construction-blocked-work-stops",
+      "path": "/?demo=construction&step=5&theme=real",
+      "world": {
+        "source": "generated",
+        "simulated": true,
+        "generator": "5a.1",
+        "seed": "hillink",
+        "schema": 1,
+        "fingerprint": "8a25706dfdb714548a93e9975569ec39",
+        "historyLength": 9,
+        "layout": "generated",
+        "error": null
+      },
+      "note": "claude waiting waiting at queue:bldg-1-L0-hall:bench1#0"
+    },
+    {
+      "name": "E05b-construction-waiting-for-kyle-work-stops",
+      "path": "/?demo=construction&step=3&theme=real",
+      "world": {
+        "source": "generated",
+        "simulated": true,
+        "generator": "5a.1",
+        "seed": "hillink",
+        "schema": 1,
+        "fingerprint": "c420d0e81b065cab372be0f07ea142c0",
+        "historyLength": 8,
+        "layout": "generated",
+        "error": null
+      },
+      "note": "waiting: Kyle must approve the spend; claude at development:room-7:officeChair2"
+    },
+    {
+      "name": "E06-construction-exterior",
+      "path": "/?demo=construction&step=6&theme=real",
+      "world": {
+        "source": "generated",
+        "simulated": true,
+        "generator": "5a.1",
+        "seed": "hillink",
+        "schema": 1,
+        "fingerprint": "a768e011c29acfc4f6c6f4e5e3a00980",
+        "historyLength": 11,
+        "layout": "generated",
+        "error": null
+      },
+      "note": null
+    },
+    {
+      "name": "E07-construction-systems",
+      "path": "/?demo=construction&step=7&theme=real",
+      "world": {
+        "source": "generated",
+        "simulated": true,
+        "generator": "5a.1",
+        "seed": "hillink",
+        "schema": 1,
+        "fingerprint": "b3d5b459a6b0c43125a6648697aeb065",
+        "historyLength": 12,
+        "layout": "generated",
+        "error": null
+      },
+      "note": null
+    },
+    {
+      "name": "E08-construction-furnishing",
+      "path": "/?demo=construction&step=8&theme=real",
+      "world": {
+        "source": "generated",
+        "simulated": true,
+        "generator": "5a.1",
+        "seed": "hillink",
+        "schema": 1,
+        "fingerprint": "0a3d5f6a6ca23a61c6c946db9458dba2",
+        "historyLength": 13,
+        "layout": "generated",
+        "error": null
+      },
+      "note": null
+    },
+    {
+      "name": "E09-construction-inspection-codex-on-site",
+      "path": "/?demo=construction&step=9&theme=real",
+      "world": {
+        "source": "generated",
+        "simulated": true,
+        "generator": "5a.1",
+        "seed": "hillink",
+        "schema": 1,
+        "fingerprint": "7866b8341ebf8725fefbd043052c6294",
+        "historyLength": 14,
+        "layout": "generated",
+        "error": null
+      },
+      "note": "codex survey at site:meeting-room:site:meeting-room:build1"
+    },
+    {
+      "name": "E10-construction-review-rejected-rework",
+      "path": "/?demo=construction&step=10&theme=real",
+      "world": {
+        "source": "generated",
+        "simulated": true,
+        "generator": "5a.1",
+        "seed": "hillink",
+        "schema": 1,
+        "fingerprint": "eab8a87d803317fb090ec01139af420d",
+        "historyLength": 15,
+        "layout": "generated",
+        "error": null
+      },
+      "note": null
+    },
+    {
+      "name": "F1-construction-complete-furnished-walkable",
+      "path": "/?demo=construction&step=15&theme=real",
+      "world": {
+        "source": "generated",
+        "simulated": true,
+        "generator": "5a.1",
+        "seed": "hillink",
+        "schema": 1,
+        "fingerprint": "44563c3002618f7bd6042d606f585424",
+        "historyLength": 21,
+        "layout": "generated",
+        "error": null
+      },
+      "note": null
+    },
+    {
+      "name": "F2-operational-team-meets-in-new-room",
+      "path": "/?demo=construction&step=16&walk=1&theme=real",
+      "world": {
+        "source": "generated",
+        "simulated": true,
+        "generator": "5a.1",
+        "seed": "hillink",
+        "schema": 1,
+        "fingerprint": "5b0278ac92f1f5cfd5ab0e92b90ad833",
+        "historyLength": 22,
+        "layout": "generated",
+        "error": null
+      },
+      "note": "claude meeting at comms:room-9:chair2; codex meeting at comms:room-9:chair3"
+    },
+    {
+      "name": "G1-same-project-fantasy-structure",
+      "path": "/?demo=construction&step=4&theme=fantasy",
+      "world": {
+        "source": "generated",
+        "simulated": true,
+        "generator": "5a.1",
+        "seed": "hillink",
+        "schema": 1,
+        "fingerprint": "970e2f6c93976383fedf55ff13d5ebd8",
+        "historyLength": 8,
+        "layout": "generated",
+        "error": null
+      },
+      "note": null
+    },
+    {
+      "name": "G2-same-project-fantasy-inspection",
+      "path": "/?demo=construction&step=9&theme=fantasy",
+      "world": {
+        "source": "generated",
+        "simulated": true,
+        "generator": "5a.1",
+        "seed": "hillink",
+        "schema": 1,
+        "fingerprint": "2376243fbd69653a70870ffd290aed83",
+        "historyLength": 14,
+        "layout": "generated",
+        "error": null
+      },
+      "note": null
+    },
+    {
+      "name": "G3-same-room-fantasy-operational",
+      "path": "/?demo=construction&step=16&walk=1&theme=fantasy",
+      "world": {
+        "source": "generated",
+        "simulated": true,
+        "generator": "5a.1",
+        "seed": "hillink",
+        "schema": 1,
+        "fingerprint": "9bcd815c870027d34dba3c0c20dc2cfd",
+        "historyLength": 22,
+        "layout": "generated",
+        "error": null
+      },
+      "note": null
+    },
+    {
+      "name": "H1-blueprint-generated-navigation",
+      "path": "/?source=sim&theme=blueprint",
+      "world": {
+        "source": "generated",
+        "simulated": false,
+        "generator": "5a.1",
+        "seed": "hillink",
+        "schema": 1,
+        "fingerprint": "d205978be510b24b217f936fefb87454",
+        "historyLength": 1,
+        "layout": "generated",
+        "error": null
+      },
+      "note": null
+    },
+    {
+      "name": "Z1-legacy-hand-built-world-for-comparison",
+      "path": "/?source=sim&theme=real&world=legacy",
+      "world": {
+        "source": "legacy",
+        "simulated": false,
+        "generator": null,
+        "seed": null,
+        "schema": null,
+        "fingerprint": null,
+        "historyLength": 0,
+        "layout": "hq",
+        "error": null
+      },
+      "note": null,
+      "recapturedAt": "2026-09-30T11:15:11.766Z"
+    },
+    {
+      "name": "Z2-plan-view-debug-inspector",
+      "path": "/site.html",
+      "world": null,
+      "note": null
+    },
+    {
+      "name": "Z3-generated-world-unavailable-labelled-fallback",
+      "path": "/?source=sim&theme=real",
+      "world": {
+        "source": "unavailable",
+        "simulated": false,
+        "generator": null,
+        "seed": null,
+        "schema": null,
+        "fingerprint": null,
+        "historyLength": 0,
+        "layout": "hq",
+        "error": "/api/site answered HTTP 404"
+      },
+      "note": "GENERATED WORLD UNAVAILABLE: showing the hand-built legacy building as a fallback (/api/site answered HTTP 404). Retrying.",
+      "recapturedAt": "2026-09-30T11:15:11.766Z"
+    }
+  ],
+  "failures": []
+}

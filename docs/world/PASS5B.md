@@ -28,17 +28,32 @@ Flags, also only from HQ:
 
 | HQ fact | What the World shows | Rule |
 |---|---|---|
-| `BLOCKED` (objective or task), or an implementation that ended failed, blocked, uncertain, rate limited or cancelled | STOP sign, builders leave the site | Nothing advances. Completion is refused until HQ reports new evidence. |
-| `APPROVAL_REQUIRED`, `DECISION_REQUIRED`, `SPEND_APPROVAL_REQUIRED` | waiting marker, builders wait off site | Completion is refused. The wait lifts only on Kyle's approval (`SPEND_AUTHORIZED`), HQ dispatching the project's work again, or new evidence. |
-| Review verdict `request_changes` or `reject` | rework | **Never operational.** HQ completing the objective is refused (`review is not approved`), and the project goes back to systems on the next evidence. |
-| Tests while still building | builder testing on site | This is not an inspection, so the stage does not move. |
-| `INSPECTION_STARTED` before the fit-out | none | Refused. |
+Gates, also only from HQ. They fail closed (corrected after Codex's audit of `deb5cca`):
+
+| Gate | Set by | What the World shows | Cleared only by | While it is open |
+|---|---|---|---|---|
+| blocked | `BLOCKED` (objective or task), or an implementation that ended failed, blocked, uncertain, rate limited or cancelled | STOP sign, builders leave the site | new implementation evidence **newer than the block** | no stage change, no inspection, no verdict counts toward completion, no completion, no verification |
+| waiting | `APPROVAL_REQUIRED`, `DECISION_REQUIRED`, `SPEND_APPROVAL_REQUIRED` | waiting marker, builders wait off site | authority to continue **newer than the wait**: Kyle's approval (`SPEND_AUTHORIZED`) or HQ dispatching the project's work again. Evidence of work is *not* authority and is refused while waiting; inspection never clears a wait | same |
+| rework | review verdict `request_changes` or `reject` | rework | new implementation evidence newer than the verdict (then re-inspection and a new approval) | **never operational**: completion and verification are refused, and even a newer approval cannot clear rework |
+
+- Tests the builders run mid-build are site work, not an inspection, so the stage does not move. `INSPECTION_STARTED` before the fit-out is refused.
+- **Chronology.** Every fact carries its HQ provenance: the journal `seq`, which the adapter now passes through, or its time. The project keeps a revision number (one per piece of evidence) and the provenance of its latest evidence, verdict and gates. A verdict counts only for the revision under inspection, and only if it is newer than the inspection, the latest evidence and the latest verdict. An older verdict delivered late, in either direction, is refused as stale. Facts whose order cannot be proven are not newer.
+- **Completion and verification** both require: stage inspection, an approving verdict of the current revision, and no open gate. Verification additionally requires completion.
+- **Atomic.** `applyHqEvent` applies each event as a transaction. A refused (or throwing) event leaves the canonical world, its history, fingerprint and applied-event set exactly as they were.
 
 Canonical structure status follows the stage: `planned` during planning, `under-construction` while building, and `built` (walkable, furnished, usable) only on completion. Every applied fact is recorded in `world.history`, so a reload or replay reaches the same state.
 
+**Planned is not usable.** A capability shapes a room (its furnishing, its semantic place such as `comms`, and where activities send agents) only once it is built or operational. When the planner puts a new capability into an existing built room, that room keeps its previous purpose until the capability is complete. Its inspector label names the capability as "Planned: … (not usable yet)".
+
+**Site access.** A construction site is entered only through its real door: a site gate at the project's door, reached on the walk grid of the built space it opens from, on a storey the built lift serves. From there the builders walk the project's own grid. A site with no such entrance has no stations and is unreachable, so no builder is sent there. Routes fail closed: `route()` returns `null` when the graph is disconnected, and the engine keeps the character in place (`entity.unreachable`). The stretch between a free point and the graph is used only after it is checked against the walk grid.
+
 ## 3. The live HQ bridge
 
-`serve.mjs` `siteFeed()` polls HQ's read-only World contract feed (`GET /api/world?since=`), translates each item with `fromHqActivity()` and applies it through `applyHqEvent()`. That means only `source: 'hq'` events, each id applied once, and every refusal counted. The server saves the world when something changed and keeps its cursor beside the world file, so a restart resumes where it stopped. It never writes to HQ.
+`serve.mjs` `siteFeed()` polls HQ's read-only World contract feed (`GET /api/world?since=`), translates each item with `fromHqActivity()` and applies it through `applyHqEvent()`. That means only `source: 'hq'` events, each id applied once, and every refusal counted. Each translated event carries HQ's journal `seq` as its provenance. It never writes to HQ.
+
+**Durability (corrected).** The durable cursor never runs ahead of the durably saved world. Applying facts marks the world dirty. The cursor file is written (atomically) only after the world holding those facts has been saved. A failed save keeps the world dirty and the durable cursor where it was, and every later tick retries the save first, even when HQ has nothing new. After a restart the older world and older cursor are loaded, and HQ delivers the lost facts again. A crash between the two writes leaves the cursor behind, and the applied-id set makes redelivery a no-op. Each fact ends up in the durable world exactly once.
+
+**Startup (corrected, `ui/site-sync.mjs`).** Polls compare against the signature of the world actually displayed, so a newer world returned by the very first poll is applied. If the generated world cannot be loaded at boot, the page retries. If it still fails, the page shows the hand-built building **only** under a red "GENERATED WORLD UNAVAILABLE … fallback" badge, and the LIVE label adds "(fallback building, not the generated World)". It keeps retrying and switches to the generated world when it recovers. The legacy building is the normal World only with `?world=legacy`, where it is labelled as selected.
 
 New mappings in 5B (`procgen/contract.mjs`):
 
@@ -60,7 +75,9 @@ New mappings in 5B (`procgen/contract.mjs`):
 
 ## 5. Tests
 
-`tests/pass5b.test.mjs` has 16 tests. Earlier suites are unchanged, and all 113 World tests pass.
+`tests/pass5b.test.mjs` has 16 tests. `tests/pass5b-correction.test.mjs` adds 17 regressions for Codex's seven findings, each verified to fail at `deb5cca`; `tests/route-check.mjs` validates complete emitted routes against walls and solid furniture. All 130 World tests pass.
+
+Evidence capture fails closed: a shot whose `until` prerequisite never holds, or whose `expect` assertion is false, writes no image and makes the run exit 1. `notes.json` records for every image which world was shown (generated, legacy or fallback; simulated or not; generator, seed and fingerprint).
 
 - Furnishing validity: inside walls, no overlaps, door swings clear, every anchor reachable, on six seeds.
 - Navigation: never through furniture or walls, in through doors, every station reachable, upstairs by elevator. Traffic stays on the generated road lanes.

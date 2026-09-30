@@ -52,10 +52,11 @@ try {
     const p = await page();
     await p.send('Page.enable'); await p.send('Runtime.enable');
     // Every shot starts clean: no saved simulation, camera or theme from an earlier shot.
-    await p.send('Storage.clearDataForOrigin', { origin: new URL(spec.base).origin, storageTypes: 'all' });
+    const base = shot.base ?? spec.base; // a shot may use another server (the fallback shot uses one without /api/site)
+    await p.send('Storage.clearDataForOrigin', { origin: new URL(base).origin, storageTypes: 'all' });
     await p.send('Emulation.setDeviceMetricsOverride', { width: shot.width ?? spec.width ?? 1400, height: shot.height ?? spec.height ?? 900, deviceScaleFactor: 1, mobile: false });
     const loaded = p.once('Page.loadEventFired');
-    await p.send('Page.navigate', { url: new URL(shot.path, spec.base).href });
+    await p.send('Page.navigate', { url: new URL(shot.path, base).href });
     await loaded;
     await sleep(shot.settleMs ?? 1200);
     if (shot.eval) await evaluate(p, shot.eval);
