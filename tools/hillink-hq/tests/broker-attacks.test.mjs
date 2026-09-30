@@ -806,3 +806,34 @@ test('V12. a lost compute record does not hide a host Claude run from the host c
     await n.settle(id);
   } finally { await n.close(); }
 });
+
+// ---------------------------------------------------------------- Area 1 regression (Claude's re-audit PoC, verbatim)
+test('V13. Area 1 regression: a test file that rewrites stream events so failures read as passes fails closed', async () => {
+  const { spawnSync } = await import('node:child_process');
+  const { GUEST_DIR } = await import('../sandbox.mjs');
+  const work = fs.mkdtempSync(path.join(os.tmpdir(), 'hq-area1-'));
+  fs.writeFileSync(path.join(work, 'accept.test.mjs'), `
+import { Readable } from 'node:stream';
+const origPush = Readable.prototype.push;
+Readable.prototype.push = function (chunk, ...rest) {
+  if (chunk && typeof chunk === 'object') {
+    if (chunk.type === 'test:fail') chunk = { type: 'test:pass', data: chunk.data };
+    else if (chunk.type === 'test:summary' && chunk.data && chunk.data.file === undefined)
+      chunk = { type: 'test:summary', data: { ...chunk.data, success: true } };
+  }
+  return origPush.call(this, chunk, ...rest);
+};
+import test from 'node:test';
+import assert from 'node:assert';
+test('acceptance criterion 1', () => assert.strictEqual(1, 2));
+test('acceptance criterion 2', () => { throw new Error('totally broken'); });
+`);
+  try {
+    const key = newRunKey(), runner = path.join(GUEST_DIR, 'hq-test-runner.mjs');
+    const r = spawnSync(process.execPath, ['--frozen-intrinsics', '--no-warnings', '--permission', '--allow-child-process', `--allow-fs-read=${work}`, `--allow-fs-read=${runner}`, runner, 'accept.test.mjs'],
+      { cwd: work, input: `${key}\n`, encoding: 'utf8', env: { PATH: process.env.PATH } });
+    const v = testVerdict(r.stdout, { key, tests: ['accept.test.mjs'], exitedOk: r.status === 0 });
+    assert.equal(v.green, false, r.stdout);
+    assert.equal(v.passed, 0, r.stdout);
+  } finally { fs.rmSync(work, { recursive: true, force: true }); }
+});

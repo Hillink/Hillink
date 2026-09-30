@@ -141,6 +141,14 @@ per-file key derived from the run key. It attributes each result to the file it 
 proof of concept still returns green, because its tampering happens inside the one file's own process. Area 1 stays
 OPEN until step 3 is done.
 
+**Update: step 3 is built.** Before the acceptance file loads, `hq-test-child.mjs` locks node:test's reporter stream
+class and the stream and event-emitter classes and module exports it builds on. Writable data properties become
+accessors: reading is unchanged, assigning on an instance creates an own property, and assigning on the locked object
+throws. The runner's own stream instance also has `emit`, `on`, `push` and `read` pinned. The auditor's proof of concept
+is now test V13. It fails on 470e534 and fails closed (green:false) with this change. Residual limitation: the lock
+covers the objects on the path from node:test's reporter to the runner. It rests on the same process as repository
+code, and no further bypass search was done (per Kyle).
+
 **Fixed: crash-recovery gaps** (not security blockers; an orphan has no broker session):
 - The host process scan matches the marker anywhere in the raw command line, so shell-wrapped processes are found (V10).
 - On the host Claude route HQ always scans for the marker, even when the pid was recorded, so a re-exec'd or child

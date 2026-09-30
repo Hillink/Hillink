@@ -15,6 +15,8 @@ import v8 from 'node:v8';
 import module from 'node:module';
 import path from 'node:path';
 import test, { run } from 'node:test';
+import stream from 'node:stream';
+import events from 'node:events';
 import assert from 'node:assert';
 import strict from 'node:assert/strict';
 
@@ -42,11 +44,46 @@ const rel = f => (typeof f === 'string' && f.startsWith(root + path.sep) ? f.sli
 const totals = { passed: 0, failed: 0, skipped: 0, todo: 0, cancelled: 0, outside: 0 };
 const short = v => String(v ?? '').replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, '').slice(0, 300);
 
-const stream = run({ files: files.map(f => path.join(root, f)), isolation: 'none', concurrency: 1 });
-// Own, non-writable properties so later prototype changes cannot reroute this stream's events.
-Object.defineProperty(stream, 'emit', { value: stream.emit, writable: false, configurable: false });
+const results = run({ files: files.map(f => path.join(root, f)), isolation: 'none', concurrency: 1 });
+
+// 4. Lock the objects this runner's view of the run depends on, before repository code loads (run() imports the file
+//    asynchronously, after this synchronous block). These are the prototypes that carry node:test's events to the
+//    listener below: node:test's own reporter stream class and the stream and event-emitter classes it builds on,
+//    plus their module exports. Each writable data property becomes an accessor: reading is unchanged, assigning on
+//    an instance creates an own property on that instance (so ordinary code that sets its own fields keeps working),
+//    and assigning on the locked object itself throws.
+const locked = new WeakSet();
+function lock(obj) {
+  if (obj === null || (typeof obj !== 'object' && typeof obj !== 'function') || locked.has(obj)) return;
+  locked.add(obj);
+  for (const key of Reflect.ownKeys(obj)) {
+    const d = Object.getOwnPropertyDescriptor(obj, key);
+    if (!d || !('value' in d) || !d.writable) continue;
+    const value = d.value;
+    if (!d.configurable) {
+      // Cannot become an accessor. Functions are made read-only; non-function fields (flags such as the emitter's
+      // capture setting, which Node assigns on instances) stay writable so instances keep working.
+      if (typeof value === 'function') Object.defineProperty(obj, key, { writable: false });
+      continue;
+    }
+    Object.defineProperty(obj, key, {
+      enumerable: d.enumerable, configurable: false,
+      get() { return value; },
+      set(v) {
+        if (this === obj) throw new TypeError(`Cannot assign to read only property '${String(key)}' of HQ's locked test runner objects`);
+        Object.defineProperty(this, key, { value: v, writable: true, enumerable: true, configurable: true });
+      },
+    });
+  }
+  Object.preventExtensions(obj);
+}
+const classes = new Set();
+for (let p = Object.getPrototypeOf(results); p && p !== Object.prototype; p = Object.getPrototypeOf(p)) { classes.add(p); classes.add(p.constructor); }
+for (const C of [stream, stream.Stream, stream.Readable, stream.Writable, stream.Duplex, stream.Transform, stream.PassThrough, events, events.EventEmitter]) { classes.add(C); if (C?.prototype) classes.add(C.prototype); }
+for (const o of classes) lock(o);
+Object.defineProperties(results, Object.fromEntries(['emit', 'on', 'push', 'read'].map(k => [k, { value: results[k], writable: false, configurable: false }])));
 let success = null; // node:test's own verdict for the whole run (false after e.g. an uncaught error once a test ended)
-stream.on('data', e => {
+results.on('data', e => {
   if (e.type === 'test:summary' && e.data.file === undefined) { success = e.data.success === true && success !== false; return; }
   if (e.type === 'test:diagnostic' && /uncaughtException|unhandledRejection/.test(String(e.data.message))) { success = false; out(`#   ${short(e.data.message)}\n`); return; }
   if (e.type !== 'test:pass' && e.type !== 'test:fail') return;
@@ -64,7 +101,7 @@ stream.on('data', e => {
   out(`${kind === 'passed' ? 'ok' : 'not ok'} - ${short(d.name)} (${where}${kind === 'passed' || kind === 'failed' ? '' : `, ${kind}`})\n`);
   if (kind === 'failed' || kind === 'cancelled') out(`#   ${short(d.details?.error?.cause?.message ?? d.details?.error?.message)}\n`);
 });
-stream.on('end', () => {
+results.on('end', () => {
   // Everything this process ran is attributed to the file it was launched for; the reported file names are shown only.
   const payload = stringify({ v: 1, file: files[0], completed: true, success: success === true, ...totals });
   out(`HQ-CHILD ${payload} ${mac(payload)}\n`);
