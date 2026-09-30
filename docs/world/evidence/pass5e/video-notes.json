@@ -81,9 +81,9 @@
     {
       "name": "E-disable-dynamic-agent-world-stays-coherent-DEV-HARNESS",
       "path": "/?source=sim&theme=real&art=5d",
-      "seconds": 54.86,
-      "frames": 1354,
-      "capturedFps": 24.7,
+      "seconds": 74.94,
+      "frames": 2147,
+      "capturedFps": 28.7,
       "world": {
         "source": "generated",
         "simulated": false,
@@ -98,5 +98,6 @@
       "note": null
     }
   ],
-  "failures": []
+  "failures": [],
+  "note": "Clip E was re-recorded separately (same spec, clips.json) after tightening its expectation; merged here."
 }

@@ -9,10 +9,22 @@
       "path": "/?source=sim&theme=real&art=5d",
       "seconds": 80,
       "actions": [
-        { "at": 0.5, "eval": "window.__seen = new Set(); setInterval(() => window.__seen.add(hillinkWorld.scene.get('agent:claude')?.anim?.state), 100); hillinkWorld.focus('agent:claude'); true" },
-        { "at": 1, "eval": "hillinkWorld.sim.run('claudeCodes'); true" },
-        { "at": 50, "eval": "hillinkWorld.sim.run('taskCompletes'); true" },
-        { "at": 54, "eval": "hillinkWorld.sim.allIdle(); true" }
+        {
+          "at": 0.5,
+          "eval": "window.__seen = new Set(); setInterval(() => window.__seen.add(hillinkWorld.scene.get('agent:claude')?.anim?.state), 100); hillinkWorld.focus('agent:claude'); true"
+        },
+        {
+          "at": 1,
+          "eval": "hillinkWorld.sim.run('claudeCodes'); true"
+        },
+        {
+          "at": 50,
+          "eval": "hillinkWorld.sim.run('taskCompletes'); true"
+        },
+        {
+          "at": 54,
+          "eval": "hillinkWorld.sim.allIdle(); true"
+        }
       ],
       "expect": "['pickup', 'carry', 'type', 'file'].every(s => window.__seen.has(s)) && !!hillinkWorld.store.world.agents.claude.definition"
     },
@@ -21,9 +33,18 @@
       "path": "/?source=sim&theme=real&art=5d",
       "seconds": 75,
       "actions": [
-        { "at": 0.5, "eval": "window.__life = []; setInterval(() => { const s = hillinkWorld.store.world.agents['agent-test-unknown']?.lifecycle?.state; if (s && window.__life.at(-1) !== s) window.__life.push(s); }, 100); hillinkWorld.sim.run('devOnboard'); true" },
-        { "at": 2, "eval": "hillinkWorld.focus('agent:agent-test-unknown'); true" },
-        { "at": 40, "eval": "hillinkWorld.sim.run('devWork'); true" }
+        {
+          "at": 0.5,
+          "eval": "window.__life = []; setInterval(() => { const s = hillinkWorld.store.world.agents['agent-test-unknown']?.lifecycle?.state; if (s && window.__life.at(-1) !== s) window.__life.push(s); }, 100); hillinkWorld.sim.run('devOnboard'); true"
+        },
+        {
+          "at": 2,
+          "eval": "hillinkWorld.focus('agent:agent-test-unknown'); true"
+        },
+        {
+          "at": 40,
+          "eval": "hillinkWorld.sim.run('devWork'); true"
+        }
       ],
       "expect": "JSON.stringify(window.__life) === JSON.stringify(['REQUESTED', 'CONFIGURING', 'CONNECTING_PROVIDER', 'CONNECTING_TOOLS', 'GENERATING_APPEARANCE', 'TESTING', 'READY', 'ACTIVE']) && hillinkWorld.store.world.agents['agent-test-unknown'].activity === 'researching'"
     },
@@ -32,9 +53,18 @@
       "path": "/?source=sim&theme=real&art=5d",
       "seconds": 45,
       "actions": [
-        { "at": 0.5, "eval": "hillinkWorld.sim.run('devTwoAgents'); true" },
-        { "at": 1.5, "eval": "hillinkWorld.shot('entrance'); true" },
-        { "at": 16, "eval": "hillinkWorld.shot('lounge'); true" }
+        {
+          "at": 0.5,
+          "eval": "hillinkWorld.sim.run('devTwoAgents'); true"
+        },
+        {
+          "at": 1.5,
+          "eval": "hillinkWorld.shot('entrance'); true"
+        },
+        {
+          "at": 16,
+          "eval": "hillinkWorld.shot('lounge'); true"
+        }
       ],
       "expect": "['agent-test-unknown', 'agent-test-second'].every(id => hillinkWorld.store.world.agents[id].lifecycle.state === 'ACTIVE' && hillinkWorld.scene.get('agent:' + id))"
     },
@@ -43,22 +73,40 @@
       "path": "/?source=sim&theme=real&art=5d",
       "seconds": 30,
       "actions": [
-        { "at": 0.5, "eval": "hillinkWorld.sim.run('devProvisionFails'); true" },
-        { "at": 2, "eval": "hillinkWorld.focus('agent:agent-test-second'); true" }
+        {
+          "at": 0.5,
+          "eval": "hillinkWorld.sim.run('devProvisionFails'); true"
+        },
+        {
+          "at": 2,
+          "eval": "hillinkWorld.focus('agent:agent-test-second'); true"
+        }
       ],
       "expect": "hillinkWorld.store.world.agents['agent-test-second'].lifecycle.state === 'ERROR' && hillinkWorld.scene.get('agent:agent-test-second').anim.state === 'blocked'"
     },
     {
       "name": "E-disable-dynamic-agent-world-stays-coherent-DEV-HARNESS",
       "path": "/?source=sim&theme=real&art=5d",
-      "seconds": 55,
+      "seconds": 75,
       "actions": [
-        { "at": 0.5, "eval": "hillinkWorld.sim.run('devOnboard'); true" },
-        { "at": 1.5, "eval": "{ const h = hillinkWorld.theme.layout.home; hillinkWorld.camera.focusPoint(h.x + h.w / 2, h.y + h.h / 2, { zoom: 1.2, duration: 0 }); } true" },
-        { "at": 30, "eval": "hillinkWorld.sim.run('devDisable'); true" },
-        { "at": 32, "eval": "hillinkWorld.sim.run('claudeCodes'); true" }
+        {
+          "at": 0.5,
+          "eval": "hillinkWorld.sim.run('devOnboard'); true"
+        },
+        {
+          "at": 1.5,
+          "eval": "{ const h = hillinkWorld.theme.layout.home; hillinkWorld.camera.focusPoint(h.x + h.w / 2, h.y + h.h / 2, { zoom: 1.2, duration: 0 }); } true"
+        },
+        {
+          "at": 30,
+          "eval": "hillinkWorld.sim.run('devDisable'); true"
+        },
+        {
+          "at": 32,
+          "eval": "hillinkWorld.sim.run('claudeCodes'); true"
+        }
       ],
-      "expect": "hillinkWorld.store.world.agents['agent-test-unknown'].lifecycle.state === 'DISABLED' && !hillinkWorld.scene.get('agent:agent-test-unknown') && !Object.hasOwn(hillinkWorld.store.world.agents['agent-test-unknown'], 'taskId') || hillinkWorld.store.world.agents['agent-test-unknown'].taskId === null"
+      "expect": "hillinkWorld.store.world.agents['agent-test-unknown'].lifecycle.state === 'DISABLED' && !hillinkWorld.scene.get('agent:agent-test-unknown') && hillinkWorld.store.world.agents['agent-test-unknown'].taskId == null && hillinkWorld.scene.get('agent:claude').anim.state === 'type'"
     }
   ]
 }
