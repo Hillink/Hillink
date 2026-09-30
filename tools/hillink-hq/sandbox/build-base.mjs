@@ -19,7 +19,7 @@ const PINS = {
   node: { file: 'node-v24.14.1-linux-x64.tar.gz', url: 'https://nodejs.org/dist/v24.14.1/', sha256: 'ace9fa104992ed0829642629c46ca7bd7fd6e76278cb96c958c4b387d29658ea' },
   claudeCode: '2.1.138',
 };
-const GUEST = ['hq-harden.sh', 'hq-stage.sh', 'hq-key.sh', 'hq-claude.sh', 'hq-proxy.mjs', 'hq-diff.sh', 'hq-test.sh'];
+const GUEST = ['hq-harden.sh', 'hq-stage.sh', 'hq-key.sh', 'hq-claude.sh', 'hq-proxy.mjs', 'hq-diff.sh', 'hq-test.sh', 'hq-broker.sh', 'hq-broker.mjs'];
 const here = path.dirname(fileURLToPath(import.meta.url));
 const BUILD = 'hq-sandbox-build';
 const home = process.env.HQ_SANDBOX_HOME || SANDBOX_HOME;

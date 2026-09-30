@@ -9,7 +9,7 @@
 //   - The engine hands a metered adapter a one-shot grant object (issueGrant). Metered adapters refuse to start
 //     without redeeming one (redeemGrant), so calling an adapter directly, around the engine, sends nothing.
 //   - A route HQ cannot classify is treated as METERED_API (fail closed).
-import { routeFor } from './registry.mjs';
+import { routeFor, routesFor } from './registry.mjs';
 
 export const COMPUTE_CLASSES = ['LOCAL', 'SUBSCRIPTION', 'METERED_API'];
 const RANK = { LOCAL: 0, SUBSCRIPTION: 1, METERED_API: 2 };
@@ -107,8 +107,8 @@ function matchAuthorization(state, { task, agentId, route, now }) {
 
 // ---- the gate -----------------------------------------------------------------------------------------------------
 // Returns { allowed: true, route, authorizationId?, reservedUsd } or { allowed: false, code, route, ...facts }.
-export function decideCompute({ state, task, agentId, adapterId, mode, now }) {
-  const route = routeFor(adapterId, task.operation);
+export function decideCompute({ state, task, agentId, adapterId, mode, now, variant = null }) {
+  const route = routeFor(adapterId, task.operation, variant);
   if (route.computeClass !== 'METERED_API') return { allowed: true, route, reservedUsd: 0 };
   const base = { allowed: false, route, provider: route.provider, agentId, backend: route.backend, why: route.why, estimatedCostUsd: null, maxCostUsd: route.perRunCapUsd ?? null, alternatives: route.alternatives ?? [], waitingWouldHelp: route.waitingWouldHelp ?? false, mode };
   if (mode !== 'BUDGETED') return { ...base, code: 'BLOCKED_REQUIRES_SPEND_APPROVAL', reason: `${route.provider} metered API (${route.backend}) is forbidden in ${mode} mode. Nothing ran.` };
@@ -118,12 +118,46 @@ export function decideCompute({ state, task, agentId, adapterId, mode, now }) {
   return { allowed: true, route, authorizationId: auth.id, reservedUsd: route.perRunCapUsd };
 }
 
+// Pass 4.5: every variant of (adapter, operation) that the adapter can serve now (supports(operation, variant) !==
+// false), each decided. Callers take the cheapest allowed one; a metered variant is only ever a fallback for a task no
+// free variant can do at all. unsupported lists the free variants that exist but cannot run here, with the reason.
+export function decideVariants({ state, task, agentId, adapterId, mode, now, supports = () => undefined }) {
+  const decided = [], unsupported = [];
+  for (const route of routesFor(adapterId, task.operation)) {
+    // An adapter that does not say (undefined) serves its default route and metered variants (those stay behind the
+    // spend gate); a free named variant must be declared by the adapter, so nothing is classified free by accident.
+    let ok = supports(task.operation, route.variant);
+    if (ok === undefined) ok = route.variant === 'default' || route.computeClass === 'METERED_API';
+    if (ok === false || (ok && ok.ok === false)) { unsupported.push({ route, reason: ok?.reason ?? 'not available in this HQ' }); continue; }
+    decided.push(decideCompute({ state, task, agentId, adapterId, mode, now, variant: route.variant }));
+  }
+  return { decided, unsupported };
+}
+// The best decision for one agent: cheapest allowed variant, else the (metered) refusal, else unavailable.
+export function decideBest(args) {
+  const { decided, unsupported } = decideVariants(args);
+  const allowed = decided.filter(d => d.allowed);
+  if (allowed.length) return allowed[0];
+  if (decided.length) {
+    const d = decided[0];
+    const free = unsupported.filter(u => u.route.computeClass !== 'METERED_API');
+    return free.length ? { ...d, reason: `${d.reason} The $0 route (${free.map(u => `${u.route.routeId ?? u.route.variant}: ${u.reason}`).join('; ')}) is not available.`.slice(0, 900) } : d;
+  }
+  const u = unsupported[0];
+  return { allowed: false, code: 'UNAVAILABLE', route: u?.route ?? null, agentId: args.agentId, reason: unsupported.map(x => `${x.route.routeId ?? x.route.variant}: ${x.reason}`).join('; ') || 'no route', provider: u?.route?.provider ?? 'unknown', backend: u?.route?.backend ?? '', why: '', alternatives: [], maxCostUsd: null, waitingWouldHelp: true, mode: args.mode };
+}
+
 // One-shot capability objects. Only the engine issues them, right after journaling COMPUTE_SELECTED; a metered
 // adapter redeems exactly one per run. A plain object with the same fields is not a grant.
 const issued = new WeakSet(), redeemed = new WeakSet();
 export function issueGrant({ taskId, runId, route, authorizationId = null, reservedUsd = 0 }) {
-  const grant = Object.freeze({ taskId, runId, computeClass: route.computeClass, provider: route.provider, adapterId: route.adapterId, authorizationId, reservedUsd });
+  const grant = Object.freeze({ taskId, runId, computeClass: route.computeClass, provider: route.provider, adapterId: route.adapterId, variant: route.variant ?? 'default', authorizationId, reservedUsd });
   issued.add(grant);
+  return grant;
+}
+// Reads an engine-issued grant without redeeming it (a router choosing the variant). A look-alike object is refused.
+export function grantInfo(grant) {
+  if (!grant || !issued.has(grant)) throw Error('Refusing to start: no HQ compute grant for this run.');
   return grant;
 }
 export function redeemGrant(grant, { taskId, runId }) {

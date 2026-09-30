@@ -3,7 +3,7 @@ import { initialAgents, operations } from './registry.mjs';
 import { validateImplementation } from './implementation-policy.mjs';
 import { ORCHESTRATION_EVENTS, reduceOrchestration } from './orchestration/state.mjs';
 import { COMPUTE_EVENTS, reduceCompute, emptyCompute, computeLedger } from './compute/state.mjs';
-import { decideCompute, issueGrant, classRank, capacityOf, validateSpendAuthorization, authorizationStatus, DEFAULT_MODE, MODES } from './compute/policy.mjs';
+import { decideVariants, issueGrant, classRank, capacityOf, validateSpendAuthorization, authorizationStatus, DEFAULT_MODE, MODES } from './compute/policy.mjs';
 import { routeFor } from './compute/registry.mjs';
 
 export const defaults = { computeMode: DEFAULT_MODE, heartbeatMs: 15_000, progressMs: 120_000, adapterTimeoutMs: 3000, quarantineMs: 60_000, observationJournalMs: 300_000, maxAttempts: 2, maxLocalWorkers: 1 };
@@ -173,8 +173,10 @@ export class Engine {
     const run = this.state.runs[runId];
     if (!run || run.endedAt || this.state.tasks[run.taskId].runId !== runId) throw Error('Stale or unknown run');
     if (!payload || !text(payload.summary)) throw Error('Evidence summary required');
-    const kinds = ['ACK', 'HEARTBEAT', 'PROGRESS', 'TEST_STARTED', 'TEST_PROGRESS', 'TEST_RESULT', 'COMMIT', 'PR', 'REVIEW', 'FINDING', 'HANDOFF', 'COMPLETED', 'FAILED', 'BLOCKED', 'CANCELLED', 'RATE_LIMITED', 'USAGE', 'MODEL_OUTPUT', 'MODEL_RESULT', 'UNCERTAIN'];
+    const kinds = ['ACK', 'HEARTBEAT', 'PROGRESS', 'TEST_STARTED', 'TEST_PROGRESS', 'TEST_RESULT', 'COMMIT', 'PR', 'REVIEW', 'FINDING', 'HANDOFF', 'COMPLETED', 'FAILED', 'BLOCKED', 'CANCELLED', 'RATE_LIMITED', 'USAGE', 'MODEL_OUTPUT', 'MODEL_RESULT', 'UNCERTAIN', 'BROKER'];
     if (!kinds.includes(payload.kind)) throw Error('Unknown evidence kind');
+    // Pass 4.5 broker audit: HQ-authored metadata (operation, logical path, outcome, sizes), never file contents.
+    if (payload.kind === 'BROKER' && (!payload.broker || typeof payload.broker !== 'object' || !/^[A-Z_]{3,40}$/.test(String(payload.broker.event)) || JSON.stringify(payload.broker).length > 2000)) throw Error('Invalid broker audit record');
     if (payload.kind === 'ACK' && run.acknowledgedAt) throw Error('Run already acknowledged');
     if (!run.acknowledgedAt && !['ACK', 'FAILED', 'CANCELLED', 'BLOCKED', 'UNCERTAIN', 'RATE_LIMITED'].includes(payload.kind)) throw Error('Worker acknowledgement required');
     if (payload.kind === 'TEST_RESULT' && !['passed', 'failed'].includes(payload.result)) throw Error('Test result required');
@@ -235,7 +237,7 @@ export class Engine {
         const { agent, decision } = pick;
         if (task.operation === 'implement-repo' && agent.id !== 'claude') throw Error(`Refusing to dispatch implementation to ${agent.id}`);
         const runId = randomUUID(), route = decision.route;
-        const compute = { operation: task.operation, adapterId: agent.executionAdapter, computeClass: route.computeClass, provider: route.provider, backend: route.backend, model: agent.model ?? null, authorizationId: decision.authorizationId ?? null, reservedUsd: decision.reservedUsd ?? 0, mode: this.config.computeMode };
+        const compute = { operation: task.operation, adapterId: agent.executionAdapter, variant: route.variant ?? 'default', routeId: route.routeId ?? null, security: route.security ?? null, computeClass: route.computeClass, provider: route.provider, backend: route.backend, model: agent.model ?? null, authorizationId: decision.authorizationId ?? null, reservedUsd: decision.reservedUsd ?? 0, mode: this.config.computeMode };
         this.emit('DISPATCHED', { taskId: task.id, agentId: agent.id, runId, compute });
         // A one-shot grant for exactly this run. Metered adapters refuse to send anything without redeeming one.
         const grant = issueGrant({ taskId: task.id, runId, route, authorizationId: compute.authorizationId, reservedUsd: compute.reservedUsd });
@@ -262,7 +264,21 @@ export class Engine {
     // Pass 3 role boundary before any cost reasoning: implementation is Claude's alone, whatever the journal says.
     const intruder = task.operation === 'implement-repo' && capable.find(a => a.id !== 'claude');
     if (intruder) throw Error(`Refusing to dispatch implementation to ${intruder.id}`);
-    const decided = capable.map(agent => ({ agent, decision: decideCompute({ state: this.state, task, agentId: agent.id, adapterId: agent.executionAdapter, mode, now }) }));
+    // Pass 4.5: each agent may serve the operation through several route variants; the adapter says which it can run
+    // here now. A free variant that exists but is unavailable is remembered for the report, never replaced by paying.
+    const unsupported = [];
+    const decided = capable.flatMap(agent => {
+      const adapter = this.adapters[agent.executionAdapter];
+      const v = decideVariants({ state: this.state, task, agentId: agent.id, adapterId: agent.executionAdapter, mode, now, supports: (op, variant) => adapter.supports?.(op, variant) });
+      unsupported.push(...v.unsupported.filter(u => u.route.computeClass !== 'METERED_API').map(u => ({ agent, ...u })));
+      return v.decided.map(decision => ({ agent, decision }));
+    });
+    if (!decided.length) {
+      // Only free variants exist and none can run here now: wait (recorded once), never pay.
+      const u = unsupported[0];
+      if (u && !(task.waitingFor?.agentId === u.agent.id && task.waitingFor?.capacity === 'UNAVAILABLE')) this.emit('WAITING_FOR_CAPACITY', { taskId: task.id, agentId: u.agent.id, capacity: 'UNAVAILABLE', computeClass: u.route.computeClass, reason: String(u.reason).slice(0, 300), retryAt: null, paidAlternativeUsed: false });
+      return null;
+    }
     const allowed = decided.filter(x => x.decision.allowed);
     const free = allowed.filter(x => x.decision.route.computeClass !== 'METERED_API');
     // Metered compute is considered only when no LOCAL or SUBSCRIPTION route can do this task at all. A free agent that
@@ -272,7 +288,8 @@ export class Engine {
     const ready = task.notBefore > now ? null : pool.find(x => !x.agent.assignment && this.status(x.agent) === 'IDLE');
     if (ready) return ready;
     if (!pool.length) {
-      const blocked = decided.find(x => !x.decision.allowed).decision;
+      let blocked = decided.find(x => !x.decision.allowed).decision;
+      if (unsupported.length) blocked = { ...blocked, reason: `${blocked.reason} The $0 route is not available here (${unsupported.map(u => `${u.route.routeId ?? u.route.variant}: ${u.reason}`).join('; ')}).`.slice(0, 900) };
       const ownerAction = mode === 'BUDGETED'
         ? `Authorize up to $${(blocked.maxCostUsd ?? 0).toFixed(2)} for this task in HQ (Spend), then retry it; or use a $0 alternative: ${blocked.alternatives.join(' ')}`.slice(0, 1900)
         : `This needs metered ${blocked.provider} API compute, which ZERO_CREDIT mode forbids. $0 alternatives: ${blocked.alternatives.join(' ')} To pay for it: start HQ with HQ_COMPUTE_MODE=BUDGETED and authorize a bounded amount for this task.`.slice(0, 1900);

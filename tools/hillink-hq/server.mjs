@@ -13,6 +13,9 @@ import { connectCliAgents } from './cli-agent-adapter.mjs';
 import { connectOrchestrator } from './orchestrator-adapter.mjs';
 import { ClaudeImplementer, ClaudeRouter, findClaudeBinary } from './implementation-runner.mjs';
 import { WslSandbox } from './sandbox.mjs';
+import { LinuxSandbox } from './sandbox/linux.mjs';
+import { BrokerServer } from './broker/mcp-server.mjs';
+import { SubscriptionImplementer } from './subscription-implementer.mjs';
 import { execFileSync } from 'node:child_process';
 import { Conductor } from './orchestration/conductor.mjs';
 import { CommitVerifier } from './orchestration/verify.mjs';
@@ -37,7 +40,7 @@ async function body(req) {
   return JSON.parse(raw);
 }
 
-export async function createHQ({ port = 4312, directory = path.join(here, '.state'), store, adapters, sink, intervalMs = 1000, ollama = false, cliAgents = false, orchestrator = false, implementation = false, env = process.env, request = fetch, sandboxFactory = ({ env: e }) => new WslSandbox({ home: e.HQ_SANDBOX_HOME || undefined }), conductorOptions = {}, verifier = null, computeMode = null } = {}) {
+export async function createHQ({ port = 4312, directory = path.join(here, '.state'), store, adapters, sink, intervalMs = 1000, ollama = false, cliAgents = false, orchestrator = false, implementation = false, env = process.env, request = fetch, sandboxFactory = ({ env: e }) => (process.platform === 'win32' ? new WslSandbox({ home: e.HQ_SANDBOX_HOME || undefined }) : new LinuxSandbox({ home: e.HQ_SANDBOX_HOME || undefined })), brokerOptions = {}, conductorOptions = {}, verifier = null, computeMode = null } = {}) {
   const journal = store ?? new FileStore(directory);
   const local = new LocalAdapter();
   // Pass 4: ZERO_CREDIT unless HQ's own environment says BUDGETED. Requests, agents and tasks cannot change it.
@@ -51,7 +54,7 @@ export async function createHQ({ port = 4312, directory = path.join(here, '.stat
   }
   // Pass 2.6: Claude may take bounded implementation tasks (implement-repo) through a separate runtime with
   // task-specific permissions. Its review adapter is unchanged; a router picks the runtime per task.
-  let implementationStatus = 'DISABLED', sandboxRef = null;
+  let implementationStatus = 'DISABLED', implementationRoutes = null, sandboxRef = null, brokerServer = null;
   // A restart can find Claude still holding a crashed run (parked until HQ proves it stopped). The sandbox handle,
   // stale-instance cleanup and the runner are wired regardless, so recovery can prove termination and the retry can
   // run; only the capability change waits for an unassigned agent (found in the first real crash test).
@@ -65,10 +68,21 @@ export async function createHQ({ port = 4312, directory = path.join(here, '.stat
     else if (!box.ok) implementationStatus = `UNAVAILABLE: ${box.reason}`;
     else {
       sandbox.cleanupStale().catch(() => {}); // instances left by a crash are disposable
-      const implementer = new ClaudeImplementer({ repoRoot: path.resolve(here, '../..'), worktreeRoot: env.HQ_WORKTREE_DIR || undefined, claudeBin, env, sandbox });
-      engine.adapters['cli-claude'] = new ClaudeRouter(engine.adapters['cli-claude'], implementer);
+      const repoRoot = path.resolve(here, '../..'), worktreeRoot = env.HQ_WORKTREE_DIR || undefined;
+      // Pass 2.7 direct-sandbox runner (metered key; BUDGETED + authorization only). Kept as the optional paid path.
+      const implementer = new ClaudeImplementer({ repoRoot, worktreeRoot, claudeBin, env, sandbox });
+      // Pass 4.5 split broker (subscription). Needs a sandbox that supports broker operations.
+      let subscription = null;
+      const brokerReady = sandbox.brokerSupport?.() ?? { ok: false, reason: 'sandbox has no broker support' };
+      if (brokerReady.ok) {
+        brokerServer = await new BrokerServer().start();
+        subscription = new SubscriptionImplementer({ repoRoot, worktreeRoot, claudeBin, env, sandbox, broker: brokerServer, ...brokerOptions });
+      }
+      engine.adapters['cli-claude'] = new ClaudeRouter(engine.adapters['cli-claude'], implementer, subscription);
       if (!engine.state.agents.claude.assignment) engine.configureAgent('claude', { capabilities: [...new Set([...engine.state.agents.claude.capabilities, 'implement-repo'])] });
+      const direct = implementer.available();
       implementationStatus = 'CONFIGURED';
+      implementationRoutes = { subscriptionSplitBroker: brokerReady.ok ? 'READY' : `UNAVAILABLE: ${brokerReady.reason}`, apiKeySandbox: direct.ok ? 'AVAILABLE (METERED: BUDGETED mode + Kyle authorization only)' : `UNAVAILABLE: ${direct.reason}` };
     }
   }
   // A capability recorded by an earlier start does not survive a start without the sandbox (fail closed).
@@ -125,7 +139,7 @@ export async function createHQ({ port = 4312, directory = path.join(here, '.stat
       if (req.headers['x-hq-client'] !== 'command-center' || (req.headers.origin && req.headers.origin !== origin) || (req.headers['sec-fetch-site'] && req.headers['sec-fetch-site'] !== 'same-origin')) return json(403, { error: 'Same-origin HQ client required' });
       if (req.method === 'GET' && url.pathname === '/api/session') return json(200, { token: session });
       if (!equal(req.headers.authorization, `Bearer ${session}`)) return json(401, { error: 'HQ session required' });
-      if (req.method === 'GET' && url.pathname === '/api/state') return json(200, { ...engine.snapshot(), events: engine.state.events.slice(-recentEvents), eventCount: engine.state.events.length, operations, health: { controller: lastError ? 'DEGRADED' : 'ONLINE', lastError, externalNotifications: sink ? 'CONFIGURED' : 'UNCONFIGURED', ollama: ollamaStatus, cliAgents: agentsStatus, orchestrator: orchestratorStatus, implementation: implementationStatus, localOnly: true, computeMode: engine.config.computeMode, meteredCredentialsPresent: credentials } });
+      if (req.method === 'GET' && url.pathname === '/api/state') return json(200, { ...engine.snapshot(), events: engine.state.events.slice(-recentEvents), eventCount: engine.state.events.length, operations, health: { controller: lastError ? 'DEGRADED' : 'ONLINE', lastError, externalNotifications: sink ? 'CONFIGURED' : 'UNCONFIGURED', ollama: ollamaStatus, cliAgents: agentsStatus, orchestrator: orchestratorStatus, implementation: implementationStatus, implementationRoutes, localOnly: true, computeMode: engine.config.computeMode, meteredCredentialsPresent: credentials } });
       // Pass 4: compute policy, ledger and spend authorization. Owner API only (loopback, same-origin, session token);
       // nothing here is reachable from agent output, handoffs or the orchestrator's tools.
       if (req.method === 'GET' && url.pathname === '/api/compute') return json(200, { mode: engine.config.computeMode, ledger: computeLedger(engine.state, { now: engine.now(), taskId: url.searchParams.get('task') || null }), routes: allRoutes(), agents: agentProfiles(), meteredCredentialsPresent: credentials });
@@ -178,6 +192,7 @@ export async function createHQ({ port = 4312, directory = path.join(here, '.stat
     closing = true; clearTimeout(timer);
     await ticking;
     await Promise.allSettled([...new Set(Object.values(engine.adapters))].map(adapter => adapter.close?.()));
+    await brokerServer?.close();
     await new Promise(resolve => server.close(resolve));
     journal.close();
   } };

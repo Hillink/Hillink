@@ -375,7 +375,7 @@ test('18-19. code Claude writes (tests, hooks) never sees an API key: HQ runs te
   const implementer = new ClaudeImplementer({ repoRoot: repo, worktreeRoot, claudeBin: 'claude-test.exe', spawn: fake.spawn, env, pulseMs: 50, unsandboxed: true });
   const events = [];
   const task = { id: 'b2c3d4e5', operation: 'implement-repo', safety: 'local-worktree-write', description: 'probe', implementation: { objective: 'probe', scope: ['sandbox/hq-implementation/'], acceptanceCriteria: 'no keys', constraints: 'none', tests: ['sandbox/hq-implementation/probe.test.mjs'] } };
-  await implementer.start({ task, runId: 'run-p4', emit: e => events.push(e), compute: issueGrant({ taskId: task.id, runId: 'run-p4', route: routeFor('cli-claude', 'implement-repo'), authorizationId: 'a', reservedUsd: 2 }) });
+  await implementer.start({ task, runId: 'run-p4', emit: e => events.push(e), compute: issueGrant({ taskId: task.id, runId: 'run-p4', route: routeFor('cli-claude', 'implement-repo', 'direct-sandbox'), authorizationId: 'a', reservedUsd: 2 }) });
   for (let i = 0; i < 400 && !events.some(e => ['COMPLETED', 'FAILED', 'BLOCKED'].includes(e.kind)); i++) await new Promise(r => setTimeout(r, 25));
   const result = events.find(e => e.kind === 'TEST_RESULT');
   assert.equal(result?.result, 'passed', JSON.stringify(events.slice(-3)));

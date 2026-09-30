@@ -17,7 +17,7 @@ export function reduceCompute(state, event) {
     // reservation) are journaled atomically: there is no crash window where one exists without the other.
     case 'DISPATCHED': {
       const s = d.compute; if (!s) break; // journals from before Pass 4 carry no compute record
-      c.runs[d.runId] = { runId: d.runId, taskId: d.taskId, agentId: d.agentId, operation: s.operation, adapterId: s.adapterId, computeClass: s.computeClass, provider: s.provider, backend: s.backend, model: s.model ?? null, authorizationId: s.authorizationId ?? null, reservedUsd: s.reservedUsd ?? 0, mode: s.mode, startedAt: at, endedAt: null, outcome: null, meteredCostUsd: s.computeClass === 'METERED_API' ? null : 0, reportedCostUsd: null, costSource: s.computeClass === 'METERED_API' ? 'unknown' : 'not metered' };
+      c.runs[d.runId] = { runId: d.runId, taskId: d.taskId, agentId: d.agentId, operation: s.operation, adapterId: s.adapterId, variant: s.variant ?? 'default', routeId: s.routeId ?? null, security: s.security ?? null, computeClass: s.computeClass, provider: s.provider, backend: s.backend, model: s.model ?? null, authorizationId: s.authorizationId ?? null, reservedUsd: s.reservedUsd ?? 0, mode: s.mode, startedAt: at, endedAt: null, outcome: null, meteredCostUsd: s.computeClass === 'METERED_API' ? null : 0, reportedCostUsd: null, costSource: s.computeClass === 'METERED_API' ? 'unknown' : 'not metered' };
       if (state.tasks[d.taskId]) delete state.tasks[d.taskId].waitingFor;
       break;
     }

@@ -4,16 +4,19 @@
 // investigation has justified it), so the plan is a policy, not a fixed script.
 import { gatesFor, riskFor, reviewPolicy, PRE_WORK_GATES, POST_WORK_GATES } from './policy.mjs';
 import { ROUTES } from './routing.mjs';
-import { routeFor } from '../compute/registry.mjs';
+import { routesFor } from '../compute/registry.mjs';
 
 // Pass 4: the adapter HQ wires for each agent, so the plan can say, before anything runs, what compute each step
 // would use and whether any of it is metered. Deterministic: no model is asked what a model costs.
 const ADAPTER = { claude: 'cli-claude', codex: 'cli-codex', qwen: 'ollama-qwen', gemma: 'ollama-gemma' };
-export function computePlan(kinds, mode) {
+// supports(adapterId, operation, variant): whether HQ can serve that route variant now (Pass 4.5). Unknown: assume yes.
+export function computePlan(kinds, mode, supports = () => undefined) {
   const steps = [...new Set(kinds)].map(kind => {
     const r = ROUTES[kind];
     if (!r || kind === 'verify') return { kind, computeClass: 'LOCAL', provider: 'local', backend: 'HQ deterministic checks' };
-    const options = r.agents.map(a => ({ agentId: a, ...routeFor(ADAPTER[a], r.operation) }));
+    const usable = (a, x) => { const v = supports(ADAPTER[a], r.operation, x.variant); return v === undefined ? (x.variant === 'default' || x.computeClass === 'METERED_API') : v !== false && v?.ok !== false; };
+    const options = r.agents.flatMap(a => routesFor(ADAPTER[a], r.operation).filter(x => usable(a, x)).map(x => ({ agentId: a, ...x })));
+    if (!options.length) return { kind, computeClass: 'UNAVAILABLE', provider: 'none', backend: 'no route can run this step in this HQ' };
     const best = options.sort((a, b) => ['LOCAL', 'SUBSCRIPTION', 'METERED_API'].indexOf(a.computeClass) - ['LOCAL', 'SUBSCRIPTION', 'METERED_API'].indexOf(b.computeClass))[0];
     return { kind, agentId: best.agentId, computeClass: best.computeClass, provider: best.provider, backend: best.backend, ...(best.computeClass === 'METERED_API' ? { maxCostUsdPerRun: best.perRunCapUsd, why: best.why } : {}) };
   });
@@ -44,7 +47,7 @@ export function implementationSteps(objective, contract, { repair = null, review
   return [impl, verify, review];
 }
 
-export function planObjective(objective, { computeMode = 'ZERO_CREDIT' } = {}) {
+export function planObjective(objective, { computeMode = 'ZERO_CREDIT', supports } = {}) {
   const input = objective.input;
   const gates = gatesFor(input), risk = riskFor(input, gates), reviewRule = reviewPolicy(risk.level);
   const steps = [];
@@ -69,6 +72,6 @@ export function planObjective(objective, { computeMode = 'ZERO_CREDIT' } = {}) {
     verification: input.type === 'implement' || input.type === 'fix' ? ['HQ-run tests inside the sandbox must pass', 'HQ verifies the commit, scope and test evidence from git', `review by ${reviewRule.independentProvider ? 'an independent provider (Codex)' : 'a read-only reviewer other than the implementing session'}`] : ['the handoff must validate'],
     completionCriteria: input.type === 'implement' || input.type === 'fix' ? ['an accepted investigation (fix) or a submitted contract (implement)', 'a verified local commit on an hq/impl branch', 'an approving review, or a recorded decision on a disagreement', ...gates.filter(g => POST_WORK_GATES.has(g)).map(g => `Kyle's decision on ${g} (HQ never performs it)`)] : ['an accepted handoff answering the objective'],
     steps,
-    compute: computePlan(input.type === 'fix' ? ['investigate', 'implement', 'verify', 'review'] : steps.map(s => s.kind), computeMode),
+    compute: computePlan(input.type === 'fix' ? ['investigate', 'implement', 'verify', 'review'] : steps.map(s => s.kind), computeMode, supports),
   };
 }

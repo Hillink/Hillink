@@ -14,7 +14,7 @@ import { candidates, assertImplementer, ROUTES } from './routing.mjs';
 import { parseHandoff, implementationHandoff, framingFor, hashOf } from './handoff.mjs';
 import { classify, retryDecision, loopGuard, repeated } from './retry.mjs';
 import { validateImplementation } from '../implementation-policy.mjs';
-import { decideCompute } from '../compute/policy.mjs';
+import { decideBest, decideCompute } from '../compute/policy.mjs';
 
 const KIND_STATE = { investigate: 'INVESTIGATING', implement: 'IMPLEMENTING', verify: 'VERIFYING', review: 'REVIEWING', rebuttal: 'REVIEWING', 'local-check': 'INVESTIGATING' };
 const HANDOFF_KIND = { investigate: 'investigation', review: 'review', rebuttal: 'rebuttal' };
@@ -124,7 +124,7 @@ export class Conductor {
 
   plan(o) {
     this.set(o, 'PLANNING', 'Planning started.');
-    const plan = planObjective(o, { computeMode: this.engine.config.computeMode });
+    const plan = planObjective(o, { computeMode: this.engine.config.computeMode, supports: (adapterId, op, variant) => this.supports(adapterId, op, variant) });
     this.engine.emit('OBJECTIVE_PLANNED', { objectiveId: o.id, plan });
     const pre = plan.preWorkGates;
     if (pre.length) return this.requestApprovals(o, pre, 'before any work starts');
@@ -173,11 +173,20 @@ export class Conductor {
     const route = ROUTES[s.kind];
     // Pass 4: the spend gate, before the task exists. Metered compute without Kyle's authorization stops here, so the
     // charge is never discovered after the fact. (The engine checks again at dispatch.)
-    const gate = decideCompute({ state: this.state, task: { id: null, operation: route.operation, link: { objectiveId: o.id } }, agentId: pick.agentId, adapterId: agents[pick.agentId].executionAdapter, mode: this.engine.config.computeMode, now: this.now() });
+    const adapterId = agents[pick.agentId].executionAdapter;
+    const gate = decideBest({ state: this.state, task: { id: null, operation: route.operation, link: { objectiveId: o.id } }, agentId: pick.agentId, adapterId, mode: this.engine.config.computeMode, now: this.now(), supports: (op, variant) => this.supports(adapterId, op, variant) });
+    // Pass 4.5: no route variant can run here at all (for example the broker's sandbox is missing): wait, never pay.
+    if (!gate.allowed && gate.code === 'UNAVAILABLE') return this.set(o, 'WAITING_FOR_EVIDENCE', `Step ${s.kind} waits: ${gate.reason}`.slice(0, 500));
     if (!gate.allowed) return this.spendGate(o, s, gate);
     const task = s.kind === 'implement' ? this.implementTask(o, s) : this.readOnlyTask(o, s, pick.agentId);
     this.engine.createTask({ ...task, operation: route.operation, safety: route.safety, priority: 50, preferredAgentId: pick.agentId }, { requestedBy: o.requestedBy?.taskId && this.state.tasks[o.requestedBy.taskId] ? o.requestedBy : null, link: { objectiveId: o.id, stepId: s.id }, internal: true, repair: s.repair ?? null });
     this.set(o, KIND_STATE[s.kind], `${s.kind} assigned to ${agents[pick.agentId].name}${pick.busy ? ' (queued behind its current task)' : ''}.`);
+  }
+  // Whether the wired adapter can serve a route variant now (Pass 4.5). An adapter without supports() serves all.
+  supports(adapterId, op, variant) {
+    const a = this.engine.adapters[adapterId];
+    if (!a) return true; // planning before adapters connect: the gate at dispatch decides
+    return a.supports?.(op, variant);
   }
   // Metered compute needed and not authorized: Kyle decides (never the orchestrator, never agent text).
   spendGate(o, s, gate) {

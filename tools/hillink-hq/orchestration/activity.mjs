@@ -12,7 +12,10 @@ export const WORLD_CONTRACT_VERSION = 1;
 export const ACTIVITY_TYPES = ['TASK_CREATED', 'PLANNING_STARTED', 'AGENT_ASSIGNED', 'AGENT_STARTED', 'AGENT_WORKING', 'HANDOFF_RECEIVED', 'HANDOFF_REJECTED', 'IMPLEMENTATION_STARTED', 'SANDBOX_CREATED', 'SANDBOX_DESTROYED', 'TESTING', 'TEST_RESULT', 'COMMIT', 'VERIFYING', 'REVIEWING', 'RETRYING', 'APPROVAL_REQUIRED', 'DECISION_REQUIRED', 'WAITING', 'AGENT_FINISHED', 'BLOCKED', 'COMPLETE', 'FAILED', 'CANCELLED',
   // Pass 4 compute events (additive). Items may carry computeClass: LOCAL | SUBSCRIPTION | METERED_API, so the World
   // can show local, subscription and paid external compute differently. Amounts are dollars; never credentials.
-  'COMPUTE_SELECTED', 'LOCAL_AGENT_STARTED', 'SUBSCRIPTION_AGENT_STARTED', 'METERED_AGENT_STARTED', 'AGENT_CAPACITY_EXHAUSTED', 'WAITING_FOR_CAPACITY', 'SPEND_APPROVAL_REQUIRED', 'SPEND_AUTHORIZED', 'SPEND_REVOKED', 'BUDGET_EXHAUSTED'];
+  'COMPUTE_SELECTED', 'LOCAL_AGENT_STARTED', 'SUBSCRIPTION_AGENT_STARTED', 'METERED_AGENT_STARTED', 'AGENT_CAPACITY_EXHAUSTED', 'WAITING_FOR_CAPACITY', 'SPEND_APPROVAL_REQUIRED', 'SPEND_AUTHORIZED', 'SPEND_REVOKED', 'BUDGET_EXHAUSTED',
+  // Pass 4.5 split-broker events (additive). HQ-authored, from the broker's audit: never a path, file content, prompt,
+  // model text or credential.
+  'FILE_EDITING', 'REPAIRING', 'IMPLEMENTATION_FINISHED'];
 const STARTED = { LOCAL: 'LOCAL_AGENT_STARTED', SUBSCRIPTION: 'SUBSCRIPTION_AGENT_STARTED', METERED_API: 'METERED_AGENT_STARTED' };
 export const ACTIVITIES = ['idle', 'planning', 'investigating', 'building', 'testing', 'verifying', 'reviewing', 'waiting', 'blocked', 'done'];
 
@@ -59,7 +62,15 @@ export function worldActivity(events, { since = 0, limit = 500 } = {}) {
         else if (d.kind === 'TEST_STARTED') push(e, { ...base, type: 'TESTING', activity: 'testing', summary: 'HQ running the acceptance tests.' });
         else if (d.kind === 'TEST_RESULT') push(e, { ...base, type: 'TEST_RESULT', activity: 'testing', summary: `Tests ${d.result}.` });
         else if (d.kind === 'COMMIT') push(e, { ...base, type: 'COMMIT', activity: 'building', summary: 'Local commit made by HQ (not pushed, not merged).' });
+        else if (d.kind === 'BROKER') {
+          const ev = d.broker?.event;
+          if (ev === 'BROKER_WRITE_ALLOWED') push(e, { ...base, type: 'FILE_EDITING', activity: 'building', summary: `${r.agentId} editing a file in the sandbox.` });
+          else if (ev === 'BROKER_READ' || ev === 'BROKER_SEARCH') push(e, { ...base, type: 'AGENT_WORKING', activity: 'building', summary: `${r.agentId} reading the task repository.` });
+          else if (ev === 'SANDBOX_TEST_STARTED') push(e, { ...base, type: r.testFailed ? 'REPAIRING' : 'TESTING', activity: 'testing', summary: r.testFailed ? `${r.agentId} repairing: re-running the tests after a failure.` : `${r.agentId} running the tests in the sandbox.` });
+          else if (ev === 'SANDBOX_TEST_COMPLETED') { r.testFailed = d.broker.outcome !== 'passed'; push(e, { ...base, type: 'TEST_RESULT', activity: 'testing', summary: `Agent's test run ${r.testFailed ? 'failed' : 'passed'}.` }); }
+        }
         else if (d.kind === 'RATE_LIMITED') push(e, { ...base, type: 'AGENT_CAPACITY_EXHAUSTED', activity: 'waiting', computeClass: r.computeClass, capacity: d.capacity === 'SUBSCRIPTION_LIMIT_REACHED' ? 'SUBSCRIPTION_LIMIT_REACHED' : 'RATE_LIMITED', summary: `${r.agentId} is out of capacity; HQ waits (no paid fallback).` });
+        if (TERMINAL_KINDS.has(d.kind) && building) push(e, { ...base, type: 'IMPLEMENTATION_FINISHED', activity: d.kind === 'COMPLETED' ? 'done' : 'blocked', outcome: d.kind.toLowerCase(), summary: `Implementation finished (${d.kind.toLowerCase()}).` });
         if (TERMINAL_KINDS.has(d.kind)) push(e, { ...base, type: 'AGENT_FINISHED', activity: d.kind === 'COMPLETED' ? 'done' : 'blocked', outcome: d.kind.toLowerCase(), summary: `${r.agentId} finished (${d.kind.toLowerCase()}).` });
         break;
       }

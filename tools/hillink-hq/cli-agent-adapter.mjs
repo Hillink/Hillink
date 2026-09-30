@@ -36,6 +36,14 @@ export const cliAgents = {
         // Second line of defence: the session itself says where its credential came from. Anything but "none" is an
         // API key; the run is stopped and never counted as subscription work.
         if (run.billing !== 'metered' && message.apiKeySource && message.apiKeySource !== 'none') { run.authViolation = `Claude Code started with a metered API key (${String(message.apiKeySource).slice(0, 40)}); HQ stopped it.`; return []; }
+        // Pass 4.5: the split broker's Claude must report exactly HQ's broker tools and HQ's one MCP server, connected.
+        // Anything else (a built-in tool, a plugin or user MCP tool, a missing broker) stops the session before it acts.
+        if (run.expectTools) {
+          const tools = [...(message.tools || [])].sort(), want = [...run.expectTools].sort();
+          const servers = (message.mcp_servers || []).map(m => `${m.name}:${m.status}`);
+          if (JSON.stringify(tools) !== JSON.stringify(want)) { run.toolViolation = `Claude Code started with tools other than HQ's broker tools (${tools.join(', ').slice(0, 300) || 'none'}); HQ stopped it.`; return []; }
+          if (JSON.stringify(servers) !== JSON.stringify([`${run.expectServer}:connected`])) { run.toolViolation = `Claude Code's MCP servers were not exactly HQ's connected broker (${servers.join(', ').slice(0, 200) || 'none'}); HQ stopped it.`; return []; }
+        }
         return [{ kind: 'ACK', summary: `Claude Code session started with tools: ${(message.tools || []).join(', ').slice(0, 200)} (subscription sign-in).` }];
       }
       if (message.type === 'rate_limit_event' && message.rate_limit_info?.status === 'rejected') {
@@ -48,6 +56,7 @@ export const cliAgents = {
         const content = message.message?.content || [];
         run.steps += 1;
         const tools = content.filter(c => c.type === 'tool_use').map(c => c.name);
+        if (run.expectTools && tools.some(t => !run.expectTools.includes(t))) { run.toolViolation = `Claude Code attempted a tool outside HQ's broker (${tools.filter(t => !run.expectTools.includes(t)).join(', ').slice(0, 120)}); HQ stopped it.`; return []; }
         return [{ kind: 'MODEL_OUTPUT', summary: tools.length ? `Claude step ${run.steps}: used ${tools.join(', ')}.` : `Claude step ${run.steps}: wrote a response.` }];
       }
       if (message.type === 'result') {
@@ -149,7 +158,7 @@ export class CliAgentAdapter {
     if (this.billing === 'subscription' && this.spec.authCheck && this.healthCache?.result?.auth !== 'subscription') throw Error(`${this.spec.label} subscription sign-in not verified; refusing to start (no metered fallback).`);
     const started = Date.now();
     const child = this.launch(this.spec.args());
-    const run = { billing: this.billing, child, closed: false, cancelled: false, timedOut: false, acknowledged: false, steps: 0, finished: null, usage: null, lastMessage: '', rateLimitedUntil: null };
+    const run = { billing: this.billing, expectTools: this.spec.expectTools ?? null, expectServer: this.spec.expectServer ?? null, child, closed: false, cancelled: false, timedOut: false, acknowledged: false, steps: 0, finished: null, usage: null, lastMessage: '', rateLimitedUntil: null };
     this.runs.set(runId, run);
     let pending = '', stderr = '';
     const safeEmit = event => { try { emit(event); return true; } catch { return false; } };
@@ -163,6 +172,7 @@ export class CliAgentAdapter {
         if (!safeEmit(event)) void this.cancel(runId);
       }
       if (run.authViolation && !run.cancelled) { this.healthCache = null; void this.cancel(runId); }
+      if (run.toolViolation && !run.cancelled) void this.cancel(runId);
     };
     child.stdout.on('data', data => {
       pending += data.toString();
@@ -188,6 +198,7 @@ export class CliAgentAdapter {
       const failureText = `${run.finished && !run.finished.ok ? run.finished.text : ''} ${stderr}`;
       let terminal;
       if (run.authViolation) terminal = { kind: 'BLOCKED', summary: `AUTH_REQUIRED: ${run.authViolation} No metered fallback.`, ownerAction: 'Remove the API key or apiKeyHelper from Claude Code\'s configuration so it uses your subscription, then restart HQ.' };
+      else if (run.toolViolation) terminal = { kind: 'BLOCKED', summary: `TOOL_POLICY: ${run.toolViolation}`, ownerAction: 'Check Claude Code\'s version and managed settings: HQ requires that --tools "" removes every built-in tool.' };
       else if (run.cancelled && !run.timedOut) terminal = { kind: 'CANCELLED', summary: 'Worker termination confirmed by process close.' };
       else if (run.rateLimitedUntil || (!run.finished?.ok && limited(failureText))) {
         // Pass 4: a subscription limit means wait (or Kyle decides); it never becomes an API call.

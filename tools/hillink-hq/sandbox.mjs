@@ -14,13 +14,15 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 export const SANDBOX_HOME = path.join(os.homedir(), '.hillink-hq', 'sandbox');
 export const INSTANCE_PREFIX = 'hq-sbx-';
+export const GUEST_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), 'sandbox', 'guest');
 const MAX_PATCH = 8 * 1024 * 1024;
 
 // Patterns that must never be committed by an implementation (API keys and private keys).
-const SECRETS = [/sk-ant-[A-Za-z0-9_-]{20,}/, /sk-(proj|svcacct|admin)-[A-Za-z0-9_-]{20,}/, /\bsk-[A-Za-z0-9]{32,}\b/, /gh[pousr]_[A-Za-z0-9]{30,}/, /github_pat_[A-Za-z0-9_]{30,}/, /AKIA[0-9A-Z]{16}/, /-----BEGIN [A-Z ]*PRIVATE KEY-----/, /xox[baprs]-[A-Za-z0-9-]{20,}/, /sb_secret_[A-Za-z0-9_-]{20,}/, /eyJhbGciOi[A-Za-z0-9_-]{30,}\.[A-Za-z0-9_-]{30,}\./];
+export const SECRET_PATTERNS = [/sk-ant-[A-Za-z0-9_-]{20,}/, /sk-(proj|svcacct|admin)-[A-Za-z0-9_-]{20,}/, /\bsk-[A-Za-z0-9]{32,}\b/, /gh[pousr]_[A-Za-z0-9]{30,}/, /github_pat_[A-Za-z0-9_]{30,}/, /AKIA[0-9A-Z]{16}/, /-----BEGIN [A-Z ]*PRIVATE KEY-----/, /xox[baprs]-[A-Za-z0-9-]{20,}/, /sb_secret_[A-Za-z0-9_-]{20,}/, /eyJhbGciOi[A-Za-z0-9_-]{30,}\.[A-Za-z0-9_-]{30,}\./];
 
 // Validates a patch produced in the sandbox before HQ lets git touch it. Returns the list of paths it affects.
 export function checkPatch(patch) {
@@ -34,7 +36,7 @@ export function checkPatch(patch) {
     if (/^(new file mode|deleted file mode|old mode|new mode) (120000|160000)\b/.test(line) || /^index [0-9a-f]+\.\.[0-9a-f]+ (120000|160000)$/.test(line)) throw Error('patch contains a symbolic link or submodule');
     if (/^[+ -]?Subproject commit /.test(line)) throw Error('patch contains a submodule');
     if ((m = /^(?:rename|copy) (?:from|to) (.+)$/.exec(line))) paths.add(m[1]);
-    if (line.startsWith('+') && !line.startsWith('+++')) for (const re of SECRETS) if (re.test(line)) throw Error('patch adds something that looks like a secret (API key, token or private key)');
+    if (line.startsWith('+') && !line.startsWith('+++')) for (const re of SECRET_PATTERNS) if (re.test(line)) throw Error('patch adds something that looks like a secret (API key, token or private key)');
   }
   for (const p of paths) if (p.includes('..') || p.startsWith('/') || /(^|\/)\.git(\/|$)/i.test(p) || /[\\:]/.test(p)) throw Error(`patch touches an unsafe path: ${p.slice(0, 120)}`);
   return [...paths].sort();
@@ -54,6 +56,18 @@ export class WslSandbox {
       if (!fs.existsSync(this.baseTar)) return { ok: false, reason: 'sandbox base image not built' };
       return { ok: true, info };
     } catch { return { ok: false, reason: 'sandbox base image not built (run: node tools/hillink-hq/sandbox/build-base.mjs)' }; }
+  }
+  // Pass 4.5: the split broker needs the image's broker scripts, identical to the ones in this checkout. An image built
+  // before Pass 4.5 (or from other scripts) does not support it: HQ then waits, it never falls back to paying.
+  brokerSupport() {
+    const a = this.available();
+    if (!a.ok) return a;
+    const want = ['hq-broker.sh', 'hq-broker.mjs', 'hq-diff.sh', 'hq-test.sh', 'hq-stage.sh', 'hq-harden.sh'];
+    for (const f of want) {
+      let local; try { local = crypto.createHash('sha256').update(fs.readFileSync(path.join(GUEST_DIR, f), 'utf8').replace(/\r\n/g, '\n')).digest('hex'); } catch { return { ok: false, reason: `guest script ${f} missing from this checkout` }; }
+      if (a.info?.scripts?.[f] !== local) return { ok: false, reason: `the sandbox base image predates the Pass 4.5 broker (${f} differs); rebuild it: node tools/hillink-hq/sandbox/build-base.mjs` };
+    }
+    return { ok: true };
   }
   async verifyBase() {
     const info = JSON.parse(fs.readFileSync(this.baseInfo, 'utf8'));

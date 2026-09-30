@@ -14,4 +14,5 @@ export function subscriptionProbe(args, child, { claude = { loggedIn: true, auth
 // What the engine hands a metered adapter after a successful spend check, for tests that drive an adapter directly.
 import { issueGrant } from '../compute/policy.mjs';
 import { routeFor } from '../compute/registry.mjs';
-export const testGrant = (taskId, runId, { adapterId = 'cli-claude', operation = 'implement-repo', authorizationId = 'test-authorization', reservedUsd = 2 } = {}) => issueGrant({ taskId, runId, route: routeFor(adapterId, operation), authorizationId, reservedUsd });
+// Implementation grants default to the metered direct-sandbox variant (Pass 2.7 runner); pass variant for others.
+export const testGrant = (taskId, runId, { adapterId = 'cli-claude', operation = 'implement-repo', variant = operation === 'implement-repo' ? 'direct-sandbox' : null, authorizationId = 'test-authorization', reservedUsd = 2 } = {}) => issueGrant({ taskId, runId, route: routeFor(adapterId, operation, variant), authorizationId, reservedUsd });

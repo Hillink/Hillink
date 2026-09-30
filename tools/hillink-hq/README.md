@@ -92,6 +92,18 @@ With `HQ_AGENTS_ENABLED=1` (or `HQ_IMPLEMENTATION_ENABLED=1`), Claude can take b
 - **Blocked outcomes:** failed tests, a scope violation, missing test files or no changes end BLOCKED with the reason and an owner action. Nothing is committed, and the worktree is kept for inspection.
 - **Permissions:** chosen per task by `ClaudeRouter`. Review tasks use the unchanged read-only adapter in the repository, so nothing carries over from one task to the next.
 
+## Subscription implementation through the split broker (Pass 4.5)
+
+In `ZERO_CREDIT` mode, implementation runs on Kyle's Claude subscription.
+
+- Claude Code runs on the host with **no built-in tools** (`--tools ""`) and only HQ's seven broker tools over MCP on `127.0.0.1`: list, read, search, write, edit, changes and run_tests.
+- HQ authorizes every call against the task's scope and limits. It then runs the call inside the disposable sandbox, which has no network and no credential, and audits it.
+- Afterwards HQ takes the diff itself and runs the usual checks. The commit is local only.
+- The metered Pass 2.7 route (Claude inside the sandbox with an API key) remains, but only with `BUDGETED` mode plus a Kyle spend authorization. HQ never falls back to it on its own.
+- On Linux the sandbox is `sandbox/linux.mjs`, which uses namespaces and a chroot and needs root. On Windows it is WSL, and you must rebuild the base image once with `node tools/hillink-hq/sandbox/build-base.mjs` for the new guest scripts.
+- `GET /api/state` shows `health.implementationRoutes`.
+- Design, trust diagram, residual risks: [docs/pass45-split-broker.md](docs/pass45-split-broker.md). Live results: [docs/pass45-live-results.json](docs/pass45-live-results.json).
+
 ## OS sandbox for implementation (Pass 2.7)
 
 Implementation runs only inside a disposable WSL2 instance (`sandbox.mjs`). Without the sandbox base image HQ does not offer `implement-repo` at all, and withdraws the capability if an earlier start recorded it.
