@@ -113,6 +113,9 @@ test('idle life: variants and chatting only while truly idle, and they map to id
   const { frames: w } = run([[start, 90]]);
   assert.ok(of(w, 'claude').filter(f => f.activity === 'coding').every(f => !['phone', 'stretch', 'chat', 'watch'].includes(f.state)), 'no idle variety while working');
   assert.ok(w.every(f => !f.chatWith || f.activity === 'idle'), 'only idle agents chat');
+  const byNow = new Map(); for (const f of frames) byNow.set(`${f.now}:${f.id}`, f);
+  const chats = frames.filter(f => f.state === 'chat');
+  assert.ok(chats.every(f => { const o = byNow.get(`${f.now}:${String(f.chatWith).replace('agent:', '')}`); return o && !o.moving && !f.moving && o.activity === 'idle'; }), 'a chat partner is always idle and at rest, never walking away');
   for (const [s, activity] of [['phone', 'idle'], ['stretch', 'idle'], ['chat', 'idle'], ['watch', 'waiting'], ['file', 'completed'], ['frustrated', 'waiting']]) {
     const r = intentOf({ spot: 'lounge:sofa', posture: 'sit', agent: { activity }, anim: { state: s } }, s, { tasks: {} }, {});
     assert.ok(INTENTS.includes(r.intent), `${s} -> ${r.intent}`);

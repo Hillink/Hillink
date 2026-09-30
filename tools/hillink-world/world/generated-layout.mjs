@@ -146,7 +146,8 @@ export function createGeneratedLayout(world, { theme = 'real' } = {}) {
   // Living HQ: a refit. A capability the planner put into a room that already exists (and is walkable) has no new
   // structure to build; its project still moves through the same canonical stages, so the room becomes a refit site:
   // builders work inside it, at free cells of its own walk grid reached from its own door, while the room keeps its
-  // previous purpose until the capability is complete (Pass 5B finding 4). Only from requested construction on.
+  // previous purpose until the capability is complete (Pass 5B finding 4). Only from site preparation on. The stations
+  // are round the work zone the art layer draws in the room's back corner.
   function refitSite(p) {
     const cap = world.capabilities[p.id], room = cap && world.spaces[cap.placement?.spaceId];
     if (!room || room.status !== 'built' || !furnishing[room.id] || stageIndex(p.stage) < stageIndex('site-preparation')) return;
@@ -154,7 +155,7 @@ export function createGeneratedLayout(world, { theme = 'real' } = {}) {
     const doorCell = [...G.startDoor].find(([, d]) => plan[`${room.id}~in~${d}`])?.[0], doorId = doorCell != null ? G.startDoor.get(doorCell) : null;
     if (doorCell == null) return;
     const lid = `site:${p.id}`, R = view.rectToView(room.rect), floor = room.level, stations = {};
-    for (const [key, fx, fz, use] of [['build1', 0.35, 0.45, 'build'], ['build2', 0.65, 0.55, 'build'], ['inspect1', 0.5, 0.3, 'site-inspect']]) {
+    for (const [key, fx, fz, use] of [['build1', 0.82, 0.5, 'build'], ['build2', 0.55, 0.62, 'build'], ['inspect1', 0.66, 0.4, 'site-inspect']]) {
       const k = approachCell(G, { x: R.x0 + (R.x1 - R.x0) * fx, z: R.z0 + (R.z1 - R.z0) * fz }); if (k === -1) continue;
       const pts = gridWalk(G, doorCell, k); if (!pts) continue;
       const sid = `${lid}:${key}`, end = pts.at(-1), ids = [`${room.id}~in~${doorId}`, ...pts.slice(1, -1).map((pt, i) => node(`${sid}~${i}`, pt.x, pt.z, floor))];

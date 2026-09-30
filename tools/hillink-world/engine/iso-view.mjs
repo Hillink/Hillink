@@ -327,7 +327,12 @@ export class IsoWorldView extends WorldView {
       else { turnToward(e, FACING_ANGLE[e.faceGoal], dt); if (Math.abs(Math.atan2(Math.sin(e.heading - FACING_ANGLE[e.faceGoal]), Math.cos(e.heading - FACING_ANGLE[e.faceGoal]))) < 0.02) { e.dir = e.faceGoal; e.faceGoal = null; } }
     }
     if (!e.faceGoal && e.pendingSit) { e.pendingSit = false; if (e.posture !== 'sit') { e.posture = 'sit'; if (!instant) e.sitUntil = now + SIT_MS; } }
-    if (!instant && now > (e.chatCheck ?? 0)) { e.chatCheck = now + 900; e.chatWith = null; if (e.agent?.activity === 'idle' && !e.moving && e.spot) for (const o of this.scene.entities.values()) if (o !== e && o.kind === 'agent' && o.agent?.activity === 'idle' && !o.moving && o.spot && o.spotInfo?.room === e.spotInfo?.room && Math.hypot(o.x - e.x, o.y - e.y) < this.size.agent[1] * 2.4) { e.chatWith = o.id; if (!e.faceGoal && e.posture !== 'sit') { const dx = o.x - e.x; e.faceGoal = Math.abs(dx) > 2 ? (dx < 0 ? 'left' : 'right') : e.dir; } break; } }
+    // Chat partners: both idle and at rest at their own spots in the same room, a few metres apart. Checked every frame
+    // for the current partner (a partner who walks off ends the chat at once), and every 0.9 s for a new one.
+    const restingIdle = o => o.agent?.activity === 'idle' && !o.moving && !o.departAt && !o.visit && !o.loop && o.spot && o.spotInfo?.room;
+    const near = o => o !== e && o.kind === 'agent' && restingIdle(o) && o.spotInfo.room === e.spotInfo?.room && Math.hypot(o.x - e.x, o.y - e.y) < this.size.agent[1] * 2.4;
+    if (e.chatWith) { const o = this.scene.get(e.chatWith); if (!o || !restingIdle(e) || !near(o)) e.chatWith = null; }
+    if (!instant && !e.chatWith && now > (e.chatCheck ?? 0)) { e.chatCheck = now + 900; if (restingIdle(e)) for (const o of this.scene.entities.values()) if (near(o)) { e.chatWith = o.id; if (!e.faceGoal && e.posture !== 'sit') { const dx = o.x - e.x; e.faceGoal = Math.abs(dx) > 2 ? (dx < 0 ? 'left' : 'right') : e.dir; } break; } }
     if (e.journey) this.stepJourney(e, now);
     else if (e.carrying && !e.errand && !e.loop && !e.moving && e.spot && e.spot === e.placeKey) e.carrying = false; // set the task down at the desk
     if (e.visit) this.visitStep(e, now);

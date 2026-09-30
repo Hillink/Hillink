@@ -477,14 +477,14 @@ export function createArtSkin(layout, skinId = 'real') {
   for (const site of sites) add(site.f, { x0: site.u.x0 - 6, x1: site.u.x1 + 6, z0: site.u.z0, z1: site.u.z1, sb: boxBounds(P, { ...site.u, x0: site.u.x0 - 30, x1: site.u.x1 + 30, h1: HT + 60 }, site.f), draw: d => drawSite(d, site) });
   // Living HQ: refits. A capability placed into a room that already exists is built inside that room, step by step
   // with its project's canonical stage (the room keeps working around it until the capability is complete). The work
-  // zone is the capability's area, centred towards the back of the room.
+  // zone is the capability's area, in the room's back corner away from its door.
   for (const p of Object.values(projects)) {
     if (p.completed || spaces.some(s => s.project === p.id && s.primitive !== 'staircase' && s.primitive !== 'elevator')) continue;
     const cap = world.capabilities[p.id], room = cap && world.spaces[cap.placement?.spaceId];
     if (!room || room.status !== 'built' || stageIndex(p.stage) < stageIndex('site-preparation')) continue;
     const r = rp(room), side = Math.sqrt(Math.max(4, cap.area ?? 9)) * U, w = Math.min(side * 1.25, (r.x1 - r.x0) * 0.6), dz = Math.min(side * 0.8, (r.z1 - r.z0) * 0.5);
-    const cx = (r.x0 + r.x1) / 2, u = { x0: cx - w / 2, x1: cx + w / 2, z0: r.z1 - dz - 30, z1: r.z1 - 30 };
-    const refit = { p, f: room.level, u, label: labelOf.get(`room:${room.id}`) ?? room.id, name: cap.name ?? p.id };
+    const u = { x0: r.x1 - 24 - w, x1: r.x1 - 24, z0: r.z1 - 30 - dz, z1: r.z1 - 30 }; // the back corner away from the door, seen through the glass
+    const refit = { p, f: room.level, u, label: labelOf.get(`room:${room.id}`) ?? room.id, name: cap.spec?.name ?? String(p.id).replace(/-/g, ' ') };
     add(refit.f, { ...u, sb: boxBounds(P, { ...u, x0: u.x0 - 20, x1: u.x1 + 20, h1: HT }, refit.f), draw: d => drawRefit(d, refit) });
   }
   function drawRefit(d, { p, f, u, label, name }) {
