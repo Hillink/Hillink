@@ -11,33 +11,23 @@
 // Missing entries fall back to the theme it extends, then to NEUTRAL (plain captions, no sequence), so a new theme
 // can start empty and nothing breaks.
 import { presenceOf } from '../core/agents.mjs';
+import { readonly } from '../core/readonly.mjs';
 
-// Read-only view: any write throws, at any depth. Interpretations get these, never the live objects.
-const RO = new WeakMap();
-export function readonly(v) {
-  if (v == null || typeof v !== 'object') return v;
-  if (RO.has(v)) return RO.get(v);
-  const p = new Proxy(v, {
-    get: (t, k) => readonly(Reflect.get(t, k)),
-    set: () => { throw TypeError('the theme interpreter cannot change canonical state'); },
-    defineProperty: () => { throw TypeError('the theme interpreter cannot change canonical state'); },
-    deleteProperty: () => { throw TypeError('the theme interpreter cannot change canonical state'); },
-    setPrototypeOf: () => { throw TypeError('the theme interpreter cannot change canonical state'); },
-  });
-  RO.set(v, p); return p;
-}
+// Read-only view: any write throws, at any depth. Interpretations get these, never the live objects (core/readonly.mjs).
+export { readonly };
 
 const NEUTRAL = {
   agent: {
     REQUESTED: { caption: 'Requested' }, CONFIGURING: { caption: 'Provisioning: configuring' }, CONNECTING_PROVIDER: { caption: 'Provisioning: connecting provider' },
     CONNECTING_TOOLS: { caption: 'Provisioning: connecting tools' }, GENERATING_APPEARANCE: { caption: 'Provisioning: appearance' }, TESTING: { caption: 'Provisioning: testing' },
     WAITING: { caption: 'Provisioning paused' }, ERROR: { caption: 'Provisioning failed' },
+    READY: { caption: 'Ready: waiting for activation' },
   },
   events: {},
 };
 
 // Real HQ: a new hire. Candidates wait in the lobby (the onboarding area of today's HQ) while their real setup runs;
-// only when HQ says READY do they walk in to the team. Construction and task beats are already staged by the Real
+// only when HQ activates them (READY, then ACTIVATED) do they walk in to the team. Construction and task beats are already staged by the Real
 // renderers from canonical state; their names are recorded here so the table is the one index of Real's staging.
 const REAL = {
   extends: NEUTRAL,
@@ -50,6 +40,8 @@ const REAL = {
     TESTING: { place: 'onboarding', clip: 'waiting', caption: 'Onboarding: trial task', sequence: 'trial' },
     WAITING: { place: 'onboarding', clip: 'waiting', caption: 'Onboarding paused: waiting on setup', sequence: 'interview-paused' },
     ERROR: { place: 'onboarding', clip: 'blocked', caption: 'Onboarding failed', sequence: 'interview-failed' },
+    // 5E correction (B1): READY is provisioned but not yet a working member; it waits here until HQ activates it.
+    READY: { place: 'onboarding', clip: 'waiting', caption: 'Onboarding complete: waiting to join', sequence: 'onboarding-complete' },
   },
   events: {
     AGENT_REQUESTED: { sequence: 'candidate-arrives', text: n => `${n} arrived for onboarding` },

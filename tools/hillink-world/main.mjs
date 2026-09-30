@@ -1,5 +1,6 @@
 // Hillink World app: wires source -> store -> view -> renderer, plus camera input, themes and overlays.
 import { WorldStore, emptyWorld } from './core/state.mjs';
+import { readonly } from './core/readonly.mjs';
 import { Camera } from './engine/camera.mjs';
 import { Scene } from './engine/scene.mjs';
 import { Effects, stepPath } from './engine/motion.mjs';
@@ -32,6 +33,8 @@ let mode = 'sim';
 
 // World state starts empty; boot fills it from HQ (backend truth) or from the saved simulation.
 const store = new WorldStore(emptyWorld());
+// 5E correction (B7): what the renderer, HUD and inspector read is a read-only view of the World.
+const shown = () => readonly(store.world);
 const effects = new Effects();
 const camera = new Camera({ bounds: { x: 0, y: 0, w: 1, h: 1 } });
 const canvas = $('world'), renderer = createCanvasRenderer(canvas);
@@ -104,7 +107,7 @@ function frame(now) {
   const fx = effects.active(now);
   // Art themes always have ambient life (water, machinery, staff); the blueprint only animates its agents.
   const ambient = !instant; // the building always has quiet ambient life (street, lights, idle breathing)
-  renderer.draw({ camera, scene, skin: theme.skin, layout: theme.layout, world: store.world, entities: scene.query(camera.viewRect(80)), time: now, hoverId: hover?.id, selectedId: selected?.id, effects: fx, signals: view.roomSignals, activity: view.activity, reducedMotion: instant, theme: theme.palette, modeLabel: $('mode').textContent });
+  renderer.draw({ camera, scene, skin: theme.skin, layout: theme.layout, world: shown(), entities: scene.query(camera.viewRect(80)), time: now, hoverId: hover?.id, selectedId: selected?.id, effects: fx, signals: view.roomSignals, activity: view.activity, reducedMotion: instant, theme: theme.palette, modeLabel: $('mode').textContent });
   if (document.hidden) { running = false; return; }
   if (moving || cameraMoving || fx.length || follow || store.pending.length) requestAnimationFrame(frame);
   else if (ambient) setTimeout(() => requestAnimationFrame(frame), theme.id === 'blueprint' ? 50 : 28); // ~30 fps ambience (~20 on the blueprint)
@@ -136,7 +139,7 @@ canvas.addEventListener('pointermove', e => {
   const hit = scene.pick(wx, wy, pickSlop());
   if (hit?.id !== hover?.id) { hover = hit; canvas.style.cursor = hit ? 'pointer' : 'grab'; invalidate(); }
   const tip = $('tooltip');
-  const text = hit ? hoverText(hit.ref.type === 'room' ? { ...hit.ref, name: hit.location.name } : hit.ref, store.world, { status: hit.kind === 'agent' ? statusLine(hit, store.world, theme.layout) : undefined }) : '';
+  const text = hit ? hoverText(hit.ref.type === 'room' ? { ...hit.ref, name: hit.location.name } : hit.ref, shown(), { status: hit.kind === 'agent' ? statusLine(hit, shown(), theme.layout) : undefined }) : '';
   tip.hidden = !text; tip.textContent = text; tip.style.transform = `translate(${e.offsetX + 14}px, ${e.offsetY + 14}px)`;
 });
 canvas.addEventListener('pointerup', e => {
@@ -185,7 +188,7 @@ function showInspectRef(ref, entity) {
   // The inspector re-renders on every World change; keep what the user is typing and which results are open.
   const text = $('cmd-text'), draft = text?.value ?? '', typing = document.activeElement === text, caret = text?.selectionStart;
   const note = $('cmd-note')?.textContent ?? '', open = [...panel.querySelectorAll('details')].map(d => d.open);
-  panel.innerHTML = `<button class="close" aria-label="Close">×</button>${inspectHTML(ref, store.world, Date.now(), entity?.location, view.places, inspectExtra(ref, entity))}`;
+  panel.innerHTML = `<button class="close" aria-label="Close">×</button>${inspectHTML(ref, shown(), Date.now(), entity?.location, view.places, inspectExtra(ref, entity))}`;
   panel.hidden = false; $('side').hidden = true;
   const next = $('cmd-text');
   if (next) { next.value = draft; if (typing) { next.focus(); next.setSelectionRange(caret, caret); } $('cmd-note').textContent = note; }
@@ -276,7 +279,7 @@ function renderHud() {
   if (hudQueued || !theme) return; hudQueued = true;
   requestAnimationFrame(() => {
     hudQueued = false;
-    const world = store.world, s = summarize(world, a => PRODUCTIVE_STATES.has(scene.get(`agent:${a.id}`)?.anim?.state));
+    const world = shown(), s = summarize(world, a => PRODUCTIVE_STATES.has(scene.get(`agent:${a.id}`)?.anim?.state));
     $('stats').innerHTML = `<span class="n-total"><b>${s.total}</b>Agents</span><span class="n-working" title="${s.assigned} assigned; ${s.working} at their work right now"><b>${s.working}</b>Working</span><span class="n-waiting"><b>${s.waiting}</b>Waiting</span><span class="n-idle"><b>${s.idle}</b>Idle</span><span class="n-attention"><b>${s.attention.length}</b>Attention</span>`;
     $('attention').innerHTML = `<h2>Attention needed (${s.attention.length})</h2>${attentionHTML(s.attention)}`;
     $('feed').innerHTML = `<h2>Recent activity</h2>${feedHTML(world, Date.now())}`;
@@ -301,7 +304,7 @@ function showMode(state) {
 }
 $('scenarios').innerHTML = SCENARIOS.map(([key, text]) => `<button data-sim="${key}">${text}</button>`).join('') + '<button data-sim="demoStep">Meeting room construction: next step (demo)</button><button data-sim="reset" class="danger">Reset simulation</button>';
 $('scenarios').addEventListener('click', e => {
-  const key = e.target.closest('[data-sim]')?.dataset.sim; if (!key) return;
+  const key = e.target.closest('[data-sim]')?.dataset.sim; if (!key || mode !== 'sim') return; // never against live HQ
   if (key === 'demoStep') { if (!demo) { $('sim-note').textContent = 'Open the World with ?demo=construction to run the construction demonstration (a simulated copy of the world).'; return; } demoStep(); return; }
   if (key === 'reset') { sim.stop(); storage.set('hlw:sim-world', null); location.reload(); return; }
   const cancelled = sim.run(key);
@@ -373,6 +376,9 @@ const demoMode = !!demoKind && !!siteWorld;
 if (demoMode) { siteWorld = structuredClone(siteWorld); siteWorld.simulated = true; } // never saved; refuses live HQ events
 applyTheme(params.get('theme') ?? storage.get('hlw:theme') ?? 'real');
 mode = demoMode || requested === 'sim' ? 'sim' : requested === 'hq' || await hqAvailable() ? 'hq' : 'sim';
+// 5E correction (B4): the store takes events from one source family only. Live refuses every simulated event (from the
+// simulator, the dev handle or the console), and the simulation refuses live facts.
+store.family = mode === 'hq' ? 'live' : 'sim';
 if (mode === 'hq') {
   // Live: the simulator is hidden so simulated events can never mix with real ones.
   $('sim-toggle').hidden = true; $('sim-panel').hidden = true;
@@ -445,4 +451,4 @@ if (params.get('shot')) setTimeout(() => applyShot(params.get('shot')), 600); //
 
 $('empty').hidden = Object.keys(store.world.agents).length > 0;
 invalidate();
-window.hillinkWorld = { shot: applyShot, get worldInfo() { return { source: siteSync?.state ?? siteSource, simulated: Boolean(siteWorld?.simulated), generator: siteWorld?.generator ?? null, seed: siteWorld?.seed ?? null, schema: siteWorld?.schema ?? null, fingerprint: siteWorld ? worldFingerprint(siteWorld) : null, historyLength: siteWorld?.history?.length ?? 0, layout: theme?.layout?.id ?? null, error: siteSync?.error ?? siteError }; }, get siteWorld() { return siteWorld; }, get demo() { return demo; }, demoStep, why: id => explainAgent(store.world, id), get commands() { return commandInfo; }, get constructionStatus() { return constructionStatus; }, store, get scene() { return scene; }, get theme() { return theme; }, camera, sim, focus, setTheme: applyTheme }; // Dev handle for tests and console.
+window.hillinkWorld = { shot: applyShot, get worldInfo() { return { source: siteSync?.state ?? siteSource, simulated: Boolean(siteWorld?.simulated), generator: siteWorld?.generator ?? null, seed: siteWorld?.seed ?? null, schema: siteWorld?.schema ?? null, fingerprint: siteWorld ? worldFingerprint(siteWorld) : null, historyLength: siteWorld?.history?.length ?? 0, layout: theme?.layout?.id ?? null, error: siteSync?.error ?? siteError }; }, get siteWorld() { return siteWorld; }, get demo() { return demo; }, demoStep, why: id => explainAgent(store.world, id), get commands() { return commandInfo; }, get constructionStatus() { return constructionStatus; }, store, get scene() { return scene; }, get theme() { return theme; }, camera, get sim() { return mode === 'sim' ? sim : null; }, focus, setTheme: applyTheme }; // Dev handle for tests and console. Live mode exposes no simulator (5E correction B4).

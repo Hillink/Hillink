@@ -4,6 +4,7 @@
 // the World from HQ's snapshot instead (reset). Nothing here invents activity: every World event cites
 // an HQ event or snapshot field.
 import { SCHEMA_VERSION } from '../core/events.mjs';
+import { normalizeDefinition } from '../core/agents.mjs';
 
 const clip = (s, max = 480) => (typeof s === 'string' && s.length > max ? `${s.slice(0, max - 1)}…` : s ?? null);
 const makeEvent = (id, type, at, fields) => ({ v: SCHEMA_VERSION, id, type, at, source: 'hq', ...fields });
@@ -11,7 +12,9 @@ const make = makeEvent;
 
 // What an agent visibly does for a task, from the HQ operation's capability.
 // Pass 5E: the agent definition fields HQ reports, when it reports them (core/agents.mjs normalizes and bounds them).
-const hqDefinition = a => Object.fromEntries(Object.entries({ provider: a.provider, model: a.model, team: a.team, roleDescription: a.description, capabilities: a.capabilities, tools: a.tools }).filter(([, v]) => v != null));
+const hqDefinition = a => Object.fromEntries(Object.entries({ provider: a.provider, model: a.model, team: a.team, roleDescription: a.description, capabilities: a.capabilities, tools: a.tools, meta: a.attribution != null ? { attribution: a.attribution } : undefined }).filter(([, v]) => v != null));
+// 5E correction (B6): the agents an HQ snapshot defines, as registry definitions (for attribution on the server).
+export const hqDefinitions = snap => Object.fromEntries((snap?.agents ?? []).filter(a => a && typeof a.id === 'string').map(a => [a.id, normalizeDefinition({ id: a.id, name: a.name, role: a.role, ...hqDefinition(a) })]).filter(([, d]) => d));
 export function activityForCapability(capability = '') {
   if (/review/.test(capability)) return 'reviewing';
   if (/^(test|verify|security)/.test(capability)) return 'testing';
@@ -90,7 +93,7 @@ export class HqTranslator {
       const runtime = runtimeFor(snap, a), sig = JSON.stringify(runtime);
       if (this.runtime[a.id] === sig) continue;
       this.runtime[a.id] = sig;
-      out.push(make(`hq-rt-${snap.seq}-${a.id}-${hash(sig)}`, 'AGENT_RUNTIME', at, { agentId: a.id, runtime, ...(reset ? { snapshot: true } : {}) }));
+      out.push(make(`hq-rt-${snap.seq}-${a.id}-${hash(sig)}`, 'AGENT_RUNTIME', at, { agentId: a.id, runtime, order: snap.seq * 1000 + 999, ...(reset ? { snapshot: true } : {}) }));
     }
     return out;
   }
@@ -104,7 +107,7 @@ export class HqTranslator {
     else {
       out = { reset: false, events: newer.flatMap(e => this.fromEvent(e)) };
       const state = healthState(snap.health);
-      if (state !== this.health) out.events.push(make(`hq-health-${snap.seq}-${state}`, 'SYSTEM_STATUS', snap.now ?? Date.now(), { systemId: 'hq', state, detail: clip(snap.health?.lastError) }));
+      if (state !== this.health) out.events.push(make(`hq-health-${snap.seq}-${state}`, 'SYSTEM_STATUS', snap.now ?? Date.now(), { systemId: 'hq', state, detail: clip(snap.health?.lastError), order: snap.seq * 1000 + 998 }));
     }
     out.events.push(...this.runtimeEvents(snap, out.reset));
     this.health = healthState(snap.health);
@@ -141,12 +144,18 @@ export class HqTranslator {
       const issue = alert.active && issueFor(alert);
       if (issue) out.push(make(id('alert', alert.key), 'ISSUE_FOUND', alert.openedAt ?? at, issue));
     }
+    // 5E correction (B3, B5): a snapshot restates which agents exist; that is true before anything it says they did, so
+    // registration is stamped no later than the snapshot's earliest fact (the World orders events by time, and work for
+    // an agent it has not registered is refused).
+    const first = Math.min(...out.map(e => e.at).filter(Number.isFinite));
+    for (const e of out) if (e.type === 'AGENT_REGISTERED' || e.type === 'SYSTEM_REGISTERED') e.at = Math.min(e.at, first);
     return out;
   }
 
   fromEvent(e) {
     const d = e.data ?? {}, at = e.at, out = [];
-    const push = (type, fields) => out.push(make(`hq-${e.id}-${out.length}`, type, at, fields));
+    // `order`: HQ's own sequence, which orders events HQ stamped with the same time (core/state.mjs eventOrder).
+    const push = (type, fields) => out.push(make(`hq-${e.id}-${out.length}`, type, at, { ...fields, order: e.seq * 1000 + out.length }));
     switch (e.type) {
       case 'AGENT_REGISTERED':
         push('AGENT_REGISTERED', { agentId: d.id, name: d.name, role: clip(d.role, 120), activity: 'offline', appearance: { real: d.real, fantasy: d.fantasy }, definition: hqDefinition(d) });

@@ -93,7 +93,7 @@ stateDiagram-v2
   READY --> ACTIVE: AGENT_ACTIVATED
   READY --> ERROR
   ACTIVE --> DISABLED: AGENT_DISABLED
-  DISABLED --> ACTIVE
+  DISABLED --> ACTIVE: only if it was READY before
   DISABLED --> REQUESTED
   DRAFT --> RETIRED
   REQUESTED --> RETIRED
@@ -109,17 +109,19 @@ stateDiagram-v2
 Also allowed: REQUESTED, any provisioning stage, WAITING, ERROR and READY can go to DISABLED. The table is `TRANSITIONS` in `core/agents.mjs`.
 
 Presence (`presenceOf`), which is all a view needs:
-- **member**: ACTIVE or READY, or no lifecycle at all (registered the pre 5E way by HQ or the simulator). Can hold work.
-- **candidate**: REQUESTED, provisioning stages, WAITING, ERROR. Staged by the theme, cannot be given work.
-- **absent**: DRAFT, DISABLED, RETIRED. Not in the building, not in the roster or counts.
+- **member**: ACTIVE, or no lifecycle at all (registered the pre 5E way by `AGENT_REGISTERED` from HQ or the simulator). The only presence that can hold work.
+- **candidate**: REQUESTED, provisioning stages, WAITING, ERROR, and READY (provisioned but not activated). Staged by the theme; cannot be given work.
+- **absent**: DRAFT, DISABLED, RETIRED, and a placeholder (an id an event only mentioned). Not in the building, not in the roster or counts.
 
-Guarantees (enforced in `precheck` before the reducer mutates anything, so a refused event leaves the World identical):
-- Only transitions in the table; unknown stages refused; out of order events (older than the current state) refused.
-- `READY` only arrives as a canonical event. No animation, timer or theme can produce it.
-- Work events (`TASK_STARTED`, `AGENT_STARTED_WORK`, thinking, reviewing, testing and so on) are refused for an agent that is not a member.
-- Leaving membership drops the agent's active task back to the queue and ends its meeting.
-- **Source families never mix**: an agent first defined by `hq`/`github`/`platform` (live) can never be changed by `sim`, and a simulated agent never receives HQ facts. `replay` may restate either.
-- `WorldStore.reset` (replay) is idempotent by event id.
+Guarantees (enforced in `precheck` before the reducer mutates anything, so a refused event leaves the World identical). The "5E correction" items were added after the adversarial audit (branch `claude/world-5e-fix-cloud`):
+- Only transitions in the table; unknown stages refused.
+- `READY` only arrives as a canonical event. No animation, timer or theme can produce it. READY is not membership: only `AGENT_ACTIVATED` makes a lifecycle agent a member (5E correction B1).
+- `DISABLED -> ACTIVE` only for an agent that legitimately reached READY (or was a registered member) before; `lifecycle.readied` records it past the bounded history. Otherwise it goes back to REQUESTED (B3).
+- One participation gate (B2): every event that would give an agent a task, an activity, a PR, a message or a meeting seat (`TASK_STARTED`, every agent activity event, `AGENT_MESSAGE` sender and recipient, `MEETING_STARTED` participants) requires every agent it names to be a working member. Only `AGENT_OFFLINE` without a task or PR is allowed for anyone. HQ runtime facts never give work to a non-member either.
+- An id the World has never registered is not a member (B3): work for it is refused; facts that give no work (`AGENT_RUNTIME`, a bare `AGENT_OFFLINE`) create a *placeholder* (absent, cannot work). `AGENT_REGISTERED` or the lifecycle establishes it, and a later `AGENT_REQUESTED` for that id provisions it normally.
+- Leaving membership drops the agent's active task back to the queue and removes it from every open meeting (a meeting left empty ends).
+- **Source families never mix** (B4): an agent, task or meeting first defined by `hq`/`github`/`platform` (live) can never be changed by `sim`, and a simulated one never receives live facts. Every agent an event refers to is checked (`agentId`, `toAgentId`, `agentIds[]`, `reviewerId`, `evidence.by`, and the owner of the task or meeting it names). `replay` is not a family and has no wildcard: a replay restates events with their original sources. The live page locks its store to `live` (`WorldStore.family`) and exposes no simulator.
+- **Live equals replay** (B5): `eventOrder` is one total canonical order (time; then source and the source's own sequence, HQ's `order`; then meaning, e.g. registration before lifecycle, READY before ACTIVATED; then id). The store keeps its received history in that order; a late event re-applies the history from the last checkpoint before its place, so live state is always the fold a replay would compute. Duplicate ids change nothing.
 - Lifecycle history is kept per agent (last 12 entries).
 
 HQ today supports only part of this: an agent HQ registers is simply there (ACTIVE). The provisioning states exist so a backend that does provision can report them, and so the development harness can exercise them. Nothing in the World advances them on its own.
@@ -180,6 +182,8 @@ Capture metadata (paths, world fingerprint, fps): `notes.json`, `shots.json`, `c
 
 `tools/hillink-world/tests/pass5e.test.mjs` (11 tests) covers the registry and schema, default migration (the default agents render identically), lifecycle transitions and fail closed refusal, READY only from events, source family separation, the interpreter's read-only boundary, replay idempotency, and dynamic agents end to end. The Living HQ regressions are `hq-life.test.mjs` and `truth.test.mjs`. Run everything with `npm run test:world` (17 files): **162 passed, 0 failed** on 2026-09-30 at head 802ea45, Living HQ regressions included.
 
+5E correction: `tests/pass5e-correction.test.mjs` (14 tests) reproduces each audit blocker B1-B7 and proves it now fails closed. With it, `npm run test:world` (18 files): **176 passed, 0 failed**.
+
 ## Limitations
 
 - HQ does not provision agents yet. It reports registration only, so live agents are always ACTIVE. The provisioning states are exercised only by the labelled simulator.
@@ -188,13 +192,16 @@ Capture metadata (paths, world fingerprint, fps): `notes.json`, `shots.json`, `c
 - Named sequences are recorded in the theme table, but most are staged by placement, clip and caption rather than bespoke animation. No new art in this pass.
 - Fantasy uses Real's staging until 5G.
 - `permissions` are descriptive in the World; HQ is the enforcer.
+- A store restored from a saved world (no history) cannot place events older than that world; they are checked against it. A store's history is bounded (20,000 events, folded into its base world in checkpoints); an event older than the folded part is refused as too late rather than applied out of order.
+- Git attribution (B6) reads the live registry on the server: the defaults plus the agents HQ reports. HQ does not report `attribution` yet, so today only the defaults attribute; an HQ agent with `attribution: { tokens: [...] }` will attribute with no World change.
 - `EXTRA_AGENTS` in the simulator (sales, support ...) still register the pre 5E way; they get definitions through `definitionOf` like any other agent.
 
 ## Migration notes
 
-- Per id tables are gone as sources of truth: `core/roles.mjs`, `render/looks.mjs`, the simulator roster and git attribution now read `DEFAULT_DEFINITIONS`. Each default carries a `figure` block with the exact previous renderer parameters, so the existing agents look the same.
+- Per id tables are gone as sources of truth: `core/roles.mjs`, `render/looks.mjs` and the simulator roster read `DEFAULT_DEFINITIONS`; git attribution reads the live registry (5E correction B6) through declarative `meta.attribution: { tokens: [...] }` words, never a regex. Each default carries a `figure` block with the exact previous renderer parameters, so the existing agents look the same.
 - `AGENT_REGISTERED` still sets `name`, `role`, `kind`, `appearance` on the agent (older code reads them) and now also merges them into `agent.definition`. The first source to touch an agent is recorded as `agent.origin`.
-- An agent with no `lifecycle` is treated as ACTIVE, so worlds, snapshots and journals saved before 5E replay unchanged.
+- An agent with no `lifecycle` registered by `AGENT_REGISTERED` is treated as ACTIVE, so worlds, snapshots and journals saved before 5E replay unchanged. An HQ snapshot stamps its registrations no later than its earliest fact, so its tasks land on registered agents.
+- 5E correction (B7): the view, the renderer frame, the HUD and the inspector receive read-only views of the World (`core/readonly.mjs`); a write through `entity.agent`, `entity.task` or a skin's `env.world` throws.
 - New event types (`AGENT_DEFINED`, `AGENT_REQUESTED`, `AGENT_PROVISIONING`, `…_WAITING`, `…_FAILED`, `AGENT_READY`, `AGENT_ACTIVATED`, `AGENT_DISABLED`, `AGENT_RETIRED`) are additive; an older World rejects them as unknown without crashing.
 - `WorldView` takes an optional fifth argument, the interpreter (Real by default). Views now spawn scene entities through `spawnEntity`.
 - To add a theme: `defineTheme(id, { extends, agent, events })`. To add a rig: `defineRig`. To add an entity kind: `defineEntityKind`.

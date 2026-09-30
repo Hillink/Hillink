@@ -1,7 +1,7 @@
 // Development simulation (brief §16). Emits World events tagged source "sim" into a store.
 // It has no network access and no adapter: it cannot read or write Hillink data.
 import { makeEvent } from '../core/events.mjs';
-import { DEFAULT_DEFINITIONS } from '../core/agents.mjs';
+import { DEFAULT_DEFINITIONS, canWork } from '../core/agents.mjs';
 import { DEV_AGENTS, DEV_ONBOARDING } from './dev-agents.mjs';
 
 // Pass 5E: the simulated team comes from the registry's default definitions (core/agents.mjs), like any agent.
@@ -156,7 +156,7 @@ export class Simulator {
     });
   }
   teamMeeting() {
-    const ids = Object.keys(this.store.world.agents).slice(0, 4);
+    const ids = Object.values(this.store.world.agents).filter(canWork).map(a => a.id).slice(0, 4); // only working members can meet
     this.meeting = this.id('meeting');
     const pr = Object.values(this.store.world.prs).at(-1);
     this.emit('MEETING_STARTED', { meetingId: this.meeting, agentIds: ids, topic: 'Plan the payout retry fix (simulated)', decision: 'Retry in the webhook, or in a scheduled job?', evidence: pr ? [{ kind: 'pr', ref: pr.id, summary: pr.title }] : [], taskId: pr?.taskId ?? undefined });
@@ -164,7 +164,7 @@ export class Simulator {
   endMeeting() { if (this.meeting) this.emit('MEETING_ENDED', { meetingId: this.meeting, outcome: 'Retry in a scheduled job (simulated decision)' }); this.meeting = null; }
   ownerNeeded() { this.emit('ISSUE_FOUND', { issueId: this.id('issue'), title: 'Approve production SQL (simulated)', severity: 'high', location: 'command', agentId: 'codex', owner: true }); this.emit('AGENT_WAITING', { agentId: 'codex', detail: 'Waiting for Kyle' }); }
   queueWork(count = 5) { for (let i = 0; i < count; i++) this.emit('TASK_CREATED', { taskId: this.id('task'), title: `Queued task ${this.n}` }); }
-  allIdle() { for (const a of Object.values(this.store.world.agents)) this.emit('AGENT_IDLE', { agentId: a.id }); }
+  allIdle() { for (const a of Object.values(this.store.world.agents)) if (canWork(a)) this.emit('AGENT_IDLE', { agentId: a.id }); }
   systemError() {
     this.emit('SYSTEM_STATUS', { systemId: 'supabase', state: 'down', detail: 'Connection refused (simulated)' });
     this.emit('ISSUE_FOUND', { issueId: this.id('issue'), title: 'Database unreachable', severity: 'high', location: 'servers' });

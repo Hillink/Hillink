@@ -218,6 +218,8 @@ test('the demonstration is simulated and labelled: its facts only change a simul
   const sim = structuredClone(live); sim.simulated = true;
   assert.equal(applyHqEvent(sim, hq('OBJECTIVE_CREATED', { objectiveId: 'x' })).applied, false, 'a simulated world refuses live facts');
   const store = new WorldStore(emptyWorld()), demo = createConstructionDemo({ siteWorld: sim, store, now: () => 1 });
+  // The demo runs in simulation mode, where the simulated team is registered (5E correction: only members work or meet).
+  for (const id of ['claude', 'codex']) store.dispatch(makeEvent('AGENT_REGISTERED', { agentId: id, name: id, role: 'r' }, { source: 'sim', at: 0 }));
   const stages = [];
   while (!demo.done) { const r = demo.applyCanonical(); for (const x of r) assert.equal(x.applied, true, `${x.type}: ${x.reason}`); demo.applyAgents(); store.flush(); stages.push(demo.project?.stage + (demo.project?.blocked ? '!blocked' : '') + (demo.project?.rework ? '!rework' : '')); }
   assert.equal(stages.length, DEMO_STEPS.length);

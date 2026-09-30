@@ -48,11 +48,15 @@ test('state: task lifecycle drives agent activity and reports changed keys', () 
   assert.equal(w.tasks.t1.status, 'failed');
 });
 
-test('state: an event for an unknown agent creates an unregistered placeholder', () => {
+test('state: an event for an unknown agent never makes it a working member (5E correction B3)', () => {
   const w = emptyWorld();
-  applyEvent(w, ev('AGENT_TESTING', { agentId: 'ghost' }));
+  // Work for an id the World has never registered is refused outright: it neither creates a member nor mutates anything.
+  assert.throws(() => applyEvent(w, ev('AGENT_TESTING', { agentId: 'ghost' })), /ghost is unknown, not a working member/);
+  assert.equal(w.agents.ghost, undefined);
+  // A fact that gives no work (it is offline) may mention it: it becomes an unregistered placeholder, absent from the World.
+  applyEvent(w, ev('AGENT_OFFLINE', { agentId: 'ghost' }));
   assert.equal(w.agents.ghost.role, 'Unregistered agent');
-  assert.equal(w.agents.ghost.activity, 'testing');
+  assert.equal(w.agents.ghost.placeholder, true);
 });
 
 test('store: batches, orders by time, dedupes by id, and quarantines invalid events', () => {
@@ -61,11 +65,11 @@ test('store: batches, orders by time, dedupes by id, and quarantines invalid eve
   store.subscribe(changed => calls.push([...changed]));
   const later = ev('AGENT_IDLE', { agentId: 'a' }, 2000);
   const earlier = ev('AGENT_TESTING', { agentId: 'a' }, 1000);
-  store.dispatchAll([later, earlier, later, ev('AGENT_IDLE', {})]);
+  store.dispatchAll([later, earlier, later, ev('AGENT_IDLE', {}), ev('AGENT_REGISTERED', { agentId: 'a', name: 'A', role: 'r' }, 500)]);
   store.flush();
   assert.equal(calls.length, 1, 'one notification per flush');
   assert.equal(store.world.agents.a.activity, 'idle', 'later event wins after sorting');
-  assert.equal(store.world.seq, 2, 'duplicate id applied once');
+  assert.equal(store.world.seq, 3, 'duplicate id applied once');
   assert.equal(store.rejected.length, 1);
   store.dispatch(later); assert.equal(store.flush().size, 0, 'redelivery is a no-op');
   store.replace(emptyWorld());

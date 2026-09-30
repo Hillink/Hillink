@@ -7,7 +7,7 @@
 // Every event id derives from the evidence itself (sha, review id, check state), so polling is idempotent.
 import { SCHEMA_VERSION } from '../core/events.mjs';
 
-import { DEFAULT_DEFINITIONS } from '../core/agents.mjs';
+import { DEFAULT_DEFINITIONS, attribute } from '../core/agents.mjs';
 const PASS_DIR ='tools/hillink-world/world/passes';
 const SAFE_REF = /^(?!-)[\w./-]{1,120}$/;
 const clip = (s, n = 160) => (typeof s === 'string' ? (s.length > n ? `${s.slice(0, n - 1)}…` : s) : null);
@@ -15,11 +15,9 @@ const event = (id, type, at, fields) => ({ v: SCHEMA_VERSION, id, type, at, sour
 
 // Which World agent a commit or review belongs to (co-author trailers, author, reviewer login).
 // Pass 5E: the patterns come from the registry (core/agents.mjs meta.attribution), not from code.
-export function agentFor(...texts) {
-  const t = texts.filter(Boolean).join(' ').toLowerCase();
-  for (const d of Object.values(DEFAULT_DEFINITIONS)) if (d.meta?.attribution && new RegExp(d.meta.attribution).test(t)) return d.id;
-  return null;
-}
+// 5E correction (B6): from the live registry (createConstructionSource's `registry`), so an agent HQ defines at runtime
+// is attributed exactly like a default one; agentFor() is the default registry alone.
+export const agentFor = (...texts) => attribute(DEFAULT_DEFINITIONS, ...texts);
 const CI_RUNNING = new Set(['IN_PROGRESS', 'QUEUED', 'PENDING', 'WAITING', 'REQUESTED', 'EXPECTED']);
 const CI_FAILED = new Set(['FAILURE', 'ERROR', 'TIMED_OUT', 'CANCELLED', 'ACTION_REQUIRED', 'STARTUP_FAILURE']);
 // One overall CI state for a head commit from GitHub's status rollup.
@@ -38,7 +36,8 @@ export function ciState(rollup = []) {
 }
 
 // run(cmd, args) -> Promise<stdout>; injected so tests never touch a real repository.
-export function createConstructionSource({ run, now = () => Date.now() }) {
+// registry() -> (a promise of) the live agent definitions (5E correction B6); defaults when none is given.
+export function createConstructionSource({ run, now = () => Date.now(), registry = () => DEFAULT_DEFINITIONS }) {
   const status = { git: null, gh: null, fetchedAt: null, error: null, passes: 0 };
   const git = (...args) => run('git', args);
   const gh = (...args) => run('gh', args);
@@ -60,6 +59,9 @@ export function createConstructionSource({ run, now = () => Date.now() }) {
 
   async function poll() {
     const events = [];
+    let reg = DEFAULT_DEFINITIONS;
+    try { reg = (await registry()) ?? DEFAULT_DEFINITIONS; } catch { /* the defaults still attribute */ }
+    const agentFor = (...texts) => attribute(reg, ...texts);
     try { await git('fetch', '--quiet', 'origin'); status.fetchedAt = now(); status.git = true; }
     catch (e) { status.git = false; status.error = `git fetch failed: ${clip(e.message, 120)}`; }
     // Pull requests (GitHub). Without gh the World still shows plans, commits and merges from git.

@@ -1,4 +1,6 @@
 // Canvas 2D renderer. Draws a frame with a replaceable skin (render/iso-skin.mjs today). It receives a frame description; it never reads World state or backends directly.
+// 5E correction (B7): the World in a frame is a read-only view (core/readonly.mjs): a skin that writes to it throws.
+import { readonly } from '../core/readonly.mjs';
 
 export function createCanvasRenderer(canvas, { skin = null } = {}) {
   const ctx = canvas.getContext('2d');
@@ -10,7 +12,7 @@ export function createCanvasRenderer(canvas, { skin = null } = {}) {
       canvas.style.width = `${width}px`; canvas.style.height = `${height}px`;
     },
     draw(frame) {
-      const { camera, entities, time, hoverId, selectedId, effects, signals, reducedMotion, theme, world, layout, activity } = frame;
+      const { camera, entities, time, hoverId, selectedId, effects, signals, reducedMotion, theme, layout, activity } = frame, world = readonly(frame.world);
       const skin = frame.skin ?? this.skin;
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       skin.background(ctx, camera, theme);

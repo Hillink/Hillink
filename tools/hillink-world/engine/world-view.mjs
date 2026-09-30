@@ -10,6 +10,7 @@ import { PRODUCTIVE_ACTIVITIES as PRODUCTIVE } from '../core/truth.mjs';
 import { ACTIVITY_PLACE } from '../core/behavior.mjs';
 import { createInterpreter } from '../themes/interpreter.mjs';
 import { spawnEntity } from '../core/entities.mjs';
+import { readonly } from '../core/readonly.mjs';
 import { definitionOf } from '../core/agents.mjs';
 import { resolveAppearance, rigProfileOf } from '../render/appearance.mjs';
 const HANDOFF_MS = 1500;
@@ -45,7 +46,10 @@ export class WorldView {
     });
   }
   // changed: Set of keys from the store ('*' means rebuild everything).
+  // 5E correction (B7): the view, and everything it hands to renderers (entity.agent, entity.task, entity.system),
+  // holds read-only views of the World: no renderer, theme or appearance code can write a canonical fact through them.
   sync(world, changed, now) {
+    world = readonly(world);
     this.world = world;
     const all = changed.has('*');
     const agentsChanged = all || [...changed].some(k => k.startsWith('agent:'));

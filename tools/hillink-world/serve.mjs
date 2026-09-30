@@ -13,6 +13,8 @@ import { fileURLToPath } from 'node:url';
 import os from 'node:os';
 import { execFile } from 'node:child_process';
 import { createConstructionSource } from './adapters/git.mjs';
+import { hqDefinitions } from './adapters/hq.mjs';
+import { DEFAULT_DEFINITIONS } from './core/agents.mjs';
 import { openWorldFile } from './procgen/persist.mjs';
 import { applyHqEvent, fromHqActivity } from './procgen/contract.mjs';
 
@@ -30,13 +32,13 @@ export function trimSnapshot(s) {
     const d = e.data ?? {};
     if (e.type === 'TASK_CREATED') return pick(d, ['id', 'title', 'operation', 'capability', 'safety', 'ownerAction']);
     if (e.type === 'WORKER_EVENT') return pick(d, ['runId', 'kind', 'summary', 'result', 'completedTests', 'url', 'toAgentId', 'retryAt']);
-    if (e.type === 'AGENT_REGISTERED') return pick(d, ['id', 'name', 'role', 'real', 'fantasy', 'provider', 'model', 'team', 'description', 'capabilities', 'tools']);
+    if (e.type === 'AGENT_REGISTERED') return pick(d, ['id', 'name', 'role', 'real', 'fantasy', 'provider', 'model', 'team', 'description', 'capabilities', 'tools', 'attribution']);
     return pick(d, ['agentId', 'taskId', 'runId', 'status', 'detail', 'retryAt', 'reason', 'key', 'kind', 'ownerMustAct', 'ownerAction']);
   };
   return {
     seq: s.seq, now: s.now,
     health: { controller: s.health?.controller ?? null, lastError: s.health?.lastError ?? null },
-    agents: (s.agents ?? []).map(a => pick(a, ['id', 'name', 'role', 'real', 'fantasy', 'status', 'assignment', 'detail', 'retryAt', 'executionAdapter', 'adapterAvailable'])),
+    agents: (s.agents ?? []).map(a => pick(a, ['id', 'name', 'role', 'real', 'fantasy', 'status', 'assignment', 'detail', 'retryAt', 'executionAdapter', 'adapterAvailable', 'attribution'])),
     tasks: (s.tasks ?? []).map(t => ({
       ...pick(t, ['id', 'title', 'stage', 'agentId', 'runId', 'capability', 'operation', 'safety', 'preferredAgentId', 'requestedBy', 'blocker', 'ownerAction', 'createdAt', 'claimedAt', 'endedAt']),
       // The last few evidence lines (kind, short summary, time) so a reload keeps the task's story; raw payloads stay in HQ.
@@ -255,8 +257,11 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
   const port = Number(process.env.WORLD_PORT || 4320);
   const repo = path.resolve(root, '../..');
   const run = (cmd, args) => new Promise((resolve, reject) => execFile(cmd, args, { cwd: repo, timeout: 30000, maxBuffer: 8e6, windowsHide: true }, (e, out) => (e ? reject(e) : resolve(out))));
+  // 5E correction (B6): commits and reviews are attributed from the live registry: the defaults plus the agents HQ defines.
+  const registryHq = process.env.WORLD_HQ === '0' ? null : hqClient(process.env.HQ_URL || 'http://127.0.0.1:4312');
+  const registry = async () => ({ ...DEFAULT_DEFINITIONS, ...(registryHq ? hqDefinitions(await registryHq().catch(() => null)) : {}) });
   const construction = process.env.WORLD_GIT === '0' ? null : constructionFeed({
-    source: createConstructionSource({ run }),
+    source: createConstructionSource({ run, registry }),
     journal: createJournal(path.join(process.env.WORLD_STATE_DIR || path.join(os.homedir(), '.hillink-world'), 'construction.jsonl')),
     intervalMs: Number(process.env.WORLD_GIT_INTERVAL_MS || 60000),
   });

@@ -119,18 +119,19 @@ test('3. two dynamic agents with different roles, looks and rigs coexist without
 
 test('4. lifecycle transitions fail closed, and a refused event leaves the World exactly as it was', () => {
   const store = new WorldStore(emptyWorld());
-  const tryEvent = e => { const before = snapshot(store.world); store.dispatch(e); store.flush(); const refused = store.rejected.at(-1)?.event === e; if (refused) assert.equal(snapshot(store.world), before, `${e.type} refused without side effects`); return !refused; };
+  const tryEvent = e => { const before = snapshot(store.world); store.dispatch(e); store.flush(); const refused = store.rejected.some(r => r.event === e); if (refused) assert.equal(snapshot(store.world), before, `${e.type} refused without side effects`); return !refused; };
   assert.ok(tryEvent(ev('AGENT_REQUESTED', { agentId: 'x1', definition: { name: 'X' } }, { at: 100 })));
   assert.ok(!tryEvent(ev('AGENT_READY', { agentId: 'x1' }, { at: 101 })), 'READY straight from REQUESTED is refused');
   assert.ok(!tryEvent(ev('AGENT_ACTIVATED', { agentId: 'x1' }, { at: 101 })), 'ACTIVE before READY is refused');
   assert.ok(!tryEvent(ev('AGENT_PROVISIONING', { agentId: 'x1', stage: 'SUMMONING' }, { at: 101 })), 'an unknown stage is refused');
   assert.ok(!tryEvent(ev('TASK_STARTED', { agentId: 'x1', taskId: 't' }, { at: 101 })), 'a candidate cannot be given work');
   assert.ok(tryEvent(ev('AGENT_PROVISIONING', { agentId: 'x1', stage: 'TESTING' }, { at: 105 })));
-  assert.ok(!tryEvent(ev('AGENT_PROVISIONING', { agentId: 'x1', stage: 'CONFIGURING' }, { at: 103 })), 'an older (out-of-order) event is refused');
+  // 5E correction (B5): a late event takes its canonical place (as a replay would put it) instead of being dropped.
+  assert.ok(tryEvent(ev('AGENT_PROVISIONING', { agentId: 'x1', stage: 'CONFIGURING' }, { at: 103 })), 'a late event lands in time order');
   assert.ok(tryEvent(ev('AGENT_READY', { agentId: 'x1' }, { at: 106 })));
   assert.ok(tryEvent(ev('AGENT_RETIRED', { agentId: 'x1' }, { at: 107 })));
   for (const t of ['AGENT_ACTIVATED', 'AGENT_REQUESTED', 'AGENT_DISABLED']) assert.ok(!tryEvent(ev(t, { agentId: 'x1' }, { at: 200 })), `RETIRED is terminal (${t} refused)`);
-  assert.deepEqual(store.world.agents.x1.lifecycle.history.map(h => h.state), ['REQUESTED', 'TESTING', 'READY', 'RETIRED']);
+  assert.deepEqual(store.world.agents.x1.lifecycle.history.map(h => h.state), ['REQUESTED', 'CONFIGURING', 'TESTING', 'READY', 'RETIRED']);
   // The table is total over the states and only READY leads to ACTIVE.
   for (const s of LIFECYCLE) assert.ok(Array.isArray(TRANSITIONS[s]), s);
   assert.deepEqual(LIFECYCLE.filter(s => TRANSITIONS[s].includes('ACTIVE')).sort(), ['DISABLED', 'READY']);
@@ -199,7 +200,7 @@ test('10 and 11. live and simulated sources never touch each other\'s agents; on
     ev('AGENT_PROVISIONING', { agentId: 'sim1', stage: 'TESTING' }, { source: 'hq', at: 3 }), ev('AGENT_REGISTERED', { agentId: 'sim1', name: 'x', role: 'y' }, { source: 'hq', at: 3 })]); s.flush();
   assert.equal(snapshot(s.world), before, 'every cross-source change was refused');
   assert.equal(s.rejected.length, 4);
-  assert.equal(checkAgentEvent(s.world.agents.live1, ev('AGENT_DISABLED', { agentId: 'live1' }, { source: 'replay', at: 9 })), null, 'replay may restate either');
+  assert.match(checkAgentEvent(s.world.agents.live1, ev('AGENT_DISABLED', { agentId: 'live1' }, { source: 'replay', at: 9 })), /cannot change agent/, 'replay is not a wildcard (5E correction B4)');
   // One canonical agent, two representations: a single registry entry, a theme override only where it differs.
   const def = normalizeDefinition(A), real = resolveAppearance(def.appearance, 'real'), fantasy = resolveAppearance(def.appearance, 'fantasy');
   assert.equal(real.archetype, 'human'); assert.equal(fantasy.archetype, 'elf');

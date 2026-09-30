@@ -101,6 +101,7 @@ test('scenarios: a newer scenario on the same agents cancels the older one; idle
   assert.equal(Object.keys(w.prs).length, 0, 'the cancelled journey emitted nothing more');
   // Reducer rule, independent of the simulator.
   const w2 = emptyWorld();
+  applyEvent(w2, ev('AGENT_REGISTERED', { agentId: 'a', name: 'A', role: 'r' }, 999)); // 5E correction: meetings seat registered members only
   applyEvent(w2, ev('MEETING_STARTED', { meetingId: 'm', agentIds: ['a'] }));
   applyEvent(w2, ev('AGENT_IDLE', { agentId: 'a' }, 1001)); assert.equal(w2.agents.a.meetingId, 'm');
   applyEvent(w2, ev('AGENT_REVIEWING', { agentId: 'a' }, 1002)); assert.equal(w2.agents.a.meetingId, null, 'real work does');

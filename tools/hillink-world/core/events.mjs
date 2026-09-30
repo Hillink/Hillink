@@ -99,5 +99,6 @@ export function validProgress(p) {
 let counter = 0;
 export function makeEvent(type, fields, { source = 'sim', at = Date.now() } = {}) {
   counter = (counter + 1) % 1e9;
-  return { v: SCHEMA_VERSION, id: `${source}-${at.toString(36)}-${counter.toString(36)}`, type, at, source, ...fields };
+  // The counter is zero-padded so that, at one timestamp, ids sort in emission order (core/state.mjs eventOrder).
+  return { v: SCHEMA_VERSION, id: `${source}-${at.toString(36)}-${counter.toString(36).padStart(6, '0')}`, type, at, source, ...fields };
 }

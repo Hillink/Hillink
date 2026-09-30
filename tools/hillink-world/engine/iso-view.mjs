@@ -4,6 +4,7 @@
 //   plus assemble/survey at a construction site (only for a real piece of pass evidence that just arrived).
 // Truth rule: work/type/inspect/read play only for a productive activity, at the assigned station, after arriving.
 import { WorldView } from './world-view.mjs';
+import { readonly } from '../core/readonly.mjs';
 import { LAYERS } from './scene.mjs';
 import { startPath } from './motion.mjs';
 import { stationPoint } from '../core/behavior.mjs';
@@ -181,6 +182,7 @@ export class IsoWorldView extends WorldView {
     if (path) startPath(e, path, now);
   }
   sync(world, changed, now) {
+    world = readonly(world); // 5E correction (B7): see WorldView.sync
     super.sync(world, changed, now);
     if (changed.has('*') || changed.has('meetings')) this.syncMeetings(world);
     if (changed.has('*') || [...changed].some(k => k.startsWith('pass:'))) this.syncPasses(world, changed.has('*'), now);

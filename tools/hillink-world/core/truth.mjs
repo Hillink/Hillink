@@ -12,6 +12,8 @@
 //      animation or a button click can never make an agent look productive without a verified run.
 // Agents with no runtime (the dev simulator's) keep their event-driven activity; the page labels them SIMULATION.
 
+import { canWork } from './agents.mjs';
+
 export const AGENT_STATES = ['WORKING', 'STARTING', 'IDLE', 'WAITING', 'NEEDS_ATTENTION', 'FAILED', 'OFFLINE', 'NOT_CONNECTED', 'UNKNOWN'];
 export const STATE_LABEL = {
   WORKING: 'Working', STARTING: 'Starting', IDLE: 'Idle', WAITING: 'Waiting', NEEDS_ATTENTION: 'Needs attention',
@@ -90,6 +92,8 @@ export function reconcileAgents(world, at, setActivity) {
       }
       a.truth = { ...truth, since: !prev || prev.state !== truth.state ? at : prev.since };
     }
+    // 5E correction (B2): runtime facts never give work or activity to an agent that is not a working member.
+    if (!canWork(a)) { if (moved) changed.push(a.id); continue; }
     if (truth.state !== 'WORKING' && a.taskId && truth.taskId !== a.taskId && !['WAITING', 'NEEDS_ATTENTION'].includes(truth.state)) a.taskId = null;
     if (truth.state === 'WORKING' && truth.taskId) a.taskId = truth.taskId;
     if (activity !== a.activity) { setActivity(a, activity, { type: 'AGENT_RUNTIME', at, detail: truth.reason, source: 'hq' }); changed.push(a.id); }

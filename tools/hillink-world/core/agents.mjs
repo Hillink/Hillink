@@ -71,11 +71,11 @@ export function mergeDefinitions(...defs) {
 // render/looks.mjs, the simulator's roster) into the shared schema. `figure` holds the exact parameters the current
 // figure renderers already used for each theme, so these agents look the same as before this pass.
 export const DEFAULT_DEFINITIONS = Object.fromEntries([
-  { id: 'claude', name: 'Claude', kind: 'agent', provider: 'anthropic', role: 'Engineering: builder', roleTitle: 'Implementation', roleDescription: 'Builds features and fixes. Through HQ today it runs read-only repository reviews only.', team: 'Engineering', responsibilities: ['implementation', 'construction'], workstation: { kind: 'desk', uses: ['work'] }, meta: { attribution: '\\bclaude\\b' },
+  { id: 'claude', name: 'Claude', kind: 'agent', provider: 'anthropic', role: 'Engineering: builder', roleTitle: 'Implementation', roleDescription: 'Builds features and fixes. Through HQ today it runs read-only repository reviews only.', team: 'Engineering', responsibilities: ['implementation', 'construction'], workstation: { kind: 'desk', uses: ['work'] }, meta: { attribution: { tokens: ['claude'] } },
     appearance: { archetype: 'human', rig: 'humanoid', palette: { primary: '#e2711d' }, themes: {
       real: { archetype: 'human', figure: { shirt: '#d9773f', sleeve: '#d9773f', pants: '#3a3f4a', hair: '#5a3a22', skin: '#f1c7a0', belt: '#4a3a2a', hoodie: true, glasses: true, screen: '#ffb27a', package: 'box' } },
       fantasy: { archetype: 'dwarf', figure: { shirt: '#b5552b', sleeve: '#b5552b', pants: '#5a3b24', hair: '#c4521f', beard: '#c4521f', beardLong: true, skin: '#eab28a', hat: 'helmet', hatColor: '#9aa6b4', horns: true, belt: '#3c2a1a', scale: 0.86, wide: 1.2, headScale: 1.08, package: 'scroll' } } } } },
-  { id: 'codex', name: 'Codex', kind: 'agent', provider: 'openai', role: 'Engineering: QA and security', roleTitle: 'Investigation and review', roleDescription: 'Audits, traces behavior, verifies and reviews work, and specifies what to build next. Not an implementation agent.', team: 'Engineering', responsibilities: ['review', 'testing', 'inspection'], workstation: { kind: 'desk', uses: ['work', 'inspect'] }, meta: { attribution: 'codex' },
+  { id: 'codex', name: 'Codex', kind: 'agent', provider: 'openai', role: 'Engineering: QA and security', roleTitle: 'Investigation and review', roleDescription: 'Audits, traces behavior, verifies and reviews work, and specifies what to build next. Not an implementation agent.', team: 'Engineering', responsibilities: ['review', 'testing', 'inspection'], workstation: { kind: 'desk', uses: ['work', 'inspect'] }, meta: { attribution: { tokens: ['codex'] } },
     appearance: { archetype: 'human', rig: 'humanoid', palette: { primary: '#3a86ff' }, themes: {
       real: { archetype: 'human', figure: { shirt: '#2d4f8e', pants: '#1f2530', hair: '#1a1a1d', skin: '#d8a883', headset: true, badge: '#e8f1ff', vest: null, jacket: '#243f73', screen: '#5ee1ff', package: 'box' } },
       fantasy: { archetype: 'cyborg', figure: { shirt: '#3c4a5c', pants: '#2a323d', skin: '#b8c4d0', skinTone2: 'rgba(120,135,155,0.55)', hair: '#5d6b7c', bald: true, visor: '#39e6ff', antenna: true, metalArm: true, core: true, glove: '#9aa6b4', package: 'scroll' } } } } },
@@ -112,6 +112,23 @@ export function definitionOf(a) {
 // Every agent the World knows, as definitions (defaults that are present plus dynamic ones).
 export const registryOf = world => Object.fromEntries(Object.values(world?.agents ?? {}).map(a => [a.id, definitionOf(a)]));
 
+// ---- Attribution (5E correction B6): which agent a commit or review belongs to, from the registry, for ANY agent.
+// Declarative only: meta.attribution = { tokens: ['name', ...] }, literal words matched case-insensitively against the
+// words of an author or Co-Authored-By trailer. Nothing supplied by a definition is ever compiled or executed (no regex),
+// and anything malformed simply attributes nothing.
+const TOKEN = /^[a-z0-9][a-z0-9_.-]{1,39}$/;
+export function attributionTokens(def) {
+  const t = def?.meta?.attribution?.tokens;
+  return Array.isArray(t) ? [...new Set(t.filter(x => typeof x === 'string').map(x => x.trim().toLowerCase()).filter(x => TOKEN.test(x)))].slice(0, 8) : [];
+}
+// registry: { id: definition } or [definition]. Returns the matching agent id, or null. Ties go to the lowest id.
+export function attribute(registry, ...texts) {
+  const words = new Set(texts.filter(x => typeof x === 'string').join(' ').toLowerCase().split(/[^a-z0-9_.-]+/).flatMap(w => [w, ...w.split(/[._-]+/)]).filter(Boolean));
+  const defs = (Array.isArray(registry) ? registry : Object.values(registry ?? {})).filter(d => d && typeof d.id === 'string').sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+  for (const d of defs) if (attributionTokens(d).some(t => words.has(t))) return d.id;
+  return null;
+}
+
 // ---- Lifecycle. Independent of theme. HQ today supports only part of it: an agent HQ registers is simply there
 // (ACTIVE). The provisioning states exist so that a backend which does provision can report them, and so that the
 // development harness can exercise them; nothing in the World advances them on its own.
@@ -140,19 +157,29 @@ export const isLifecycleEvent = type => Object.hasOwn(LIFECYCLE_EVENTS, type);
 export const targetState = e => (e.type === 'AGENT_PROVISIONING' ? e.stage : LIFECYCLE_EVENTS[e.type]);
 
 // Where an agent stands in the World, from its lifecycle alone: a member of the team (present and usable), a candidate
-// (being provisioned: not yet allowed to work), or absent (disabled or retired: not in the building).
+// (being provisioned, or READY but not yet activated: not allowed to work), or absent (disabled, retired, a draft, or a
+// placeholder the World only saw mentioned).
+// 5E correction (B1, B3): only ACTIVE is a working member, plus an agent registered the pre-5E way (AGENT_REGISTERED by
+// HQ or the simulator, no lifecycle). A placeholder (an id an event merely mentioned) is never a member.
 export function presenceOf(a) {
-  const s = a?.lifecycle?.state ?? 'ACTIVE'; // no lifecycle: registered the pre-5E way, by HQ or the simulator
-  if (s === 'ACTIVE' || s === 'READY') return 'member';
+  if (!a) return 'absent';
+  const s = a.lifecycle?.state;
+  if (!s) return a.placeholder ? 'absent' : 'member'; // no lifecycle: registered the pre-5E way
+  if (s === 'ACTIVE') return 'member';
   if (s === 'DISABLED' || s === 'RETIRED' || s === 'DRAFT') return 'absent';
   return 'candidate';
 }
 export const canWork = a => presenceOf(a) === 'member';
+// Whether an agent has legitimately reached READY (or was a working member) at some point: the one condition under
+// which DISABLED may return straight to ACTIVE. A pre-5E registered agent was a working member.
+export const readied = a => Boolean(a && (a.lifecycle ? a.lifecycle.readied : !a.placeholder));
 
 // Event sources that may define or move an agent, by the source that first defined it. The development simulator can
-// never touch an HQ agent, and HQ facts never land on a simulated one. Replay restates either.
+// never touch an HQ agent, and HQ facts never land on a simulated one. 5E correction (B4): "replay" is not a family and
+// has no wildcard; a replay restates events with their original sources, so a "replay" event can touch no agent.
 const FAMILY = { hq: 'live', github: 'live', platform: 'live', sim: 'sim' };
-export const sameFamily = (origin, source) => source === 'replay' || !origin || FAMILY[origin] === FAMILY[source];
+export const familyOf = source => FAMILY[source] ?? null;
+export const sameFamily = (origin, source) => familyOf(source) != null && (!origin || familyOf(origin) === familyOf(source));
 
 // Fail-closed check of a lifecycle or definition event against the current agent. Returns null (allowed) or a reason.
 // Called before the reducer touches anything, so a refused event leaves the World exactly as it was.
@@ -165,9 +192,13 @@ export function checkAgentEvent(a, e) {
   if (!isLifecycleEvent(e.type)) return null;
   const to = targetState(e);
   if (!LIFECYCLE.includes(to) || (e.type === 'AGENT_PROVISIONING' && !PROVISIONING_STAGES.includes(to))) return `${e.type}: unknown stage ${e.stage}`;
-  const from = a?.lifecycle?.state ?? (a ? 'ACTIVE' : 'DRAFT');
-  if (e.type === 'AGENT_REQUESTED' && !a) return null; // a new agent enters as a request
+  // No lifecycle: a registered pre-5E agent is ACTIVE; a placeholder (only ever mentioned) has not started one.
+  const from = a?.lifecycle?.state ?? (a && !a.placeholder ? 'ACTIVE' : 'DRAFT');
+  if (e.type === 'AGENT_REQUESTED' && (!a || (a.placeholder && !a.lifecycle))) return null; // a new agent enters as a request
   if (a?.lifecycle && e.at < a.lifecycle.since) return `${e.type}: out of order for ${e.agentId} (older than its ${from} state)`;
   if (!TRANSITIONS[from]?.includes(to)) return `${e.type}: ${e.agentId} cannot go from ${from} to ${to}`;
+  // 5E correction (B3): re-enabling is only for an agent that was ready before. One disabled during provisioning (or
+  // after a failure) has never been READY and must go back through the provisioning lifecycle.
+  if (from === 'DISABLED' && to === 'ACTIVE' && !readied(a)) return `${e.type}: ${e.agentId} was never READY; it must be provisioned again`;
   return null;
 }
