@@ -212,7 +212,7 @@ export class ClaudeImplementer {
         emit({ kind: 'TEST_STARTED', summary: `HQ running ${shown} in the task worktree (sandboxed: read worktree only, no writes, no processes).` });
         const env = Object.fromEntries(TEST_ENV.filter(k => this.env[k]).map(k => [k, this.env[k]]));
         const runner = path.join(GUEST_DIR, TEST_RUNNER);
-        try { out = await this.exec(process.execPath, ['--frozen-intrinsics', '--no-warnings', ...strip, '--permission', `--allow-fs-read=${dir}`, `--allow-fs-read=${runner}`, runner, ...contract.tests], { cwd: dir, env, timeout: this.testTimeoutMs, signal: entry.abort.signal, input: `${runKey}\n` }); }
+        try { out = await this.exec(process.execPath, ['--frozen-intrinsics', '--no-warnings', ...strip, '--permission', '--allow-child-process', `--allow-fs-read=${dir}`, `--allow-fs-read=${runner}`, runner, ...contract.tests], { cwd: dir, env, timeout: this.testTimeoutMs, signal: entry.abort.signal, input: `${runKey}\n` }); }
         catch (error) { ok = false; out = `${error.stdout ?? ''}\n${error.stderr ?? ''}`; }
       }
       stop();

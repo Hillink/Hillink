@@ -592,7 +592,7 @@ test('V1. Codex attack reproduced: an acceptance test that prints forged TAP and
     assert.ok(legacyGreen(FORGED_TAP), 'the old predicate (TAP counts plus exit code) would have accepted this output');
     assert.equal(t.stage, 'BLOCKED'); assert.match(t.blocker, /Acceptance tests failed .*no authenticated result/);
     assert.equal(h.commits().length, 0);
-    assert.match(brokerTestOutput(h), /0 passed, 1 failed\. Not accepted: no authenticated result/, 'Claude\'s own run_tests is not fooled either');
+    assert.match(brokerTestOutput(h), /0 passed, 1 failed\. Not accepted: .*no authenticated result/, 'Claude\'s own run_tests is not fooled either');
     assert.ok(hqOut.includes('# pass 2'), 'the forged text was printed, and ignored');
   } finally { await h.close(); }
 });
@@ -671,7 +671,7 @@ test('V6. the real Linux sandbox: the forged-report attack fails closed and a ge
   try {
     await s.call('repo_write', { path: 'sandbox/hq-implementation/slug.test.mjs', content: `import test from 'node:test';\n${forgeAndExit}test('x', () => {});\n` });
     const bad = await s.call('run_tests', {});
-    assert.match(bad.text, /0 passed, 1 failed\. Not accepted: no authenticated result/, bad.text);
+    assert.match(bad.text, /0 passed, 1 failed\. Not accepted: .*no authenticated result/, bad.text);
     await s.call('repo_write', { path: 'sandbox/hq-implementation/slug.mjs', content: IMPL });
     await s.call('repo_write', { path: 'sandbox/hq-implementation/slug.test.mjs', content: PASSING });
     const good = await s.call('run_tests', {});

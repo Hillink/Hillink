@@ -40,6 +40,6 @@ case "$ROLE" in
     FLAGS=(); FILES=()
     for t in "$@"; do case "$t" in --experimental-strip-types) FLAGS+=("$t") ;; --test-reporter=tap|--no-warnings) ;; -*|/*|*..*) echo "HQ-SANDBOX: bad test argument" >&2; exit 98;; *) FILES+=("$t") ;; esac; done
     cd "$R/work"
-    drop 64001 /usr/bin/timeout --kill-after=10 300 /opt/node/bin/node --frozen-intrinsics --no-warnings "${FLAGS[@]}" --permission --allow-fs-read=/work --allow-fs-read=/opt/hq/hq-test-runner.mjs /opt/hq/hq-test-runner.mjs "${FILES[@]}" ;;
+    drop 64001 /usr/bin/timeout --kill-after=10 300 /opt/node/bin/node --frozen-intrinsics --no-warnings "${FLAGS[@]}" --permission --allow-child-process --allow-fs-read=/work --allow-fs-read=/opt/hq/hq-test-runner.mjs /opt/hq/hq-test-runner.mjs "${FILES[@]}" ;;
   *) echo "HQ-SANDBOX: unknown step" >&2; exit 98 ;;
 esac

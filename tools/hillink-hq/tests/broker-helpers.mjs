@@ -50,7 +50,7 @@ export class DirSandbox {
     if (script === 'hq-broker.sh') return runNode([path.join(GUEST_DIR, 'hq-broker.mjs')], { cwd: work, env: { PATH: process.env.PATH, HQ_BROKER_ROOT: work }, input });
     if (script === 'hq-test.sh') {
       const runner = path.join(GUEST_DIR, 'hq-test-runner.mjs'), flags = args.filter(a => a === '--experimental-strip-types'), files = args.filter(a => !a.startsWith('-'));
-      return runNode(['--frozen-intrinsics', '--no-warnings', ...flags, '--permission', `--allow-fs-read=${work}`, `--allow-fs-read=${runner}`, runner, ...files], { cwd: work, env: { PATH: process.env.PATH }, input });
+      return runNode(['--frozen-intrinsics', '--no-warnings', ...flags, '--permission', '--allow-child-process', `--allow-fs-read=${work}`, `--allow-fs-read=${runner}`, runner, ...files], { cwd: work, env: { PATH: process.env.PATH }, input });
     }
     if (script === 'hq-diff.sh') {
       const g = (...a) => execFileSync('git', ['-c', 'safe.directory=*', `--git-dir=${gd}`, `--work-tree=${work}`, '-c', 'core.hooksPath=/dev/null', ...a], { encoding: 'utf8', maxBuffer: 64e6 });

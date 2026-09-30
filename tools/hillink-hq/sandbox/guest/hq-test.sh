@@ -22,6 +22,6 @@ exec timeout --kill-after=10 300 unshare --net --mount --propagation private --f
     env -i PATH=/opt/node/bin:/usr/bin:/bin HOME=/tmp LANG=C.UTF-8 \
       bwrap --unshare-user --disable-userns --unshare-pid --unshare-ipc --die-with-parent \
         --dev-bind / / --proc /proc --chdir /work -- \
-        /opt/node/bin/node --frozen-intrinsics --no-warnings "${@:1:$0}" --permission --allow-fs-read=/work \
+        /opt/node/bin/node --frozen-intrinsics --no-warnings "${@:1:$0}" --permission --allow-child-process --allow-fs-read=/work \
           --allow-fs-read=/opt/hq/hq-test-runner.mjs /opt/hq/hq-test-runner.mjs "${@:$0+1}"
 ' "${#FLAGS[@]}" "${FLAGS[@]}" "${FILES[@]}"

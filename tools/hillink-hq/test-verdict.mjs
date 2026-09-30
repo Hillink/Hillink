@@ -28,6 +28,8 @@ export function testVerdict(out, { key, tests, exitedOk }) {
   if (r.v !== 1 || r.completed !== true || Object.values(n).some(Number.isNaN)) return fail('malformed authenticated result');
   const empty = tests.filter(t => !(count(r.files?.[t]?.passed) > 0));
   const reasons = [];
+  // Per-file failures reported by HQ's controller (a test process that crashed, exited early or left no result).
+  for (const [f, why] of Object.entries(r.errors && typeof r.errors === 'object' ? r.errors : {})) reasons.push(`${String(f).slice(0, 200)}: ${String(why).slice(0, 200)}`);
   if (!exitedOk) reasons.push('the test process did not exit cleanly');
   if (r.success !== true) reasons.push('node:test reported the run as unsuccessful (for example an uncaught error)');
   if (n.failed) reasons.push(`${n.failed} failed`);

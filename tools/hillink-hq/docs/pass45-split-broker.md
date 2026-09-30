@@ -134,6 +134,13 @@ while working on this fix, so it needs a person to build it. Proposed design:
 3. Inside each child, freeze the test framework's objects and prototypes before repository code loads.
 The auditor's proof of concept is the regression test: it must come back red.
 
+**Update (d037cbe → next commit): steps 1 and 2 are built.** `sandbox/guest/hq-test-runner.mjs` is now the
+controller. It never loads repository code and runs each acceptance file in its own `hq-test-child.mjs` process, with a
+per-file key derived from the run key. It attributes each result to the file it launched and emits the unchanged final
+`HQ-RESULT` format. The run key no longer enters any process that runs tests. **Step 3 is not built.** The auditor's
+proof of concept still returns green, because its tampering happens inside the one file's own process. Area 1 stays
+OPEN until step 3 is done.
+
 **Fixed: crash-recovery gaps** (not security blockers; an orphan has no broker session):
 - The host process scan matches the marker anywhere in the raw command line, so shell-wrapped processes are found (V10).
 - On the host Claude route HQ always scans for the marker, even when the pid was recorded, so a re-exec'd or child
