@@ -34,6 +34,10 @@ Runtime history and the controller lock live in ignored `tools/hillink-hq/.state
 
 Adapter interface: `health()` returns an actual IDLE/OFFLINE/UNKNOWN/RATE_LIMITED observation; `start({task,runId,emit})` launches and returns promptly; `cancel(runId)` returns true **only after confirmed termination**. `emit` accepts ACK, HEARTBEAT, TEST_STARTED/RESULT, COMMIT, PR, REVIEW, FINDING, HANDOFF, USAGE, MODEL_OUTPUT/RESULT, UNCERTAIN and terminal events. Wire a registered adapter through `createHQ({adapters})`. Cloud execution adapters are **not implemented**. GitHub comments/assignments must never be converted into ACK/heartbeat evidence.
 
+## Zero-credit compute (Pass 4)
+
+Normal HQ needs **no metered AI API spend**. Every dispatch is classified from HQ's own route table as `LOCAL` (HQ processes, Ollama on 127.0.0.1), `SUBSCRIPTION` (Claude Code and Codex signed in with Kyle's subscriptions) or `METERED_API` (the sandboxed Claude implementation's API key, the optional OpenAI orchestrator, anything unclassified). The default mode, `ZERO_CREDIT`, forbids metered compute outright and returns `BLOCKED_REQUIRES_SPEND_APPROVAL` before anything runs. `HQ_COMPUTE_MODE=BUDGETED` allows metered compute only with a live, bounded, revocable spend authorization Kyle creates through the owner API. Out-of-capacity subscriptions make HQ wait; they never fall back to an API. Full design, secrets audit, live results and remaining risks: [docs/pass4-zero-credit.md](docs/pass4-zero-credit.md).
+
 ## Optional real Ollama bridge
 
 Set `HQ_OLLAMA_ENABLED=1` before starting the server (PowerShell: `$env:HQ_OLLAMA_ENABLED='1'`). The bridge discovers existing Gemma/Qwen models through `http://127.0.0.1:11434/api/tags`; it does not download models or contact another host. Queue **Summarize text with a local model**. Only the description is sent to the selected local model, with no file/system tools. Model output is untrusted text, never executable instructions or an authoritative product decision.
@@ -51,13 +55,13 @@ Set `HQ_AGENTS_ENABLED=1` before starting the server (PowerShell: `$env:HQ_AGENT
 - **Claude** runs `claude -p --output-format stream-json` with only the `Read`, `Grep` and `Glob` tools, no MCP servers and no saved session.
 - **Codex** runs `codex exec --json --sandbox read-only -c approval_policy=never --ephemeral`. Its read-only guarantee is Codex's own sandbox.
 
-Queue **Ask Claude or Codex to review the repo (read-only)** and optionally pick the worker. The task description is sent over stdin, never on a command line. The child gets only PATH, profile/home and proxy variables plus that provider's own configuration (`CLAUDE_CONFIG_DIR` for Claude, which never gets `ANTHROPIC_API_KEY` so reviews use your Claude Code sign-in rather than API billing; `OPENAI_API_KEY`/`CODEX_HOME` for Codex); Supabase, Stripe and other secrets are not inherited.
+Queue **Ask Claude or Codex to review the repo (read-only)** and optionally pick the worker. The task description is sent over stdin, never on a command line. The child gets only PATH, profile/home and proxy variables plus that provider's own configuration (`CLAUDE_CONFIG_DIR` for Claude, `CODEX_HOME` for Codex). Neither ever gets an API key (Pass 4: `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `CODEX_API_KEY` and the other metered variables are stripped), Codex runs with `-c forced_login_method=chatgpt`, and HQ checks `claude auth status --json` / `codex login status` before dispatching, so reviews run only on your subscription sign-ins. Supabase, Stripe and other secrets are not inherited.
 
 Evidence is real: the CLI's session start is the ACK, the live process sends heartbeats, and each agent step (tool use, message) is progress. The final answer, the token counts the CLI reports and exit status close the run. A missing CLI shows OFFLINE. A CLI that exits before starting a session fails with a sign-in hint. A usage limit becomes RATE_LIMITED with the reported reset time. Runs are stopped after 20 minutes. Cancellation needs observed process close (SIGTERM then SIGKILL; `taskkill /T` then `/T /F` on Windows, where the npm shim runs through a shell). Answers are model output, not verified implementation. Edit-capable runs are not implemented; that needs an owner decision on worktrees and review gates.
 
 ## ChatGPT orchestrator (OpenAI)
 
-With `HQ_AGENTS_ENABLED=1` (or `HQ_ORCHESTRATOR_ENABLED=1`) and `OPENAI_API_KEY` in HQ's environment, ChatGPT becomes a real HQ agent: the orchestrator. Queue **Ask ChatGPT, the orchestrator** (operation `orchestrate`). Without a key it stays not connected, with the reason "OpenAI runtime not configured". A rejected key or unavailable model shows OFFLINE with the reason.
+**Pass 4: optional and off by default.** Every turn is a metered OpenAI API call, and Kyle normally orchestrates through his ChatGPT subscription outside HQ. The orchestrator connects only with `HQ_ORCHESTRATOR_ENABLED=1` (no longer implied by `HQ_AGENTS_ENABLED`), `OPENAI_API_KEY`, and `HQ_COMPUTE_MODE=BUDGETED`; each turn then still needs a Kyle spend authorization. Without it, decisions the orchestrator would make go to Kyle in HQ. With those, ChatGPT becomes a real HQ agent: the orchestrator. Queue **Ask ChatGPT, the orchestrator** (operation `orchestrate`). Without a key it stays not connected, with the reason "OpenAI runtime not configured". A rejected key or unavailable model shows OFFLINE with the reason.
 
 - **Runtime:** OpenAI Responses API over REST with streaming (`orchestrator-adapter.mjs`). There's no SDK, so HQ keeps zero dependencies. The model is `OPENAI_ORCHESTRATOR_MODEL`, default `gpt-6.1-sol`. The instructions live in `prompts/orchestrator.md`.
 - **Tools:** `orchestrator-tools.mjs` is the complete list:
@@ -87,6 +91,18 @@ With `HQ_AGENTS_ENABLED=1` (or `HQ_IMPLEMENTATION_ENABLED=1`), Claude can take b
 - **Evidence:** ACK (Claude's session and its tools), Claude's steps and answer, FINDING (changed files), TEST_STARTED and TEST_RESULT (HQ's counts), COMMIT (SHA), and COMPLETED with `implementation: { branch, base, worktree, commit, files, tests }`.
 - **Blocked outcomes:** failed tests, a scope violation, missing test files or no changes end BLOCKED with the reason and an owner action. Nothing is committed, and the worktree is kept for inspection.
 - **Permissions:** chosen per task by `ClaudeRouter`. Review tasks use the unchanged read-only adapter in the repository, so nothing carries over from one task to the next.
+
+## Subscription implementation through the split broker (Pass 4.5)
+
+In `ZERO_CREDIT` mode, implementation runs on Kyle's Claude subscription.
+
+- Claude Code runs on the host with **no built-in tools** (`--tools ""`) and only HQ's seven broker tools over MCP on `127.0.0.1`: list, read, search, write, edit, changes and run_tests.
+- HQ authorizes every call against the task's scope and limits. It then runs the call inside the disposable sandbox, which has no network and no credential, and audits it.
+- Afterwards HQ takes the diff itself and runs the usual checks. The commit is local only.
+- The metered Pass 2.7 route (Claude inside the sandbox with an API key) remains, but only with `BUDGETED` mode plus a Kyle spend authorization. HQ never falls back to it on its own.
+- On Linux the sandbox is `sandbox/linux.mjs`, which uses namespaces and a chroot and needs root. On Windows it is WSL, and you must rebuild the base image once with `node tools/hillink-hq/sandbox/build-base.mjs` for the new guest scripts.
+- `GET /api/state` shows `health.implementationRoutes`.
+- Design, trust diagram, residual risks: [docs/pass45-split-broker.md](docs/pass45-split-broker.md). Live results: [docs/pass45-live-results.json](docs/pass45-live-results.json).
 
 ## OS sandbox for implementation (Pass 2.7)
 

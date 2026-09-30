@@ -7,6 +7,25 @@
 // Only then is the run reconciled (RUN_RECONCILED, then CANCELLED evidence) and the step marked interrupted. If
 // anything cannot be proven, the run stays parked with Pass 2's owner action. Nothing is assumed to have succeeded.
 
+// Pass 4.5 repair: on the split-broker route Claude Code runs on the HOST, outside the sandbox, so an unregistered
+// sandbox proves nothing about it. HQ records a marker (the run's private MCP config path, which appears on Claude's
+// command line) before spawning it and the pid right after. Recovery then needs the pid to be gone, or, when the pid
+// was never recorded (a crash in between), a process-table scan that finds no process carrying the marker. Where
+// the process table cannot be read (Windows, no /proc) the run stays parked.
+export async function hostProcessesWith(markers, { procDir = '/proc', fsImpl } = {}) {
+  const fs = fsImpl ?? (await import('node:fs')).default;
+  if (process.platform !== 'linux' && !fsImpl) return null;
+  let names; try { names = fs.readdirSync(procDir).filter(n => /^[0-9]+$/.test(n)); } catch { return null; }
+  const found = [];
+  for (const n of names) {
+    let cmd; try { cmd = fs.readFileSync(`${procDir}/${n}/cmdline`, 'utf8'); } catch { continue; } // exited meanwhile
+    // Substring match on the raw command line: a shell or wrapper that embeds the path inside a longer argument
+    // (for example `bash -c "claude --mcp-config <path> ..."`) still counts.
+    if (markers.some(m => cmd.includes(m))) found.push(Number(n));
+  }
+  return found;
+}
+
 export const processAlive = pid => {
   if (!Number.isInteger(pid) || pid <= 0) return true; // unknown pid: cannot prove it stopped
   try { process.kill(pid, 0); return true; } catch (error) { return error.code === 'EPERM'; }
@@ -14,7 +33,7 @@ export const processAlive = pid => {
 
 // sandboxes() must list registered WSL instances or throw. There is deliberately no default: "no listing" is never
 // "no sandbox" (found in the first real crash test, where a missing handle read as an empty list).
-export async function probeTermination(engine, run, { alive = processAlive, sandboxes = async () => { throw Error('no sandbox handle'); }, controllerPid = process.pid } = {}) {
+export async function probeTermination(engine, run, { alive = processAlive, sandboxes = async () => { throw Error('no sandbox handle'); }, controllerPid = process.pid, hostScan = hostProcessesWith } = {}) {
   const task = engine.state.tasks[run.taskId], agent = engine.state.agents[run.agentId];
   const ev = task.evidence.filter(e => e.runId === run.runId);
   const pids = [...new Set(ev.map(e => e.pid).filter(p => Number.isInteger(p) && p !== controllerPid))];
@@ -25,6 +44,24 @@ export async function probeTermination(engine, run, { alive = processAlive, sand
     // and the adapter is HQ-local (its start() ran inside the dead controller).
     if (!run.acknowledgedAt && ['cli-claude', 'cli-codex', 'local-checks'].includes(agent?.executionAdapter)) return { stopped: false, evidence: 'Run was dispatched but reported no process id; termination cannot be proven.' };
     return { stopped: false, evidence: 'No process or sandbox evidence for this run.' };
+  }
+  const hostPids = [...new Set(ev.filter(e => e.hostProcess === 'claude' && Number.isInteger(e.pid)).map(e => e.pid))];
+  const markers = [...new Set(ev.map(e => e.hostMarker).filter(m => typeof m === 'string' && m.length > 8))];
+  // A host run is recognised from its compute record, or, if that record was lost, from a cli-claude run that
+  // recorded a host marker or host pid.
+  const computeRun = engine.state.compute?.runs?.[run.runId];
+  const hostClaude = computeRun ? computeRun.variant === 'split-broker' : agent?.executionAdapter === 'cli-claude' && (markers.length > 0 || hostPids.length > 0);
+  let scanned = null;
+  if (hostClaude) {
+    // Always scan, even when a pid was recorded: Claude Code can re-exec or spawn children that carry the same
+    // config path under another pid.
+    // The broker died with the old HQ, so such an orphan has no tool that reaches the sandbox or the repository,
+    // but HQ still does not call it stopped without proof.
+    const found = markers.length ? await hostScan(markers).catch(() => null) : null;
+    if (found === null && !hostPids.length) return { stopped: false, evidence: 'Claude Code ran on the host (split broker) and its process id was never recorded; HQ cannot prove it stopped. It holds no broker session (the endpoint ended with the old HQ), so it cannot reach the sandbox or the repository. End any leftover claude process, then reconcile.' };
+    if (found?.length) return { stopped: false, evidence: `Claude Code host process(es) ${found.join(', ')} from this run still exist (found by its private config path); they hold no broker session.` };
+    // Where the process table cannot be read (Windows) a recorded pid remains the proof, as before.
+    if (found) scanned = 'no host process carries this run\'s private config path';
   }
   const living = pids.filter(pid => alive(pid));
   if (living.length) return { stopped: false, evidence: `Process(es) ${living.join(', ')} still exist.` };
@@ -37,6 +74,7 @@ export async function probeTermination(engine, run, { alive = processAlive, sand
   }
   const parts = [];
   if (pids.length) parts.push(`process(es) ${pids.join(', ')} no longer exist`);
+  if (scanned) parts.push(scanned);
   if (boxes.length) parts.push(`sandbox(es) ${boxes.join(', ')} are unregistered`);
   if (remote) parts.push('the HQ controller that issued the OpenAI request has exited, so none of its tool calls can execute');
   return { stopped: true, evidence: `Termination proven by HQ after restart: ${parts.join('; ')}.` };

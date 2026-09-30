@@ -11,6 +11,7 @@ import { ClaudeImplementer, ClaudeRouter } from '../implementation-runner.mjs';
 import { Conductor } from '../orchestration/conductor.mjs';
 import { CommitVerifier } from '../orchestration/verify.mjs';
 import { reconcileInterrupted } from '../orchestration/recovery.mjs';
+import { allowMetered, testGrant, subscriptionProbe } from './compute-helpers.mjs';
 
 export const git = (cwd, ...args) => execFileSync('git', args, { cwd, encoding: 'utf8', windowsHide: true });
 export function tempRepo() {
@@ -88,7 +89,7 @@ export function fakeClaude(files, { hang = () => false } = {}) {
 export const GREETING_TEST = "import test from 'node:test';\nimport assert from 'node:assert/strict';\nimport { greet } from './greeting.mjs';\ntest('greets', () => assert.equal(greet('Kyle'), 'Hello, Kyle!'));\n";
 export const greetingFiles = (dir = 'sandbox/hq-implementation', body = 'Hello') => ({ [`${dir}/greeting.mjs`]: `export const greet = name => \`${body}, \${name}!\`;\n`, [`${dir}/greeting.test.mjs`]: GREETING_TEST });
 
-export function harness({ store = new MemoryStore(), repo = tempRepo(), codex, claudeReview, claudeFiles = () => greetingFiles(), claudeHang, limits = {}, alive = () => false, requireSandbox = false, clockStart = 1_000_000 } = {}) {
+export function harness({ store = new MemoryStore(), repo = tempRepo(), codex, claudeReview, claudeFiles = () => greetingFiles(), claudeHang, limits = {}, alive = () => false, requireSandbox = false, clockStart = 1_000_000, metered = true } = {}) {
   const clock = { t: clockStart };
   const worktreeRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'hq-p3-wt-'));
   const codexAgent = codex ?? scriptedAgent('Codex', () => ({ text: handoffText(review()) }));
@@ -99,6 +100,9 @@ export function harness({ store = new MemoryStore(), repo = tempRepo(), codex, c
   engine.initialize();
   if (!engine.state.agents.claude.capabilities.includes('implement-repo') || engine.state.agents.claude.executionAdapter !== 'cli-claude') engine.configureAgent('claude', { capabilities: ['implement', 'review', 'review-repo', 'implement-repo'], executionAdapter: 'cli-claude' });
   if (engine.state.agents.codex.executionAdapter !== 'cli-codex') engine.configureAgent('codex', { capabilities: ['test', 'security', 'review', 'investigate', 'review-repo'], executionAdapter: 'cli-codex' });
+  // Pass 4: Pass 3's implementation scenarios run with Kyle's spend authorization (the sandbox is metered). An engine
+  // rebuilt after a restart re-reads the authorization from the journal; only the mode is configuration.
+  if (metered) { if (Object.keys(engine.state.compute.authorizations).length) engine.config.computeMode = 'BUDGETED'; else allowMetered(engine); }
   const verifier = new CommitVerifier({ repoRoot: repo, requireSandbox });
   const conductor = new Conductor(engine, { verifier, limits, recovery: () => reconcileInterrupted(engine, { alive, sandboxes: async () => [] }) });
   engine.conductor = conductor;

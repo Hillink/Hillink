@@ -13,6 +13,7 @@ import path from 'node:path';
 import { WslSandbox, checkPatch, INSTANCE_PREFIX } from '../sandbox.mjs';
 import { ClaudeImplementer } from '../implementation-runner.mjs';
 import { validateImplementation } from '../implementation-policy.mjs';
+import { allowMetered, testGrant, subscriptionProbe } from './compute-helpers.mjs';
 
 const git = (cwd, ...args) => execFileSync('git', args, { cwd, encoding: 'utf8', windowsHide: true });
 const FAKE_KEY = ['sk', 'ant', 'test'].join('-') + '-' + 'Q'.repeat(48); // assembled at runtime; not a real key
@@ -44,7 +45,10 @@ function baseImage() {
   return home;
 }
 // A fake wsl.exe: records every call and plays the guest scripts' part.
-function fakeWsl({ patch = '', claudeExit = 0, testOut = 'ℹ tests 1\nℹ pass 1\nℹ fail 0\n', testExit = 0, hangClaude = false } = {}) {
+// What HQ's guest test runner prints: one result authenticated with the run key HQ sent on stdin.
+const signed = (key, r) => { const p = JSON.stringify({ v: 1, completed: true, success: true, skipped: 0, todo: 0, cancelled: 0, outside: 0, ...r }); const h = s => crypto.hash('sha256', s); return `HQ-RESULT ${p} ${h(`${key}:${h(`${key}:${p}`)}`)}\n`; };
+const passing = key => signed(key, { passed: 1, failed: 0, files: { [CONTRACT.tests[0]]: { passed: 1, failed: 0, skipped: 0, todo: 0 } } });
+function fakeWsl({ patch = '', claudeExit = 0, testOut = passing, testExit = 0, hangClaude = false } = {}) {
   const calls = [], registered = new Set(), received = {};
   let hanging = null;
   const spawn = (command, args, opts = {}) => {
@@ -75,7 +79,7 @@ function fakeWsl({ patch = '', claudeExit = 0, testOut = 'ℹ tests 1\nℹ pass 
         return finish(claudeExit);
       }
       if (script === '/opt/hq/hq-diff.sh') return finish(0, patch);
-      if (script === '/opt/hq/hq-test.sh') { received.testArgs = args.slice(args.indexOf('--exec') + 2); return finish(testExit, testOut); }
+      if (script === '/opt/hq/hq-test.sh') { received.testArgs = args.slice(args.indexOf('--exec') + 2); received.testKey = input.toString().trim(); return finish(testExit, typeof testOut === 'function' ? testOut(received.testKey) : testOut); }
       finish(127);
     });
     return child;
@@ -89,7 +93,7 @@ async function run({ wsl = {}, patch, env = { HQ_SANDBOX_ANTHROPIC_API_KEY: FAKE
   const implementer = new ClaudeImplementer({ repoRoot: repo, worktreeRoot, claudeBin: 'claude-host.exe', spawn: fake.spawn, env, sandbox, pulseMs: 50, cliOptions: { graceMs: 10 } });
   const events = [], runId = 'run-abc123';
   const task = { id: 'a1b2c3d4-0000-0000-0000-000000000000', operation: 'implement-repo', safety: 'local-worktree-write', implementation: CONTRACT, description: 'x' };
-  await implementer.start({ task, runId, emit: e => events.push(e) });
+  await implementer.start({ task, runId, emit: e => events.push(e), compute: testGrant(task.id, runId) });
   const promise = implementer.runs.get(runId).promise;
   if (cancelAfter) { for (let i = 0; i < 200 && !fake.received.prompt; i++) await new Promise(r => setTimeout(r, 10)); assert.equal(await implementer.cancel(runId), true); }
   await promise;
@@ -122,9 +126,9 @@ test('patch checks: links, submodules, .git, traversal, secrets and oversize are
 test('fail closed: no sandbox, or a missing or tampered base image, means no implementation at all', async () => {
   const repo = tempRepo();
   const bare = new ClaudeImplementer({ repoRoot: repo, claudeBin: 'x' });
-  await assert.rejects(bare.start({ task: { id: 'a1b2c3d4', operation: 'implement-repo', safety: 'local-worktree-write', implementation: CONTRACT }, runId: 'r', emit: () => {} }), /no OS sandbox/);
+  await assert.rejects(bare.start({ task: { id: 'a1b2c3d4', operation: 'implement-repo', safety: 'local-worktree-write', implementation: CONTRACT }, runId: 'r', emit: () => {}, compute: testGrant('a1b2c3d4', 'r') }), /no OS sandbox/);
   const missing = new ClaudeImplementer({ repoRoot: repo, claudeBin: 'x', sandbox: new WslSandbox({ home: fs.mkdtempSync(path.join(os.tmpdir(), 'hq-sbx-none-')) }) });
-  await assert.rejects(missing.start({ task: { id: 'a1b2c3d4', operation: 'implement-repo', safety: 'local-worktree-write', implementation: CONTRACT }, runId: 'r', emit: () => {} }), /base image not built/);
+  await assert.rejects(missing.start({ task: { id: 'a1b2c3d4', operation: 'implement-repo', safety: 'local-worktree-write', implementation: CONTRACT }, runId: 'r', emit: () => {}, compute: testGrant('a1b2c3d4', 'r') }), /base image not built/);
   const home = baseImage(); fs.writeFileSync(path.join(home, 'base.tar'), 'tampered');
   await assert.rejects(new WslSandbox({ home }).verifyBase(), /checksum mismatch/);
 });
@@ -159,7 +163,7 @@ test('sandboxed run: Claude only through wsl.exe, key only over stdin, patch app
 test('teardown on failure, blocked output and cancellation', async () => {
   const failed = await run({ wsl: { claudeExit: 1 } });
   assert.equal(failed.last.kind, 'FAILED'); assert.ok(unregistered(failed.fake, failed.box));
-  const testsRed = await run({ wsl: { testExit: 1, testOut: 'ℹ tests 1\nℹ pass 0\nℹ fail 1\n' } });
+  const testsRed = await run({ wsl: { testExit: 1, testOut: key => signed(key, { passed: 0, failed: 1, files: { [CONTRACT.tests[0]]: { passed: 0, failed: 1, skipped: 0, todo: 0 } } }) } });
   assert.equal(testsRed.last.kind, 'BLOCKED'); assert.match(testsRed.last.summary, /tests failed/); assert.ok(unregistered(testsRed.fake, testsRed.box));
   assert.equal(git(testsRed.repo, 'rev-parse', testsRed.last.implementation.branch).trim(), git(testsRed.repo, 'rev-parse', 'main').trim(), 'nothing committed');
   const cancelled = await run({ wsl: { hangClaude: true }, cancelAfter: true });

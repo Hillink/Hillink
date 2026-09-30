@@ -6,6 +6,7 @@ import { Engine } from '../engine.mjs';
 import { MemoryStore } from '../store.mjs';
 import { connectOrchestrator, OrchestratorAdapter, LIMITS } from '../orchestrator-adapter.mjs';
 import { TOOL_NAMES, TOOL_DEFINITIONS, validateArgs, createToolbox } from '../orchestrator-tools.mjs';
+import { allowMetered, testGrant, subscriptionProbe } from './compute-helpers.mjs';
 
 const KEY = 'sk-test-DO-NOT-LEAK-1234567890';
 const sse = events => new Response(new ReadableStream({ start(c) { for (const e of events) c.enqueue(new TextEncoder().encode(`event: ${e.type}\ndata: ${JSON.stringify(e)}\n\n`)); c.close(); } }), { status: 200, headers: { 'content-type': 'text/event-stream' } });
@@ -41,6 +42,7 @@ function setup({ key = KEY, script = [], openai = {}, claudeConnected = true } =
   if (claudeConnected) { engine.adapters['cli-claude'] = { ...localAdapter }; engine.configureAgent('claude', { capabilities: ['implement', 'review', 'review-repo'], executionAdapter: 'cli-claude' }); }
   const fake = fakeOpenAI(script, openai);
   const status = connectOrchestrator(engine, { env: key ? { OPENAI_API_KEY: key } : {}, request: fake.request });
+  allowMetered(engine); // Pass 4: every in-HQ ChatGPT turn is metered and needs Kyle's authorization
   const ask = text => engine.createTask({ title: `Kyle asks ChatGPT: ${text}`.slice(0, 200), description: text, operation: 'orchestrate', safety: 'local-read-only', priority: 50, preferredAgentId: 'chatgpt' });
   const settle = async () => { for (let i = 0; i < 50; i++) { await new Promise(r => setImmediate(r)); } };
   const adapter = engine.adapters['openai-orchestrator'];

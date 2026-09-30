@@ -106,8 +106,11 @@ export function reduceOrchestration(state, event) {
     case 'RUN_RECONCILED': { const t = state.tasks[d.taskId]; if (t) t.interrupted = { at, evidence: d.evidence }; break; }
     case 'WORKER_EVENT': {
       // Measured spend attaches to the objective that owns the task (reported cost from the CLI's own counters).
+      // Pass 4: only a METERED_API run spends money. A subscription CLI's "cost" is its estimate of API-equivalent
+      // value, not a charge, so it never counts (and never trips the objective's spend gate).
       const run = state.runs[d.runId], t = run && state.tasks[run.taskId];
-      if (d.kind === 'USAGE' && t?.link && Number.isFinite(d.usage?.reportedCostUsd)) {
+      const metered = state.compute?.runs?.[d.runId] ? state.compute.runs[d.runId].computeClass === 'METERED_API' : true;
+      if (d.kind === 'USAGE' && t?.link && metered && Number.isFinite(d.usage?.reportedCostUsd) && d.usage.reportedCostUsd >= 0) {
         const obj = state.objectives[t.link.objectiveId];
         if (obj) obj.spentUsd = Math.round((obj.spentUsd + d.usage.reportedCostUsd) * 1e6) / 1e6;
       }

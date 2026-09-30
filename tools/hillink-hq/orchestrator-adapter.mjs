@@ -13,6 +13,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { TOOL_DEFINITIONS, createToolbox } from './orchestrator-tools.mjs';
+import { redeemGrant } from './compute/policy.mjs';
 
 const API = 'https://api.openai.com/v1';
 export const DEFAULT_MODEL = 'gpt-6.1-sol'; // OpenAI's balance of capability and cost (docs, 2026-09); OPENAI_ORCHESTRATOR_MODEL overrides.
@@ -91,8 +92,10 @@ export class OrchestratorAdapter {
     if (this.stateFile) { try { fs.mkdirSync(path.dirname(this.stateFile), { recursive: true }); fs.writeFileSync(this.stateFile, JSON.stringify({ conversationId: body.id, model: this.model, createdAt: new Date(this.now()).toISOString() }, null, 2)); } catch { /* context is a convenience */ } }
     return body.id;
   }
-  async start({ task, runId, emit }) {
+  async start({ task, runId, emit, compute }) {
     if (task.operation !== 'orchestrate' || task.safety !== 'local-read-only') throw Error('Orchestrator adapter accepts orchestration requests only');
+    // Pass 4: every turn is a metered OpenAI request. No engine-issued grant (backed by a Kyle authorization) = no request.
+    redeemGrant(compute, { taskId: task.id, runId });
     if (this.runs.size) throw Error('Orchestrator already has an unresolved request');
     const entry = { abort: new AbortController(), inFlight: false, done: false };
     this.runs.set(runId, entry);
