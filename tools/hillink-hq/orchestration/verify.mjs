@@ -41,6 +41,8 @@ export class CommitVerifier {
     if (this.requireSandbox) check('the sandbox was confirmed destroyed', handoff.sandbox?.destroyed === true, handoff.sandbox?.name);
     return { ok: checks.every(c => c.ok), checks, files };
   }
+  // The committed change as text, for reviewers (read-only; bounded by the caller).
+  diff(sha) { return this.git(['show', '--no-color', '--no-ext-diff', '--no-textconv', '--format=%H%n%s', sha]); }
   async present(sha, tests) {
     try { const listed = (await this.git(['ls-tree', '-r', '--name-only', '-z', sha, '--', ...tests])).split('\0').filter(Boolean); return tests.every(t => listed.includes(t)); }
     catch { return false; }
