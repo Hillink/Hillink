@@ -13,6 +13,17 @@ export const SYSTEM_STATES = ['ok', 'busy', 'degraded', 'down', 'unknown'];
 export const EVENT_TYPES = {
   // Registry: things that exist in the World.
   AGENT_REGISTERED: ['agentId', 'name', 'role'],
+  // Pass 5E: the agent registry and lifecycle (core/agents.mjs). Each says what happened to an agent, never how a
+  // theme shows it. A definition is created or updated by AGENT_DEFINED (or carried by AGENT_REGISTERED/REQUESTED).
+  AGENT_DEFINED: ['agentId', 'definition'],
+  AGENT_REQUESTED: ['agentId'],
+  AGENT_PROVISIONING: ['agentId', 'stage'], // stage: one of core/agents.mjs PROVISIONING_STAGES
+  AGENT_PROVISIONING_WAITING: ['agentId'],
+  AGENT_PROVISIONING_FAILED: ['agentId'],
+  AGENT_READY: ['agentId'],
+  AGENT_ACTIVATED: ['agentId'],
+  AGENT_DISABLED: ['agentId'],
+  AGENT_RETIRED: ['agentId'],
   SYSTEM_REGISTERED: ['systemId', 'name', 'kind'],
   // Tasks.
   TASK_CREATED: ['taskId', 'title'],

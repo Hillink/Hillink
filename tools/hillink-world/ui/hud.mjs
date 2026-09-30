@@ -1,6 +1,7 @@
 import { drawPortrait } from '../render/figure.mjs';
 import { lookFor } from '../render/looks.mjs';
 import { jobOf, lastJobOf } from '../core/job.mjs';
+import { presenceOf } from '../core/agents.mjs';
 // HUD overlays: company counts, attention list, recent activity and the agent roster.
 // Everything here is derived from World state; nothing is invented (no usage or cost figures until a
 // real source reports them).
@@ -11,7 +12,7 @@ export const WORKING = PRODUCTIVE_ACTIVITIES;
 // isWorking (optional): whether an agent's body is actually doing its work right now (from the view).
 // Without it, "working" falls back to the semantic activity.
 export function summarize(world, isWorking = a => WORKING.has(a.activity)) {
-  const agents = Object.values(world.agents);
+  const agents = Object.values(world.agents).filter(a => presenceOf(a) !== 'absent'); // Pass 5E: disabled and retired agents are not counted
   const count = pred => agents.filter(pred).length;
   const attention = [];
   const withIssue = new Set(Object.values(world.issues).filter(i => i.open && i.agentId).map(i => i.agentId));
@@ -40,6 +41,16 @@ const taskTitle = (world, id) => world.tasks[id]?.title ?? 'a task';
 export function describe(e, world) {
   switch (e.type) {
     case 'AGENT_REGISTERED': return `${e.name ?? name(world, e.agentId)} joined`;
+    // Pass 5E: lifecycle, in theme-neutral words (a theme's own words come from its interpreter).
+    case 'AGENT_DEFINED': return `${name(world, e.agentId)}: definition updated`;
+    case 'AGENT_REQUESTED': return `New agent requested: ${name(world, e.agentId)}`;
+    case 'AGENT_PROVISIONING': return `${name(world, e.agentId)}: provisioning (${String(e.stage).toLowerCase().replace(/_/g, ' ')})`;
+    case 'AGENT_PROVISIONING_WAITING': return `${name(world, e.agentId)}: provisioning paused${e.detail ? ` (${e.detail})` : ''}`;
+    case 'AGENT_PROVISIONING_FAILED': return `${name(world, e.agentId)}: provisioning failed${e.detail ? ` (${e.detail})` : ''}`;
+    case 'AGENT_READY': return `${name(world, e.agentId)} is ready`;
+    case 'AGENT_ACTIVATED': return `${name(world, e.agentId)} is active`;
+    case 'AGENT_DISABLED': return `${name(world, e.agentId)} was disabled`;
+    case 'AGENT_RETIRED': return `${name(world, e.agentId)} retired`;
     case 'TASK_CREATED': return `New task: ${e.title}`;
     case 'TASK_STARTED': return `${name(world, e.agentId)} started “${taskTitle(world, e.taskId)}”`;
     case 'TASK_COMPLETED': return `Finished “${taskTitle(world, e.taskId)}”`;
@@ -104,7 +115,7 @@ export function attentionHTML(items, limit = 4) {
 // Roster portraits are drawn by the same figure code as the world (no image files), in the active skin.
 // statusOf (optional): what the agent's body is doing, from the view ("Walking to Engineering").
 export function rosterHTML(world, statusOf = a => (a.activity === 'completed' ? 'finished' : a.activity), toneOf = a => a.activity) {
-  const agents = Object.values(world.agents);
+  const agents = Object.values(world.agents).filter(a => presenceOf(a) !== 'absent');
   if (!agents.length) return '';
   return agents.map(a => {
     const job = jobOf(world, a), last = !job ? lastJobOf(world, a) : null;

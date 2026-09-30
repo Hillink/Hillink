@@ -22,17 +22,18 @@ export const ACTIVITY_PLACE = {
 const ruleFor = (activity, layout) => ({ ...(ACTIVITY_PLACE[activity] ?? ACTIVITY_PLACE.idle), ...(layout.places?.[activity] ?? {}) });
 // Only a meeting sends agents to the meeting room; a one-off message (a handoff) keeps the sender where it is.
 // Pass 5B: a generated layout may send an agent to a construction site (its task is a project HQ is building).
-const ruleForAgent = (a, layout) => layout.placeFor?.(a) ?? (a.activity === 'communicating' && !a.meetingId ? { stay: true, clip: 'talk' } : ruleFor(a.activity, layout));
+// Pass 5E: `rules` (agent id -> rule) is the theme's staging for agents that are not working members (candidates).
+const ruleForAgent = (a, layout, rules) => rules?.[a.id] ?? layout.placeFor?.(a) ?? (a.activity === 'communicating' && !a.meetingId ? { stay: true, clip: 'talk' } : ruleFor(a.activity, layout));
 
 // Assign stations deterministically so agents don't pile onto one spot.
 // `current` is agentId -> {location, station}; agents keep their station while their activity keeps the same room.
-export function placeAgents(agents, current, layout) {
+export function placeAgents(agents, current, layout, rules = null) {
   current ??= {};
   const taken = new Set(), result = {};
   const ordered = [...agents].sort((a, b) => a.id.localeCompare(b.id));
   // Pass 1: agents that stay (completed/error) or keep an existing valid station.
   for (const a of ordered) {
-    const rule = ruleForAgent(a, layout);
+    const rule = ruleForAgent(a, layout, rules);
     // A place from another theme's layout may not exist here (e.g. the Realistic break room).
     const prev = layout.locationById[current[a.id]?.location]?.stations[current[a.id]?.station] ? current[a.id] : null;
     if (rule.stay && prev) { result[a.id] = { ...prev, clip: rule.clip }; taken.add(`${prev.location}:${prev.station}`); continue; }
@@ -43,7 +44,7 @@ export function placeAgents(agents, current, layout) {
   // Pass 2: everyone else takes the first free station (ordered, so conversation partners sit at adjacent tables).
   for (const a of ordered) {
     if (result[a.id]) continue;
-    const own = ruleForAgent(a, layout), rule = own.stay ? ruleFor('idle', layout) : own;
+    const own = ruleForAgent(a, layout, rules), rule = own.stay ? ruleFor('idle', layout) : own;
     const loc = layout.locationById[rule.location];
     let station = rule.stations.find(s => !taken.has(`${loc.id}:${s}`));
     let overflow = 0;

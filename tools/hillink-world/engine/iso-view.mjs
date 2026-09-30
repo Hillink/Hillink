@@ -37,6 +37,8 @@ export function resolveState(e, now, layout = null) {
   if (e.loop?.phase === 'work' && !e.moving) return e.loop.clip;
   if (e.journey && e.journey.phase === 'hold' && !e.moving) return e.journey.legs[e.journey.i]?.clip ?? 'idle';
   if (e.receiving) return 'talk';
+  // Pass 5E: a candidate (being provisioned) is staged by the theme; it waits, or shows its failure, where it is placed.
+  if (e.staging?.presence === 'candidate') return e.staging.clip === 'blocked' ? 'blocked' : 'waiting';
   if (e.sitUntil > now) return 'sit';
   const a = e.agent; if (!a) return 'idle';
   const atStation = !e.moving && !e.faceGoal && e.spot != null && e.spot === e.placeKey;
@@ -80,6 +82,7 @@ const PRODUCTIVE_WORDS = { coordinating: 'Coordinating', coding: 'Typing', think
 export function actionText(e, layout) {
   const st = e.anim?.state ?? 'idle', a = e.agent;
   const where = e.dest?.location ? layout?.locationById?.[e.dest.location]?.name : null;
+  if (e.staging?.presence === 'candidate') return e.moving ? `${e.staging.caption} (arriving)` : e.staging.caption;
   switch (st) {
     case 'walk': if (e.journey) return e.journey.kind === 'start' && e.carrying ? JOURNEY_WORDS.start : e.journey.kind === 'start' ? 'Going to pick up the task' : e.journey.kind === 'finish' ? 'Taking the finished task to the archive' : 'Walking';
       if (e.loop) return e.loop.kind === 'haul' ? (e.loop.phase === 'back' ? 'Carrying materials' : 'Fetching materials') : 'Walking the site';
@@ -121,8 +124,8 @@ export function actionText(e, layout) {
 }
 
 export class IsoWorldView extends WorldView {
-  constructor(scene, effects, layout, scenery) {
-    super(scene, effects, layout, scenery);
+  constructor(scene, effects, layout, scenery, interpreter = null) {
+    super(scene, effects, layout, scenery, interpreter);
     for (const l of Object.values(this.lifts)) { l.ambient = false; l.floors = layout.lifts[l.id]?.floors; l.speed = scenery?.liftSpeed ?? l.speed; }
     if (layout.generated) this.initAmbient(); else this.ambient = [];
   }

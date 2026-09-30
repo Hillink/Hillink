@@ -1,11 +1,12 @@
 // Development simulation (brief §16). Emits World events tagged source "sim" into a store.
 // It has no network access and no adapter: it cannot read or write Hillink data.
 import { makeEvent } from '../core/events.mjs';
+import { DEFAULT_DEFINITIONS } from '../core/agents.mjs';
+import { DEV_AGENTS, DEV_ONBOARDING } from './dev-agents.mjs';
 
-export const SIM_AGENTS = [
-  { agentId: 'claude', name: 'Claude', role: 'Engineering: builder', appearance: { color: '#e2711d' } },
-  { agentId: 'codex', name: 'Codex', role: 'Engineering: QA and security', appearance: { color: '#3a86ff' } },
-];
+// Pass 5E: the simulated team comes from the registry's default definitions (core/agents.mjs), like any agent.
+export const SIM_ROSTER = ['claude', 'codex'];
+export const SIM_AGENTS = SIM_ROSTER.map(id => DEFAULT_DEFINITIONS[id]).map(d => ({ agentId: d.id, name: d.name, role: d.role, appearance: { color: d.appearance.palette.primary } }));
 export const EXTRA_AGENTS = [
   { agentId: 'sales', name: 'Sales agent', role: 'Sales', appearance: { color: '#06d6a0' } },
   { agentId: 'support', name: 'Support agent', role: 'Support', appearance: { color: '#8338ec' } },
@@ -115,6 +116,35 @@ export class Simulator {
     if (!d) this.deployBegins();
     this.later(d ? 200 : 2500, () => { this.emit('DEPLOY_SUCCESS', { deployId }); this.emit('SYSTEM_STATUS', { systemId: 'vercel', state: 'ok' }); });
   }
+  // ---- Pass 5E DEVELOPMENT HARNESS (simulated, source "sim"): any agent definition through the canonical lifecycle.
+  // These emit the same lifecycle events a real provisioning backend would report; nothing is provisioned.
+  defineAgent(def) { this.emit('AGENT_DEFINED', { agentId: def.id, definition: def }); }
+  requestAgent(def) { this.emit('AGENT_REQUESTED', { agentId: def.id, definition: def, detail: 'Simulated request (development harness)' }); }
+  provisionAgent(id, stage) { this.emit('AGENT_PROVISIONING', { agentId: id, stage, detail: 'Simulated (development harness)' }); }
+  pauseProvisioning(id, detail) { this.emit('AGENT_PROVISIONING_WAITING', { agentId: id, detail }); }
+  failProvisioning(id, detail) { this.emit('AGENT_PROVISIONING_FAILED', { agentId: id, detail }); }
+  agentReady(id) { this.emit('AGENT_READY', { agentId: id, detail: 'Simulated (development harness)' }); }
+  activateAgent(id) { this.emit('AGENT_ACTIVATED', { agentId: id }); }
+  disableAgent(id) { this.emit('AGENT_DISABLED', { agentId: id }); }
+  retireAgent(id) { this.emit('AGENT_RETIRED', { agentId: id }); }
+  // A full simulated onboarding, one stage every stepMs: request, the provisioning stages, ready, active.
+  onboard(def, { stepMs = 2500, fail = null } = {}) {
+    this.requestAgent(def);
+    DEV_ONBOARDING.forEach((stage, i) => this.later((i + 1) * stepMs, () => {
+      if (fail && stage === fail) return this.failProvisioning(def.id, `Simulated failure at ${stage.toLowerCase().replace(/_/g, ' ')}`);
+      if (fail && DEV_ONBOARDING.indexOf(stage) > DEV_ONBOARDING.indexOf(fail)) return;
+      this.provisionAgent(def.id, stage);
+    }));
+    if (fail) return;
+    this.later((DEV_ONBOARDING.length + 1) * stepMs, () => this.agentReady(def.id));
+    this.later((DEV_ONBOARDING.length + 1) * stepMs + 600, () => this.activateAgent(def.id));
+  }
+  devOnboard() { this.onboard(DEV_AGENTS[0]); }
+  devTwoAgents() { for (const d of DEV_AGENTS) this.onboard(d, { stepMs: 700 }); }
+  devProvisionFails() { this.onboard(DEV_AGENTS[1], { stepMs: 1500, fail: 'CONNECTING_TOOLS' }); }
+  devDisable() { this.disableAgent(DEV_AGENTS[0].id); }
+  devRetire() { for (const d of DEV_AGENTS) if (this.store.world.agents[d.id]) this.retireAgent(d.id); }
+  devWork() { const id = DEV_AGENTS[0].id, taskId = this.id('task'); this.emit('TASK_CREATED', { taskId, title: 'Market scan (simulated)' }); this.later(600, () => this.emit('TASK_STARTED', { taskId, agentId: id, activity: 'researching', progress: { kind: 'stage', stage: 'Researching' } })); }
   manyAgents() {
     for (const a of EXTRA_AGENTS) if (!this.store.world.agents[a.agentId]) this.emit('AGENT_REGISTERED', { ...a, activity: 'idle' });
     this.later(500, () => {
@@ -212,6 +242,7 @@ function scenarioAgents(key, world) {
     reviewJourney: ['claude', 'codex'], claudeCodes: ['claude'], codexTests: ['codex'], claudeMessagesCodex: ['claude', 'codex'],
     testFails: ['codex'], testPasses: ['codex'], taskCompletes: ['claude'], ownerNeeded: ['codex'], tour: ['claude', 'codex'],
     teamMeeting: all.slice(0, 4), manyAgents: EXTRA_AGENTS.map(a => a.agentId), allIdle: all,
+    devOnboard: [DEV_AGENTS[0].id], devTwoAgents: DEV_AGENTS.map(d => d.id), devProvisionFails: [DEV_AGENTS[1].id], devDisable: [DEV_AGENTS[0].id], devRetire: DEV_AGENTS.map(d => d.id), devWork: [DEV_AGENTS[0].id],
   }[key] ?? [];
 }
 
@@ -219,5 +250,6 @@ export const SCENARIOS = [
   ['reviewJourney', 'Claude builds, Codex reviews'], ['claudeCodes', 'Claude starts coding'], ['codexTests', 'Codex starts testing'], ['claudeMessagesCodex', 'Claude messages Codex'],
   ['testFails', 'Test fails'], ['testPasses', 'Test succeeds'], ['taskCompletes', 'Task completes'], ['deployBegins', 'Deployment begins'],
   ['deploySucceeds', 'Deployment succeeds'], ['teamMeeting', 'Start a meeting'], ['endMeeting', 'End the meeting'], ['ownerNeeded', 'Needs Kyle'], ['manyAgents', 'Many agents at once'], ['queueWork', 'Queue 5 tasks'], ['allIdle', 'Agents go idle'],
+  ['devOnboard', 'DEV: onboard an unknown agent'], ['devTwoAgents', 'DEV: onboard two unknown agents'], ['devProvisionFails', 'DEV: provisioning fails'], ['devWork', 'DEV: unknown agent works'], ['devDisable', 'DEV: disable the unknown agent'], ['devRetire', 'DEV: retire the dev agents'],
   ['constructionStep', 'Construction: next milestone'], ['systemError', 'System error'], ['systemRecovers', 'System recovers'], ['tour', 'Play full tour'],
 ];

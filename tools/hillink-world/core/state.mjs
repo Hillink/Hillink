@@ -3,6 +3,7 @@
 import { validateEvent } from './events.mjs';
 import { applyPassEvent } from './construction.mjs';
 import { reconcileAgents } from './truth.mjs';
+import { normalizeDefinition, mergeDefinitions, checkAgentEvent, isLifecycleEvent, targetState, canWork, sameFamily } from './agents.mjs';
 
 export function emptyWorld() {
   return { seq: 0, at: 0, agents: {}, tasks: {}, systems: {}, prs: {}, builds: {}, deploys: {}, testRuns: {}, issues: {}, meetings: {}, meetingLog: [], passes: {}, messages: [], log: [] };
@@ -44,9 +45,30 @@ function setActivity(a, activity, event) {
   a.source = event.source;
 }
 
+// Pass 5E: registry rules, checked before the reducer touches anything (a refused event changes nothing).
+// Definitions and lifecycle follow core/agents.mjs; an agent that is not a working member (being provisioned,
+// disabled or retired) cannot be given work; and an agent defined by one source family is never changed by the other.
+const WORK_EVENTS = new Set(['TASK_STARTED', 'AGENT_STARTED_WORK', 'AGENT_THINKING', 'AGENT_COORDINATING', 'AGENT_RESEARCHING', 'AGENT_REVIEWING', 'AGENT_TESTING']);
+function precheck(world, e) {
+  const a = e.agentId != null ? world.agents[e.agentId] : null;
+  if (e.type === 'AGENT_DEFINED' || isLifecycleEvent(e.type)) return checkAgentEvent(a, e);
+  if (e.type === 'AGENT_REGISTERED' && a?.origin && !sameFamily(a.origin, e.source)) return `AGENT_REGISTERED: ${e.source} cannot re-register ${e.agentId} (defined by ${a.origin})`;
+  if (WORK_EVENTS.has(e.type) && a && !canWork(a)) return `${e.type}: ${e.agentId} is ${a.lifecycle.state}, not a working member`;
+  return null;
+}
+function define(a, raw, e) {
+  const d = normalizeDefinition({ ...raw, id: a.id }); if (!d) return;
+  a.definition = mergeDefinitions(a.definition, d);
+  a.definitionVersion = (a.definitionVersion ?? 0) + 1; a.definedAt = e.at;
+  // The fields older code reads directly stay in step with the definition.
+  if (d.name) a.name = d.name; if (d.role) a.role = d.role; if (d.kind) a.kind = d.kind;
+  if (d.appearance) a.appearance = a.definition.appearance;
+}
+const LIFECYCLE_HISTORY = 12;
+
 // Returns the set of changed entity keys ("agent:claude", "task:t1", "system:db", ...).
 export function applyEvent(world, event) {
-  const problem = validateEvent(event);
+  const problem = validateEvent(event) ?? precheck(world, event);
   if (problem) throw Error(problem);
   const changed = new Set();
   world.seq += 1;
@@ -56,7 +78,33 @@ export function applyEvent(world, event) {
     case 'AGENT_REGISTERED': {
       const a = agent(world, e.agentId, changed);
       Object.assign(a, { name: e.name, role: e.role, kind: e.kind ?? 'agent', home: e.home ?? null, appearance: e.appearance ?? null, source: e.source });
-      if (e.activity) setActivity(a, e.activity, e);
+      a.origin ??= e.source;
+      // Registration carries the definition fields HQ knows (Pass 5E); the pre-5E fields above stay as they were.
+      define(a, { ...(e.definition ?? {}), name: e.name, role: e.role, ...(e.kind ? { kind: e.kind } : {}), ...(e.appearance ? { appearance: e.appearance } : {}), ...(e.home ? { home: e.home } : {}) }, e);
+      if (e.activity && canWork(a)) setActivity(a, e.activity, e);
+      break;
+    }
+    case 'AGENT_DEFINED': {
+      const a = agent(world, e.agentId, changed), created = a.origin == null && !a.definition;
+      a.origin ??= e.source;
+      define(a, e.definition, e);
+      if (created && !a.lifecycle) a.lifecycle = { state: 'DRAFT', since: e.at, detail: null, history: [{ state: 'DRAFT', at: e.at }] };
+      break;
+    }
+    case 'AGENT_REQUESTED': case 'AGENT_PROVISIONING': case 'AGENT_PROVISIONING_WAITING': case 'AGENT_PROVISIONING_FAILED':
+    case 'AGENT_READY': case 'AGENT_ACTIVATED': case 'AGENT_DISABLED': case 'AGENT_RETIRED': {
+      const a = agent(world, e.agentId, changed), to = targetState(e);
+      a.origin ??= e.source;
+      if (e.definition) define(a, e.definition, e);
+      const history = [...(a.lifecycle?.history ?? []), { state: to, at: e.at, detail: e.detail ?? null }].slice(-LIFECYCLE_HISTORY);
+      a.lifecycle = { state: to, since: e.at, detail: e.detail ?? null, history };
+      a.source = e.source;
+      // Only a working member may hold work. Leaving (or not yet joining) the team drops any task and meeting;
+      // joining makes the agent available (its runtime, if HQ reports one, still decides what it does).
+      if (!canWork(a)) {
+        if (a.taskId && world.tasks[a.taskId]?.agentId === a.id && world.tasks[a.taskId].status === 'active') { const t = world.tasks[a.taskId]; t.status = 'queued'; t.agentId = null; t.history.push({ type: e.type, at: e.at }); changed.add(`task:${t.id}`); }
+        a.taskId = null; a.meetingId = null; setActivity(a, 'offline', e);
+      } else if (a.activity === 'offline' && !a.runtime) setActivity(a, 'idle', e);
       break;
     }
     case 'AGENT_RUNTIME': {

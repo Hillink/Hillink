@@ -7,16 +7,17 @@
 // Every event id derives from the evidence itself (sha, review id, check state), so polling is idempotent.
 import { SCHEMA_VERSION } from '../core/events.mjs';
 
-const PASS_DIR = 'tools/hillink-world/world/passes';
+import { DEFAULT_DEFINITIONS } from '../core/agents.mjs';
+const PASS_DIR ='tools/hillink-world/world/passes';
 const SAFE_REF = /^(?!-)[\w./-]{1,120}$/;
 const clip = (s, n = 160) => (typeof s === 'string' ? (s.length > n ? `${s.slice(0, n - 1)}…` : s) : null);
 const event = (id, type, at, fields) => ({ v: SCHEMA_VERSION, id, type, at, source: 'github', ...fields });
 
 // Which World agent a commit or review belongs to (co-author trailers, author, reviewer login).
+// Pass 5E: the patterns come from the registry (core/agents.mjs meta.attribution), not from code.
 export function agentFor(...texts) {
   const t = texts.filter(Boolean).join(' ').toLowerCase();
-  if (/\bclaude\b/.test(t)) return 'claude';
-  if (/codex/.test(t)) return 'codex';
+  for (const d of Object.values(DEFAULT_DEFINITIONS)) if (d.meta?.attribution && new RegExp(d.meta.attribution).test(t)) return d.id;
   return null;
 }
 const CI_RUNNING = new Set(['IN_PROGRESS', 'QUEUED', 'PENDING', 'WAITING', 'REQUESTED', 'EXPECTED']);

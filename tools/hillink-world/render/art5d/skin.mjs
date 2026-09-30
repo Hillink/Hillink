@@ -66,6 +66,9 @@ function vehicleRoutesOf(layout) {
 }
 
 export const STATE_COLOR = { working: '#35c486', travelling: '#4aa3ff', waiting: '#f4a23b', blocked: '#e5484d', done: '#5cc98a', idle: null, offline: '#6b7380' };
+// Pass 5E: bodies by rig profile (render/appearance.mjs RIG_PROFILES[].body). Only the humanoid figure exists today; a new
+// rig adds its drawer here (same interface as drawFigure) and every agent whose appearance names that rig uses it.
+const BODIES = { figure: drawFigure };
 export function stateOf(e, a) {
   const st = e.anim?.state, intent = e.anim?.intent;
   if (st === 'frustrated' || intent === 'blocked' || intent === 'recovering' || a.activity === 'error') return 'blocked';
@@ -730,8 +733,8 @@ export function createArtSkin(layout, skinId = 'real') {
     const fig = { x, y, h: e.h, dir: e.dir ?? 'front', posture: e.posture, state: dressed.clip, prev: d.reduced ? null : dressed.prev, blend: blendOf(e.anim, d.now), props: dressed.props, gait: e.gaitAmount ?? 1, t, time: d.reduced ? 0 : d.T + hash(e.id.length), stride: e.stride ?? 0, look, use: e.spotInfo?.use, moving: e.moving, alpha: a.activity === 'offline' ? 0.82 : 1 };
     if (!e.ride) softShadow(ctx, x, y + 0.5, e.h * 0.2, e.h * 0.07, { alpha: 0.34 }), softShadow(ctx, x + e.h * 0.16, y - e.h * 0.05, e.h * 0.24, e.h * 0.07, { alpha: 0.14 });
     stateRing(d, e, a, x, y);
-    const head = drawFigure(ctx, fig);
-    if (selected || hovered || PRODUCTIVE_STATES.has(st) || SITE_STATES.has(st)) d.late.unshift(() => drawFigure(ctx, { ...fig, alpha: selected ? 0.45 : 0.3 }));
+    const body = BODIES[e.rig?.body] ?? drawFigure, head = body(ctx, fig);
+    if (selected || hovered || PRODUCTIVE_STATES.has(st) || SITE_STATES.has(st)) d.late.unshift(() => body(ctx, { ...fig, alpha: selected ? 0.45 : 0.3 }));
     d.late.push(() => badge(d, e, a, x, head.top, hovered, selected));
   }
   // Pass 5C: ambient people (engine/npcs.mjs): same figures and locomotion, muted clothes, no name or status badge.

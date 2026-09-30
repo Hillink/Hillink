@@ -10,6 +10,8 @@ const makeEvent = (id, type, at, fields) => ({ v: SCHEMA_VERSION, id, type, at, 
 const make = makeEvent;
 
 // What an agent visibly does for a task, from the HQ operation's capability.
+// Pass 5E: the agent definition fields HQ reports, when it reports them (core/agents.mjs normalizes and bounds them).
+const hqDefinition = a => Object.fromEntries(Object.entries({ provider: a.provider, model: a.model, team: a.team, roleDescription: a.description, capabilities: a.capabilities, tools: a.tools }).filter(([, v]) => v != null));
 export function activityForCapability(capability = '') {
   if (/review/.test(capability)) return 'reviewing';
   if (/^(test|verify|security)/.test(capability)) return 'testing';
@@ -123,7 +125,7 @@ export class HqTranslator {
     for (const a of snap.agents ?? []) {
       out.push(make(id('agent', a.id), 'AGENT_REGISTERED', at, {
         agentId: a.id, name: a.name, role: clip(a.role, 120), activity: activityForStatus(a, tasksById[a.assignment]),
-        appearance: { real: a.real, fantasy: a.fantasy }, detail: clip(a.detail),
+        appearance: { real: a.real, fantasy: a.fantasy }, detail: clip(a.detail), definition: hqDefinition(a),
       }));
     }
     for (const t of snap.tasks ?? []) {
@@ -147,7 +149,7 @@ export class HqTranslator {
     const push = (type, fields) => out.push(make(`hq-${e.id}-${out.length}`, type, at, fields));
     switch (e.type) {
       case 'AGENT_REGISTERED':
-        push('AGENT_REGISTERED', { agentId: d.id, name: d.name, role: clip(d.role, 120), activity: 'offline', appearance: { real: d.real, fantasy: d.fantasy } });
+        push('AGENT_REGISTERED', { agentId: d.id, name: d.name, role: clip(d.role, 120), activity: 'offline', appearance: { real: d.real, fantasy: d.fantasy }, definition: hqDefinition(d) });
         break;
       case 'AGENT_OBSERVED': {
         // HQ observes only unassigned agents, so an observation never interrupts a live run.

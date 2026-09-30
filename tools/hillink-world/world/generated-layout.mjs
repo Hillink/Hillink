@@ -246,6 +246,8 @@ export function createGeneratedLayout(world, { theme = 'real' } = {}) {
     researching: place('development', ['print', 'read'], place('archive', ['read'])),
     communicating: place('comms', ['meeting', 'table']),
     waiting: place('queue', ['wait']),
+    // Pass 5E: where a theme may stage agents being provisioned (Real: the lobby, as onboarding).
+    onboarding: place('queue', ['wait']),
     idle: place('lounge', ['relax', 'coffee', 'snack', 'table'], place('queue', ['wait'])),
     offline: place('lounge', ['relax', 'table'], place('queue', ['wait'])),
   };

@@ -1,6 +1,7 @@
 import { STAGE_LABEL, PIECES } from '../core/construction.mjs';
 import { STATE_LABEL, deriveAgentState } from '../core/truth.mjs';
 import { roleOf } from '../core/roles.mjs';
+import { definitionOf } from '../core/agents.mjs';
 // Contextual detail (brief §10–11): built from World state on demand, never shown by default.
 const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const ago = (at, now) => (at == null ? 'unknown' : `${Math.max(0, Math.round((now - at) / 1000))}s ago`);
@@ -71,8 +72,9 @@ export function inspectHTML(ref, world, now, location, places = {}, extra = {}) 
     const job = extra.job, last = extra.lastJob, t = job?.task;
     const prRow = job?.pr ? row(job.kind === 'review' ? 'Reviewing' : 'Pull request', `${job.pr.title}${job.pr.state ? ` (${job.pr.state}${job.pr.verdict ? `: ${job.pr.verdict}` : ''})` : ''}`) : '';
     const owner = t?.agentId && t.agentId !== a.id ? row('Built by', world.agents[t.agentId]?.name ?? t.agentId) : '';
-    const truth = a.truth ?? deriveAgentState(world, a), role = roleOf(a.id);
+    const truth = a.truth ?? deriveAgentState(world, a), role = roleOf(a), def = definitionOf(a) ?? {};
     return `<p class="kicker">Agent</p><h2>${esc(a.name)}</h2><p class="muted">${esc(role ? `${role.title}: ${role.summary}` : a.role)}</p>
+      ${a.lifecycle && a.lifecycle.state !== 'ACTIVE' ? row('Lifecycle', a.lifecycle.state.toLowerCase().replace(/_/g, ' ') + (a.lifecycle.detail ? `: ${a.lifecycle.detail}` : '')) : ''}${def.provider ? row('Provider', def.model ? `${def.provider} (${def.model})` : def.provider) : ''}${def.team ? row('Team', def.team) : ''}
       ${row('State', STATE_LABEL[truth.state] ?? truth.state)}<p class="why">${esc(truth.reason)}</p>
       ${row('Doing', extra.status ?? a.activity)}${row('Since', ago(truth.since ?? a.since, now))}
       ${job ? row(job.kind === 'meeting' ? 'Meeting' : 'Task', job.title) + row('Stage', job.stage ?? 'Unknown') + prRow + owner : row('Task', 'None')}

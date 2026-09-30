@@ -1,35 +1,15 @@
 // Skins: the same simulation dressed two ways (plus the Blueprint debug view). A skin is materials for
 // the building and a look for each agent; nothing here changes positions, states or timing.
-// Agent identities (Kyle's directive): Claude builder/engineer (dwarf), Codex QA and security inspector
-// (cyborg), ChatGPT orchestrator (king), Qwen local analyst, Gemma utility worker, Local Verifier minor.
+// Pass 5E: agent looks are data in each agent's definition (core/agents.mjs, render/appearance.mjs): a base appearance
+// plus per-theme overrides. Hillink's current agents carry their pre-5E looks there unchanged; any other agent (one
+// the World has never seen) is drawn from its own appearance data, or a plain outfit in its registered colour.
+import { definitionOf, DEFAULT_DEFINITIONS } from '../core/agents.mjs';
+import { resolveAppearance, figureLookOf } from './appearance.mjs';
 
-const LOOKS = {
-  real: {
-    claude: { shirt: '#d9773f', sleeve: '#d9773f', pants: '#3a3f4a', hair: '#5a3a22', skin: '#f1c7a0', belt: '#4a3a2a', hoodie: true, glasses: true, screen: '#ffb27a', package: 'box' },
-    codex: { shirt: '#2d4f8e', pants: '#1f2530', hair: '#1a1a1d', skin: '#d8a883', headset: true, badge: '#e8f1ff', vest: null, jacket: '#243f73', screen: '#5ee1ff', package: 'box' },
-    chatgpt: { shirt: '#f2f4f7', jacket: '#2a2f3a', sleeve: '#2a2f3a', pants: '#2a2f3a', hair: '#2b2118', skin: '#eab893', tie: '#10a37f', package: 'box' },
-    qwen: { shirt: '#6f4fc9', pants: '#2b2440', hair: '#d8d4e6', skin: '#f3d0b0', glasses: true, screen: '#c3a6ff', package: 'box' },
-    gemma: { shirt: '#e7e3d6', overalls: '#2f8f6b', pants: '#2f8f6b', hair: '#6b3f22', skin: '#c98f68', hat: 'cap', hatColor: '#2f8f6b', screen: '#7cf0c4', package: 'box' },
-    'hq-verifier': { shirt: '#56606e', pants: '#2a313a', hair: '#333', skin: '#e2b48d', vest: '#f2b01e', hat: 'hardhat', hatColor: '#f2f2f2', scale: 0.92, package: 'box' },
-    kyle: { shirt: '#ffffff', jacket: '#1f2f5a', sleeve: '#1f2f5a', pants: '#1f2f5a', hair: '#1b1512', skin: '#b67c56', tie: '#7c4dff', package: 'box' },
-  },
-  fantasy: {
-    claude: { shirt: '#b5552b', sleeve: '#b5552b', pants: '#5a3b24', hair: '#c4521f', beard: '#c4521f', beardLong: true, skin: '#eab28a', hat: 'helmet', hatColor: '#9aa6b4', horns: true, belt: '#3c2a1a', scale: 0.86, wide: 1.2, headScale: 1.08, package: 'scroll' },
-    codex: { shirt: '#3c4a5c', pants: '#2a323d', skin: '#b8c4d0', skinTone2: 'rgba(120,135,155,0.55)', hair: '#5d6b7c', bald: true, visor: '#39e6ff', antenna: true, metalArm: true, core: true, glove: '#9aa6b4', package: 'scroll' },
-    chatgpt: { shirt: '#6b1f2e', sleeve: '#6b1f2e', pants: '#3a1620', hair: '#e9e4d8', beard: '#e9e4d8', skin: '#efc6a2', hat: 'crown', cape: '#a3182c', belt: '#c8a24a', package: 'scroll' },
-    qwen: { shirt: '#4a2f8a', robe: true, hair: '#e8e2f4', beard: '#e8e2f4', skin: '#f0cfae', hat: 'wizard', hatColor: '#3b2470', package: 'scroll' },
-    gemma: { shirt: '#3f7a4a', pants: '#5b4630', hair: '#7a4a2a', skin: '#e8b890', hat: 'hood', hatColor: '#2f5e39', goggles: true, scale: 0.8, package: 'scroll' },
-    'hq-verifier': { shirt: '#7d8794', pants: '#4a4f58', hair: '#444', skin: '#e2b48d', hat: 'helmet', vest: '#2f5aa8', scale: 0.92, package: 'scroll' },
-    kyle: { shirt: '#3a2b6b', sleeve: '#3a2b6b', pants: '#231a44', hair: '#1b1512', skin: '#b67c56', cape: '#7c4dff', package: 'scroll' },
-  },
-};
-
-// Unknown agents: a plain outfit in their registered colour, so they are never mistaken for a named agent.
+export const LOOKS = Object.fromEntries(['real', 'fantasy'].map(t => [t, Object.fromEntries(Object.values(DEFAULT_DEFINITIONS).map(d => [d.id, figureLookOf(resolveAppearance(d.appearance, t), t)]))]));
 export function lookFor(skinId, agent) {
-  const own = LOOKS[skinId === 'fantasy' ? 'fantasy' : 'real'][agent?.id];
-  if (own) return own;
-  const c = agent?.appearance?.color ?? '#6b7a90';
-  return { shirt: c, pants: '#2c3340', hair: '#3b2a20', package: skinId === 'fantasy' ? 'scroll' : 'box' };
+  const theme = skinId === 'fantasy' ? 'fantasy' : 'real';
+  return figureLookOf(resolveAppearance(definitionOf(agent ?? {})?.appearance, theme), theme);
 }
 
 // Building materials per skin.

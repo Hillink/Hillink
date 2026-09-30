@@ -7,11 +7,18 @@ import { Lift, seeded } from './lift.mjs';
 import { npcAt } from './ambience.mjs';
 
 import { PRODUCTIVE_ACTIVITIES as PRODUCTIVE } from '../core/truth.mjs';
+import { ACTIVITY_PLACE } from '../core/behavior.mjs';
+import { createInterpreter } from '../themes/interpreter.mjs';
+import { spawnEntity } from '../core/entities.mjs';
+import { definitionOf } from '../core/agents.mjs';
+import { resolveAppearance, rigProfileOf } from '../render/appearance.mjs';
 const HANDOFF_MS = 1500;
 
 export class WorldView {
   // scenery (optional): a theme's animation layer. It adds lifts, ambient staff (NPCs) and foreground occluders.
-  constructor(scene, effects, layout, scenery = null) {
+  // interpreter (Pass 5E): the theme's staging of canonical facts (themes/interpreter.mjs); Real by default.
+  constructor(scene, effects, layout, scenery = null, interpreter = null) {
+    this.interpreter = interpreter ?? createInterpreter('real');
     this.scene = scene; this.effects = effects; this.layout = layout; this.places = {}; this.lastMessage = null; this.roomSignals = {};
     this.scenery = scenery; this.activity = { rooms: {}, stations: {}, construction: 0 };
     const s = layout.entityScale ?? 1, ch = scenery?.characterHeight;
@@ -57,8 +64,16 @@ export class WorldView {
     }
   }
   syncAgents(world, now, rebuild = false) {
-    const agents = Object.values(world.agents);
-    const layout = this.layout, next = placeAgents(agents, this.places, layout);
+    // Pass 5E: the theme stages each agent from its canonical lifecycle. Absent agents (disabled, retired, drafts) are
+    // not in the building, so they hold no station; candidates are placed where the theme stages provisioning.
+    const layout = this.layout, staged = {}, rules = {};
+    for (const a of Object.values(world.agents)) staged[a.id] = this.interpreter.agent(a);
+    const agents = Object.values(world.agents).filter(a => staged[a.id].presence !== 'absent');
+    for (const a of agents) if (staged[a.id].presence === 'candidate') {
+      const r = layout.places?.[staged[a.id].place] ?? layout.places?.waiting ?? ACTIVITY_PLACE.waiting;
+      rules[a.id] = { ...r, clip: staged[a.id].clip };
+    }
+    const next = placeAgents(agents, this.places, layout, rules);
     for (const a of agents) {
       let e = this.scene.get(`agent:${a.id}`);
       const place = next[a.id], target = stationPoint(place, layout);
@@ -68,7 +83,7 @@ export class WorldView {
         // Arrivals queue side by side at the door (one footprint apart) instead of spawning on one point.
         const door = layout.locationById[layout.spawn ?? 'command'].door, slot = this.arrivals = (this.arrivals ?? 0) + 1;
         const dx = ((slot - 1) % 5) * (layout.overflowStep ?? 0);
-        e = this.scene.add({ id: `agent:${a.id}`, kind: 'agent', layer: LAYERS.agent, x: door[0] + dx, y: door[1], w: this.size.agent[0], h: this.size.agent[1], selectable: true, ref: { type: 'agent', id: a.id }, facing: 1, anchor: this.scenery ? 'feet' : undefined });
+        e = spawnEntity(this.scene, 'agent', { id: `agent:${a.id}`, x: door[0] + dx, y: door[1], w: this.size.agent[0], h: this.size.agent[1], selectable: true, ref: { type: 'agent', id: a.id }, facing: 1, anchor: this.scenery ? 'feet' : undefined });
       }
       const prev = this.places[a.id];
       const placeChanged = created || !prev || prev.location !== place.location || prev.station !== place.station || prev.overflow !== place.overflow;
@@ -76,9 +91,12 @@ export class WorldView {
       if (created && rebuild) { e.x = target[0]; e.y = target[1]; e.dest = { location: place.location, target }; this.scene.moved(e); }
       else if (placeChanged) { this.endHandoff(e); this.goTo(e, place, target, now); }
       if (e.clip !== place.clip) e.clipStart = now;
-      Object.assign(e, { clip: place.clip, agent: a });
+      // The body's rig (render/appearance.mjs): its height comes from the definition, not from the agent's id.
+      const rig = rigProfileOf(resolveAppearance(definitionOf(a)?.appearance, this.interpreter.themeId));
+      e.h = this.size.agent[1] * rig.heightScale; e.w = this.size.agent[0] * rig.heightScale;
+      Object.assign(e, { clip: place.clip, agent: a, staging: staged[a.id], rig });
     }
-    for (const [id, e] of this.scene.entities) if (e.kind === 'agent' && !world.agents[e.ref.id]) this.scene.remove(id);
+    for (const [id, e] of this.scene.entities) if (e.kind === 'agent' && (!world.agents[e.ref.id] || staged[e.ref.id]?.presence === 'absent')) this.scene.remove(id);
     this.places = next;
   }
   syncTasks(world) {
@@ -86,7 +104,7 @@ export class WorldView {
     for (const [id, e] of this.scene.entities) if (e.kind === 'task' && !world.tasks[e.ref.id]) this.scene.remove(id);
     for (const t of Object.values(world.tasks)) {
       let e = this.scene.get(`task:${t.id}`);
-      if (!e) e = this.scene.add({ id: `task:${t.id}`, kind: 'task', layer: LAYERS.task, x: 0, y: 0, w: this.size.task, h: this.size.task, selectable: true, ref: { type: 'task', id: t.id } });
+      if (!e) e = spawnEntity(this.scene, 'task', { id: `task:${t.id}`, x: 0, y: 0, w: this.size.task, h: this.size.task, selectable: true, ref: { type: 'task', id: t.id } });
       const p = placement[t.id];
       e.task = t; e.follow = p.follow ? `agent:${p.follow}` : null;
       if (p.point) { e.x = p.point[0]; e.y = p.point[1]; this.scene.moved(e); }
@@ -95,7 +113,7 @@ export class WorldView {
   syncSystem(s) {
     const spots = this.layout.systemSpots, spot = spots[s.kind] ?? spots.platform;
     let e = this.scene.get(`system:${s.id}`);
-    if (!e) e = this.scene.add({ id: `system:${s.id}`, kind: 'system', layer: LAYERS.system, x: spot[0], y: spot[1], w: this.size.system, h: this.size.system, selectable: true, ref: { type: 'system', id: s.id } });
+    if (!e) e = spawnEntity(this.scene, 'system', { id: `system:${s.id}`, x: spot[0], y: spot[1], w: this.size.system, h: this.size.system, selectable: true, ref: { type: 'system', id: s.id } });
     e.system = s;
   }
   // Tests, builds, deploys, PRs and issues light up their rooms' equipment; the renderer reads these per room.

@@ -46,7 +46,7 @@ function applyTheme(id, { keepCamera = false } = {}) {
   const cam0 = keepCamera && theme ? camera.toJSON() : null;
   theme = loadTheme(THEME_ORDER.includes(id) ? id : 'real', { world: siteWorld, art: params.get('art') });
   const places = view?.places ?? {}; // Semantic places (room + station ids) carry across themes.
-  scene = new Scene(); view = new IsoWorldView(scene, effects, theme.layout, theme.scenery); view.places = places;
+  scene = new Scene(); view = new IsoWorldView(scene, effects, theme.layout, theme.scenery, theme.interpreter); view.places = places;
   Object.assign(camera, { bounds: theme.layout.bounds, home: theme.layout.home ?? null, minZoom: theme.camera.minZoom, maxZoom: theme.camera.maxZoom });
   view.sync(store.world, new Set(['*']), performance.now());
   // Agents start at their stations instead of walking in from the entrance.
