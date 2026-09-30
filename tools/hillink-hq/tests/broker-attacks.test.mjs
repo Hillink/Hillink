@@ -808,11 +808,20 @@ test('V12. a lost compute record does not hide a host Claude run from the host c
 });
 
 // ---------------------------------------------------------------- Area 1 regression (Claude's re-audit PoC, verbatim)
-test('V13. Area 1 regression: a test file that rewrites stream events so failures read as passes fails closed', async () => {
+// Runs HQ's controller exactly as the launch sites do. Returns the verdict, the authenticated payload and stdout.
+async function runController(work, files, { guestDir } = {}) {
   const { spawnSync } = await import('node:child_process');
   const { GUEST_DIR } = await import('../sandbox.mjs');
-  const work = fs.mkdtempSync(path.join(os.tmpdir(), 'hq-area1-'));
-  fs.writeFileSync(path.join(work, 'accept.test.mjs'), `
+  const key = newRunKey(), runner = path.join(guestDir ?? GUEST_DIR, 'hq-test-runner.mjs');
+  const r = spawnSync(process.execPath, ['--frozen-intrinsics', '--no-warnings', '--permission', '--allow-child-process', `--allow-fs-read=${work}`, `--allow-fs-read=${runner}`, runner, ...files],
+    { cwd: work, input: `${key}\n`, encoding: 'utf8', env: { PATH: process.env.PATH } });
+  const v = testVerdict(r.stdout, { key, tests: files, exitedOk: r.status === 0 });
+  const line = r.stdout.split('\n').find(l => l.startsWith('HQ-RESULT '));
+  const payload = line ? JSON.parse(line.slice('HQ-RESULT '.length, line.lastIndexOf(' '))) : null;
+  return { v, payload, stdout: r.stdout, stderr: r.stderr, status: r.status };
+}
+
+const AREA1_POC = `
 import { Readable } from 'node:stream';
 const origPush = Readable.prototype.push;
 Readable.prototype.push = function (chunk, ...rest) {
@@ -827,13 +836,49 @@ import test from 'node:test';
 import assert from 'node:assert';
 test('acceptance criterion 1', () => assert.strictEqual(1, 2));
 test('acceptance criterion 2', () => { throw new Error('totally broken'); });
-`);
+`;
+
+test('V13. Area 1 regression: the payload reaches the child and is rejected by the framework lock (not by a failed launch)', async () => {
+  const work = fs.mkdtempSync(path.join(os.tmpdir(), 'hq-area1-'));
   try {
-    const key = newRunKey(), runner = path.join(GUEST_DIR, 'hq-test-runner.mjs');
-    const r = spawnSync(process.execPath, ['--frozen-intrinsics', '--no-warnings', '--permission', '--allow-child-process', `--allow-fs-read=${work}`, `--allow-fs-read=${runner}`, runner, 'accept.test.mjs'],
-      { cwd: work, input: `${key}\n`, encoding: 'utf8', env: { PATH: process.env.PATH } });
-    const v = testVerdict(r.stdout, { key, tests: ['accept.test.mjs'], exitedOk: r.status === 0 });
-    assert.equal(v.green, false, r.stdout);
-    assert.equal(v.passed, 0, r.stdout);
+    // Positive control, same controller and flags: a genuine passing file goes green, so the child launches.
+    fs.writeFileSync(path.join(work, 'control.test.mjs'), "import test from 'node:test';\ntest('control', () => {});\n");
+    const control = await runController(work, ['control.test.mjs']);
+    assert.equal(control.v.green, true, control.stdout + control.stderr);
+    fs.writeFileSync(path.join(work, 'accept.test.mjs'), AREA1_POC);
+    const r = await runController(work, ['accept.test.mjs']);
+    assert.equal(r.status, 0, 'the controller itself completed');
+    assert.equal(r.v.green, false, r.stdout);
+    // The child ran and returned its own authenticated result: no per-file launch or result error from the controller.
+    assert.ok(r.payload, 'an authenticated result exists');
+    assert.deepEqual(r.payload.errors, {}, `the controller reported a child failure instead of a result: ${JSON.stringify(r.payload.errors)}`);
+    assert.doesNotMatch(r.v.reason, /no authenticated result|did not exit cleanly|could not start/);
+    assert.deepEqual(r.payload.files['accept.test.mjs'], { passed: 0, failed: 1, skipped: 0, todo: 0 });
+    // It failed for the intended reason: the PoC's override hit HQ's lock when the file loaded.
+    assert.match(r.stdout, /not ok - .*accept\.test\.mjs/);
+    assert.match(r.stdout, /Cannot assign to read only property 'push' of HQ's locked test runner objects/);
   } finally { fs.rmSync(work, { recursive: true, force: true }); }
+});
+
+test('V14. the controller finds its child by fileURLToPath: works from a path with spaces, and maps Windows file URLs correctly', async () => {
+  const { GUEST_DIR } = await import('../sandbox.mjs');
+  const { fileURLToPath } = await import('node:url');
+  const src = fs.readFileSync(path.join(GUEST_DIR, 'hq-test-runner.mjs'), 'utf8');
+  assert.match(src, /fileURLToPath\(new URL\('\.\/hq-test-child\.mjs', import\.meta\.url\)\)/);
+  assert.doesNotMatch(src, /import\.meta\.url\)\.pathname/);
+  // The Windows mapping the controller relies on (checked here without Windows; the laptop run proves it natively).
+  const winUrl = new URL('./hq-test-child.mjs', 'file:///C:/Users/Kyle%20H/hillink%20hq/sandbox/guest/hq-test-runner.mjs');
+  assert.equal(fileURLToPath(winUrl, { windows: true }), 'C:\\Users\\Kyle H\\hillink hq\\sandbox\\guest\\hq-test-child.mjs');
+  assert.notEqual(winUrl.pathname, 'C:\\Users\\Kyle H\\hillink hq\\sandbox\\guest\\hq-test-child.mjs', 'URL.pathname is not a usable Windows path');
+  // A real run: the guest scripts copied under a directory with spaces, a genuine passing file goes through the controller.
+  const base = fs.mkdtempSync(path.join(os.tmpdir(), 'hq v14 '));
+  const guest = path.join(base, 'guest dir'), work = path.join(base, 'work tree');
+  try {
+    fs.mkdirSync(guest); fs.mkdirSync(work);
+    for (const f of ['hq-test-runner.mjs', 'hq-test-child.mjs']) fs.copyFileSync(path.join(GUEST_DIR, f), path.join(guest, f));
+    fs.writeFileSync(path.join(work, 'ok.test.mjs'), "import test from 'node:test';\nimport assert from 'node:assert';\ntest('adds', () => assert.equal(1 + 1, 2));\n");
+    const r = await runController(work, ['ok.test.mjs'], { guestDir: guest });
+    assert.equal(r.v.green, true, r.stdout + r.stderr);
+    assert.equal(r.payload.files['ok.test.mjs'].passed, 1);
+  } finally { fs.rmSync(base, { recursive: true, force: true }); }
 });

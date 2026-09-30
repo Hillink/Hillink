@@ -12,6 +12,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { spawn } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 
 const writeSync = fs.writeSync, hash = crypto.hash;
 const out = s => { try { writeSync(1, s); } catch { /* stdout closed: no result, fails closed */ } };
@@ -27,7 +28,8 @@ const files = process.argv.slice(2);
 if (!files.length || files.some(f => f.startsWith('-') || path.isAbsolute(f) || f.split(/[\\/]/).includes('..')) || new Set(files).size !== files.length) { out('HQ-RUNNER: bad test file list.\n'); process.exit(98); }
 
 const root = process.cwd();
-const CHILD = path.join(path.dirname(new URL(import.meta.url).pathname), 'hq-test-child.mjs');
+// fileURLToPath, not URL.pathname: correct on native Windows (drive letters, backslashes) and with spaces (%20).
+const CHILD = fileURLToPath(new URL('./hq-test-child.mjs', import.meta.url));
 // The child gets the controller's own hardening flags (minus child-process rights) and may read only /work and its script.
 const passThrough = process.execArgv.filter(a => a === '--experimental-strip-types');
 const childArgs = ['--frozen-intrinsics', '--no-warnings', ...passThrough, '--permission', `--allow-fs-read=${root}`, `--allow-fs-read=${CHILD}`, CHILD];
