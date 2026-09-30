@@ -14,6 +14,8 @@ import { hoverText, inspectHTML } from './ui/inspect.mjs';
 import { summarize, feedHTML, attentionHTML, rosterHTML, paintFaces } from './ui/hud.mjs';
 import { connectHq, hqAvailable } from './adapters/hq-client.mjs';
 import { explainAgent, STATE_LABEL } from './core/truth.mjs';
+import { createConstructionDemo, DEMO_STEPS } from './sim/construction-demo.mjs';
+import { STAGE_LABEL as PROJECT_STAGE } from './procgen/construction.mjs';
 
 const $ = id => document.getElementById(id);
 const storage = {
@@ -32,11 +34,15 @@ const effects = new Effects();
 const camera = new Camera({ bounds: { x: 0, y: 0, w: 1, h: 1 } });
 const canvas = $('world'), renderer = createCanvasRenderer(canvas);
 let theme, scene, view;
+// Pass 5B: the canonical procedural world the building is generated from (GET /api/site), or null for the
+// hand-authored legacy building (?world=legacy). In the construction demo it is a simulated copy that is never saved.
+let siteWorld = null, demo = null;
 let hover = null, selected = null, follow = null, lastFrame = performance.now(), running = false;
 
 // Themes: same World state, different layout and art. Switching rebuilds only the view.
-function applyTheme(id) {
-  theme = loadTheme(THEME_ORDER.includes(id) ? id : 'real');
+function applyTheme(id, { keepCamera = false } = {}) {
+  const cam0 = keepCamera && theme ? camera.toJSON() : null;
+  theme = loadTheme(THEME_ORDER.includes(id) ? id : 'real', { world: siteWorld });
   const places = view?.places ?? {}; // Semantic places (room + station ids) carry across themes.
   scene = new Scene(); view = new IsoWorldView(scene, effects, theme.layout, theme.scenery); view.places = places;
   Object.assign(camera, { bounds: theme.layout.bounds, home: theme.layout.home ?? null, minZoom: theme.camera.minZoom, maxZoom: theme.camera.maxZoom });
@@ -44,8 +50,8 @@ function applyTheme(id) {
   // Agents start at their stations instead of walking in from the entrance.
   for (const e of scene.entities.values()) if (e.kind === 'agent') { const p = e.path?.at(-1); if (p) { e.x = p[0]; e.y = p[1]; e.path = []; e.moving = false; scene.moved(e); } }
   view.step(0, performance.now(), { instant: true }, stepPath);
-  hover = null; select(null); cameraTouched = false;
-  const cam = storage.get(`hlw:camera:${theme.id}`);
+  hover = null; if (!keepCamera) { select(null); cameraTouched = false; }
+  const cam = cam0 ?? (params.get('camera') ? null : storage.get(`hlw:camera:${theme.id}${siteWorld ? ':gen' : ''}`));
   if (cam && Number.isFinite(cam.zoom)) camera.animateTo(cam, 0); else camera.overview({ duration: 0 });
   storage.set('hlw:theme', theme.id);
   document.documentElement.dataset.theme = theme.id;
@@ -230,7 +236,7 @@ for (const id of ['inspect', 'side', 'roster']) $(id).addEventListener('click', 
 export function focus(target) {
   cameraTouched = true; // a chosen view must survive HUD resizes
   if (target === 'overview') { follow = null; camera.overview(); return invalidate(); }
-  const [kind, id] = target.split(':');
+  const cut = target.indexOf(':'), kind = target.slice(0, cut), id = target.slice(cut + 1); // ids may contain ':' (site:meeting-room)
   if (kind === 'room') { const l = theme.layout.locationById[id]; follow = null; camera.focusRect({ x: l.x, y: l.y, w: l.w, h: l.h }, { maxZoom: theme.camera.maxZoom * 0.75 }); }
   else {
     const e = scene.get(target); if (!e) return;
@@ -288,9 +294,10 @@ function showMode(state) {
   const text = { sim: 'SIMULATION: not real Hillink activity', live: 'LIVE: HQ', down: 'HQ OFFLINE: showing last known state' }[state];
   $('mode').textContent = text; $('mode').dataset.state = state;
 }
-$('scenarios').innerHTML = SCENARIOS.map(([key, text]) => `<button data-sim="${key}">${text}</button>`).join('') + '<button data-sim="reset" class="danger">Reset simulation</button>';
+$('scenarios').innerHTML = SCENARIOS.map(([key, text]) => `<button data-sim="${key}">${text}</button>`).join('') + '<button data-sim="demoStep">Meeting room construction: next step (demo)</button><button data-sim="reset" class="danger">Reset simulation</button>';
 $('scenarios').addEventListener('click', e => {
   const key = e.target.closest('[data-sim]')?.dataset.sim; if (!key) return;
+  if (key === 'demoStep') { if (!demo) { $('sim-note').textContent = 'Open the World with ?demo=construction to run the construction demonstration (a simulated copy of the world).'; return; } demoStep(); return; }
   if (key === 'reset') { sim.stop(); storage.set('hlw:sim-world', null); location.reload(); return; }
   const cancelled = sim.run(key);
   $('sim-note').textContent = cancelled.length ? `Stopped “${cancelled.join('”, “')}” so it can't overwrite this scenario.` : '';
@@ -304,7 +311,28 @@ $('scenarios').addEventListener('click', e => {
 // v2: worlds saved by older builds (v1) are discarded rather than replayed into the new state shape.
 setInterval(() => { if (mode === 'sim') storage.set('hlw:sim-world', { v: 2, world: store.world }); }, 2000);
 
-function savePrefs() { cameraTouched = true; clearTimeout(savePrefs.t); savePrefs.t = setTimeout(() => storage.set(`hlw:camera:${theme.id}`, camera.toJSON()), 300); }
+function savePrefs() { cameraTouched = true; clearTimeout(savePrefs.t); savePrefs.t = setTimeout(() => storage.set(`hlw:camera:${theme.id}${siteWorld ? ':gen' : ''}`, camera.toJSON()), 300); }
+
+// Pass 5B: when the canonical world changes (construction reported by HQ, or a demo step), the building is regenerated
+// from it: layout, navigation and art. Agents keep their places; the camera stays where it is.
+function rebuildWorld() { applyTheme(theme.id, { keepCamera: true }); }
+// Live: the World server applies HQ's facts to the persisted canonical world; the page picks up the new version.
+async function pollSite() {
+  try { const r = await fetch('/api/site', { cache: 'no-store' }); if (r.ok) { const body = await r.json(), sig = JSON.stringify(body.world); if (sig !== pollSite.sig) { const first = !pollSite.sig; pollSite.sig = sig; if (!first) { siteWorld = body.world; rebuildWorld(); } } } } catch { /* keep the last known world */ }
+  setTimeout(pollSite, 10000);
+}
+// The construction demo: one step applies one batch of simulated HQ facts to the simulated world, regenerates the
+// building, then moves the simulated agents (so builders walk to the site from where they were).
+function demoStep({ rebuild = true } = {}) {
+  if (!demo || demo.done) return null;
+  const results = demo.applyCanonical();
+  if (rebuild) rebuildWorld();
+  const label = demo.applyAgents(); store.flush();
+  const p = demo.project;
+  $('sim-note').textContent = `Step ${demo.index} of ${DEMO_STEPS.length}: ${label}.${p ? ` Construction: ${PROJECT_STAGE[p.stage]}${p.blocked ? ' (blocked)' : ''}${p.rework ? ' (rework)' : ''}${p.completed ? ', complete' : ''}.` : ''}${results.some(r => !r.applied) ? ` Refused: ${results.filter(r => !r.applied).map(r => `${r.type} (${r.reason})`).join('; ')}.` : ''}`;
+  invalidate();
+  return { label, results };
+}
 
 // Construction (LIVE only): pass evidence from git and GitHub, collected and journaled by the World server.
 // Kept as sticky events so an HQ reconnect never demolishes what has been built.
@@ -319,8 +347,13 @@ async function pollConstruction() {
 
 // Boot.
 resize();
+if (params.get('world') !== 'legacy') {
+  try { const r = await fetch('/api/site', { cache: 'no-store' }); if (r.ok) siteWorld = (await r.json()).world; } catch { /* no generated world: the legacy building */ }
+}
+const demoMode = params.get('demo') === 'construction' && !!siteWorld;
+if (demoMode) { siteWorld = structuredClone(siteWorld); siteWorld.simulated = true; } // never saved; refuses live HQ events
 applyTheme(params.get('theme') ?? storage.get('hlw:theme') ?? 'real');
-mode = requested === 'sim' ? 'sim' : requested === 'hq' || await hqAvailable() ? 'hq' : 'sim';
+mode = demoMode || requested === 'sim' ? 'sim' : requested === 'hq' || await hqAvailable() ? 'hq' : 'sim';
 if (mode === 'hq') {
   // Live: the simulator is hidden so simulated events can never mix with real ones.
   $('sim-toggle').hidden = true; $('sim-panel').hidden = true;
@@ -329,9 +362,21 @@ if (mode === 'hq') {
   pollConstruction(); pollCommands();
 } else {
   showMode('sim');
-  const saved = storage.get('hlw:sim-world');
+  const saved = demoMode ? null : storage.get('hlw:sim-world');
   if (saved?.v === 2) store.replace(saved.world); else sim.seed();
 }
+if (demoMode) {
+  // ?demo=construction[&step=N][&walk=1]: jump to step N (agents placed), or with walk=1 leave the last step's walks running.
+  $('sim-toggle').hidden = false; store.flush();
+  demo = createConstructionDemo({ siteWorld, store });
+  const target = Math.min(DEMO_STEPS.length, Number(params.get('step') ?? 0));
+  const walk = params.get('walk') === '1';
+  for (let k = 0; k < target; k++) { const last = k === target - 1; demo.applyCanonical(); if (last && walk) rebuildWorld(); demo.applyAgents(); store.flush(); }
+  if (target && !walk) rebuildWorld();
+  $('sim-note').textContent = target ? `Construction demo at step ${target} of ${DEMO_STEPS.length}: ${DEMO_STEPS[target - 1].label}.` : 'Construction demo ready: press "Meeting room construction: next step".';
+} else if (siteWorld && !siteWorld.simulated) pollSite();
+// ?camera=room:<id>|agent:<id>|overview|building: frame a view on load (reproducible screenshots).
+if (params.get('camera')) setTimeout(() => focus(params.get('camera')), 50);
 $('empty').hidden = Object.keys(store.world.agents).length > 0;
 invalidate();
-window.hillinkWorld = { why: id => explainAgent(store.world, id), get commands() { return commandInfo; }, get constructionStatus() { return constructionStatus; }, store, get scene() { return scene; }, get theme() { return theme; }, camera, sim, focus, setTheme: applyTheme }; // Dev handle for tests and console.
+window.hillinkWorld = { get siteWorld() { return siteWorld; }, get demo() { return demo; }, demoStep, why: id => explainAgent(store.world, id), get commands() { return commandInfo; }, get constructionStatus() { return constructionStatus; }, store, get scene() { return scene; }, get theme() { return theme; }, camera, sim, focus, setTheme: applyTheme }; // Dev handle for tests and console.

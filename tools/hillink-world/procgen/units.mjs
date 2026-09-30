@@ -37,6 +37,8 @@ export const DIMS = Object.freeze({
   // Smallest usable room: a door, a person turning, furniture on one wall.
   room: { minSide: snapUp(Math.max(door.width + 1, 5 * person.footprint.w)), minArea: 6 },
   stairCore: { w: snapUp(door.width + 0.5), d: 4 }, // a straight flight rising one storey, plus landings
+  // Pass 5B: an elevator shaft beside the stair (the car from world/scale.mjs ARCH.elevator plus running clearance).
+  liftShaft: { w: snapUp(toMetres(ARCH.elevator.w) + 0.4), d: snapUp(toMetres(ARCH.elevator.d) + 0.4) },
   vehicle,
   road: { lane, width: snapUp(2 * lane), shoulder: 0.5 },
   path: { width: snapUp(2 * person.footprint.w + 0.5) },

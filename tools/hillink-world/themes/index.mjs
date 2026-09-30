@@ -5,6 +5,8 @@ import { createIsoLayout } from '../world/layout.mjs';
 import { createIsoSkin } from '../render/iso-skin.mjs';
 import { STREET } from '../world/building.mjs';
 import { AGENT, ARCH } from '../world/scale.mjs';
+import { createGeneratedLayout } from '../world/generated-layout.mjs';
+import { createSiteSkin } from '../render/site-skin.mjs';
 
 export const THEME_ORDER = ['real', 'fantasy', 'blueprint'];
 export const THEME_NAMES = { real: 'Realistic', fantasy: 'Fantasy', blueprint: 'Blueprint' };
@@ -20,7 +22,14 @@ function scenery(L) {
   };
 }
 
-export function loadTheme(id) {
-  const key = THEME_ORDER.includes(id) ? id : 'real', L = hqLayout();
+// Pass 5B: with a canonical procedural world the theme runs on generated geometry (world/generated-layout.mjs and
+// render/site-skin.mjs); without one it falls back to the hand-authored building (kept for comparison: ?world=legacy).
+export function loadTheme(id, { world = null } = {}) {
+  const key = THEME_ORDER.includes(id) ? id : 'real';
+  if (world) {
+    const G = createGeneratedLayout(world, { theme: key });
+    return { id: key, name: THEME_NAMES[key], layout: G, skin: createSiteSkin(G, key), scenery: { characterHeight: G.characterHeight, walkSpeed: G.walkSpeed, liftSpeed: ARCH.elevator.speed, npcHeight: AGENT.height, npcs: [] }, camera: { minZoom: 0.2, maxZoom: 4 }, generated: true };
+  }
+  const L = hqLayout();
   return { id: key, name: THEME_NAMES[key], layout: L, skin: createIsoSkin(L, key), scenery: scenery(L), camera: { minZoom: 0.45, maxZoom: 4 } };
 }

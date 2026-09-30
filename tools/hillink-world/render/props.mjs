@@ -176,6 +176,8 @@ export const PROPS = {
       else { const [sx, sy] = d.P.at(x + 4.5, z + 3, f, top + 5); d.ctx.strokeStyle = '#1f7a3f'; d.ctx.lineWidth = 1.4; d.ctx.beginPath(); d.ctx.moveTo(sx - 2.5, sy); d.ctx.lineTo(sx - 0.5, sy + 2); d.ctx.lineTo(sx + 3, sy - 2.5); d.ctx.stroke(); }
     });
   },
+  // Pass 5B: an office printer; its status light and the paper tray show while someone uses it.
+  printer(d, it) { const b = box(it), f = it.floor, h = it.h, busy = d.pointBusy?.(`${it.room ?? ''}:${it.id}@0`) || d.pointBusy?.(`${it.room ?? ''}:${it.id}`); prism(d, f, { ...b, h1: h * 0.82 }, d.M.fantasy ? '#6b5a44' : '#e3e5e8'); prism(d, f, { x0: b.x0 + 2, x1: b.x1 - 2, z0: b.z0 + 2, z1: b.z1 - 2, h0: h * 0.82, h1: h }, d.M.fantasy ? '#8a7456' : '#cfd3d8'); prism(d, f, { x0: it.x - 5, x1: it.x + 5, z0: b.z0 - 3, z1: b.z0 + 1, h0: h * 0.55, h1: h * 0.58 }, '#f7f7f2', { outline: false }); const [sx, sy] = d.P.at(b.x1 - 4, b.z0, f, h * 0.7); d.ctx.fillStyle = busy ? '#3ddc84' : '#6b7a90'; d.ctx.fillRect(sx - 1, sy - 1, 2.2, 2.2); },
   waterCooler(d, it) { const b = box(it, 1, -1, 1, -1), f = it.floor; prism(d, f, { ...b, h1: it.h - 12 }, '#e9ecef'); const [sx, sy] = d.P.at(it.x, it.z, f, it.h - 5); d.ctx.fillStyle = 'rgba(120,190,255,0.75)'; d.ctx.beginPath(); d.ctx.ellipse(sx, sy, 6, 9, 0, 0, TAU); d.ctx.fill(); d.ctx.strokeStyle = INK; d.ctx.lineWidth = d.lw; d.ctx.stroke(); },
   roofSign(d, it) {
     const { ctx, P } = d, f = it.floor, b = box(it);

@@ -32,6 +32,9 @@ export function resolveState(e, now) {
   if (e.sitUntil > now) return 'sit';
   const a = e.agent; if (!a) return 'idle';
   const atStation = !e.moving && e.spot != null && e.spot === e.placeKey;
+  // Pass 5B: at a construction site a productive agent builds, or inspects the work.
+  if (atStation && e.spotInfo?.use === 'build' && ['coding', 'thinking', 'researching'].includes(a.activity)) return 'assemble';
+  if (atStation && (e.spotInfo?.use === 'site-inspect' || e.spotInfo?.use === 'build') && ['testing', 'reviewing', 'coding', 'thinking'].includes(a.activity)) return 'survey';
   switch (a.activity) {
     case 'coding': return atStation ? (e.posture === 'sit' ? 'type' : 'work') : 'idle';
     case 'thinking': return atStation ? 'work' : 'idle';
@@ -62,8 +65,8 @@ export function actionText(e, layout) {
     case 'type': case 'work': case 'inspect': case 'read': return PRODUCTIVE_WORDS[a?.activity] ?? 'Working';
     case 'talk': return e.errand ? 'Handing off' : e.receiving ? 'Receiving a handoff' : 'Talking';
     case 'meeting': return 'In a meeting';
-    case 'assemble': return `Installing commit ${e.visit?.ref?.slice(0, 7) ?? ''}`.trim();
-    case 'survey': return e.visit?.state === 'changes_requested' ? 'Marking changes on the site' : 'Inspecting the site';
+    case 'assemble': return e.visit ? `Installing commit ${e.visit?.ref?.slice(0, 7) ?? ''}`.trim() : `Building ${where ?? 'on site'}`.replace(/: .*$/, '');
+    case 'survey': return e.visit ? (e.visit?.state === 'changes_requested' ? 'Marking changes on the site' : 'Inspecting the site') : 'Inspecting the construction';
     case 'blocked': return 'Blocked';
     case 'waiting': return 'Waiting';
     case 'celebrate': return 'Finished';

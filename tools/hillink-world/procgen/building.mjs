@@ -12,6 +12,7 @@
 import { DIMS, snap, snapUp } from './units.mjs';
 import { rect, r3, centre } from './geom.mjs';
 import { accessRank } from './capabilities.mjs';
+import { rng as rngOf } from './rng.mjs';
 
 export const roomLength = (areaM2, width) => snapUp(Math.max(areaM2 / width, DIMS.room.minSide));
 const ROLE = { public: 'public-area', staff: 'workstation-area', secure: 'secure-area' };
@@ -72,14 +73,26 @@ export function layoutBands({ program, bl, br, start, depth = null, r }) {
   return { bands, depth: total };
 }
 
+// The vertical core at one end of the entry hall: a stair flight and, beside it, an elevator shaft.
+export const CORE_W = r3(DIMS.stairCore.w + DIMS.liftShaft.w);
+
 // A whole design for a program. Returns the local plan the placer turns into world spaces and doors.
-export function designBuilding(program, r) {
-  const cw = DIMS.corridor, hallD = DIMS.stairCore.d;
+// `levels` (optional) splits the program over storeys: [[specs for level 0], [specs for level 1], ...]. Every level
+// shares the same footprint, band widths and core, so the building reads as one block.
+export function designBuilding(program, r, { levels = null } = {}) {
+  const cw = DIMS.corridor, hallD = DIMS.stairCore.d, programs = levels ?? [program], all = programs.flat();
+  // Each level lays out from its own sub-stream, so the sizing pass and the final pass make the same choices.
+  const key = r.next(), sub = k => rngOf('level-layout', key, k);
   // Office-sized bands by default; a large space (a hall, a workshop floor) widens its band so it stays a sensible shape.
-  const wide = Math.min(12, snap(Math.sqrt(Math.max(...program.map(s => s.area), 0) / 1.6)));
-  const bl = Math.max(snap(r.float(3.5, 6)), wide), br = snap(r.float(3.5, 6));
-  const laid = layoutBands({ program, bl, br, start: hallD, r });
-  return { W: r3(bl + cw + br), D: r3(hallD + laid.depth), bl, br, cw, hallD, stairSide: bl >= br ? 'L' : 'R', bands: laid.bands };
+  const wide = Math.min(12, snap(Math.sqrt(Math.max(...all.map(s => s.area), 0) / 1.6)));
+  let bl = Math.max(snap(r.float(3.5, 6)), wide), br = snap(r.float(3.5, 6));
+  // The core stands at the end of the hall on the wider band's side; that band is at least as wide as the core,
+  // so the entrance (on the corridor's axis) never lands in the stair or the lift.
+  const stairSide = bl >= br ? 'L' : 'R';
+  if (stairSide === 'L') bl = Math.max(bl, CORE_W); else br = Math.max(br, CORE_W);
+  const depth = Math.max(...programs.map((p, k) => layoutBands({ program: p, bl, br, start: hallD, r: sub(k) }).depth));
+  const laid = programs.map((p, k) => ({ level: k, bands: layoutBands({ program: p, bl, br, start: hallD, depth, r: sub(k) }).bands }));
+  return { W: r3(bl + cw + br), D: r3(hallD + depth), bl, br, cw, hallD, stairSide, bands: laid[0].bands, levels: laid };
 }
 
 // Turns a design into world entities (ids from the world's counters). Returns the building record.
@@ -92,7 +105,7 @@ export function placeBuilding(world, { parcelId, fp, front, design, level = 0, s
     levels: [], wings: [], maxLevels: 4,
   };
   world.buildings[id] = b;
-  addLevel(world, b, level, design.bands, status);
+  for (const l of design.levels ?? [{ level, bands: design.bands }]) addLevel(world, b, l.level, l.bands, status);
   // Entrance: the front wall, on the corridor's axis.
   const hall = world.spaces[`${id}-L${level}-hall`];
   const u = design.bl + design.cw / 2, ew = DIMS.entrance.width;
@@ -107,8 +120,11 @@ export function addLevel(world, b, level, bands, status) {
   const depth = P.D; // every level shares the main block's depth; rear wings are ground-level additions
   const hall = addSpace(world, `${key}-hall`, { primitive: 'hallway', roles: ['public-area'], buildingId: b.id, level, rect: F.toWorld(0, 0, P.W, P.hallD), local: { u: 0, v: 0, w: P.W, d: P.hallD }, access: level === 0 ? 'public' : 'staff', status });
   const corridor = addSpace(world, `${key}-corridor`, { primitive: 'hallway', roles: [], buildingId: b.id, level, rect: F.toWorld(P.bl, P.hallD, P.cw, depth - P.hallD), local: { u: P.bl, v: P.hallD, w: P.cw, d: depth - P.hallD }, access: 'staff', status });
-  const su = P.stairSide === 'L' ? 0 : P.W - DIMS.stairCore.w;
+  // The core: the stair flight at the hall's end, the lift shaft beside it at the back of the hall (its doors open
+  // onto the hall). Both stay reserved until the building has a second built level.
+  const su = P.stairSide === 'L' ? 0 : P.W - DIMS.stairCore.w, lu = P.stairSide === 'L' ? DIMS.stairCore.w : P.W - CORE_W, L = DIMS.liftShaft;
   const stair = addSpace(world, `${key}-stair`, { primitive: 'staircase', roles: [], buildingId: b.id, level, rect: F.toWorld(su, 0, DIMS.stairCore.w, P.hallD), local: { u: su, v: 0, w: DIMS.stairCore.w, d: P.hallD }, access: 'staff', status: 'reserved', inside: hall.id });
+  addSpace(world, `${key}-lift`, { primitive: 'elevator', roles: [], buildingId: b.id, level, rect: F.toWorld(lu, P.hallD - L.d, L.w, L.d), local: { u: lu, v: P.hallD - L.d, w: L.w, d: L.d }, access: 'staff', status: 'reserved', inside: hall.id });
   // Hall and corridor share an open edge the width of the corridor.
   addDoor(world, { buildingId: b.id, level, a: hall.id, b: corridor.id, seg: [F.pt(P.bl, P.hallD), F.pt(P.bl + P.cw, P.hallD)], width: P.cw, height: DIMS.clearHeight, kind: 'opening', status });
   b.levels = [...new Set([...b.levels, level])].sort((x, y) => x - y);
@@ -143,8 +159,7 @@ export function roomDoor(world, b, room, corridor, F, status) {
 export function refreshStairs(world, b) {
   const built = b.levels.filter(l => world.spaces[`${b.id}-L${l}-hall`]?.status === 'built');
   for (const l of b.levels) {
-    const s = world.spaces[`${b.id}-L${l}-stair`];
-    if (s) s.status = built.length > 1 && built.includes(l) ? 'built' : 'reserved';
+    for (const s of [world.spaces[`${b.id}-L${l}-stair`], world.spaces[`${b.id}-L${l}-lift`]]) if (s) s.status = built.length > 1 && built.includes(l) ? 'built' : 'reserved';
   }
 }
 

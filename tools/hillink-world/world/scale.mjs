@@ -77,6 +77,7 @@ export const SIZES = {
   bookshelf: { w: u(0.64), d: u(0.24), h: u(1.12) },
   reviewConsole: { w: u(1.2), d: u(0.32), h: u(0.54), surface: u(0.54) },
   waterCooler: { w: u(0.28), d: u(0.28), h: u(0.8) },
+  printer: { w: u(0.36), d: u(0.3), h: u(0.6) }, // Pass 5B: a floor-standing office printer
   plant: { w: u(0.28), d: u(0.28), range: [u(0.7), u(1.0)] },
   tree: { w: u(0.48), d: u(0.48), range: [u(1.6), u(2.4)] },
   hedge: { h: u(0.32), free: ['w', 'd'] },

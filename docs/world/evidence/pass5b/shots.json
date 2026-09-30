@@ -1,0 +1,184 @@
+{
+  "base": "http://127.0.0.1:4331",
+  "width": 1400,
+  "height": 900,
+  "shots": [
+    {
+      "name": "A1-generated-hq-inhabited-real",
+      "path": "/?source=sim&theme=real",
+      "eval": "hillinkWorld.sim.run('claudeCodes'); hillinkWorld.sim.run('codexTests'); true",
+      "until": "[...hillinkWorld.scene.entities.values()].filter(e => e.kind === 'agent').every(e => ['type', 'inspect', 'work'].includes(e.anim?.state))",
+      "untilMs": 60000,
+      "waitMs": 800,
+      "note": "[...hillinkWorld.scene.entities.values()].filter(e => e.kind==='agent').map(e => e.ref.id + ' ' + e.anim?.state + ' at ' + e.spot).join('; ')"
+    },
+    {
+      "name": "A2-generated-hq-inhabited-fantasy",
+      "path": "/?source=sim&theme=fantasy",
+      "eval": "hillinkWorld.sim.run('claudeCodes'); hillinkWorld.sim.run('codexTests'); true",
+      "until": "[...hillinkWorld.scene.entities.values()].filter(e => e.kind === 'agent').every(e => ['type', 'inspect', 'work'].includes(e.anim?.state))",
+      "untilMs": 60000,
+      "waitMs": 800
+    },
+    {
+      "name": "B1-agent-sitting-typing-at-generated-desk",
+      "path": "/?source=sim&theme=real&camera=room:development",
+      "eval": "hillinkWorld.sim.run('claudeCodes'); true",
+      "until": "hillinkWorld.scene.get('agent:claude')?.anim?.state === 'type'",
+      "untilMs": 60000,
+      "after": "hillinkWorld.focus('room:development'); true",
+      "waitMs": 1200,
+      "note": "(() => { const e = hillinkWorld.scene.get('agent:claude'); return 'claude ' + e.anim.state + ' posture ' + e.posture + ' at ' + e.spot; })()"
+    },
+    {
+      "name": "B2-agent-using-printer",
+      "path": "/?source=sim&theme=real",
+      "eval": "(async () => { const { makeEvent } = await import('/core/events.mjs'); const s = hillinkWorld.store; s.dispatch(makeEvent('TASK_CREATED', { taskId: 'print-1', title: 'Print the review notes' }, { source: 'sim', at: Date.now() })); s.dispatch(makeEvent('TASK_STARTED', { taskId: 'print-1', agentId: 'codex', activity: 'researching', progress: { kind: 'stage', stage: 'Reading' } }, { source: 'sim', at: Date.now() })); return true; })()",
+      "until": "hillinkWorld.scene.get('agent:codex')?.anim?.state === 'read'",
+      "untilMs": 60000,
+      "after": "hillinkWorld.focus('room:development'); true",
+      "waitMs": 1200,
+      "note": "(() => { const e = hillinkWorld.scene.get('agent:codex'); return 'codex ' + e.anim.state + ' using ' + e.spotInfo?.use + ' (' + e.spotInfo?.of + ')'; })()"
+    },
+    {
+      "name": "B3-break-room-rest",
+      "path": "/?source=sim&theme=real",
+      "until": "[...hillinkWorld.scene.entities.values()].filter(e => e.kind === 'agent').every(e => !e.moving && e.spot)",
+      "untilMs": 60000,
+      "after": "hillinkWorld.focus('room:lounge'); true",
+      "waitMs": 1200,
+      "note": "[...hillinkWorld.scene.entities.values()].filter(e => e.kind==='agent').map(e => e.ref.id + ' ' + e.anim?.state + ' ' + e.posture + ' at ' + e.spotInfo?.use).join('; ')"
+    },
+    {
+      "name": "C1-agent-riding-generated-elevator",
+      "path": "/?source=sim&theme=real",
+      "eval": "hillinkWorld.sim.run('claudeCodes'); true",
+      "until": "hillinkWorld.scene.get('agent:claude')?.gait === 'ride'",
+      "untilMs": 60000,
+      "after": "(() => { const e = hillinkWorld.scene.get('agent:claude'); hillinkWorld.camera.focusPoint(e.x, e.y - 60, { zoom: 2.2, duration: 0 }); return true; })()",
+      "note": "(() => { const e = hillinkWorld.scene.get('agent:claude'); const l = Object.values(hillinkWorld.theme.layout.lifts)[0]; return 'claude gait ' + e.gait + ', lift ' + l.id + ' floors ' + l.floors.join(','); })()"
+    },
+    {
+      "name": "D1-traffic-on-generated-road",
+      "path": "/?source=sim&theme=real",
+      "waitMs": 2500,
+      "after": "(() => { const L = hillinkWorld.theme.layout, n = L.navNodes['road-1#' + Math.max(1, Object.keys(L.navNodes).filter(k => k.startsWith('road-1#')).length - 3)]; hillinkWorld.camera.focusPoint(n[0], n[1], { zoom: 1.1, duration: 0 }); return true; })()"
+    },
+    {
+      "name": "E01-construction-planning-survey",
+      "path": "/?demo=construction&step=1&theme=real",
+      "waitMs": 2000
+    },
+    {
+      "name": "E02-construction-site-preparation-builder-walking",
+      "path": "/?demo=construction&step=2&walk=1&theme=real",
+      "waitMs": 2500,
+      "note": "(() => { const e = hillinkWorld.scene.get('agent:claude'); return 'claude ' + e.anim?.state + ' ' + (e.moving ? 'walking to the site' : 'at ' + e.spot); })()"
+    },
+    {
+      "name": "E03-construction-foundation-builder-at-work",
+      "path": "/?demo=construction&step=3&theme=real",
+      "waitMs": 2500,
+      "note": "(() => { const e = hillinkWorld.scene.get('agent:claude'); return 'claude ' + e.anim?.state + ' at ' + e.spot; })()",
+      "after": "hillinkWorld.focus('room:site:meeting-room'); true"
+    },
+    {
+      "name": "E04a-construction-structure-wide",
+      "path": "/?demo=construction&step=4&theme=real",
+      "waitMs": 2500
+    },
+    {
+      "name": "E04-construction-structure",
+      "path": "/?demo=construction&step=4&theme=real",
+      "waitMs": 2500,
+      "after": "hillinkWorld.focus('room:site:meeting-room'); true"
+    },
+    {
+      "name": "E05-construction-blocked-work-stops",
+      "path": "/?demo=construction&step=5&theme=real",
+      "waitMs": 2500,
+      "note": "(() => { const e = hillinkWorld.scene.get('agent:claude'); return 'claude ' + e.agent?.activity + ' ' + e.anim?.state + ' at ' + e.spot; })()",
+      "after": "hillinkWorld.focus('room:site:meeting-room'); true"
+    },
+    {
+      "name": "E06-construction-exterior",
+      "path": "/?demo=construction&step=6&theme=real",
+      "waitMs": 2500,
+      "after": "hillinkWorld.focus('room:site:meeting-room'); true"
+    },
+    {
+      "name": "E07-construction-systems",
+      "path": "/?demo=construction&step=7&theme=real",
+      "waitMs": 2500,
+      "after": "hillinkWorld.focus('room:site:meeting-room'); true"
+    },
+    {
+      "name": "E08-construction-furnishing",
+      "path": "/?demo=construction&step=8&theme=real",
+      "waitMs": 2500,
+      "after": "hillinkWorld.focus('room:site:meeting-room'); true"
+    },
+    {
+      "name": "E09-construction-inspection-codex-on-site",
+      "path": "/?demo=construction&step=9&theme=real",
+      "waitMs": 2500,
+      "note": "(() => { const e = hillinkWorld.scene.get('agent:codex'); return 'codex ' + e.anim?.state + ' at ' + e.spot; })()",
+      "after": "hillinkWorld.focus('room:site:meeting-room'); true"
+    },
+    {
+      "name": "E10-construction-review-rejected-rework",
+      "path": "/?demo=construction&step=10&theme=real",
+      "waitMs": 2500,
+      "after": "hillinkWorld.focus('room:site:meeting-room'); true"
+    },
+    {
+      "name": "F1-construction-complete-furnished-walkable",
+      "path": "/?demo=construction&step=15&theme=real",
+      "waitMs": 2500
+    },
+    {
+      "name": "F2-operational-team-meets-in-new-room",
+      "path": "/?demo=construction&step=16&walk=1&theme=real",
+      "until": "['claude','codex'].every(id => hillinkWorld.scene.get('agent:' + id)?.anim?.state === 'meeting')",
+      "untilMs": 60000,
+      "waitMs": 800,
+      "after": "hillinkWorld.focus('room:comms'); true",
+      "note": "['claude','codex'].map(id => { const e = hillinkWorld.scene.get('agent:' + id); return id + ' ' + e.anim?.state + ' at ' + e.spot; }).join('; ')"
+    },
+    {
+      "name": "G1-same-project-fantasy-structure",
+      "path": "/?demo=construction&step=4&theme=fantasy",
+      "waitMs": 2500,
+      "after": "hillinkWorld.focus('room:site:meeting-room'); true"
+    },
+    {
+      "name": "G2-same-project-fantasy-inspection",
+      "path": "/?demo=construction&step=9&theme=fantasy",
+      "waitMs": 2500,
+      "after": "hillinkWorld.focus('room:site:meeting-room'); true"
+    },
+    {
+      "name": "G3-same-room-fantasy-operational",
+      "path": "/?demo=construction&step=16&walk=1&theme=fantasy",
+      "until": "['claude','codex'].every(id => hillinkWorld.scene.get('agent:' + id)?.anim?.state === 'meeting')",
+      "untilMs": 60000,
+      "waitMs": 800,
+      "after": "hillinkWorld.focus('room:comms'); true"
+    },
+    {
+      "name": "H1-blueprint-generated-navigation",
+      "path": "/?source=sim&theme=blueprint",
+      "waitMs": 2500
+    },
+    {
+      "name": "Z1-legacy-hand-built-world-for-comparison",
+      "path": "/?source=sim&theme=real&world=legacy",
+      "waitMs": 2500
+    },
+    {
+      "name": "Z2-plan-view-debug-inspector",
+      "path": "/site.html",
+      "waitMs": 1500
+    }
+  ]
+}

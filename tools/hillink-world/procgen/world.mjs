@@ -34,7 +34,7 @@ function emptyWorld(seed, options) {
     terrain: { options: { ...TERRAIN_DEFAULTS, ...options } },
     counters: {}, origin: null, arrival: null,
     districts: {}, parcels: {}, roads: {}, paths: {}, buildings: {}, spaces: {}, doors: {}, points: {}, anchors: {},
-    capabilities: {}, environment: [], primitives: {},
+    capabilities: {}, environment: [], primitives: {}, projects: {},
     ops: { agents: {}, tasks: {}, objectives: {} },
     history: [], applied: {},
   };
@@ -51,7 +51,11 @@ export function createWorld({ seed, capabilities = SEED_CAPABILITIES, terrain: o
   if (specs.some(s => s.outdoor)) throw Error('founding capabilities are indoor; add outdoor ones with placeCapability');
   const origin = world.origin = chooseOrigin(t, world.seed);
   const d = addDistrict(world, t, origin, { seed: world.seed, key: 'founding' });
-  const design = designBuilding(specs, rng(world.seed, 'building', 'founding'));
+  // A small two-storey startup building: the public and shared rooms (the lobby, break room and meeting room) on the
+  // ground floor, the working rooms upstairs; one storey when the program is too small to split.
+  const downstairs = s => s.level === 'ground' || s.access === 'public' || s.kind === 'meeting-space';
+  const levels = specs.some(downstairs) && specs.some(s => !downstairs(s)) ? [specs.filter(downstairs), specs.filter(s => !downstairs(s))] : null;
+  const design = designBuilding(specs, rng(world.seed, 'building', 'founding'), { levels });
   const parcels = d.parcels.map(id => world.parcels[id]).filter(p => p.buildable >= 0.85).sort((a, b) => Math.hypot(centre(a.rect).x - origin.x, centre(a.rect).y - origin.y) - Math.hypot(centre(b.rect).x - origin.x, centre(b.rect).y - origin.y) || (a.id < b.id ? -1 : 1));
   let founded = false;
   for (const p of parcels) {

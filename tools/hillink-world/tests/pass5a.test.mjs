@@ -244,11 +244,17 @@ test('HQ contract: only HQ changes operational facts; renderer, simulator and ma
   applyHqEvent(w, hq('TASK_ASSIGNED', { taskId: 't1', agentId: 'claude', objectiveId: 'o1' }, 'h2'));
   applyHqEvent(w, hq('IMPLEMENTATION_STARTED', { agentId: 'claude', taskId: 't1' }, 'h3'));
   assert.equal(w.ops.agents.claude.spaceId, w.capabilities.engineering.placement.spaceId, 'implementing happens where engineering lives');
-  applyHqEvent(w, hq('CAPABILITY_REQUESTED', { capability: UNKNOWN[0] }, 'h4'));
+  applyHqEvent(w, hq('CAPABILITY_REQUESTED', { capability: UNKNOWN[0], objectiveId: 'o1', taskId: 't1' }, 'h4'));
   assert.equal(w.capabilities['podcast-studio'].status, 'planned');
   assert.equal(applyHqEvent(w, hq('CAPABILITY_VERIFIED', { capabilityId: 'podcast-studio' }, 'h5')).applied, false, 'a planned capability cannot be verified');
   applyHqEvent(w, hq('CONSTRUCTION_REQUESTED', { capabilityId: 'podcast-studio' }, 'h6'));
   assert.equal(w.capabilities['podcast-studio'].status, 'under-construction');
+  // Pass 5B: completion is only possible after the project was built, inspected and its review approved.
+  assert.equal(applyHqEvent(w, hq('CONSTRUCTION_COMPLETED', { capabilityId: 'podcast-studio' }, 'h7a')).applied, false, 'no completion without inspection');
+  for (let k = 0; k < 5; k++) applyHqEvent(w, hq('WORK_COMMITTED', { taskId: 't1', ref: `c${k}` }, `h7c${k}`));
+  applyHqEvent(w, hq('TESTING', { agentId: 'codex', taskId: 't1' }, 'h7t'));
+  assert.equal(applyHqEvent(w, hq('CONSTRUCTION_COMPLETED', { capabilityId: 'podcast-studio' }, 'h7b')).applied, false, 'no completion without an approved review');
+  applyHqEvent(w, hq('REVIEW_VERDICT', { taskId: 't1', verdict: 'approved' }, 'h7v'));
   applyHqEvent(w, hq('CONSTRUCTION_COMPLETED', { capabilityId: 'podcast-studio' }, 'h7'));
   applyHqEvent(w, hq('CAPABILITY_VERIFIED', { capabilityId: 'podcast-studio' }, 'h8'));
   assert.equal(w.capabilities['podcast-studio'].status, 'operational');
@@ -273,7 +279,7 @@ test('HQ contract: today\'s HQ activity feed (Pass 3 contract v1) translates int
   assert.equal(w.ops.objectives.o1.status, 'waiting-for-kyle');
   assert.equal(w.ops.tasks.t1.agentId, 'claude');
   assert.equal(w.ops.agents.claude.spaceId, w.capabilities.engineering.placement.spaceId);
-  assert.ok(Object.keys(w.capabilities).length === 5, 'HQ activity never invents structures');
+  assert.equal(Object.keys(w.capabilities).length, SEED_CAPABILITIES.length, 'HQ activity never invents structures');
 });
 
 // ---------------------------------------------------------------- camera
@@ -306,8 +312,8 @@ test('the seed world is tiny: one small building on mostly undeveloped land, no 
     assert.equal(s.buildings.length, 1); assert.equal(s.parcels.developed, 1);
     assert.ok(s.parcels.total >= 9, 'land is reserved for growth, not built on');
     assert.ok(s.developedShare < 2, `${seed}: ${s.developedShare}% developed`);
-    assert.equal(s.vacantRooms + s.rooms, s.rooms, 'rooms exist for capabilities');
-    assert.ok(s.rooms <= 7, `${seed}: ${s.rooms} rooms`);
+    assert.equal(s.rooms - s.vacantRooms, SEED_CAPABILITIES.length, 'one room per founding capability; the rest is spare space');
+    assert.ok(s.rooms <= 10 && s.buildings[0].levels.length <= 2, `${seed}: ${s.rooms} rooms on ${s.buildings[0].levels.length} storeys`);
     assert.ok(s.environmentAnchors > 300, 'mostly wilderness');
   }
 });

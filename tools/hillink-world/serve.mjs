@@ -14,6 +14,7 @@ import os from 'node:os';
 import { execFile } from 'node:child_process';
 import { createConstructionSource } from './adapters/git.mjs';
 import { openWorldFile } from './procgen/persist.mjs';
+import { applyHqEvent, fromHqActivity } from './procgen/contract.mjs';
 
 const root = path.dirname(fileURLToPath(import.meta.url));
 const types = { '.html': 'text/html; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.jpg': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp' };
@@ -75,7 +76,35 @@ export function hqClient(base = 'http://127.0.0.1:4312', { fetchImpl = fetch, ti
     if (!r.ok) throw Error(body.error ?? `HQ refused the task (${r.status})`);
     return body.id;
   };
+  // Pass 5B: HQ's World contract feed (GET /api/world, read-only): activity items since a journal sequence number.
+  state.activity = async since => { const r = await authed(`/api/world?since=${Number(since) || 0}`); if (!r.ok) throw Error(`HQ world feed failed (${r.status})`); return r.json(); };
   return state;
+}
+
+// Pass 5B: the live bridge. HQ's facts (its World contract feed) are applied to the persisted canonical world through
+// the contract (procgen/contract.mjs): only HQ events, each once, recorded in history. The cursor (the last HQ journal
+// sequence applied) lives beside the world file, so a restart continues where it stopped. Never writes to HQ.
+export function siteFeed({ hq, site, cursorFile, intervalMs = 15000 }) {
+  let cursor = 0, busy = false;
+  try { cursor = Number(JSON.parse(fs.readFileSync(cursorFile, 'utf8')).seq) || 0; } catch { /* first run */ }
+  const status = { cursor, applied: 0, refused: 0, error: null };
+  const tick = async () => {
+    if (busy) return; busy = true;
+    try {
+      const body = await hq.activity(cursor);
+      let changed = false;
+      for (const item of body.activity ?? []) {
+        const ev = fromHqActivity(item);
+        if (ev) { const r = applyHqEvent(site.world, ev); if (r.applied) { changed = true; status.applied++; } else if (r.reason !== 'already applied') status.refused++; }
+        cursor = Math.max(cursor, Number(item.seq) || 0);
+      }
+      if (changed) site.save();
+      fs.mkdirSync(path.dirname(cursorFile), { recursive: true }); fs.writeFileSync(cursorFile, JSON.stringify({ seq: cursor }));
+      Object.assign(status, { cursor, error: null });
+    } catch (error) { status.error = String(error.cause?.code ?? error.message).slice(0, 200); } finally { busy = false; }
+  };
+  tick(); const timer = setInterval(tick, intervalMs); timer.unref?.();
+  return { tick, status, stop: () => clearInterval(timer) };
 }
 
 // Agents the World may send commands to, and the only HQ operation a command becomes. Pass 1 wires one real
@@ -220,6 +249,8 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
   });
   const commands = process.env.WORLD_HQ === '0' ? null : createJournal(path.join(process.env.WORLD_STATE_DIR || path.join(os.homedir(), '.hillink-world'), 'commands.jsonl'));
   // Pass 5A: the canonical procedural world, founded once from WORLD_SEED and then only ever loaded.
-  const site = openWorldFile(path.join(process.env.WORLD_STATE_DIR || path.join(os.homedir(), '.hillink-world'), 'site.json'), { seed: process.env.WORLD_SEED || 'hillink' });
+  const stateDir = process.env.WORLD_STATE_DIR || path.join(os.homedir(), '.hillink-world');
+  const site = openWorldFile(path.join(stateDir, 'site.json'), { seed: process.env.WORLD_SEED || 'hillink' });
+  if (process.env.WORLD_HQ !== '0') siteFeed({ hq: hqClient(process.env.HQ_URL || 'http://127.0.0.1:4312'), site, cursorFile: path.join(stateDir, 'site-hq-cursor.json'), intervalMs: Number(process.env.WORLD_SITE_INTERVAL_MS || 15000) });
   createServer({ construction, commands, site }).listen(port, '127.0.0.1', () => console.log(`Hillink World: http://127.0.0.1:${port} (live from HQ at ${process.env.HQ_URL || 'http://127.0.0.1:4312'} when it is running, otherwise simulation)`));
 }

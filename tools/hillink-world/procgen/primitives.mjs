@@ -17,6 +17,7 @@ const BASE = {
   hallway: { layer: 'circulation', geometry: 'rect', walkable: true },
   door: { layer: 'circulation', geometry: 'segment', walkable: true },
   staircase: { layer: 'circulation', geometry: 'rect', walkable: true, vertical: true },
+  elevator: { layer: 'circulation', geometry: 'rect', walkable: true, vertical: true },
   'transport-node': { layer: 'circulation', geometry: 'point', walkable: true, vehicles: true },
   // structure
   building: { layer: 'structure', geometry: 'rect', contains: ['floor', 'wing'] },

@@ -21,7 +21,8 @@ export const ACTIVITY_PLACE = {
 // A layout may re-home an activity (for example idle agents to a break room) via `layout.places`.
 const ruleFor = (activity, layout) => ({ ...(ACTIVITY_PLACE[activity] ?? ACTIVITY_PLACE.idle), ...(layout.places?.[activity] ?? {}) });
 // Only a meeting sends agents to the meeting room; a one-off message (a handoff) keeps the sender where it is.
-const ruleForAgent = (a, layout) => (a.activity === 'communicating' && !a.meetingId ? { stay: true, clip: 'talk' } : ruleFor(a.activity, layout));
+// Pass 5B: a generated layout may send an agent to a construction site (its task is a project HQ is building).
+const ruleForAgent = (a, layout) => layout.placeFor?.(a) ?? (a.activity === 'communicating' && !a.meetingId ? { stay: true, clip: 'talk' } : ruleFor(a.activity, layout));
 
 // Assign stations deterministically so agents don't pile onto one spot.
 // `current` is agentId -> {location, station}; agents keep their station while their activity keeps the same room.

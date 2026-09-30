@@ -24,6 +24,8 @@ export const KNOWN = {
   'meeting-space': { area: 12, access: 'staff', shareable: false, adjacent: ['command'], traits: ['gathering'] },
   'compute-infrastructure': { area: 6, access: 'secure', level: 'any', traits: ['machines', 'power'] },
   reception: { area: 10, access: 'public', level: 'ground', traits: ['welcome'] },
+  // Pass 5B: where idle agents rest between tasks (the old World's Break Room).
+  'break-space': { area: 16, access: 'staff', level: 'ground', traits: ['rest'] },
   archive: { area: 8, access: 'staff', shareable: true, traits: ['records'] },
   storage: { area: 6, access: 'staff', shareable: true, traits: ['goods'] },
 };
@@ -52,12 +54,13 @@ export function normalizeCapability(input) {
 }
 
 // The organisation HQ runs today (tools/hillink-hq): an orchestrator (command), Claude building (engineering),
-// Codex and the local verifier checking work (review), meetings, and the local models (compute). This is the
-// seed program; nothing else is pre-built.
+// Codex and the local verifier checking work (review), meetings, the local models (compute) and a break room
+// where idle agents wait for work. This is the seed program; nothing else is pre-built.
 export const SEED_CAPABILITIES = [
   { id: 'command', kind: 'command' },
   { id: 'engineering', kind: 'engineering' },
   { id: 'review', kind: 'review' },
   { id: 'meeting-space', kind: 'meeting-space' },
   { id: 'compute-infrastructure', kind: 'compute-infrastructure' },
+  { id: 'break-space', kind: 'break-space' },
 ];
