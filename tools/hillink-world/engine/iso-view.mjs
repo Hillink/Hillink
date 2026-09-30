@@ -8,33 +8,44 @@ import { LAYERS } from './scene.mjs';
 import { startPath } from './motion.mjs';
 import { stationPoint } from '../core/behavior.mjs';
 import { hash } from './ambience.mjs';
+import { turnToward } from './motion.mjs';
+import { intentOf, setClip, FACING_ANGLE, BUILD_CLIP, variantOfProject } from './animation.mjs';
 
-export const STATES = ['idle', 'react', 'stand', 'sit', 'walk', 'carry', 'work', 'type', 'inspect', 'read', 'talk', 'meeting', 'blocked', 'waiting', 'celebrate', 'offline', 'assemble', 'survey'];
+export const STATES = ['idle', 'react', 'stand', 'sit', 'walk', 'carry', 'work', 'type', 'inspect', 'read', 'talk', 'meeting', 'blocked', 'waiting', 'celebrate', 'offline', 'assemble', 'survey', 'measure', 'dig', 'paint', 'install', 'lift', 'pickup'];
 export const PRODUCTIVE_STATES = new Set(['work', 'type', 'inspect', 'read']);
+// Construction clips (Pass 5C): played only at a real site station for a verified activity (resolveState).
+export const SITE_STATES = new Set(['assemble', 'survey', 'measure', 'dig', 'paint', 'install', 'lift', 'pickup']);
 const REACT_MS = 450, STAND_MS = 520, SIT_MS = 480, CELEBRATE_MS = 2600;
+const LOOP_MS = 9000; // a builder's or inspector's site loop comes round every LOOP_MS or so (varied per character)
 const SITE_MS = 6500, VISIT_FRESH_MS = 20 * 60 * 1000; // a site visit is for evidence from the last 20 minutes
 const IDLE_USES = new Set(['relax', 'look', 'coffee', 'snack', 'table', 'lean']);
 
 // Semantic animation API: play(entity, 'walk'). Restarts the clip only when the state changes.
-export function play(e, state, now) {
-  if (e.anim?.state !== state) e.anim = { state, since: now };
-  return e.anim;
-}
+// Pass 5C: the previous clip is remembered so the renderer can blend (engine/animation.mjs setClip).
+export function play(e, state, now) { return setClip(e, state, now, { intent: e.anim?.intent ?? null, variant: e.anim?.variant ?? null }); }
 
-// Which state a character should show right now. Pure; reads the entity and its agent.
-export function resolveState(e, now) {
+// Which state a character should show right now. Pure; reads the entity, its agent and (for a construction site)
+// the canonical project it stands at (layout.projects).
+export function resolveState(e, now, layout = null) {
   if (e.departAt > now) return now < (e.reactEnd ?? 0) ? 'react' : e.posture === 'sit' ? 'stand' : 'react';
   if (e.gait === 'walk' || e.gait === 'board') return e.carrying ? 'carry' : 'walk';
   if (e.gait === 'wait-lift' || e.gait === 'ride') return e.carrying ? 'carry' : 'idle';
   if (e.errand) return e.errand.phase === 'give' ? 'talk' : 'carry';
   if (e.visit?.phase === 'work' && !e.moving) return e.visit.kind === 'commit' ? 'assemble' : 'survey';
+  if (e.loop?.phase === 'work' && !e.moving) return e.loop.clip;
   if (e.receiving) return 'talk';
   if (e.sitUntil > now) return 'sit';
   const a = e.agent; if (!a) return 'idle';
-  const atStation = !e.moving && e.spot != null && e.spot === e.placeKey;
-  // Pass 5B: at a construction site a productive agent builds, or inspects the work.
-  if (atStation && e.spotInfo?.use === 'build' && ['coding', 'thinking', 'researching'].includes(a.activity)) return 'assemble';
-  if (atStation && (e.spotInfo?.use === 'site-inspect' || e.spotInfo?.use === 'build') && ['testing', 'reviewing', 'coding', 'thinking'].includes(a.activity)) return 'survey';
+  const atStation = !e.moving && !e.faceGoal && e.spot != null && e.spot === e.placeKey;
+  // Pass 5B/5C: at a construction site a productive agent builds, with the clip of the project's real stage, or
+  // inspects the work. While the project is under inspection, builders pause rather than build.
+  const use = e.spotInfo?.use, siteId = String(e.spot ?? '').match(/^site:([^:]+):/)?.[1], project = siteId ? layout?.projects?.[siteId] : null;
+  if (atStation && (use === 'build' || use === 'site-inspect') && ['testing', 'reviewing'].includes(a.activity)) return 'survey';
+  if (atStation && use === 'build' && ['coding', 'thinking', 'researching'].includes(a.activity)) {
+    if (project?.stage === 'inspection') return 'idle';
+    return BUILD_CLIP[project ? variantOfProject(project) : 'structure'] ?? 'assemble';
+  }
+  if (atStation && use === 'site-inspect' && ['coding', 'thinking'].includes(a.activity)) return 'survey';
   switch (a.activity) {
     case 'coding': return atStation ? (e.posture === 'sit' ? 'type' : 'work') : 'idle';
     case 'thinking': return atStation ? 'work' : 'idle';
@@ -56,9 +67,11 @@ export function actionText(e, layout) {
   const st = e.anim?.state ?? 'idle', a = e.agent;
   const where = e.dest?.location ? layout?.locationById?.[e.dest.location]?.name : null;
   switch (st) {
-    case 'walk': if (e.visit) return e.visit.phase === 'back' ? 'Walking back from the site' : 'Walking to the construction site';
+    case 'walk': if (e.loop) return e.loop.kind === 'haul' ? (e.loop.phase === 'back' ? 'Carrying materials' : 'Fetching materials') : 'Walking the site';
+      if (e.visit) return e.visit.phase === 'back' ? 'Walking back from the site' : 'Walking to the construction site';
       return e.ride ? 'Walking to the elevator' : where ? `Walking to ${where}` : 'Walking';
-    case 'carry': return e.errand ? 'Carrying a handoff' : where ? `Carrying to ${where}` : 'Carrying';
+    case 'carry': if (e.loop) return 'Carrying materials';
+      return e.errand ? 'Carrying a handoff' : where ? `Carrying to ${where}` : 'Carrying';
     case 'react': return 'Noticed new work';
     case 'stand': return 'Getting up';
     case 'sit': return 'Sitting down';
@@ -66,6 +79,12 @@ export function actionText(e, layout) {
     case 'talk': return e.errand ? 'Handing off' : e.receiving ? 'Receiving a handoff' : 'Talking';
     case 'meeting': return 'In a meeting';
     case 'assemble': return e.visit ? `Installing commit ${e.visit?.ref?.slice(0, 7) ?? ''}`.trim() : `Building ${where ?? 'on site'}`.replace(/: .*$/, '');
+    case 'measure': return 'Surveying the site';
+    case 'dig': return 'Laying the foundation';
+    case 'paint': return 'Finishing the exterior';
+    case 'install': return e.anim?.variant === 'repair' ? 'Reworking after review' : 'Installing systems';
+    case 'lift': return 'Fitting furniture';
+    case 'pickup': return e.loop?.kind === 'haul' ? 'Collecting materials' : 'Picking up';
     case 'survey': return e.visit ? (e.visit?.state === 'changes_requested' ? 'Marking changes on the site' : 'Inspecting the site') : 'Inspecting the construction';
     case 'blocked': return 'Blocked';
     case 'waiting': return 'Waiting';
@@ -153,7 +172,7 @@ export class IsoWorldView extends WorldView {
   }
   // Every trip starts with a beat: the character notices, stands up if seated, then sets off.
   goTo(e, place, target, now) {
-    e.visit = null; e.pendingVisit = null; // real work always wins over a site visit
+    e.visit = null; e.pendingVisit = null; e.loop = null; e.carrying = e.errand ? e.carrying : false; // real work always wins over a site visit
     // Already standing (or sitting) on the new spot: nothing to walk, so no reaction, no standing up.
     if (!e.moving && !e.ride && Math.hypot(target[0] - e.x, target[1] - e.y) < 1) { e.dest = { location: place.location, target }; return; }
     super.goTo(e, place, target, now);
@@ -173,30 +192,75 @@ export class IsoWorldView extends WorldView {
     for (const e of this.scene.entities.values()) if (e.kind === 'agent') busy = this.control(e, now, opts.instant) || busy;
     return moving || busy;
   }
-  // Per-character controller: arrivals, sitting, standing, facing, idle wandering, and the animation state.
+  // Per-character controller: arrivals, turning to face, sitting, standing, the site work loop, idle wandering, and
+  // the animation state (body clip plus intent, engine/animation.mjs).
   control(e, now, instant) {
+    const dt = Math.min(0.1, Math.max(0.001, (now - (e.lastControl ?? now)) / 1000)); e.lastControl = now;
     if (e.departAt && now >= e.departAt) { e.departAt = 0; e.posture = 'stand'; }
-    if (e.moving || e.departAt) { e.wasMoving = true; e.spot = null; }
+    if (e.moving || e.departAt) { e.wasMoving = true; e.spot = null; e.faceGoal = null; e.pendingSit = false; }
     else if (e.spot == null) {
       // Arrived (or placed directly): which interaction point is this, if any?
       const info = this.pointAt(e.x, e.y);
       e.spot = info ? `${info.room}:${info.id}` : '';
       e.spotInfo = info;
-      if (info) e.dir = info.facing;
-      else if (!e.dir || e.dir === 'back') e.dir = 'front';
-      const sit = info?.pose === 'sit';
-      if (sit && e.posture !== 'sit') { e.posture = 'sit'; if (e.wasMoving && !instant) e.sitUntil = now + SIT_MS; }
-      if (!sit) e.posture = 'stand';
+      const sit = info?.pose === 'sit', goal = info?.facing ?? (!e.dir || e.dir === 'back' ? 'front' : null);
+      if (instant || !e.wasMoving) {
+        // Placed directly (page load, replay): already in pose.
+        if (goal) { e.dir = goal; e.heading = FACING_ANGLE[goal]; }
+        e.posture = sit ? 'sit' : 'stand';
+      } else {
+        // Arrived on foot: turn to face what is used here (the desk, the printer, the site), then sit if it is a seat.
+        e.faceGoal = goal; e.pendingSit = sit;
+        if (!sit) e.posture = 'stand';
+      }
       e.wasMoving = false; e.fresh = false;
       e.nextWander = now + 16000 + hash(e.id.length * 7.7 + now / 997) * 26000;
+      e.nextLoop = now + LOOP_MS * (0.6 + hash(e.id.length * 3.1 + now / 1009) * 0.8);
     }
+    if (e.faceGoal) {
+      if (instant) { e.dir = e.faceGoal; e.heading = FACING_ANGLE[e.faceGoal]; e.faceGoal = null; }
+      else { turnToward(e, FACING_ANGLE[e.faceGoal], dt); if (Math.abs(Math.atan2(Math.sin(e.heading - FACING_ANGLE[e.faceGoal]), Math.cos(e.heading - FACING_ANGLE[e.faceGoal]))) < 0.02) { e.dir = e.faceGoal; e.faceGoal = null; } }
+    }
+    if (!e.faceGoal && e.pendingSit) { e.pendingSit = false; if (e.posture !== 'sit') { e.posture = 'sit'; if (!instant) e.sitUntil = now + SIT_MS; } }
     if (e.visit) this.visitStep(e, now);
     else if (e.pendingVisit) { const pv = e.pendingVisit; e.pendingVisit = null; if (now < pv.until) this.visitSite(pv.ev, pv.pass, pv.s, now); }
-    const state = resolveState(e, now);
-    play(e, state, now);
+    if (!instant) this.siteLoop(e, now);
+    const state = resolveState(e, now, this.layout);
+    setClip(e, state, now, intentOf(e, state, { world: this.world, projects: this.layout.projects }));
     // Idle agents in the Break Room drift between its spots now and then (ambient, never "work").
     if (!instant && state === 'idle' && e.agent?.activity === 'idle' && !e.errand && !e.visit && e.spot && now > (e.nextWander ?? Infinity)) this.wander(e, now);
-    return e.departAt > now || e.sitUntil > now || state === 'react';
+    return e.departAt > now || e.sitUntil > now || state === 'react' || !!e.faceGoal || !!e.loop;
+  }
+  // Pass 5C: work at a construction site is not one frozen pose. While HQ truth has the character working there
+  // (it stands at its assigned site station, playing a productive clip), it now and then walks a short loop:
+  // builders fetch materials from the site entrance and carry them back (site preparation, furnishing), an
+  // inspector walks to another point of the site and surveys it. The loop never changes a fact: it starts only from
+  // the assigned station, and ends (or never starts) the moment the character's place changes, as it does when the
+  // project is blocked, waits for Kyle or finishes.
+  siteLoop(e, now) {
+    const L = e.loop;
+    if (L) {
+      if (e.placeKey && this.places[e.ref.id] && `${this.places[e.ref.id].location}:${this.places[e.ref.id].station}` !== L.home) { e.loop = null; e.carrying = false; return; }
+      if (L.phase === 'go' && !e.moving && !e.departAt && !e.faceGoal) { L.phase = 'work'; L.until = now + L.workMs; }
+      else if (L.phase === 'work' && now >= L.until) {
+        L.phase = 'back'; if (L.kind === 'haul') e.carrying = true;
+        e.dest = { location: L.site, target: L.homePoint }; startPath(e, this.layout.route([e.x, e.y], L.site, L.homePoint), now); e.spot = null;
+      } else if (L.phase === 'back' && !e.moving && e.spot === L.home) { e.loop = null; e.carrying = false; e.nextLoop = now + LOOP_MS * (0.7 + hash(now / 1013 + e.id.length) * 0.7); }
+      return;
+    }
+    if (e.moving || e.departAt || e.faceGoal || !e.spot?.startsWith('site:') || e.spot !== e.placeKey || now < (e.nextLoop ?? Infinity)) return;
+    const st = e.anim?.state, site = this.layout.locationById[e.spot.slice(0, e.spot.lastIndexOf(':'))];
+    if (!site?.site) return;
+    const haul = st === 'lift' || st === 'measure', inspect = st === 'survey';
+    if (!haul && !inspect) { e.nextLoop = now + LOOP_MS; return; }
+    const homePoint = [e.x, e.y], taken = new Set([...this.scene.entities.values()].filter(o => o.kind === 'agent' && o !== e).flatMap(o => [o.spot, o.placeKey, o.loop?.targetKey]));
+    let target = null, targetKey = null;
+    if (haul && site.gate) target = site.gate;
+    else if (inspect) { const free = Object.entries(site.stations).filter(([k]) => `${site.id}:${k}` !== e.spot && !taken.has(`${site.id}:${k}`)); if (free.length) { const [k, p] = free[Math.floor(hash(now / 997 + e.id.length) * free.length)]; target = p; targetKey = `${site.id}:${k}`; } }
+    if (!target) { e.nextLoop = now + LOOP_MS; return; }
+    const path = this.layout.route([e.x, e.y], site.id, target); if (!path) { e.nextLoop = now + LOOP_MS; return; }
+    e.loop = { kind: haul ? 'haul' : 'inspect', phase: 'go', site: site.id, home: e.spot, homePoint, targetKey, workMs: haul ? 1400 : 3200, clip: haul ? 'pickup' : 'survey' };
+    e.dest = { location: site.id, target }; startPath(e, path, now); e.spot = null;
   }
   pointAt(x, y) {
     for (const info of Object.values(this.layout.stationInfo)) if (Math.hypot(info.point[0] - x, info.point[1] - y) < 2) return info;

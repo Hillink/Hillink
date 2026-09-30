@@ -15,8 +15,10 @@ import { AGENT, ARCH, STREET_SCALE, SIZES } from '../world/scale.mjs';
 import { drawFigure } from './figure.mjs';
 import { PROPS, chairBack, DECOR, prism, poly, glow, shade, INK } from './props.mjs';
 import { MATERIALS, lookFor } from './looks.mjs';
-import { vehiclesAt, hash } from '../engine/ambience.mjs';
-import { PRODUCTIVE_STATES, actionText } from '../engine/iso-view.mjs';
+import { vehiclesAt, hash, smoothPolyline } from '../engine/ambience.mjs';
+import { PRODUCTIVE_STATES, SITE_STATES, actionText } from '../engine/iso-view.mjs';
+import { blendOf } from '../engine/animation.mjs';
+import { rigFor, dress } from './rigs.mjs';
 import { jobOf } from '../core/job.mjs';
 import { PRODUCTIVE_ACTIVITIES as WORKING } from '../core/truth.mjs';
 import { placeLabel } from './iso-skin.mjs';
@@ -55,10 +57,13 @@ export function vehicleRoutesOf(layout) {
   const { world, view, U } = layout, lane = STREET_SCALE.lane * 0.5;
   const offset = (pts, k) => pts.map(([x, z], i) => { const a = pts[Math.max(0, i - 1)], b = pts[Math.min(pts.length - 1, i + 1)], L = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1; return [x - ((b[1] - a[1]) / L) * k, z + ((b[0] - a[0]) / L) * k]; });
   return Object.values(world.roads).filter(r => r.status === 'built' && r.points.length > 1).map(r => r.points.map(p => { const v = view.toView(p.x, p.y); return [v.x * U, v.z * U]; }))
-    .flatMap(pts => [{ points: offset(pts, lane), speed: STREET_SCALE.carSpeed, every: 11, chance: 0.75 }, { points: offset([...pts].reverse(), lane), speed: STREET_SCALE.carSpeed * 0.9, every: 13, chance: 0.65 }]);
+    .flatMap(pts => [{ points: offset(pts, lane), speed: STREET_SCALE.carSpeed, every: 11, chance: 0.75 }, { points: offset([...pts].reverse(), lane), speed: STREET_SCALE.carSpeed * 0.9, every: 13, chance: 0.65 }])
+    // Pass 5C: bends rounded (cars turn through them), slowing in them; faded in and out at the map edge.
+    .map(r => ({ ...r, points: smoothPolyline(r.points, STREET_SCALE.car.length * 1.6), bendWindow: STREET_SCALE.car.length * 1.2, fade: STREET_SCALE.car.length * 2.5 }));
 }
 
 export function createSiteSkin(layout, skinId = 'real') {
+  const rig = rigFor(skinId);
   const debug = skinId === 'blueprint', M = MATERIALS[debug ? 'real' : skinId], B = MATERIALS.blueprint;
   const { P, world, view, U, furnishing } = layout, HT = ARCH.floorHeight, g = P.g;
   const labelOf = new Map(represent(world, debug ? 'real' : skinId).items.map(i => [`${i.primitive}:${i.canonicalId}`, i.label]));
@@ -220,16 +225,38 @@ export function createSiteSkin(layout, skinId = 'real') {
   }
   const vehicleRoutes = vehicleRoutesOf(layout);
   const CAR = STREET_SCALE.car;
+  // Pass 5C: vehicles are oriented boxes that turn with the road (no snapping between two axis-aligned shapes), fade
+  // in and out where they enter and leave the map, and show brake lights while slowing to a stop.
+  function orientedBox(d, cx, cz, L, W, angle, h0, h1, colors, alpha) {
+    const { ctx } = d, fx = Math.cos(angle), fz = Math.sin(angle), sx = -fz, sz = fx;
+    const c = [[L, W], [L, -W], [-L, -W], [-L, W]].map(([a, b]) => [cx + fx * a + sx * b, cz + fz * a + sz * b]);
+    const faces = [0, 1, 2, 3].map(i => { const a = c[i], b = c[(i + 1) % 4]; return { a, b, z: (a[1] + b[1]) / 2, x: (a[0] + b[0]) / 2 }; });
+    faces.sort((p, q) => q.z - p.z || p.x - q.x); // far faces first
+    ctx.save(); ctx.globalAlpha *= alpha;
+    for (const fc of faces) {
+      poly(ctx, [P.at(fc.a[0], fc.a[1], 0, h0), P.at(fc.b[0], fc.b[1], 0, h0), P.at(fc.b[0], fc.b[1], 0, h1), P.at(fc.a[0], fc.a[1], 0, h1)], Math.abs(fc.b[1] - fc.a[1]) > Math.abs(fc.b[0] - fc.a[0]) ? colors.side : colors.front, INK, d.lw * 0.8);
+    }
+    poly(ctx, c.map(([x, z]) => P.at(x, z, 0, h1)), colors.top, INK, d.lw * 0.8);
+    ctx.restore();
+    return c;
+  }
   function drawVehicle(d, v) {
-    const { ctx } = d, alongX = Math.abs(Math.cos(v.angle)) >= Math.abs(Math.sin(v.angle)), L = CAR.length / 2, W = CAR.width / 2;
-    const box = alongX ? { x0: v.x - L, x1: v.x + L, z0: v.y - W, z1: v.y + W } : { x0: v.x - W, x1: v.x + W, z0: v.y - L, z1: v.y + L };
-    const body = M.fantasy ? '#7a5534' : v.color;
-    poly(ctx, [P.at(box.x0, box.z0, 0), P.at(box.x1, box.z0, 0), P.at(box.x1, box.z1, 0), P.at(box.x0, box.z1, 0)], 'rgba(0,0,0,0.28)');
-    prism(d, 0, { ...box, h0: CAR.wheel * 0.9, h1: CAR.body }, body);
-    const inset = 0.2;
-    const cab = alongX ? { x0: box.x0 + CAR.length * inset, x1: box.x1 - CAR.length * inset, z0: box.z0 + 3, z1: box.z1 - 3 } : { x0: box.x0 + 3, x1: box.x1 - 3, z0: box.z0 + CAR.length * inset, z1: box.z1 - CAR.length * inset };
-    if (M.fantasy) { const [lx, ly] = P.at(v.x, v.y, 0, CAR.body + 4); ctx.fillStyle = '#ffcf6b'; ctx.beginPath(); ctx.arc(lx, ly, 3, 0, TAU); ctx.fill(); return; }
-    prism(d, 0, { ...cab, h0: CAR.body, h1: CAR.height }, { front: 'rgba(160,200,235,0.85)', side: 'rgba(120,160,200,0.85)', top: shade(body, 1.1) });
+    const { ctx } = d, L = CAR.length / 2, W = CAR.width / 2, alpha = v.alpha ?? 1;
+    if (alpha <= 0.01) return;
+    const body = M.fantasy ? '#7a5534' : v.color, fx = Math.cos(v.angle), fz = Math.sin(v.angle);
+    ctx.save(); ctx.globalAlpha *= alpha * 0.28;
+    const sh = [[L, W], [L, -W], [-L, -W], [-L, W]].map(([a, b]) => P.at(v.x + fx * a - fz * b, v.y + fz * a + fx * b, 0));
+    poly(ctx, sh, '#000'); ctx.restore();
+    orientedBox(d, v.x, v.y, L, W, v.angle, CAR.wheel * 0.9, CAR.body, { front: shade(body, 0.95), side: shade(body, 0.8), top: shade(body, 1.08) }, alpha);
+    if (M.fantasy) { const [lx, ly] = P.at(v.x + fx * L * 0.9, v.y + fz * L * 0.9, 0, CAR.body + 4); ctx.save(); ctx.globalAlpha *= alpha; ctx.fillStyle = '#ffcf6b'; ctx.beginPath(); ctx.arc(lx, ly, 3, 0, TAU); ctx.fill(); ctx.restore(); return; }
+    orientedBox(d, v.x - fx * L * 0.08, v.y - fz * L * 0.08, L * 0.58, W * 0.86, v.angle, CAR.body, CAR.height, { front: 'rgba(160,200,235,0.9)', side: 'rgba(120,160,200,0.9)', top: shade(body, 1.12) }, alpha);
+    // Lights: headlights ahead, tail lights behind (brighter while stopped).
+    ctx.save(); ctx.globalAlpha *= alpha;
+    for (const [k, c, r] of [[1, '#fff6c8', 1.6], [-1, v.stopped ? '#ff3b30' : '#b3261e', v.stopped ? 2 : 1.4]]) for (const s of [-1, 1]) {
+      const [lx, ly] = P.at(v.x + fx * L * k - fz * W * 0.6 * s, v.y + fz * L * k + fx * W * 0.6 * s, 0, CAR.body * 0.75);
+      ctx.fillStyle = c; ctx.beginPath(); ctx.arc(lx, ly, r, 0, TAU); ctx.fill();
+    }
+    ctx.restore();
   }
 
   // ---- Construction sites, drawn from their project's canonical stage. ----
@@ -344,9 +371,11 @@ export function createSiteSkin(layout, skinId = 'real') {
     const { ctx, env } = d, st = e.anim?.state ?? 'idle', t = (d.now - (e.anim?.since ?? d.now)) / 1000, look = lookFor(skinId, a);
     const x = e.x + dx, y = e.y, hovered = env.hoverId === e.id, selected = env.selectedId === e.id;
     if (hovered || selected) { ctx.beginPath(); ctx.ellipse(x, y + 0.5, e.h * 0.34, e.h * 0.1, 0, 0, TAU); ctx.lineWidth = 2; ctx.strokeStyle = selected ? '#e21b23' : '#ffffff'; ctx.stroke(); }
-    const fig = { x, y, h: e.h, dir: e.dir ?? 'front', posture: e.posture, state: st, t, time: d.reduced ? 0 : d.T + hash(e.id.length), stride: e.stride ?? 0, look, use: e.spotInfo?.use, moving: e.moving, alpha: a.activity === 'offline' ? 0.82 : 1 };
+    // Pass 5C: the rig dresses the intent (clip and props); the previous clip blends out over BLEND_MS.
+    const dressed = dress(rig, e.anim);
+    const fig = { x, y, h: e.h, dir: e.dir ?? 'front', posture: e.posture, state: dressed.clip, prev: d.reduced ? null : dressed.prev, blend: blendOf(e.anim, d.now), props: dressed.props, gait: e.gaitAmount ?? 1, t, time: d.reduced ? 0 : d.T + hash(e.id.length), stride: e.stride ?? 0, look, use: e.spotInfo?.use, moving: e.moving, alpha: a.activity === 'offline' ? 0.82 : 1 };
     const head = drawFigure(ctx, fig);
-    if (selected || hovered || PRODUCTIVE_STATES.has(st) || st === 'assemble' || st === 'survey') d.late.unshift(() => drawFigure(ctx, { ...fig, alpha: selected ? 0.45 : 0.3 }));
+    if (selected || hovered || PRODUCTIVE_STATES.has(st) || SITE_STATES.has(st)) d.late.unshift(() => drawFigure(ctx, { ...fig, alpha: selected ? 0.45 : 0.3 }));
     d.late.push(() => badge(d, e, a, x, head.top, hovered, selected));
   }
   function badge(d, e, a, x, top, hovered, selected) {

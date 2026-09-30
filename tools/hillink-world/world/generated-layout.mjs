@@ -193,7 +193,7 @@ export function createGeneratedLayout(world, { theme = 'real' } = {}) {
       }
     }
     const ids = Object.keys(stations), R = rectPlan(r), reachable = ids.length > 0;
-    locations.push({ id: lid, name: `${title(labels.get(`room:${parts[0].id}`) ?? p.id)}: ${STAGE_LABEL[p.stage]}`, represents: `Construction for ${p.id}${reachable ? '' : ' (no built entrance yet: unreachable)'}`, floor, stations, door: reachable ? navNodes[ids[0]] : P.at((R.x0 + R.x1) / 2, (R.z0 + R.z1) / 2, level), site: true, reachable, project: p, room: { ...R, floor: level, spaceId: null, kind: 'site', site: true }, spaceId: null });
+    locations.push({ id: lid, name: `${title(labels.get(`room:${parts[0].id}`) ?? p.id)}: ${STAGE_LABEL[p.stage]}`, represents: `Construction for ${p.id}${reachable ? '' : ' (no built entrance yet: unreachable)'}`, floor, stations, door: reachable ? navNodes[ids[0]] : P.at((R.x0 + R.x1) / 2, (R.z0 + R.z1) / 2, level), site: true, reachable, gate: reachable ? navNodes[target.id] : null /* just inside the site door: where materials come in */, project: p, room: { ...R, floor: level, spaceId: null, kind: 'site', site: true }, spaceId: null });
     if (reachable) siteStations[p.id] = { build: ids.filter(i => stationInfo[`${lid}:${i}`].use === 'build'), inspect: ids.filter(i => stationInfo[`${lid}:${i}`].use === 'site-inspect') };
   }
 
