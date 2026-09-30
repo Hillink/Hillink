@@ -82,15 +82,31 @@ export const toolCall = async (url, token, name, args) => {
 // A fake Claude Code binary for the broker runner. It answers the preflight (--version, auth status), then, for the
 // session, reads HQ's MCP config and runs `plan(call)` against the broker over HTTP exactly as Claude's MCP client
 // would, then reports a result. Options let a test forge what a compromised or misconfigured Claude would report.
-export function brokerClaude(plan = async () => {}, { tools = CLAUDE_TOOL_NAMES, servers = [{ name: 'hq', status: 'connected' }], apiKeySource = 'none', auth = { loggedIn: true, authMethod: 'claude.ai', apiProvider: 'firstParty' }, rateLimit = null, extraToolUse = null, result = 'Done.', pid = 424242 } = {}) {
-  const spawned = [], calls = [];
+// Termination is modelled for both platforms: child.kill (Unix SIGTERM/SIGKILL) and `taskkill /pid <pid> /T [/F]`
+// (Windows) reach the same fake process. holdClose: termination requests are recorded but the process stays alive
+// until the test calls release(), so a test can act in the window between a stop request and proof of close.
+export function brokerClaude(plan = async () => {}, { tools = CLAUDE_TOOL_NAMES, servers = [{ name: 'hq', status: 'connected' }], apiKeySource = 'none', auth = { loggedIn: true, authMethod: 'claude.ai', apiProvider: 'firstParty' }, rateLimit = null, extraToolUse = null, result = 'Done.', pid = 424242, holdClose = false } = {}) {
+  const spawned = [], calls = [], terminations = [], held = [];
+  const terminate = (child, request) => {
+    terminations.push(request);
+    const close = request.via === 'taskkill' ? () => child.close(1, null) : () => child.close(null, request.force ? 'SIGKILL' : 'SIGTERM');
+    if (holdClose) held.push(close); else setImmediate(close);
+  };
   const spawn = (command, args, opts) => {
+    if (command === 'taskkill') {
+      // taskkill itself is a short-lived process; its effect lands on the live process with that pid.
+      const tk = new EventEmitter(); tk.stdout = new EventEmitter(); tk.stderr = new EventEmitter(); tk.kill = () => true;
+      const target = Number(args[args.indexOf('/pid') + 1]);
+      const victim = spawned.findLast(s => s.child.pid === target && !s.child.closed);
+      if (victim) terminate(victim.child, { via: 'taskkill', pid: target, tree: args.includes('/T'), force: args.includes('/F'), args });
+      setImmediate(() => tk.emit('close', victim ? 0 : 128, null));
+      return tk;
+    }
     const child = new EventEmitter();
-    child.pid = pid; child.stdout = new EventEmitter(); child.stderr = new EventEmitter();
-    let closed = false;
-    const close = (code, signal = null) => { if (!closed) { closed = true; child.emit('close', code, signal); } };
-    child.kill = () => { setImmediate(() => close(null, 'SIGTERM')); return true; };
-    const line = o => { if (!closed) child.stdout.emit('data', Buffer.from(JSON.stringify(o) + '\n')); };
+    child.pid = pid; child.stdout = new EventEmitter(); child.stderr = new EventEmitter(); child.closed = false;
+    const close = child.close = (code, signal = null) => { if (!child.closed) { child.closed = true; child.emit('close', code, signal); } };
+    child.kill = (signal = 'SIGTERM') => { terminate(child, { via: 'signal', pid: child.pid, signal, force: signal === 'SIGKILL' }); return true; };
+    const line = o => { if (!child.closed) child.stdout.emit('data', Buffer.from(JSON.stringify(o) + '\n')); };
     spawned.push({ command, args, opts, child });
     child.stdin = Object.assign(new EventEmitter(), { end(prompt) {
       if (args[0] === '--version') return setImmediate(() => { child.stdout.emit('data', Buffer.from('2.1.285 (Claude Code)\n')); close(0); });
@@ -101,7 +117,7 @@ export function brokerClaude(plan = async () => {}, { tools = CLAUDE_TOOL_NAMES,
         child.prompt = prompt; child.mcp = { url: cfg.url, token };
         line({ type: 'system', subtype: 'init', tools, mcp_servers: servers, apiKeySource });
         await new Promise(r => setImmediate(r));
-        if (closed) return;
+        if (child.closed) return;
         // Tools Claude Code does not list can only be called by a compromised client straight over HTTP, so only listed
         // tool names appear in the stream (an unlisted one there is a separate attack, see extraToolUse).
         const call = async (name, a) => { const r = await toolCall(cfg.url, token, name, a); calls.push({ name, args: a, ...r }); if (TOOL_NAMES.includes(name)) line({ type: 'assistant', message: { content: [{ type: 'tool_use', name: `mcp__hq__${name}`, input: a }] } }); return r; };
@@ -114,5 +130,6 @@ export function brokerClaude(plan = async () => {}, { tools = CLAUDE_TOOL_NAMES,
     } });
     return child;
   };
-  return { spawn, spawned, calls, sessions: () => spawned.filter(s => s.args.includes('--mcp-config')) };
+  const release = () => { for (const close of held.splice(0)) close(); };
+  return { spawn, spawned, calls, terminations, release, sessions: () => spawned.filter(s => s.args.includes('--mcp-config')) };
 }

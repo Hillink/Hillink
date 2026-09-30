@@ -35,7 +35,7 @@ const FAKE_KEYS = { ANTHROPIC_API_KEY: 'sk-ant-api03-FAKEfakeFAKEfakeFAKEfake00'
 const writeGood = async call => { await call('repo_write', { path: 'sandbox/hq-implementation/slug.mjs', content: IMPL }); await call('repo_write', { path: 'sandbox/hq-implementation/slug.test.mjs', content: PASSING }); await call('run_tests', {}); };
 
 // One HQ with both implementation variants wired, a fake subscription Claude and a counting API-key runner.
-async function brokerHQ(plan = writeGood, { fake: fakeOpts = {}, sandbox = new DirSandbox(), repoFiles = {}, repoLinks = {}, limits, budgeted = false, brokerSupport = null, env: extraEnv = {} } = {}) {
+async function brokerHQ(plan = writeGood, { fake: fakeOpts = {}, sandbox = new DirSandbox(), repoFiles = {}, repoLinks = {}, limits, budgeted = false, brokerSupport = null, env: extraEnv = {}, cliOptions = {} } = {}) {
   const repo = tempRepo(repoFiles, { links: repoLinks }), worktreeRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'hq-brk-wt-'));
   const fake = brokerClaude(plan, fakeOpts);
   const broker = await new BrokerServer().start();
@@ -45,7 +45,7 @@ async function brokerHQ(plan = writeGood, { fake: fakeOpts = {}, sandbox = new D
   const direct = new ClaudeImplementer({ repoRoot: repo, worktreeRoot, claudeBin: 'claude-direct', spawn: () => { throw Error('the API-key runner must never launch Claude here'); }, env: directEnv, sandbox, pulseMs: 50 });
   let directStarts = 0; const directStart = direct.start.bind(direct); direct.start = run => { directStarts++; return directStart(run); };
   if (brokerSupport) sandbox.brokerSupport = brokerSupport;
-  const sub = new SubscriptionImplementer({ repoRoot: repo, worktreeRoot, claudeBin: 'claude-fake', spawn: fake.spawn, env, sandbox, broker, pulseMs: 50, ...(limits ? { limits } : {}) });
+  const sub = new SubscriptionImplementer({ repoRoot: repo, worktreeRoot, claudeBin: 'claude-fake', spawn: fake.spawn, env, sandbox, broker, pulseMs: 50, cliOptions, ...(limits ? { limits } : {}) });
   const review = { health: async () => ({ status: 'IDLE' }), start: async () => { throw Error('no reviews here'); }, cancel: async () => true };
   const engine = new Engine({ store: new MemoryStore(), adapters: { 'local-checks': { health: async () => ({ status: 'IDLE' }), start: async () => {}, cancel: async () => true }, 'cli-claude': new ClaudeRouter(review, direct, sub) }, config: { heartbeatMs: 600_000, progressMs: 600_000 } });
   engine.initialize();
@@ -87,15 +87,41 @@ test('B1. Claude Code is launched with no built-in tools, only HQ\'s broker, no 
 });
 
 test('B2. a Claude session that reports any tool beyond the broker (Bash) is stopped before it acts: BLOCKED, nothing written, nothing committed', async () => {
-  const h = await brokerHQ(writeGood, { fake: { tools: [...CLAUDE_TOOL_NAMES, 'Bash'] } });
-  try {
-    const t = await h.run();
-    assert.equal(t.stage, 'BLOCKED');
-    assert.match(t.blocker, /TOOL_POLICY: .*Bash/);
-    assert.equal(h.commits().length, 0);
-    assert.ok(h.fake.calls.every(c => c.isError || c.error), 'no broker call succeeded after the violation');
-    assert.ok(h.sandbox.destroyed.length >= 1, 'sandbox destroyed');
-  } finally { await h.close(); }
+  // Process closure is held back on purpose (Windows taskkill and Unix signals both modelled): from the moment of the
+  // violation every broker call is refused while the process is still alive, and BLOCKED waits for proof of close.
+  for (const platform of ['win32', 'linux']) {
+    const seen = {};
+    let h;
+    const plan = async (call, { child }) => {
+      for (let i = 0; i < 400 && h.fake.terminations.length < 2; i++) await new Promise(r => setTimeout(r, 10));
+      seen.stopRequests = h.fake.terminations.map(r => ({ ...r }));
+      seen.aliveBefore = !child.closed;
+      seen.stageDuring = Object.values(h.engine.state.tasks)[0].stage;
+      seen.execsBefore = h.sandbox.execs.length;
+      await writeGood(call);
+      for (const [name, args] of [['repo_read', { path: 'README.md' }], ['repo_list', { path: '.' }], ['repo_changes', {}]]) await call(name, args);
+      seen.aliveAfter = !child.closed;
+      seen.execsAfter = h.sandbox.execs.length;
+      h.fake.release(); // the termination finally takes effect: the process closes
+    };
+    h = await brokerHQ(plan, { fake: { tools: [...CLAUDE_TOOL_NAMES, 'Bash'], holdClose: true }, cliOptions: { platform, graceMs: 30 } });
+    try {
+      const t = await h.run();
+      assert.equal(seen.aliveBefore, true, `${platform}: the process was still alive when the attacker called the broker`);
+      assert.equal(seen.aliveAfter, true, `${platform}: and still alive after its last call`);
+      assert.notEqual(seen.stageDuring, 'BLOCKED', `${platform}: revocation is not proof the process stopped; BLOCKED waits for close`);
+      assert.equal(h.fake.calls.length, 6, `${platform}: the attacker made all its calls`);
+      assert.ok(h.fake.calls.every(c => c.isError || c.error), `${platform}: no broker call succeeded after the violation`);
+      assert.equal(seen.execsAfter, seen.execsBefore, `${platform}: no read, write or test reached the sandbox after revocation`);
+      if (platform === 'win32') assert.deepEqual(seen.stopRequests.map(r => [r.via, r.pid, r.tree, r.force]), [['taskkill', 424242, true, false], ['taskkill', 424242, true, true]], 'soft, then forced taskkill of the process tree');
+      else assert.deepEqual(seen.stopRequests.map(r => [r.via, r.signal]), [['signal', 'SIGTERM'], ['signal', 'SIGKILL']]);
+      assert.equal(t.stage, 'BLOCKED');
+      assert.match(t.blocker, /TOOL_POLICY: .*Bash/);
+      assert.equal(h.commits().length, 0);
+      assert.ok(h.sandbox.destroyed.length >= 1, 'sandbox destroyed');
+      assert.ok(h.brokerEvents(t).some(e => e.event === 'BROKER_CLOSED' && e.outcome === 'policy violation'), `${platform}: the broker was closed for the policy violation`);
+    } finally { await h.close(); }
+  }
 });
 
 test('B3. extra MCP servers (a plugin or user GitHub server) or a disconnected broker stop the session', async () => {
@@ -652,7 +678,7 @@ test('slug', () => assert.equal(slug('A B'), 'a-b'));
   } finally { await h.close(); }
 });
 
-test('V5. ending the run early in other ways fails closed: closing stdout, an uncaught error, skipped or todo tests, a file with no tests', async () => {
+test('V5. ending the run early in other ways fails closed: closing stdout, an uncaught error, skipped or todo tests, a file with no tests', async t => {
   const cases = {
     closeStdout: "import fs from 'node:fs';\nimport test from 'node:test';\nfs.closeSync(1);\ntest('slug', () => {});\n",
     throws: "import test from 'node:test';\ntest('slug', () => {});\nsetTimeout(() => { throw Error('late'); }, 0);\n",
@@ -660,10 +686,41 @@ test('V5. ending the run early in other ways fails closed: closing stdout, an un
     todo: "import test from 'node:test';\ntest('slug', { todo: true }, () => {});\ntest('other', () => {});\n",
     empty: '// no tests\n',
   };
+  // fs.closeSync(1) is a POSIX output-loss case. On Windows, Node's libuv returns success for fds 0-2 without closing
+  // them, so the fixture never loses its output there; counting that run would test nothing. The production WSL/Linux
+  // runner is POSIX, where this case runs. Output loss stays covered on Windows by the controlled case below.
+  const skip = { closeStdout: process.platform === 'win32' ? 'POSIX only: fs.closeSync(1) does not close stdout on Windows (libuv no-op for fds 0-2); runs on Linux/WSL' : false };
   for (const [name, content] of Object.entries(cases)) {
-    const h = await brokerHQ(async call => { await call('repo_write', { path: 'sandbox/hq-implementation/slug.mjs', content: IMPL }); await call('repo_write', { path: 'sandbox/hq-implementation/slug.test.mjs', content }); });
-    try { const t = await h.run(); assert.equal(t.stage, 'BLOCKED', name); assert.equal(h.commits().length, 0, name); } finally { await h.close(); }
+    await t.test(name, { skip: skip[name] ?? false }, async () => {
+      const h = await brokerHQ(async call => { await call('repo_write', { path: 'sandbox/hq-implementation/slug.mjs', content: IMPL }); await call('repo_write', { path: 'sandbox/hq-implementation/slug.test.mjs', content }); });
+      try { const r = await h.run(); assert.equal(r.stage, 'BLOCKED', name); assert.equal(h.commits().length, 0, name); } finally { await h.close(); }
+    });
   }
+  // Every platform: the real controller's output for a genuine passing run, with its authenticated result removed or
+  // cut short (what a run that loses its output produces), never goes green. The untouched output is the control.
+  await t.test('missing or truncated authenticated result (controlled, every platform)', async () => {
+    const sandbox = new DirSandbox(), repo = tempRepo({ 'sandbox/hq-implementation/slug.mjs': IMPL, 'sandbox/hq-implementation/slug.test.mjs': PASSING });
+    const box = `hq-sbx-test-${crypto.randomBytes(4).toString('hex')}`, tests = ['sandbox/hq-implementation/slug.test.mjs'], key = newRunKey();
+    await sandbox.create(box); await sandbox.stage(box, { repo, commit: 'HEAD' });
+    try {
+      const { stdout } = await sandbox.exec(box, 'hq-test.sh', tests, { input: `${key}\n` });
+      assert.equal(testVerdict(stdout, { key, tests, exitedOk: true }).green, true, 'control: a genuine passing run is green');
+      const lines = stdout.split(/\r?\n/), i = lines.findIndex(l => l.startsWith('HQ-RESULT '));
+      assert.ok(i >= 0, 'the control run carries an authenticated result');
+      const lost = {
+        missing: lines.filter((_, j) => j !== i).join('\n'),
+        endedBeforeResult: lines.slice(0, i).join('\n'),
+        truncatedMac: [...lines.slice(0, i), lines[i].slice(0, -8)].join('\n'),
+        truncatedJson: [...lines.slice(0, i), lines[i].slice(0, Math.floor(lines[i].length / 2))].join('\n'),
+        cutMidLine: stdout.slice(0, stdout.indexOf('HQ-RESULT ') + 12),
+      };
+      for (const [name, out] of Object.entries(lost)) {
+        const v = testVerdict(out, { key, tests, exitedOk: true });
+        assert.equal(v.green, false, name); assert.equal(v.passed, 0, name);
+        assert.match(v.reason, /no authenticated result/, name);
+      }
+    } finally { await sandbox.destroy(box); }
+  });
 });
 
 test('V6. the real Linux sandbox: the forged-report attack fails closed and a genuine run passes, through the actual test step', { skip: linux ? false : 'needs the Linux namespace sandbox (Linux, root)' }, async () => {

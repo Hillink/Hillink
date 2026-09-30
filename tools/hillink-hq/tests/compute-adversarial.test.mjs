@@ -168,19 +168,30 @@ test('5. API keys in HQ\'s environment are never forwarded to agents, and a CLI 
   // Claude whose status says an API key would be used: refused before any model call.
   const claudeApi = new CliAgentAdapter(cliAgents.claude, { spawn: (c, args) => { const ch = child(); if (!subscriptionProbe(args, ch, { claude: { loggedIn: true, authMethod: 'claude.ai', apiKeySource: 'ANTHROPIC_API_KEY' } })) queueMicrotask(() => { ch.stdout.emit('data', Buffer.from('2.1.285 (Claude Code)\n')); ch.emit('close', 0); }); return ch; } });
   assert.match((await claudeApi.health()).detail, /^AUTH_REQUIRED: Claude Code would bill a metered API key/);
-  // Second line: a session that starts with an API key anyway (e.g. an apiKeyHelper) is stopped at init.
-  const spawned = [];
-  const live = new CliAgentAdapter(cliAgents.claude, { graceMs: 5, spawn: (c, args) => { const ch = child(); spawned.push(ch); return ch; } });
-  live.healthCache = { at: Date.now(), result: { status: 'IDLE', auth: 'subscription' } };
-  const events = [];
-  await live.start({ task: { operation: 'review-repo', safety: 'local-read-only', description: 'x' }, runId: 'r2', emit: e => events.push(e) });
-  const ch = spawned[0];
-  ch.stdout.emit('data', Buffer.from(JSON.stringify({ type: 'system', subtype: 'init', apiKeySource: 'apiKeyHelper', tools: ['Read'] }) + '\n'));
-  await tick();
-  assert.ok(ch.signals.length > 0, 'the session was killed');
-  ch.emit('close', null, 'SIGTERM'); await tick();
-  assert.equal(events.some(e => e.kind === 'ACK'), false, 'never counted as a subscription session');
-  assert.equal(events.at(-1).kind, 'BLOCKED'); assert.match(events.at(-1).summary, /AUTH_REQUIRED: .*apiKeyHelper.*No metered fallback/);
+  // Second line: a session that starts with an API key anyway (e.g. an apiKeyHelper) is stopped at init. Both
+  // platforms' termination is modelled: Windows kills the process tree with taskkill (soft, then /F), Unix sends
+  // SIGTERM then SIGKILL. Neither request is proof: the terminal event waits for the original process to close.
+  for (const platform of ['win32', 'linux']) {
+    const spawned = [], taskkills = [];
+    const live = new CliAgentAdapter(cliAgents.claude, { platform, graceMs: 5, spawn: (c, args) => { const ch = child(); if (c === 'taskkill') taskkills.push(args); else spawned.push(ch); return ch; } });
+    live.healthCache = { at: Date.now(), result: { status: 'IDLE', auth: 'subscription' } };
+    const events = [];
+    await live.start({ task: { operation: 'review-repo', safety: 'local-read-only', description: 'x' }, runId: 'r2', emit: e => events.push(e) });
+    const ch = spawned[0];
+    ch.stdout.emit('data', Buffer.from(JSON.stringify({ type: 'system', subtype: 'init', apiKeySource: 'apiKeyHelper', tools: ['Read'] }) + '\n'));
+    await tick();
+    if (platform === 'win32') { assert.deepEqual(taskkills, [['/pid', '7', '/T']], 'win32: the session was killed (taskkill of its process tree)'); assert.deepEqual(ch.signals, []); }
+    else { assert.deepEqual(ch.signals, ['SIGTERM'], 'the session was killed'); assert.deepEqual(taskkills, []); }
+    // The process ignores the soft request: after the grace period HQ forces it, and still reports nothing terminal.
+    await new Promise(r => setTimeout(r, 40));
+    if (platform === 'win32') assert.deepEqual(taskkills, [['/pid', '7', '/T'], ['/pid', '7', '/T', '/F']], 'win32: forced taskkill after the grace period');
+    else assert.deepEqual(ch.signals, ['SIGTERM', 'SIGKILL']);
+    assert.ok(!events.some(e => ['BLOCKED', 'CANCELLED', 'FAILED', 'COMPLETED'].includes(e.kind)), `${platform}: no terminal event before the original process closes`);
+    if (platform === 'win32') ch.emit('close', 1, null); else ch.emit('close', null, 'SIGKILL');
+    await tick();
+    assert.equal(events.some(e => e.kind === 'ACK'), false, 'never counted as a subscription session');
+    assert.equal(events.at(-1).kind, 'BLOCKED', platform); assert.match(events.at(-1).summary, /AUTH_REQUIRED: .*apiKeyHelper.*No metered fallback/);
+  }
 });
 
 test('6. fake cost metadata cannot refund a budget or turn subscription estimates into spend', async () => {

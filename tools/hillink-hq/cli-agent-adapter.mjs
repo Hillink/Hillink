@@ -173,6 +173,10 @@ export class CliAgentAdapter {
         else if (!run.acknowledged) continue;
         if (!safeEmit(event)) void this.cancel(runId);
       }
+      // Pass 4.5 repair: a policy violation revokes the run's authority (onPolicyViolation, e.g. the broker session) at
+      // once, synchronously, before termination is even requested. Revocation is not proof the process stopped: the
+      // terminal event still waits for close.
+      if ((run.authViolation || run.toolViolation) && !run.revoked) { run.revoked = true; try { this.onPolicyViolation?.(runId, run.authViolation || run.toolViolation); } catch { /* termination still proceeds */ } }
       if (run.authViolation && !run.cancelled) { this.healthCache = null; void this.cancel(runId); }
       if (run.toolViolation && !run.cancelled) void this.cancel(runId);
     };

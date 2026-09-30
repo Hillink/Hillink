@@ -78,6 +78,9 @@ export class SubscriptionImplementer extends ClaudeImplementer {
       // 3. The broker session, bound to this task, run, sandbox and contract. Cancellation closes it at once.
       opened = this.broker.open({ taskId: task.id, runId, objectiveId: task.link?.objectiveId ?? null, sandbox: this.sandbox, box, contract, emit, limits: this.limits });
       entry.abort.signal.addEventListener('abort', () => this.broker.closeSession(opened.session.id, 'cancelled'), { once: true });
+      // A tool or auth policy violation revokes the broker at once, while Claude's process may still be alive; the
+      // task only becomes BLOCKED once the adapter has proof the process closed.
+      cli.onPolicyViolation = () => this.broker.closeSession(opened.session.id, 'policy violation');
       opened.session.audit('SUBSCRIPTION_IMPLEMENTER_STARTED', { outcome: 'started', computeClass: 'SUBSCRIPTION', summary: 'Subscription implementer starting: Claude Code on the host, HQ broker tools only, metered API spend $0.' });
       fs.writeFileSync(cfg, JSON.stringify(opened.mcpConfig), { mode: 0o600 });
       // Before Claude exists: the marker a restarted HQ can find on its command line if the pid never gets recorded.
