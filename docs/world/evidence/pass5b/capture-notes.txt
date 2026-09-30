@@ -1,0 +1,26 @@
+A1-generated-hq-inhabited-real.png  claude type at development:room-7:officeChair2; codex inspect at testing:room-5:reviewConsole6@-0.4
+A2-generated-hq-inhabited-fantasy.png
+B1-agent-sitting-typing-at-generated-desk.png  claude type posture sit at development:room-7:officeChair2
+B2-agent-using-printer.png  codex read using print (room-7:printer59)
+B3-break-room-rest.png  claude idle sit at relax; codex idle sit at relax
+C1-agent-riding-generated-elevator.png  claude gait ride, lift lift:bldg-1 floors 0,1
+D1-traffic-on-generated-road.png
+E01-construction-planning-survey.png
+E02-construction-site-preparation-builder-walking.png  claude walk walking to the site
+E03-construction-foundation-builder-at-work.png  claude assemble at site:meeting-room:site:meeting-room:build1
+E04a-construction-structure-wide.png
+E04-construction-structure.png
+E05-construction-blocked-work-stops.png  claude waiting waiting at queue:bldg-1-L0-hall:bench1#0
+E06-construction-exterior.png
+E07-construction-systems.png
+E08-construction-furnishing.png
+E09-construction-inspection-codex-on-site.png  codex survey at site:meeting-room:site:meeting-room:build1
+E10-construction-review-rejected-rework.png
+F1-construction-complete-furnished-walkable.png
+F2-operational-team-meets-in-new-room.png  claude meeting at comms:room-9:chair2; codex meeting at comms:room-9:chair3
+G1-same-project-fantasy-structure.png
+G2-same-project-fantasy-inspection.png
+G3-same-room-fantasy-operational.png
+H1-blueprint-generated-navigation.png
+Z1-legacy-hand-built-world-for-comparison.png
+Z2-plan-view-debug-inspector.png
