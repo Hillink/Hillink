@@ -404,7 +404,7 @@ showSource();
 // its own. They exist to watch motion; they never run against live HQ.
 const PLAYS = {
   office: { every: 80, steps: [[1, 'claudeCodes'], [6, 'codexTests'], [30, 'claudeMessagesCodex'], [44, 'testPasses'], [52, 'taskCompletes'], [66, 'allIdle']] },
-  workstation: { every: 48, steps: [[2, 'claudeCodes'], [28, 'taskCompletes'], [38, 'allIdle']] },
+  workstation: { every: 80, steps: [[2, 'claudeCodes'], [44, 'taskCompletes'], [54, 'allIdle']] }, // the trip up to the desk takes ~25 s
   meeting: { every: 60, steps: [[2, 'teamMeeting'], [34, 'endMeeting'], [44, 'allIdle']] },
 };
 function startPlay(kind) {

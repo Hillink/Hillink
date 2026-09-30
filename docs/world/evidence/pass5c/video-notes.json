@@ -1,0 +1,185 @@
+{
+  "base": "http://127.0.0.1:4332",
+  "at": "2026-09-30T12:24:58.304Z",
+  "clips": [
+    {
+      "name": "1-office-activity",
+      "path": "/?source=sim&theme=real&play=office",
+      "seconds": 74.86,
+      "frames": 1644,
+      "capturedFps": 22,
+      "world": {
+        "source": "generated",
+        "simulated": false,
+        "generator": "5a.1",
+        "seed": "hillink",
+        "schema": 1,
+        "fingerprint": "d205978be510b24b217f936fefb87454",
+        "historyLength": 1,
+        "layout": "generated",
+        "error": null
+      },
+      "note": "agents: claude walking, codex walking | ambient: visiting, visiting, visiting"
+    },
+    {
+      "name": "2-workstation-lifecycle",
+      "path": "/?source=sim&theme=real&play=workstation",
+      "seconds": 77.86,
+      "frames": 2261,
+      "capturedFps": 29,
+      "world": {
+        "source": "generated",
+        "simulated": false,
+        "generator": "5a.1",
+        "seed": "hillink",
+        "schema": 1,
+        "fingerprint": "d205978be510b24b217f936fefb87454",
+        "historyLength": 1,
+        "layout": "generated",
+        "error": null
+      },
+      "note": "typed at the desk: true; now idle / onBreak at lounge:room-1:couch6#0",
+      "rerecorded": "scenario timing lengthened: the real trip up to the desk takes ~25 s"
+    },
+    {
+      "name": "3-construction-activity",
+      "path": "/?demo=construction&step=1&autoplay=7&theme=real",
+      "seconds": 117.9,
+      "frames": 2741,
+      "capturedFps": 23.2,
+      "world": {
+        "source": "generated",
+        "simulated": true,
+        "generator": "5a.1",
+        "seed": "hillink",
+        "schema": 1,
+        "fingerprint": "e59e975dd06cb697c078242b3a2dc26e",
+        "historyLength": 22,
+        "layout": "generated",
+        "error": null
+      },
+      "note": "stage at the end: operational; builder working at 20 s: true"
+    },
+    {
+      "name": "4-blocked-construction",
+      "path": "/?demo=construction&step=3&autoplay=14&theme=real",
+      "seconds": 43.92,
+      "frames": 1095,
+      "capturedFps": 24.9,
+      "world": {
+        "source": "generated",
+        "simulated": true,
+        "generator": "5a.1",
+        "seed": "hillink",
+        "schema": 1,
+        "fingerprint": "cf64706f1876a2826988f00038c01e04",
+        "historyLength": 11,
+        "layout": "generated",
+        "error": null
+      },
+      "note": "working before the block: true; stopped while blocked: true (null)"
+    },
+    {
+      "name": "5-vehicles-and-environment",
+      "path": "/?source=sim&theme=real",
+      "seconds": 39.9,
+      "frames": 1305,
+      "capturedFps": 32.7,
+      "world": {
+        "source": "generated",
+        "simulated": false,
+        "generator": "5a.1",
+        "seed": "hillink",
+        "schema": 1,
+        "fingerprint": "d205978be510b24b217f936fefb87454",
+        "historyLength": 1,
+        "layout": "generated",
+        "error": null
+      },
+      "note": null
+    },
+    {
+      "name": "6-fantasy-construction",
+      "path": "/?demo=construction&step=2&autoplay=7&theme=fantasy",
+      "seconds": 59.98,
+      "frames": 1403,
+      "capturedFps": 23.4,
+      "world": {
+        "source": "generated",
+        "simulated": true,
+        "generator": "5a.1",
+        "seed": "hillink",
+        "schema": 1,
+        "fingerprint": "baba4d5d937bcc1019c59899b78214f4",
+        "historyLength": 15,
+        "layout": "generated",
+        "error": null
+      },
+      "note": "inspection"
+    },
+    {
+      "name": "7-meeting",
+      "path": "/?source=sim&theme=real&play=meeting",
+      "seconds": 44.91,
+      "frames": 1568,
+      "capturedFps": 34.9,
+      "world": {
+        "source": "generated",
+        "simulated": false,
+        "generator": "5a.1",
+        "seed": "hillink",
+        "schema": 1,
+        "fingerprint": "d205978be510b24b217f936fefb87454",
+        "historyLength": 1,
+        "layout": "generated",
+        "error": null
+      },
+      "note": "both in the meeting at 26 s: true"
+    }
+  ],
+  "failures": [],
+  "comparison": {
+    "file": "0-before-after-5b-vs-5c.mp4",
+    "before": {
+      "server": "Pass 5B e6dc9aa",
+      "name": "before-5b",
+      "path": "/?source=sim&theme=real",
+      "seconds": 59.95,
+      "frames": 2053,
+      "capturedFps": 34.2,
+      "world": {
+        "source": "generated",
+        "simulated": false,
+        "generator": "5a.1",
+        "seed": "hillink",
+        "schema": 1,
+        "fingerprint": "d205978be510b24b217f936fefb87454",
+        "historyLength": 1,
+        "layout": "generated",
+        "error": null
+      },
+      "note": null
+    },
+    "after": {
+      "server": "Pass 5C",
+      "name": "after-5c",
+      "path": "/?source=sim&theme=real",
+      "seconds": 59.97,
+      "frames": 2268,
+      "capturedFps": 37.8,
+      "world": {
+        "source": "generated",
+        "simulated": false,
+        "generator": "5a.1",
+        "seed": "hillink",
+        "schema": 1,
+        "fingerprint": "d205978be510b24b217f936fefb87454",
+        "historyLength": 1,
+        "layout": "generated",
+        "error": null
+      },
+      "note": null
+    },
+    "script": "same simulated events at the same times: claudeCodes 2 s, taskCompletes 40 s, allIdle 48 s; camera following Claude"
+  }
+}
