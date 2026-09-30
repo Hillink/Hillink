@@ -23,6 +23,7 @@ export function poly(ctx, pts, fill, stroke, lw) {
 // A box on a floor: draws the three faces the camera sees (right side, top, front).
 // c: a base colour, or { front, side, top }.
 export function prism(d, f, { x0, x1, z0, z1, h0 = 0, h1 }, c, { outline = true, alpha = 1 } = {}) {
+  if (d.art?.prism) return d.art.prism(d, f, { x0, x1, z0, z1, h0, h1 }, c, { outline, alpha }); // Pass 5D-A art layer
   const { ctx, P } = d, p = (x, z, h) => P.at(x, z, f, h);
   const col = typeof c === 'string' ? { front: c, side: shade(c, 0.78), top: shade(c, 1.14) } : c;
   const s = outline ? INK : null, lw = d.lw;
@@ -34,10 +35,10 @@ export function prism(d, f, { x0, x1, z0, z1, h0 = 0, h1 }, c, { outline = true,
 }
 const box = (it, dx0 = 0, dx1 = 0, dz0 = 0, dz1 = 0) => ({ x0: it.x - it.w / 2 + dx0, x1: it.x + it.w / 2 + dx1, z0: it.z - it.d / 2 + dz0, z1: it.z + it.d / 2 + dz1 });
 // A flat rectangle standing on a box's front face at height h (a screen, a door, a label).
-function panel(d, f, x0, x1, z, h0, h1, fill, stroke) { const p = (x, h) => d.P.at(x, z, f, h); poly(d.ctx, [p(x0, h0), p(x1, h0), p(x1, h1), p(x0, h1)], fill, stroke, d.lw * 0.8); }
+function panel(d, f, x0, x1, z, h0, h1, fill, stroke) { const p = (x, h) => d.P.at(x, z, f, h); poly(d.ctx, [p(x0, h0), p(x1, h0), p(x1, h1), p(x0, h1)], fill, d.art ? null : stroke, d.lw * 0.8); }
 // A flat rectangle lying on a horizontal surface at height h.
-function flat(d, f, x0, x1, z0, z1, h, fill, stroke) { const p = (x, z) => d.P.at(x, z, f, h); poly(d.ctx, [p(x0, z0), p(x1, z0), p(x1, z1), p(x0, z1)], fill, stroke, d.lw * 0.7); }
-function blob(d, f, x, z, h, r, fill) { const [sx, sy] = d.P.at(x, z, f, h); d.ctx.beginPath(); d.ctx.arc(sx, sy, r, 0, TAU); d.ctx.fillStyle = fill; d.ctx.fill(); d.ctx.strokeStyle = INK; d.ctx.lineWidth = d.lw; d.ctx.stroke(); }
+function flat(d, f, x0, x1, z0, z1, h, fill, stroke) { const p = (x, z) => d.P.at(x, z, f, h); poly(d.ctx, [p(x0, z0), p(x1, z0), p(x1, z1), p(x0, z1)], fill, d.art ? null : stroke, d.lw * 0.7); }
+function blob(d, f, x, z, h, r, fill) { if (d.art?.blob) return d.art.blob(d, f, x, z, h, r, fill); const [sx, sy] = d.P.at(x, z, f, h); d.ctx.beginPath(); d.ctx.arc(sx, sy, r, 0, TAU); d.ctx.fillStyle = fill; d.ctx.fill(); d.ctx.strokeStyle = INK; d.ctx.lineWidth = d.lw; d.ctx.stroke(); }
 
 // Code-like lines on a screen; `live` scrolls, otherwise a still idle frame.
 function screenLines(d, f, x0, x1, z, h0, h1, live, seed = 0) {

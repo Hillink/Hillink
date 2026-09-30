@@ -7,6 +7,7 @@ import { STREET } from '../world/building.mjs';
 import { AGENT, ARCH } from '../world/scale.mjs';
 import { createGeneratedLayout } from '../world/generated-layout.mjs';
 import { createSiteSkin } from '../render/site-skin.mjs';
+import { createArtSkin } from '../render/art5d/skin.mjs';
 
 export const THEME_ORDER = ['real', 'fantasy', 'blueprint'];
 export const THEME_NAMES = { real: 'Realistic', fantasy: 'Fantasy', blueprint: 'Blueprint' };
@@ -24,11 +25,13 @@ function scenery(L) {
 
 // Pass 5B: with a canonical procedural world the theme runs on generated geometry (world/generated-layout.mjs and
 // render/site-skin.mjs); without one it falls back to the hand-authored building (kept for comparison: ?world=legacy).
-export function loadTheme(id, { world = null } = {}) {
+// Pass 5D-A: art '5d' is the visual prototype for the Real World (render/art5d/), opt-in with ?art=5d. It draws the same
+// generated layout; only the presentation differs.
+export function loadTheme(id, { world = null, art = null } = {}) {
   const key = THEME_ORDER.includes(id) ? id : 'real';
   if (world) {
     const G = createGeneratedLayout(world, { theme: key });
-    return { id: key, name: THEME_NAMES[key], layout: G, skin: createSiteSkin(G, key), scenery: { characterHeight: G.characterHeight, walkSpeed: G.walkSpeed, liftSpeed: ARCH.elevator.speed, npcHeight: AGENT.height, npcs: [] }, camera: { minZoom: 0.2, maxZoom: 4 }, generated: true };
+    return { id: key, name: THEME_NAMES[key], layout: G, art: art === '5d' && key === 'real' ? '5d' : null, skin: art === '5d' && key === 'real' ? createArtSkin(G) : createSiteSkin(G, key), scenery: { characterHeight: G.characterHeight, walkSpeed: G.walkSpeed, liftSpeed: ARCH.elevator.speed, npcHeight: AGENT.height, npcs: [] }, camera: { minZoom: 0.2, maxZoom: 4 }, generated: true };
   }
   const L = hqLayout();
   return { id: key, name: THEME_NAMES[key], layout: L, skin: createIsoSkin(L, key), scenery: scenery(L), camera: { minZoom: 0.45, maxZoom: 4 } };

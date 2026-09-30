@@ -44,7 +44,7 @@ let hover = null, selected = null, follow = null, lastFrame = performance.now(),
 // Themes: same World state, different layout and art. Switching rebuilds only the view.
 function applyTheme(id, { keepCamera = false } = {}) {
   const cam0 = keepCamera && theme ? camera.toJSON() : null;
-  theme = loadTheme(THEME_ORDER.includes(id) ? id : 'real', { world: siteWorld });
+  theme = loadTheme(THEME_ORDER.includes(id) ? id : 'real', { world: siteWorld, art: params.get('art') });
   const places = view?.places ?? {}; // Semantic places (room + station ids) carry across themes.
   scene = new Scene(); view = new IsoWorldView(scene, effects, theme.layout, theme.scenery); view.places = places;
   Object.assign(camera, { bounds: theme.layout.bounds, home: theme.layout.home ?? null, minZoom: theme.camera.minZoom, maxZoom: theme.camera.maxZoom });
@@ -420,6 +420,28 @@ if (demoMode && Number(params.get('autoplay')) > 0) {
   const timer = setInterval(() => { if (!demo || demo.done) return clearInterval(timer); demoStep(); }, every);
 }
 if (params.get('camera')) setTimeout(() => focus(params.get('camera')), 50);
+// Pass 5D-A: named camera positions for inspecting the visual prototype (?shot=overview|entrance|workspace|lounge|
+// street|corner). Each is computed from the generated layout (the entrance door, the rooms, the road), not hard-coded.
+function shotPoint(name) {
+  const L = theme.layout, W = L.world, v = L.view, U = L.U;
+  const door = Object.values(W.doors ?? {}).find(d => d.status === 'built' && (d.a === 'outside' || d.b === 'outside'));
+  const dp = door ? v.toView((door.seg.x1 + door.seg.x2) / 2, (door.seg.y1 + door.seg.y2) / 2) : null;
+  const room = id => { const l = L.locationById?.[id]; return l ? { x: l.x + l.w / 2, y: l.y + l.h / 2 } : null; };
+  const b = Object.values(W.buildings ?? {})[0], r = b ? v.rectToView(b.footprint) : null;
+  switch (name) {
+    case 'overview': { const h = L.home; return h ? { x: h.x + h.w / 2, y: h.y + h.h / 2, zoom: 1.05 } : null; }
+    case 'entrance': return dp ? { ...toXY(L.P.at(dp.x * U, dp.z * U - 40, 0, 60)), zoom: 2.4 } : null;
+    case 'workspace': { const p = room('development'); return p && { ...p, zoom: 2.3 }; }
+    case 'lounge': { const p = room('lounge'); return p && { ...p, zoom: 2.3 }; }
+    case 'street': return dp ? { ...toXY(L.P.at(dp.x * U + 120, dp.z * U - 260, 0, 0)), zoom: 1.5 } : null;
+    case 'corner': return r ? { ...toXY(L.P.at(r.x1 * U, r.z0 * U + 40, 0, 110)), zoom: 1.8 } : null;
+    default: return null;
+  }
+}
+const toXY = ([x, y]) => ({ x, y });
+function applyShot(name) { const s = shotPoint(name); if (!s) return; follow = null; camera.focusPoint(s.x, s.y, { zoom: s.zoom, duration: 0 }); invalidate(); }
+if (params.get('shot')) setTimeout(() => applyShot(params.get('shot')), 600); // after the initial camera has settled
+
 $('empty').hidden = Object.keys(store.world.agents).length > 0;
 invalidate();
-window.hillinkWorld = { get worldInfo() { return { source: siteSync?.state ?? siteSource, simulated: Boolean(siteWorld?.simulated), generator: siteWorld?.generator ?? null, seed: siteWorld?.seed ?? null, schema: siteWorld?.schema ?? null, fingerprint: siteWorld ? worldFingerprint(siteWorld) : null, historyLength: siteWorld?.history?.length ?? 0, layout: theme?.layout?.id ?? null, error: siteSync?.error ?? siteError }; }, get siteWorld() { return siteWorld; }, get demo() { return demo; }, demoStep, why: id => explainAgent(store.world, id), get commands() { return commandInfo; }, get constructionStatus() { return constructionStatus; }, store, get scene() { return scene; }, get theme() { return theme; }, camera, sim, focus, setTheme: applyTheme }; // Dev handle for tests and console.
+window.hillinkWorld = { shot: applyShot, get worldInfo() { return { source: siteSync?.state ?? siteSource, simulated: Boolean(siteWorld?.simulated), generator: siteWorld?.generator ?? null, seed: siteWorld?.seed ?? null, schema: siteWorld?.schema ?? null, fingerprint: siteWorld ? worldFingerprint(siteWorld) : null, historyLength: siteWorld?.history?.length ?? 0, layout: theme?.layout?.id ?? null, error: siteSync?.error ?? siteError }; }, get siteWorld() { return siteWorld; }, get demo() { return demo; }, demoStep, why: id => explainAgent(store.world, id), get commands() { return commandInfo; }, get constructionStatus() { return constructionStatus; }, store, get scene() { return scene; }, get theme() { return theme; }, camera, sim, focus, setTheme: applyTheme }; // Dev handle for tests and console.

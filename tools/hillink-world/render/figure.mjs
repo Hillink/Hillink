@@ -29,7 +29,7 @@ const round = (x, y, w, h, r) => c => c.roundRect(x, y, w, h, r);
 const circle = (x, y, r) => c => c.arc(x, y, r, 0, TAU);
 
 // Hand-held props. (hx, hy) is the hand position; s is character height.
-function prop(ctx, kind, hx, hy, s, look, T, lw) {
+export function prop(ctx, kind, hx, hy, s, look, T, lw) {
   if (kind === 'tablet') {
     shape(ctx, round(hx - s * 0.1, hy - s * 0.13, s * 0.2, s * 0.14, s * 0.02), '#1d2431', lw);
     ctx.fillStyle = look.screen ?? '#5ee1ff'; ctx.fillRect(hx - s * 0.085, hy - s * 0.118, s * 0.17, s * 0.115);
@@ -129,7 +129,7 @@ function head(ctx, hx, hy, r, face, L, T, lw, { eyesClosed = false, blink = fals
 // Pose for one clip: hand offsets from the shoulder line ([far/left, near/right]), a held prop, how far the body
 // crouches (0..1 of the hip drop a deep squat takes) and how far the torso leans. Pure; used for the current clip and,
 // while clips blend (Pass 5C), for the previous one too.
-function poseFor(state, P) {
+export function poseFor(state, P) {
   const { h, T, t, x, dir, side, f, reach, sw, use, sit, g } = P;
   let arms, held = null, crouch = 0, lean = 0;
   switch (state) {
