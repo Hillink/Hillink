@@ -194,3 +194,22 @@ lineup.html + ui/lineup.mjs   character sheets (lineup, views, states, status)
   World with no agents is ignored.
 - `main.mjs` `shotPoint`: crashed in themes without a `view` (Fantasy). Now guarded.
 - `lineup.html`: an inline style was blocked by the CSP and was moved to JS.
+
+---
+
+## Art-direction checkpoint (Kyle, 2026-09-30 23:56Z) — confirmed by Kyle
+- Iteration 1 is complete. Its **systems** are kept: Real/Fantasy dual representation, canonical state relationship, 2.5D
+  isometric concept, activity/state semantics, construction semantics, navigation/interaction, procedural expansion.
+- Its **artwork is not the final Hillink identity**. Do not redesign, replace or propagate it until the direction is
+  approved.
+- No Iteration 2 and no 5I. Next input is a curated visual-reference package from Kyle/ChatGPT (characters, proportions,
+  pixel/detail level, Real and Fantasy environments, architecture, density, lighting, props, construction, mood). The
+  references are inspiration, not something to clone.
+- **Population:** the core permanent population today is Claude, Codex and ChatGPT. Scout, Treasurer, Oracle, Gemini and
+  the others in the evidence only show scalability and are not permanent inhabitants. The three-agent World should feel
+  small, intentional, alive and complete. It grows organically: need/capability → agent added → construction →
+  workspace/district operational → agent inhabits it, in both Real and Fantasy.
+- When references arrive, the first deliverable is a proposed **Hillink Art Direction Specification** covering 12
+  sections: borrowed principles per reference; what not to copy; character rules; environment rules; shared DNA; how
+  the two themes stay distinct; scale/perspective; palette/material/lighting; density; animation; procedural rules for
+  future agents and buildings; how the World evolves visually. Stop there. Nothing is implemented until Kyle approves.
