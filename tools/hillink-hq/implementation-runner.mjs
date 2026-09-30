@@ -42,10 +42,20 @@ export function changedFiles(status) {
   return [...out].sort();
 }
 
-// Counts from node --test output ("ℹ pass 3" / "# pass 3").
+// Counts from node --test output ("ℹ pass 3" / "# pass 3"). Test code shares stdout with the reporter and could print
+// its own summary lines (Pass 3 adversarial review), so HQ takes the least favorable value of every occurrence: the
+// smallest pass count and the largest fail count. A spoofed line can only make the result worse, never better.
 export function testCounts(out) {
-  const n = key => { const m = new RegExp(`^[#ℹ]\\s*${key}\\s+(\\d+)`, 'm').exec(out); return m ? Number(m[1]) : null; };
-  return { tests: n('tests'), passed: n('pass'), failed: n('fail') };
+  const all = key => [...out.matchAll(new RegExp(`^[#ℹ]\\s*${key}\\s+(\\d+)`, 'gm'))].map(m => Number(m[1]));
+  const pick = (key, f) => { const v = all(key); return v.length ? f(...v) : null; };
+  return { tests: pick('tests', Math.min), passed: pick('pass', Math.min), failed: pick('fail', Math.max) };
+}
+
+// node --test reports a file that defines no tests (or fails to load) as one top-level test named after the file.
+// Such a file proves nothing, so it is a failure. Read from TAP; test code cannot remove the reporter's own line.
+export function emptyTestFiles(out, tests) {
+  const names = new Set([...out.matchAll(/^(?:not )?ok \d+ - (.+?)(?: # .*)?\r?$/gm)].map(m => m[1].replace(/\\\\/g, '/').replace(/\\/g, '/').trim()));
+  return tests.filter(t => names.has(t));
 }
 
 export class ClaudeImplementer {
@@ -181,7 +191,7 @@ export class ClaudeImplementer {
       // The tests (and anything they import) may be Claude-written code: run them under Node's permission model,
       // reading only the worktree, writing nothing, spawning nothing, in-process (security review, Pass 2.6).
       const sandbox = ['--permission', `--allow-fs-read=${dir}`, '--test-isolation=none'];
-      const nodeArgs = [...sandbox, '--test', ...(contract.tests.some(t => t.endsWith('.ts')) ? ['--experimental-strip-types', '--no-warnings'] : []), ...contract.tests];
+      const nodeArgs = [...sandbox, '--test', '--test-reporter=tap', ...(contract.tests.some(t => t.endsWith('.ts')) ? ['--experimental-strip-types', '--no-warnings'] : []), ...contract.tests];
       const shown = ['--permission', '--allow-fs-read=<worktree>', '--test-isolation=none', ...nodeArgs.slice(sandbox.length)].join(' ');
       stop();
       let out = '', ok = true;
@@ -198,9 +208,9 @@ export class ClaudeImplementer {
         catch (error) { ok = false; out = `${error.stdout ?? ''}\n${error.stderr ?? ''}`; if (error.code === null || /timed out|ETIMEDOUT/.test(error.message)) out += '\n# fail 1\n'; }
       }
       stop();
-      const c = testCounts(out), passed = c.passed ?? 0, failed = c.failed ?? (ok ? 0 : 1);
-      const green = ok && failed === 0 && passed > 0;
-      emit({ kind: 'TEST_RESULT', result: green ? 'passed' : 'failed', summary: `${passed} passed; ${failed} failed.` });
+      const c = testCounts(out), empty = emptyTestFiles(out, contract.tests), passed = Math.max(0, (c.passed ?? 0) - empty.length), failed = c.failed ?? (ok ? 0 : 1);
+      const green = ok && failed === 0 && passed > 0 && empty.length === 0;
+      emit({ kind: 'TEST_RESULT', result: green ? 'passed' : 'failed', summary: `${passed} passed; ${failed} failed.${empty.length ? ` No tests defined in ${empty.join(', ')}.` : ''}` });
       if (!green) { emit({ kind: 'BLOCKED', summary: `Acceptance tests failed (${passed} passed, ${failed} failed). Implementation not accepted; nothing committed; worktree kept at ${dir}.`, implementation: { ...where, files, tests: { files: contract.tests, passed, failed }, patchHash, testOutput: out.split(String.fromCharCode(13)).join('').slice(-1500) }, ownerAction: 'Inspect the failing tests in the worktree and create a follow-up task.' }); return; }
       // 5. Commit on the task branch. Never pushed, never merged. Never after a cancellation.
       stop();

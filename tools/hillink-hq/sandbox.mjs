@@ -115,8 +115,10 @@ export class WslSandbox {
     try { fs.rmSync(path.join(this.home, 'instances', name), { recursive: true, force: true }); } catch { /* best effort */ }
     return !(await this.list()).includes(name);
   }
-  async list() {
-    const { stdout } = await this.run(['--list', '--quiet'], { timeoutMs: 30_000 }).catch(() => ({ stdout: '' }));
+  // strict: a failed listing throws instead of reading as "no instances" (restart recovery must never treat an
+  // unanswered query as proof that a sandbox is gone).
+  async list({ strict = false } = {}) {
+    const { stdout } = await this.run(['--list', '--quiet'], { timeoutMs: 30_000 }).catch(error => { if (strict) throw error; return { stdout: '' }; });
     return stdout.replace(/\0/g, '').split(/\r?\n/).map(s => s.trim()).filter(Boolean);
   }
   // Removes instances left behind by a crash or restart. They are disposable by design.

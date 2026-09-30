@@ -83,7 +83,8 @@ export async function createHQ({ port = 4312, directory = path.join(here, '.stat
     const parked = Object.values(engine.state.runs).some(r => !r.endedAt && ['BLOCKED', 'CANCELLED'].includes(engine.state.tasks[r.taskId]?.stage));
     if (!parked || engine.now() - lastProbe < 10_000) return;
     lastProbe = engine.now();
-    await reconcileInterrupted(engine, { sandboxes: async () => (sandboxRef ? sandboxRef.list() : []) });
+    // A sandbox listing that fails throws, so the probe proves nothing and the run stays parked.
+    await reconcileInterrupted(engine, { sandboxes: async () => (sandboxRef ? sandboxRef.list({ strict: true }) : []) }).catch(() => []);
   };
   const conductor = new Conductor(engine, { verifier: verifier ?? new CommitVerifier({ repoRoot: path.resolve(here, '../..') }), recovery, ...conductorOptions });
   engine.conductor = conductor;
