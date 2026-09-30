@@ -12,6 +12,7 @@
 // can start empty and nothing breaks.
 import { presenceOf } from '../core/agents.mjs';
 import { readonly } from '../core/readonly.mjs';
+import { SUMMONING, EVENT_CUES } from './fantasy/metaphor.mjs';
 
 // Read-only view: any write throws, at any depth. Interpretations get these, never the live objects (core/readonly.mjs).
 export { readonly };
@@ -57,10 +58,17 @@ const REAL = {
   },
 };
 
-// Themes. Fantasy uses the Real staging until its own interpretation is built (Pass 5G): that is where AGENT_REQUESTED
-// becomes the summoning chamber, the provisioning stages become portal runes, ERROR an unstable portal, and READY the
-// portal stabilising as the hero walks out. Only this table changes; canonical logic does not.
-export const THEMES = { real: REAL, blueprint: REAL, fantasy: { extends: REAL, agent: {}, events: {} } };
+// Pass 5G: Fantasy. Every provisioning stage is a step of summoning a hero, each at its own zone of the Summoning Circle
+// (world/kingdom-layout.mjs): a candidate appears, the runes are inscribed, the portal binds, the hero is equipped and
+// tried at the proving stone; WAITING dims the portal and ERROR makes it unstable. READY is a hero who stands at the
+// circle's edge awaiting the King's word: not a member until HQ activates it. The table's content is the metaphor layer
+// (themes/fantasy/metaphor.mjs); canonical logic does not change.
+const FANTASY = {
+  extends: REAL,
+  agent: Object.fromEntries(Object.entries(SUMMONING).map(([state, s]) => [state, { place: s.zone, clip: s.clip ?? 'waiting', caption: s.caption, sequence: s.sequence }])),
+  events: EVENT_CUES,
+};
+export const THEMES = { real: REAL, blueprint: REAL, fantasy: FANTASY };
 export function defineTheme(id, table) { THEMES[id] = { extends: NEUTRAL, agent: {}, events: {}, ...table }; return THEMES[id]; }
 
 const lookup = (theme, part, key) => { for (let t = theme; t; t = t.extends) if (t[part]?.[key]) return t[part][key]; return null; };

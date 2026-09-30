@@ -9,6 +9,8 @@ import { createGeneratedLayout } from '../world/generated-layout.mjs';
 import { createSiteSkin } from '../render/site-skin.mjs';
 import { createArtSkin } from '../render/art5d/skin.mjs';
 import { createInterpreter } from './interpreter.mjs';
+import { createKingdomLayout } from '../world/kingdom-layout.mjs';
+import { createKingdomSkin } from '../render/kingdom-skin.mjs';
 
 export const THEME_ORDER = ['real', 'fantasy', 'blueprint'];
 export const THEME_NAMES = { real: 'Realistic', fantasy: 'Fantasy', blueprint: 'Blueprint' };
@@ -30,6 +32,12 @@ function scenery(L) {
 // generated layout; only the presentation differs.
 export function loadTheme(id, { world = null, art = null } = {}) {
   const key = THEME_ORDER.includes(id) ? id : 'real';
+  // Pass 5G: Fantasy has its own spatial system, the kingdom (world/kingdom-layout.mjs), built from the same canonical world;
+  // it is not the Real building reskinned. Real and Blueprint keep the generated building.
+  if (world && key === 'fantasy') {
+    const K = createKingdomLayout(world);
+    return { id: key, name: THEME_NAMES[key], interpreter: createInterpreter(key), layout: K, art: null, skin: createKingdomSkin(K), scenery: { characterHeight: K.characterHeight, walkSpeed: K.walkSpeed, liftSpeed: ARCH.elevator.speed, npcHeight: AGENT.height, npcs: [] }, camera: { minZoom: 0.2, maxZoom: 4 }, generated: true, kingdom: true };
+  }
   if (world) {
     const G = createGeneratedLayout(world, { theme: key });
     return { id: key, name: THEME_NAMES[key], interpreter: createInterpreter(key), layout: G, art: art === '5d' && key === 'real' ? '5d' : null, skin: art === '5d' && key === 'real' ? createArtSkin(G) : createSiteSkin(G, key), scenery: { characterHeight: G.characterHeight, walkSpeed: G.walkSpeed, liftSpeed: ARCH.elevator.speed, npcHeight: AGENT.height, npcs: [] }, camera: { minZoom: 0.2, maxZoom: 4 }, generated: true };

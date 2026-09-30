@@ -54,6 +54,7 @@ export class WorldView {
     const all = changed.has('*');
     const agentsChanged = all || [...changed].some(k => k.startsWith('agent:'));
     if (agentsChanged) this.syncAgents(world, now, all);
+    if (this.layout.derive && (all || agentsChanged || [...changed].some(k => k.startsWith('issue:')))) this.syncDerived(world);
     if (all || [...changed].some(k => k.startsWith('task:')) || agentsChanged) this.syncTasks(world);
     for (const s of Object.values(world.systems)) if (all || changed.has(`system:${s.id}`)) this.syncSystem(s);
     if (all) for (const [id, e] of this.scene.entities) if (e.kind === 'system' && !world.systems[e.ref.id]) this.scene.remove(id);
@@ -102,6 +103,18 @@ export class WorldView {
     }
     for (const [id, e] of this.scene.entities) if (e.kind === 'agent' && (!world.agents[e.ref.id] || staged[e.ref.id]?.presence === 'absent')) this.scene.remove(id);
     this.places = next;
+  }
+  // Pass 5G: a layout's derived theme entities (the kingdom's Giant, workers, carts, portals, gate guards): specs computed
+  // from read-only canonical state (layout.derive), upserted by id and removed when their source is gone. None is
+  // canonical or selectable, and nothing they do on screen reaches the World.
+  syncDerived(world) {
+    const keep = new Set();
+    for (const s of this.layout.derive(world)) {
+      keep.add(s.id);
+      const e = this.scene.get(s.id) ?? spawnEntity(this.scene, s.kind, { id: s.id, x: s.x, y: s.y, w: s.w, h: s.h });
+      e.x = s.x; e.y = s.y; e.w = s.w; e.h = s.h; e.derived = s; this.scene.moved(e);
+    }
+    for (const [id] of this.scene.entities) if (id.startsWith('derived:') && !keep.has(id)) this.scene.remove(id);
   }
   syncTasks(world) {
     const placement = taskPlacement(world.tasks, this.layout);

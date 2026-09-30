@@ -26,7 +26,8 @@ const FANTASY_LOOKS = [
 
 // Where ambient people may go: public stations (resting or waiting uses, in the lobby, break room or outside).
 export function publicSpots(layout) {
-  return Object.values(layout.stationInfo).filter(s => PUBLIC_USES.has(s.use) && PUBLIC_ROOMS.has(s.room)).map(s => ({ key: `${s.room}:${s.id}`, room: s.room, point: s.point, pose: s.pose, facing: s.facing, use: s.use }));
+  const rooms = layout.publicRooms ? new Set(layout.publicRooms) : PUBLIC_ROOMS; // Pass 5G: a layout may name its public areas
+  return Object.values(layout.stationInfo).filter(s => PUBLIC_USES.has(s.use) && rooms.has(s.room)).map(s => ({ key: `${s.room}:${s.id}`, room: s.room, point: s.point, pose: s.pose, facing: s.facing, use: s.use }));
 }
 
 // The plan of ambient person i: when they arrive, and their n-th destination and stay (deterministic).

@@ -387,14 +387,15 @@ export class IsoWorldView extends WorldView {
   wander(e, now) {
     const here = this.layout.stationInfo[e.spot];
     e.nextWander = now + 18000 + hash(now / 1000 + e.id.length) * 30000;
-    if (here?.room !== 'lounge') return;
+    const rooms = this.layout.idleRooms ?? ['lounge']; // Pass 5G: a layout names its own rest areas (the kingdom's Hearth Commons)
+    if (!rooms.includes(here?.room)) return;
     const taken = new Set();
     for (const o of this.scene.entities.values()) if (o.kind === 'agent' && o !== e) { if (o.spot) taken.add(o.spot); if (o.placeKey) taken.add(o.placeKey); if (o.dest) taken.add(`${o.dest.location}:${this.pointAt(...o.dest.target)?.id}`); } for (const o of this.ambient ?? []) if (o.target && o.phase !== 'away') taken.add(o.target.key);
-    const free = Object.values(this.layout.stationInfo).filter(p => p.room === 'lounge' && IDLE_USES.has(p.use) && !taken.has(`lounge:${p.id}`) && `lounge:${p.id}` !== e.spot);
+    const free = Object.values(this.layout.stationInfo).filter(p => p.room === here.room && IDLE_USES.has(p.use) && !taken.has(`${p.room}:${p.id}`) && `${p.room}:${p.id}` !== e.spot);
     if (!free.length) return;
     const pick = free[Math.floor(hash(now / 1000 + e.id.charCodeAt(0)) * free.length)];
-    e.dest = { location: 'lounge', target: pick.point };
-    startPath(e, this.layout.route([e.x, e.y], 'lounge', pick.point), now);
+    e.dest = { location: here.room, target: pick.point };
+    startPath(e, this.layout.route([e.x, e.y], here.room, pick.point), now);
     this.depart(e, now, false);
   }
 }
