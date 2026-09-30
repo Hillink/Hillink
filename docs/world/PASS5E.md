@@ -172,7 +172,7 @@ Scenarios in the simulator menu, all prefixed `DEV:`: onboard an unknown agent, 
 | B (SIMULATION, DEV HARNESS) | `B-D-unknown-agent-onboarding-then-working-DEV-HARNESS.mp4` (75 s), `B1-…`, `B2-…` | An unknown agent arrives as a candidate, waits in onboarding through each stage, walks in after READY/ACTIVE and works |
 | C (SIMULATION, DEV HARNESS) | `C-two-dynamic-agents-DEV-HARNESS.mp4` (45 s), `C1-…` | Two dynamic agents with different definitions and looks (one with the fallback rig) |
 | D (SIMULATION, DEV HARNESS) | `D-provisioning-fails-DEV-HARNESS.mp4` (30 s), `D1-…` | Provisioning fails at tool connection; the agent stays a candidate showing "Onboarding failed" and never gets work |
-| E (SIMULATION, DEV HARNESS) | `E-disable-dynamic-agent-world-stays-coherent-DEV-HARNESS.mp4` (55 s), `E1-…` | Disabling the dynamic agent: it leaves, its task goes back to the queue, roster and counts stay coherent |
+| E (SIMULATION, DEV HARNESS) | `E-disable-dynamic-agent-world-stays-coherent-DEV-HARNESS.mp4` (75 s, re-recorded), `E1-…` | Disabling the dynamic agent: it leaves, its task goes back to the queue, roster and counts stay coherent |
 
 Capture metadata (paths, world fingerprint, fps): `notes.json`, `shots.json`, `clips.json`, `video-notes.json`. The A file name predates the label; it is simulation like the rest.
 
