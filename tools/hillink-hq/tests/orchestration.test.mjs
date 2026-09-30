@@ -226,6 +226,16 @@ test('G. malformed and malicious handoffs are rejected; retries are bounded; smu
   await p.drive(p.settled(pid));
   assert.equal(p.objective(pid).status, 'BLOCKED'); assert.match(p.objective(pid).statusReason, /refused by HQ policy/);
   assert.equal(p.tasks(t => t.operation === 'implement-repo').length, 0);
+  assert.equal(p.codex.calls.length, 2, 'one bounded retry with the refusal quoted');
+  assert.match(p.codex.calls[1].task.description, /Why HQ rejected your previous handoff[\s\S]*protected area/);
+
+  // The investigator is told the approved scope, and a refused first proposal can be corrected on the retry.
+  let n = 0;
+  const fixable = harness({ codex: scriptedAgent('Codex', task => ({ text: handoffText(role(task) === 'investigate' ? (++n === 1 ? investigation({ proposedScope: ['tools/hillink-hq/demo/'], proposedTests: ['tools/hillink-hq/demo/x.test.mjs'] }) : investigation()) : review()) })) });
+  const fid = fixable.conductor.submit(FIX);
+  await fixable.drive(fixable.settled(fid));
+  assert.equal(fixable.objective(fid).status, 'COMPLETE', fixable.objective(fid).statusReason);
+  assert.match(fixable.codex.calls[0].task.description, /Approved scope \(a proposal must stay inside it; HQ refuses anything else\): sandbox\/hq-implementation\//);
 
   // A valid proposal outside the approved scope is not implemented automatically: it becomes a decision.
   const s = harness({ codex: codexInvestigatesAndReviews(investigation({ proposedScope: ['lib/other/'], proposedTests: ['lib/other/x.test.mjs'] })) });

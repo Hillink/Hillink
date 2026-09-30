@@ -193,8 +193,17 @@ export class Conductor {
   readOnlyTask(o, s, agentId) {
     const prior = this.quotedEvidence(o, s);
     const kind = HANDOFF_KIND[s.kind];
+    // What the submitter already fixed (HQ-validated input, not agent text): the investigator proposes within it.
+    const input = o.input;
+    const bounds = [
+      input.scope.length ? `Approved scope (a proposal must stay inside it; HQ refuses anything else): ${input.scope.join(', ')}.` : 'No scope was approved yet; HQ will ask the orchestrator to confirm yours.',
+      input.tests.length ? `Expected test files: ${input.tests.join(', ')}.` : '',
+      input.acceptanceCriteria ? `Acceptance criteria: ${input.acceptanceCriteria}` : '',
+      input.constraints ? `Constraints: ${input.constraints}` : '',
+      'HQ never lets an implementation touch tools/hillink-hq/, .git, .github, .claude, supabase/, secrets or package manifests.',
+    ].filter(Boolean).join('\n');
     const extra = {
-      investigate: 'You are the investigator. Read the repository; do not modify anything. Find the cause with file:line evidence. If a code change is warranted, propose the narrowest scope (files or directories at least two levels deep) and 1 to 3 test files (*.test.mjs) HQ can run with node --test to prove the fix.',
+      investigate: `You are the investigator. Read the repository; do not modify anything. Find the cause with file:line evidence. If a code change is warranted, propose the narrowest scope (files or directories at least two levels deep) and 1 to 3 test files (*.test.mjs) HQ can run with node --test to prove the fix. New files may be proposed where they do not exist yet.\n${bounds}`,
       review: s.standalone ? 'You are the reviewer. Read the repository; do not modify anything. Review what the objective asks and report findings with severity and evidence.' : 'You are the independent reviewer. Read the repository; do not modify anything. Review the committed change quoted below (HQ verified it: scope, tests, commit). Approve only if it meets the objective without regressions.',
       rebuttal: 'Another agent disagrees with a position. Answer its evidence with your own evidence, once. Say whether you concede.',
     }[s.kind];
@@ -246,7 +255,15 @@ export class Conductor {
       if (handoff.patchHash && repeated(o, s.id, handoff.patchHash, 'patchHash')) return this.loop(o, s, 'The repair produced exactly the same patch as an earlier attempt.');
     } else {
       const text = task.evidence.filter(e => e.kind === 'MODEL_RESULT').at(-1);
-      try { handoff = parseHandoff(text?.fullText ?? text?.summary, HANDOFF_KIND[s.kind]); }
+      try {
+        handoff = parseHandoff(text?.fullText ?? text?.summary, HANDOFF_KIND[s.kind]);
+        // A proposal HQ policy would refuse is not accepted: the investigator gets one bounded retry with the
+        // refusal quoted (first real run: Codex proposed tools/hillink-hq/, outside the approved scope).
+        if (s.kind === 'investigate' && handoff.recommendedAction === 'implement' && o.input.type === 'fix') {
+          const e = implementationEligibility(o, { scope: handoff.proposedScope, tests: handoff.proposedTests });
+          if (e.needs === 'refuse') throw Object.assign(Error(e.reason), { handoff: true });
+        }
+      }
       catch (error) {
         this.engine.emit('HANDOFF_REJECTED', { objectiveId: o.id, stepId: s.id, taskId: task.id, reason: clip(error.message, 400) });
         return this.failed(o, s, { reason: 'malformed_handoff', detail: error.message });
