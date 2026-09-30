@@ -107,6 +107,7 @@ function reduce(world, ev) {
       const p = projects.find(q => q.objectiveId && q.objectiveId === ev.objectiveId);
       if (p && !p.taskIds.includes(ev.taskId)) p.taskIds = [...p.taskIds, ev.taskId];
       if (p) transition.resume(world, p, { at, by, order, why: 'HQ dispatched the work again' });
+      if (p) transition.unblockPlanning(world, p, { at, by, order });
       return null;
     }
     case 'AGENT_WORKING': locate(ev.agentId, 'working'); return null;

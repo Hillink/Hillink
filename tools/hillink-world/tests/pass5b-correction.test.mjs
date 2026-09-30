@@ -108,6 +108,46 @@ test('1. verification and completion refuse any unresolved gate: BLOCKED, WAITIN
   assert.equal(P(k).completed, false);
 });
 
+test('1. (re-audit) CONSTRUCTION_REQUESTED never advances a planning project past an open WAITING or BLOCKED gate', () => {
+  const planning = () => {
+    const w = createWorld({ seed: 'hillink' });
+    ok(w, 'OBJECTIVE_CREATED', { objectiveId: O, title: 'We need a meeting room' });
+    ok(w, 'CAPABILITY_REQUESTED', { capability: CAP, objectiveId: O, taskId: T });
+    return w;
+  };
+  const structures = w => Object.values(w.spaces).filter(s => s.project === CAP.id).map(s => s.status);
+  for (const [gate, fields, resume] of [
+    ['WAITING_FOR_KYLE', { objectiveId: O, reason: 'plan needs approval' }, ['APPROVAL_GRANTED', { objectiveId: O }]],
+    ['BLOCKED', { objectiveId: O, reason: 'objective blocked in HQ' }, ['TASK_ASSIGNED', { taskId: T, agentId: 'claude', objectiveId: O }]],
+  ]) {
+    const w = planning();
+    ok(w, gate, fields);
+    const before = snapshot(w), fp = worldFingerprint(w), historyLength = w.history.length;
+    const r = no(w, 'CONSTRUCTION_REQUESTED', { capabilityId: CAP.id }, `${gate} is open`);
+    assert.match(r.reason, /cannot be requested for construction/);
+    assert.equal(P(w).stage, 'planning'); assert.equal(C(w).status, 'planned');
+    assert.ok(structures(w).every(s => s === 'planned'), `${gate}: no structure became under-construction`);
+    assert.equal(snapshot(w), before, `${gate}: the refusal changed nothing`); assert.equal(worldFingerprint(w), fp); assert.equal(w.history.length, historyLength);
+    assert.equal(worldFingerprint(replayWorld(w.history, { applyOps: applyHqEvent })), fp, `${gate}: replay is identical`);
+    // Evidence is not the resume fact for either gate here (no building can have started).
+    no(w, 'WORK_COMMITTED', { taskId: T, ref: 'early' });
+    no(w, 'CONSTRUCTION_REQUESTED', { capabilityId: CAP.id }, 'still gated');
+    // The documented resume fact lifts the gate; the request then proceeds normally.
+    ok(w, ...resume);
+    assert.equal(P(w).waiting, null); assert.equal(P(w).blocked, null);
+    ok(w, 'CONSTRUCTION_REQUESTED', { capabilityId: CAP.id });
+    assert.equal(P(w).stage, 'site-preparation'); assert.equal(C(w).status, 'under-construction');
+    assert.ok(structures(w).every(s => s === 'under-construction'));
+    assert.equal(worldFingerprint(replayWorld(w.history, { applyOps: applyHqEvent })), worldFingerprint(w));
+  }
+  // A stale resume (older than the gate) does not lift it.
+  const w = planning(); ok(w, 'BLOCKED', { objectiveId: O });
+  const bo = P(w).blockedOrder;
+  applyHqEvent(w, { v: 1, source: 'hq', id: 'stale-dispatch', type: 'TASK_ASSIGNED', taskId: T, agentId: 'claude', objectiveId: O, seq: bo.seq - 1, at: bo.at - 1 });
+  assert.ok(P(w).blocked, 'an older dispatch does not lift a newer block');
+  no(w, 'CONSTRUCTION_REQUESTED', { capabilityId: CAP.id });
+});
+
 // ---------------------------------------------------------------------------------------------------------------
 // Finding 2: a stale approval never overrides a newer rejection.
 test('2. Codex reproduction: inspection, rejection, then an older not-yet-applied approval, then completion stays rework', () => {

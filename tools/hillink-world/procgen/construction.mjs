@@ -12,7 +12,8 @@
 //   operational         an approved review of the current work, completion, verification
 //
 // Gates, also only from HQ, fail closed. Each is cleared only by its own resume fact, and only by one newer than it:
-//   blocked   (task or objective BLOCKED, failed implementation)  cleared by newer implementation evidence
+//   blocked   (task or objective BLOCKED, failed implementation)  cleared by newer implementation evidence; during
+//             planning, when no implementation evidence can exist yet, by HQ dispatching the project's work again
 //   waiting   (Kyle's approval or decision is required)          cleared by newer authority to continue: Kyle's
 //             approval (APPROVAL_GRANTED) or HQ dispatching the project's work again (TASK_ASSIGNED). Evidence that
 //             work was done is not authority to continue: it is refused while the project waits.
@@ -73,6 +74,7 @@ export const approvedCurrent = p => Boolean(p.verdict && p.verdict.verdict === '
 export const transition = {
   requested(world, p, { at, by, order }) {
     if (p.stage !== 'planning') return `${p.id} is already at ${p.stage}`;
+    const gate = openGate(p); if (gate) return `${p.id} cannot be requested for construction: ${gate}`;
     p.stage = 'site-preparation'; record(p, p.stage, at, by, 'HQ asked for it to be built', order);
     return null;
   },
@@ -143,6 +145,13 @@ export const transition = {
   wait(world, p, { at, by, reason, order }) {
     p.waiting = String(reason ?? 'waiting for Kyle').slice(0, 200); p.waitingOrder = later(order, p.waitingOrder);
     record(p, p.stage, at, by, `waiting: ${p.waiting}`, order); return null;
+  },
+  // A block set during planning, before any implementation evidence can exist: HQ dispatching the project's work
+  // again (newer than the block) is its resume fact. Once building has started only new evidence lifts a block.
+  unblockPlanning(world, p, { at, by, order } = {}) {
+    if (!p.blocked || p.stage !== 'planning') return null;
+    if (!newer(order, p.blockedOrder)) return `${p.id}: this dispatch is not newer than the block it would lift`;
+    p.blocked = null; p.blockedOrder = null; record(p, p.stage, at, by, 'resumed: HQ dispatched the work again', order); return null;
   },
   // Authority to continue (Kyle's approval, or HQ dispatching the work again): clears only an older wait.
   resume(world, p, { at, by, order, why = 'authority to continue' } = {}) {
