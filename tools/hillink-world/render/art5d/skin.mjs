@@ -65,6 +65,21 @@ function vehicleRoutesOf(layout) {
     .map(r => ({ ...r, points: smoothPolyline(r.points, STREET_SCALE.car.length * 1.6), bendWindow: STREET_SCALE.car.length * 1.2, fade: STREET_SCALE.car.length * 2.5, colors: ['#eef0f2', '#c3cad3', '#2f7df6', '#c9503f', '#3a4555', '#e8b93f', '#f7f7f5'] }));
 }
 
+export const STATE_COLOR = { working: '#35c486', travelling: '#4aa3ff', waiting: '#f4a23b', blocked: '#e5484d', done: '#5cc98a', idle: null, offline: '#6b7380' };
+export function stateOf(e, a) {
+  const st = e.anim?.state, intent = e.anim?.intent;
+  if (st === 'frustrated' || intent === 'blocked' || intent === 'recovering' || a.activity === 'error') return 'blocked';
+  if (a.activity === 'waiting' || intent === 'attention' || intent === 'waiting') return 'waiting';
+  if (a.activity === 'completed' || st === 'file' || st === 'celebrate') return 'done';
+  if (e.moving && (e.carrying || e.journey || e.agent?.taskId)) return 'travelling';
+  if (['working', 'building', 'investigating', 'testing', 'reviewing', 'meeting'].includes(intent)) return 'working';
+  if (a.activity === 'offline') return 'offline';
+  return 'idle';
+}
+// Label level of detail: zoomed out an agent shows only a status pip (the ring and the body carry the rest); closer in
+// a compact name chip; its status line only on hover or selection.
+export const labelModeOf = (zoom, hovered, selected) => (hovered || selected ? 'full' : zoom < 0.95 ? 'pip' : 'name');
+
 export function createArtSkin(layout, skinId = 'real') {
   const rig = rigFor(skinId);
   const debug = false, B = MATERIALS.blueprint;
@@ -728,17 +743,6 @@ export function createArtSkin(layout, skinId = 'real') {
   // Living HQ: how an agent's real state reads at any zoom, without panels. A soft ring on the floor at its feet in the
   // state's colour (working, travelling with a task, waiting, blocked, done), a small status pip above the head when
   // zoomed out, and a compact name chip only when there is room for it (status text on hover or selection).
-  const STATE_COLOR = { working: '#35c486', travelling: '#4aa3ff', waiting: '#f4a23b', blocked: '#e5484d', done: '#5cc98a', idle: null, offline: '#6b7380' };
-  function stateOf(e, a) {
-    const st = e.anim?.state, intent = e.anim?.intent;
-    if (st === 'frustrated' || intent === 'blocked' || intent === 'recovering' || a.activity === 'error') return 'blocked';
-    if (a.activity === 'waiting' || intent === 'attention' || intent === 'waiting') return 'waiting';
-    if (a.activity === 'completed' || st === 'file' || st === 'celebrate') return 'done';
-    if (e.moving && (e.carrying || e.journey || e.agent?.taskId)) return 'travelling';
-    if (['working', 'building', 'investigating', 'testing', 'reviewing', 'meeting'].includes(intent)) return 'working';
-    if (a.activity === 'offline') return 'offline';
-    return 'idle';
-  }
   function stateRing(d, e, a, x, y) {
     const c = STATE_COLOR[stateOf(e, a)]; if (!c || e.ride) return;
     const { ctx } = d, pulse = stateOf(e, a) === 'blocked' && !d.reduced ? 0.55 + 0.35 * Math.sin(d.T * 5) : 0.7;
@@ -748,8 +752,9 @@ export function createArtSkin(layout, skinId = 'real') {
   function badge(d, e, a, x, top, hovered, selected) {
     const { ctx, env } = d, zoom = env.zoom, k = Math.min(2.2, Math.max(0.6, 1 / zoom)), cy = top - 3 * k, st = stateOf(e, a), c = STATE_COLOR[st];
     // Zoomed out: a status pip only (the ring and the body carry the rest).
-    if (zoom < 0.95 && !(hovered || selected)) { if (c) { ctx.beginPath(); ctx.arc(x, cy - 4 * k, 3.2 * k, 0, TAU); ctx.fillStyle = c; ctx.fill(); ctx.lineWidth = 1.1 * k; ctx.strokeStyle = 'rgba(255,255,255,0.9)'; ctx.stroke(); } return; }
-    const lines = hovered || selected ? [a.name, statusLine(e, env.world, layout)] : [a.name];
+    const mode = labelModeOf(zoom, hovered, selected);
+    if (mode === 'pip') { if (c) { ctx.beginPath(); ctx.arc(x, cy - 4 * k, 3.2 * k, 0, TAU); ctx.fillStyle = c; ctx.fill(); ctx.lineWidth = 1.1 * k; ctx.strokeStyle = 'rgba(255,255,255,0.9)'; ctx.stroke(); } return; }
+    const lines = mode === 'full' ? [a.name, statusLine(e, env.world, layout)] : [a.name];
     const sc = (hovered || selected ? LABEL_PX : 8.5) / 8 / zoom;
     ctx.font = font(8, 700); const w0 = ctx.measureText(lines[0]).width; ctx.font = font(6.5, 500);
     const w = (Math.max(w0, lines[1] ? ctx.measureText(lines[1]).width : 0) + 19) * sc, h = (lines.length * 11 + 5) * sc;
