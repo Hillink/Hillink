@@ -106,6 +106,8 @@ export class Engine {
   }
   initialize() {
     for (const agent of initialAgents) if (!this.state.agents[agent.id]) this.register(agent);
+    // Pass 3 roles: only Claude implements. A journal from before Pass 3 may still list 'implement' for others.
+    for (const agent of Object.values(this.state.agents)) if (agent.id !== 'claude' && !agent.assignment && agent.capabilities.some(c => c === 'implement' || c === 'implement-repo')) this.configureAgent(agent.id, { capabilities: agent.capabilities.filter(c => c !== 'implement' && c !== 'implement-repo') });
     for (const task of Object.values(this.state.tasks)) {
       const run = this.state.runs[task.runId];
       if (run && !run.endedAt) this.emit('TASK_PARKED', { taskId: task.id, reason: 'Controller restarted; previous worker termination is unconfirmed.', ownerAction: 'Confirm the previous process has stopped before resolving this run. It will not be dispatched twice.' });
@@ -130,7 +132,8 @@ export class Engine {
   // link and repair are internal too (Pass 3: only the conductor sets them): the objective step this task
   // performs, and HQ's own record of why a previous implementation attempt was not accepted.
   createTask(input, { requestedBy = null, link = null, repair = null } = {}) {
-    if (!text(input.title, 200) || !text(input.description, 2000)) throw Error('Title and description required');
+    // A conductor step carries HQ-quoted evidence (a verified diff for a reviewer), so its brief may be longer.
+    if (!text(input.title, 200) || !text(input.description, link ? 16_000 : 2000)) throw Error('Title and description required');
     if (requestedBy && (!this.state.agents[requestedBy.agentId] || !this.state.tasks[requestedBy.taskId])) throw Error('Unknown requesting agent or task');
     if (link) {
       const o = this.state.objectives[link.objectiveId];
@@ -231,6 +234,12 @@ export class Engine {
     for (const task of Object.values(this.state.tasks)) {
       const run = this.state.runs[task.runId];
       if (!run) continue;
+      // Pass 3: a task that performs an objective step is never retried or rerouted here. The conductor owns its
+      // retries (bounded, classified, and within the routing and review-independence rules); the engine only parks it.
+      if (task.link && task.recoveryPending && ['RATE_LIMITED', 'FAILED'].includes(run.terminal)) {
+        this.emit('TASK_PARKED', { taskId: task.id, reason: task.blocker ?? `${run.terminal} run.`, ownerAction: null });
+        continue;
+      }
       if (run.terminal === 'RATE_LIMITED' && task.recoveryPending) {
         this.emit('RECOVERY', { taskId: task.id, step: 'capacity-wait', reason: task.blocker, runId: run.runId });
         if (task.notBefore && task.attempts < this.config.maxAttempts) this.emit('TASK_REQUEUED', { taskId: task.id, notBefore: task.notBefore });
@@ -254,6 +263,7 @@ export class Engine {
       if (task.stage === 'CANCELLED') { if (!task.cancelled?.confirmed) this.emit('TASK_CANCELLED', { taskId: task.id, by: 'hq-watchdog', reason: task.cancelled?.reason ?? 'Cancelled.', confirmed: true }); continue; }
       this.emit('AGENT_OBSERVED', { agentId: agent.id, status: 'OFFLINE', detail: 'Recovery quarantine; awaiting cooldown and fresh health check', quarantineUntil: this.now() + this.config.quarantineMs });
       // Different worker handoff is preferred; no blind repetition or arbitrary shell retries.
+      if (task.link) { this.emit('TASK_PARKED', { taskId: task.id, reason: `Watchdog: the worker was ${ackExpired ? 'not acknowledged in time' : status} (timed out) and was stopped.`, ownerAction: null }); continue; }
       const alternate = Object.values(this.state.agents).find(a => a.id !== agent.id && (!task.preferredAgentId || a.id === task.preferredAgentId) && a.capabilities.includes(task.capability) && !a.assignment && this.adapters[a.executionAdapter] && this.status(a) === 'IDLE');
       if (alternate && task.attempts < this.config.maxAttempts) {
         this.emit('RECOVERY', { taskId: task.id, step: 'handoff', reason: `Retry with ${alternate.name}`, from: agent.id, to: alternate.id });

@@ -118,7 +118,7 @@ test('7, 12, 13. delegation creates one real Claude task linked to the orchestra
 });
 
 test('8-10. no shell, no file writes, no unknown tools; arguments are validated server-side', () => {
-  assert.deepEqual(TOOL_NAMES, ['get_hq_state', 'get_task', 'request_repo_review', 'request_implementation', 'request_kyle_approval']);
+  assert.deepEqual(TOOL_NAMES, ['get_hq_state', 'get_task', 'request_repo_review', 'request_implementation', 'submit_objective', 'get_objective', 'resolve_objective_decision', 'cancel_objective', 'request_kyle_approval']);
   assert.ok(!TOOL_NAMES.some(n => /shell|exec|command|write|file|edit|patch|env|config|http|fetch/i.test(n)));
   assert.ok(TOOL_DEFINITIONS.every(t => t.strict && t.parameters.additionalProperties === false));
   const s = setup(), tb = createToolbox(s.engine, { taskId: s.ask('x') });

@@ -14,6 +14,10 @@ import { connectOrchestrator } from './orchestrator-adapter.mjs';
 import { ClaudeImplementer, ClaudeRouter, findClaudeBinary } from './implementation-runner.mjs';
 import { WslSandbox } from './sandbox.mjs';
 import { execFileSync } from 'node:child_process';
+import { Conductor } from './orchestration/conductor.mjs';
+import { CommitVerifier } from './orchestration/verify.mjs';
+import { reconcileInterrupted } from './orchestration/recovery.mjs';
+import { worldActivity, worldSnapshot, WORLD_CONTRACT_VERSION } from './orchestration/activity.mjs';
 
 const here = fileURLToPath(new URL('.', import.meta.url));
 const assets = { '/': ['index.html', 'text/html'], '/app.mjs': ['app.mjs', 'text/javascript'], '/style.css': ['style.css', 'text/css'] };
@@ -27,7 +31,7 @@ async function body(req) {
   return JSON.parse(raw);
 }
 
-export async function createHQ({ port = 4312, directory = path.join(here, '.state'), store, adapters, sink, intervalMs = 1000, ollama = false, cliAgents = false, orchestrator = false, implementation = false, env = process.env, request = fetch, sandboxFactory = ({ env: e }) => new WslSandbox({ home: e.HQ_SANDBOX_HOME || undefined }) } = {}) {
+export async function createHQ({ port = 4312, directory = path.join(here, '.state'), store, adapters, sink, intervalMs = 1000, ollama = false, cliAgents = false, orchestrator = false, implementation = false, env = process.env, request = fetch, sandboxFactory = ({ env: e }) => new WslSandbox({ home: e.HQ_SANDBOX_HOME || undefined }), conductorOptions = {}, verifier = null } = {}) {
   const journal = store ?? new FileStore(directory);
   const local = new LocalAdapter();
   const engine = new Engine({ store: journal, adapters: adapters ?? { 'local-checks': local } });
@@ -39,11 +43,12 @@ export async function createHQ({ port = 4312, directory = path.join(here, '.stat
   }
   // Pass 2.6: Claude may take bounded implementation tasks (implement-repo) through a separate runtime with
   // task-specific permissions. Its review adapter is unchanged; a router picks the runtime per task.
-  let implementationStatus = 'DISABLED';
+  let implementationStatus = 'DISABLED', sandboxRef = null;
   if (implementation && engine.adapters['cli-claude'] && !engine.state.agents.claude.assignment) {
     const claudeBin = findClaudeBinary({ env, execFileSync });
     // Pass 2.7: implementation exists only with the OS sandbox. No sandbox image, no implement-repo capability.
     const sandbox = sandboxFactory({ env });
+    sandboxRef = sandbox;
     const box = sandbox.available();
     if (!claudeBin) implementationStatus = 'UNAVAILABLE: Claude Code binary not found (set HQ_CLAUDE_BIN)';
     else if (!box.ok) implementationStatus = `UNAVAILABLE: ${box.reason}`;
@@ -70,6 +75,18 @@ export async function createHQ({ port = 4312, directory = path.join(here, '.stat
     try { await connectOllama(engine); ollamaStatus = 'DISCOVERED'; }
     catch (error) { ollamaStatus = `UNAVAILABLE: ${error.message}`; }
   }
+  // Pass 3: the conductor turns objectives into planned, routed, verified work. HQ verifies every commit itself from
+  // git and requires the sandbox to have been destroyed. After a restart it proves interrupted runs stopped (pids
+  // gone, sandbox unregistered) before any step is retried; what it cannot prove stays parked.
+  let lastProbe = 0;
+  const recovery = async () => {
+    const parked = Object.values(engine.state.runs).some(r => !r.endedAt && ['BLOCKED', 'CANCELLED'].includes(engine.state.tasks[r.taskId]?.stage));
+    if (!parked || engine.now() - lastProbe < 10_000) return;
+    lastProbe = engine.now();
+    await reconcileInterrupted(engine, { sandboxes: async () => (sandboxRef ? sandboxRef.list() : []) });
+  };
+  const conductor = new Conductor(engine, { verifier: verifier ?? new CommitVerifier({ repoRoot: path.resolve(here, '../..') }), recovery, ...conductorOptions });
+  engine.conductor = conductor;
   const session = randomBytes(32).toString('hex');
   let origin, timer, closing = false, lastError = null, ticking = Promise.resolve();
   const server = http.createServer(async (req, res) => {
@@ -101,6 +118,18 @@ export async function createHQ({ port = 4312, directory = path.join(here, '.stat
       if (req.method === 'POST' && url.pathname === '/api/tasks') {
         const id = engine.createTask(await body(req)); return json(201, { id });
       }
+      // Pass 3 objectives. Kyle is the only caller of this API (loopback, same-origin, session token); approval gates
+      // are decided here and nowhere else.
+      if (req.method === 'POST' && url.pathname === '/api/objectives') { const id = conductor.submit(await body(req)); return json(201, { id }); }
+      if (req.method === 'POST' && url.pathname === '/api/objectives/cancel') { const b = await body(req); return json(200, await conductor.cancel(String(b.id), { by: 'kyle', reason: typeof b.reason === 'string' ? b.reason : 'Cancelled by Kyle.' })); }
+      if (req.method === 'POST' && url.pathname === '/api/objectives/approve') { const b = await body(req); return json(200, conductor.approve(String(b.id), String(b.gate), b.decision, { by: 'kyle', note: typeof b.note === 'string' ? b.note : null })); }
+      if (req.method === 'POST' && url.pathname === '/api/objectives/decide') { const b = await body(req); return json(200, conductor.decide(String(b.id), String(b.decisionId), String(b.choice), { by: 'kyle', rationale: typeof b.rationale === 'string' ? b.rationale : '' })); }
+      // The World contract: a truthful snapshot plus activity since a journal sequence number.
+      if (req.method === 'GET' && url.pathname === '/api/world') {
+        const since = Number(url.searchParams.get('since') ?? 0);
+        if (!Number.isSafeInteger(since) || since < 0) throw Error('Invalid since');
+        return json(200, { contract: WORLD_CONTRACT_VERSION, snapshot: worldSnapshot(engine.snapshot()), activity: worldActivity(engine.state.events, { since }) });
+      }
       if (req.method === 'POST' && url.pathname === '/api/alerts/ack') { engine.acknowledgeAlert((await body(req)).key); return json(200, { ok: true }); }
       if (req.method === 'POST' && url.pathname === '/api/runs/reconcile') {
         const input = await body(req); engine.reconcileStoppedRun(input.runId, input.confirmedStopped, input.evidence); return json(200, { ok: true });
@@ -113,7 +142,7 @@ export async function createHQ({ port = 4312, directory = path.join(here, '.stat
   const tick = () => {
     if (closing) return;
     ticking = (async () => {
-      try { await engine.tick(); await deliverNotifications(engine, sink); lastError = null; }
+      try { await engine.tick(); await conductor.tick(); await deliverNotifications(engine, sink); lastError = conductor.lastError ?? null; conductor.lastError = null; }
       catch (error) { lastError = error.message; }
       if (!closing) timer = setTimeout(tick, intervalMs);
     })();

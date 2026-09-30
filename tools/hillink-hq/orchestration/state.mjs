@@ -10,7 +10,7 @@ const STOP = ['WAITING_FOR_EVIDENCE', 'AWAITING_DECISION', 'AWAITING_APPROVAL', 
 // from -> allowed next states. BLOCKED, FAILED, COMPLETE and CANCELLED are final for an objective: a new attempt
 // is a new objective, so history is never rewritten.
 export const TRANSITIONS = {
-  QUEUED: ['PLANNING', 'CANCELLED', 'FAILED'],
+  QUEUED: ['PLANNING', 'BLOCKED', 'CANCELLED', 'FAILED'],
   PLANNING: [...ACTIVE, 'COMPLETE', ...STOP],
   INVESTIGATING: [...ACTIVE, 'COMPLETE', ...STOP],
   WAITING_FOR_EVIDENCE: [...ACTIVE, 'COMPLETE', ...STOP],

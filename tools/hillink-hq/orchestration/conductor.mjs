@@ -38,10 +38,18 @@ export class Conductor {
     this.engine.emit('OBJECTIVE_CREATED', { id, input, requestedBy, limits: { ...this.limits }, deadlineAt: this.now() + this.limits.deadlineMs });
     return id;
   }
+  // Records the request synchronously (journaled first), so nothing can be dispatched for this objective afterwards:
+  // start() checks cancelRequested immediately before creating work. The stop itself runs in cancel() or the tick.
+  requestCancel(id, { by = 'kyle', reason = 'Cancelled.' } = {}) {
+    const o = this.objective(id);
+    if (TERMINAL.has(o.status) || o.cancelRequested) return { status: o.status };
+    this.engine.emit('OBJECTIVE_CANCEL_REQUESTED', { objectiveId: id, by: clip(String(by), 40), reason: clip(String(reason), 300) });
+    return { status: o.status, cancelRequested: true };
+  }
   async cancel(id, { by = 'kyle', reason = 'Cancelled.' } = {}) {
     const o = this.objective(id);
     if (TERMINAL.has(o.status)) return { status: o.status, alreadyFinal: true };
-    if (!o.cancelRequested) this.engine.emit('OBJECTIVE_CANCEL_REQUESTED', { objectiveId: id, by, reason: clip(reason, 300) });
+    this.requestCancel(id, { by, reason });
     return this.finishCancel(o, reason);
   }
   approve(id, gate, decision, { by, note = null } = {}) {
@@ -72,7 +80,11 @@ export class Conductor {
       for (const o of Object.values(this.state.objectives ?? {})) {
         if (TERMINAL.has(o.status)) continue;
         try { await this.advance(o); }
-        catch (error) { this.stop(o, 'BLOCKED', `HQ orchestration error (fail closed): ${clip(error.message, 400)}`); }
+        catch (error) {
+          // Fail closed, and never let one objective's error stop the others.
+          try { await this.cancelLive(o, 'HQ orchestration error'); this.stop(o, 'BLOCKED', `HQ orchestration error (fail closed): ${clip(error.message, 400)}`, { ownerAction: 'Inspect the objective history; this is an HQ defect, not an agent result.' }); }
+          catch (inner) { this.lastError = `objective ${o.id}: ${clip(inner.message, 200)}`; }
+        }
       }
     } finally { this.busy = false; }
   }
@@ -96,12 +108,14 @@ export class Conductor {
     if (o.status === 'QUEUED') return this.plan(o);
     if (o.status === 'AWAITING_APPROVAL') return this.resumeApproval(o);
     if (o.status === 'AWAITING_DECISION') return this.resumeDecision(o);
-    const guard = loopGuard(o, this.now());
-    if (guard) { await this.cancelLive(o, `Loop guard: ${guard}`); return this.stop(o, 'BLOCKED', `Loop guard: ${guard}`, { ownerAction: 'Review the objective history; submit a narrower objective if the work is still needed.' }); }
+    const blocked = async guard => { await this.cancelLive(o, `Loop guard: ${guard}`); return this.stop(o, 'BLOCKED', `Loop guard: ${guard}`, { ownerAction: 'Review the objective history; submit a narrower objective if the work is still needed.' }); };
+    // The deadline stops everything, including a step still running.
+    if (this.now() > o.deadlineAt) return blocked(`Objective deadline passed (${new Date(o.deadlineAt).toISOString()}).`);
     for (const s of Object.values(o.steps)) if (s.status === 'RUNNING') { await this.observe(o, s); if (TERMINAL.has(o.status) || ['AWAITING_APPROVAL', 'AWAITING_DECISION'].includes(o.status)) return; }
     if (Object.values(o.steps).some(s => s.status === 'RUNNING')) return;
     const next = o.order.map(id => o.steps[id]).find(s => s.status === 'PENDING' && s.dependsOn.every(d => ['DONE', 'SKIPPED'].includes(o.steps[d]?.status)));
-    if (next) return this.start(o, next);
+    // Step, agent-call and retry budgets are checked before starting more work (a finished plan still completes).
+    if (next) { const guard = loopGuard(o, this.now()); if (guard) return blocked(guard); return this.start(o, next); }
     if (o.order.every(id => ['DONE', 'SKIPPED'].includes(o.steps[id].status))) return this.finish(o);
     // A pending step whose dependency failed cannot run: the failure already stopped the objective, or this is a bug.
     return this.stop(o, 'BLOCKED', 'No runnable step remains and the plan is not complete.');
@@ -263,14 +277,16 @@ export class Conductor {
     const retryAt = failure.reason === 'usage_limit' ? (failure.retryAt ?? null) : null;
     const alternate = ['usage_limit', 'agent_failure'].includes(failure.reason);
     const repair = failure.reason === 'test_failure' ? { attempt: d.count, reason: `HQ ran the acceptance tests inside the sandbox and they failed.\n${clip(failure.testOutput ?? failure.detail, 2500)}` } : null;
-    this.engine.emit('STEP_RETRY', { objectiveId: o.id, stepId: s.id, reason: failure.reason, count: d.count, max: d.max, strategy: d.strategy, detail: clip(failure.detail, 400), patchHash: failure.patchHash ?? null,
-      // Reroute: a failed or limited agent is set aside for this step when another approved agent can take it.
-      excludeAgents: alternate && s.agentId && ROUTES[s.kind].agents.length > 1 && s.kind !== 'rebuttal' ? [...new Set([...(s.excludeAgents ?? []), s.agentId])] : s.excludeAgents ?? [],
-      notBefore: null, ...(repair ? { repair } : {}), ...(retryAt ? { retryAt } : {}) });
-    const after = o.steps[s.id];
-    // If excluding the agent leaves nobody, wait for it instead (its reset time), rather than fail.
-    if (alternate && after.excludeAgents.length >= ROUTES[s.kind].agents.length) this.engine.emit('STEP_RETRY', { objectiveId: o.id, stepId: s.id, reason: failure.reason, count: d.count, max: d.max, strategy: 'No alternate agent is approved for this step; wait for the original agent.', detail: 'rerouting impossible', excludeAgents: [], notBefore: retryAt });
-    return this.set(o, 'WAITING_FOR_EVIDENCE', `Retrying ${s.kind} (${failure.reason}, ${d.count}/${d.max}): ${d.strategy}`);
+    // Reroute: a failed or limited agent is set aside for this step when another approved agent can take it. If that
+    // leaves nobody routed for the step, HQ waits for the original agent instead (until its reset time, if known).
+    let excludeAgents = s.excludeAgents ?? [], notBefore = null, strategy = d.strategy;
+    if (alternate && s.agentId && s.kind !== 'rebuttal') {
+      const wider = [...new Set([...excludeAgents, s.agentId])];
+      if (ROUTES[s.kind].agents.some(a => !wider.includes(a))) excludeAgents = wider;
+      else { excludeAgents = []; notBefore = retryAt; strategy = `${d.strategy} No alternate agent is approved for this step; waiting for ${s.agentId}.`; }
+    }
+    this.engine.emit('STEP_RETRY', { objectiveId: o.id, stepId: s.id, reason: failure.reason, count: d.count, max: d.max, strategy, detail: clip(failure.detail, 400), patchHash: failure.patchHash ?? null, excludeAgents, notBefore, ...(repair ? { repair } : {}) });
+    return this.set(o, 'WAITING_FOR_EVIDENCE', `Retrying ${s.kind} (${failure.reason}, ${d.count}/${d.max}): ${strategy}`);
   }
 
   // ---- what happens after an accepted handoff (policy, not a fixed script) ----
@@ -366,7 +382,15 @@ export class Conductor {
   }
   resumeDecision(o) {
     const d = Object.values(o.decisions).find(x => x.status === 'PENDING');
-    if (d) return;
+    if (d) {
+      // The orchestrator was woken once for this decision and its turn ended without resolving it: escalate to Kyle
+      // (bounded: HQ never re-asks the orchestrator in a loop).
+      const cb = d.callbackTaskId && this.state.tasks[d.callbackTaskId];
+      if (d.resume?.authority !== 'kyle' && cb && ENDED.has(cb.stage) && !(cb.runId && !this.state.runs[cb.runId]?.endedAt)) {
+        this.engine.emit('DECISION_RECORDED', { objectiveId: o.id, decisionId: d.id, choice: 'escalate_to_kyle', rationale: `The orchestrator's turn (HQ task ${cb.id}) ended without resolving this decision.`, by: 'hq' });
+      }
+      return;
+    }
     const last = Object.values(o.decisions).filter(x => x.status === 'DECIDED').sort((a, b) => a.decidedAt - b.decidedAt).at(-1);
     if (!last || last.applied) return;
     // Actions below are idempotent (steps are tagged with the decision), and the decision is marked applied last,
@@ -377,7 +401,7 @@ export class Conductor {
   }
   async applyDecision(o, last, type, choice, by) {
     if (choice === 'stop') return this.stop(o, 'CANCELLED', `Stopped by ${by}'s decision: ${clip(last.rationale, 300)}`);
-    if (choice === 'escalate_to_kyle') return this.requestDecision(o, `${last.id}-kyle`, { ...last.resume, authority: 'kyle' }, `Escalated by the orchestrator: ${last.question}`, last.options.filter(x => x.id !== 'escalate_to_kyle'));
+    if (choice === 'escalate_to_kyle') return this.requestDecision(o, `${last.id}-kyle`, { ...last.resume, authority: 'kyle' }, `Escalated ${by === 'hq' ? 'by HQ (the orchestrator did not answer)' : 'by the orchestrator'}: ${last.question}`, last.options.filter(x => x.id !== 'escalate_to_kyle'));
     if (type === 'scope' && choice === 'approve_scope') {
       const s = o.steps[last.resume.stepId];
       return this.addImplementation(o, s, { scope: last.resume.scope, tests: last.resume.tests }, last.id);
