@@ -101,7 +101,8 @@ export class CliAgentAdapter {
       if (!line.trim()) return;
       let message; try { message = JSON.parse(line); } catch { return; } // Non-JSON banner lines are not evidence.
       for (const event of this.spec.parse(message, run)) {
-        if (event.kind === 'ACK') { if (run.acknowledged) continue; run.acknowledged = true; }
+        // The ACK carries the process id HQ spawned, so a restarted HQ can check whether that process still exists.
+        if (event.kind === 'ACK') { if (run.acknowledged) continue; run.acknowledged = true; if (Number.isInteger(child.pid)) event.pid = child.pid; }
         else if (!run.acknowledged) continue;
         if (!safeEmit(event)) void this.cancel(runId);
       }
@@ -124,7 +125,8 @@ export class CliAgentAdapter {
       if (pending) consume(pending);
       run.closed = true; this.runs.delete(runId);
       const elapsedMs = Date.now() - started;
-      if (run.acknowledged && run.finished?.text) safeEmit({ kind: 'MODEL_RESULT', summary: run.finished.text.slice(0, 1900) || 'Empty response.', truncated: run.finished.text.length > 1900, outputCharacters: run.finished.text.length });
+      // fullText (bounded) is what HQ validates a structured handoff from (Pass 3); summary is the display text.
+      if (run.acknowledged && run.finished?.text) safeEmit({ kind: 'MODEL_RESULT', summary: run.finished.text.slice(0, 1900) || 'Empty response.', truncated: run.finished.text.length > 1900, outputCharacters: run.finished.text.length, fullText: run.finished.text.slice(-30_000) });
       if (run.acknowledged && run.usage) safeEmit({ kind: 'USAGE', summary: `Counters reported by ${this.spec.label}. Subscription credits remaining are UNKNOWN${run.usage.reportedCostUsd != null ? '; reported cost is the CLI\'s own estimate' : ''}.`, usage: { source: `${this.spec.adapterId}-stream`, elapsedMs, ...run.usage } });
       const failureText = `${run.finished && !run.finished.ok ? run.finished.text : ''} ${stderr}`;
       let terminal;
