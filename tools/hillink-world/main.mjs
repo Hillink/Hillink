@@ -16,6 +16,8 @@ import { connectHq, hqAvailable } from './adapters/hq-client.mjs';
 import { explainAgent, STATE_LABEL } from './core/truth.mjs';
 import { createConstructionDemo, DEMO_STEPS } from './sim/construction-demo.mjs';
 import { STAGE_LABEL as PROJECT_STAGE } from './procgen/construction.mjs';
+import { loadSite, createSiteSync, sourceLabel } from './ui/site-sync.mjs';
+import { worldFingerprint } from './procgen/world.mjs';
 
 const $ = id => document.getElementById(id);
 const storage = {
@@ -291,7 +293,9 @@ setInterval(() => { tickClock(); if (!document.hidden) renderHud(); }, 15000); t
 // Dev simulation panel.
 const sim = new Simulator(store);
 function showMode(state) {
-  const text = { sim: 'SIMULATION: not real Hillink activity', live: 'LIVE: HQ', down: 'HQ OFFLINE: showing last known state' }[state];
+  // Live HQ facts on a fallback building must never read as the live generated World.
+  const fallback = (siteSync?.state ?? siteSource) === 'unavailable' ? ' (fallback building, not the generated World)' : '';
+  const text = { sim: 'SIMULATION: not real Hillink activity', live: 'LIVE: HQ', down: 'HQ OFFLINE: showing last known state' }[state] + fallback;
   $('mode').textContent = text; $('mode').dataset.state = state;
 }
 $('scenarios').innerHTML = SCENARIOS.map(([key, text]) => `<button data-sim="${key}">${text}</button>`).join('') + '<button data-sim="demoStep">Meeting room construction: next step (demo)</button><button data-sim="reset" class="danger">Reset simulation</button>';
@@ -316,10 +320,19 @@ function savePrefs() { cameraTouched = true; clearTimeout(savePrefs.t); savePref
 // Pass 5B: when the canonical world changes (construction reported by HQ, or a demo step), the building is regenerated
 // from it: layout, navigation and art. Agents keep their places; the camera stays where it is.
 function rebuildWorld() { applyTheme(theme.id, { keepCamera: true }); }
-// Live: the World server applies HQ's facts to the persisted canonical world; the page picks up the new version.
+// Live: the World server applies HQ's facts to the persisted canonical world; the page picks up every new version,
+// including one that arrives on the very first poll, and recovers the generated world if boot could not load it
+// (ui/site-sync.mjs). Until then a fallback is labelled as one.
+async function fetchSite() { const r = await fetch('/api/site', { cache: 'no-store' }); if (!r.ok) throw Error(`/api/site answered HTTP ${r.status}`); return (await r.json()).world; }
+let siteSync = null;
+function showSource() {
+  const label = sourceLabel(siteSync?.state ?? siteSource, siteSync?.error ?? siteError), el = $('world-source');
+  el.hidden = !label; el.textContent = label ?? '';
+  if ($('mode').dataset.state) showMode($('mode').dataset.state);
+}
 async function pollSite() {
-  try { const r = await fetch('/api/site', { cache: 'no-store' }); if (r.ok) { const body = await r.json(), sig = JSON.stringify(body.world); if (sig !== pollSite.sig) { const first = !pollSite.sig; pollSite.sig = sig; if (!first) { siteWorld = body.world; rebuildWorld(); } } } } catch { /* keep the last known world */ }
-  setTimeout(pollSite, 10000);
+  await siteSync.poll();
+  setTimeout(pollSite, siteSync.state === 'unavailable' ? 4000 : 10000);
 }
 // The construction demo: one step applies one batch of simulated HQ facts to the simulated world, regenerates the
 // building, then moves the simulated agents (so builders walk to the site from where they were).
@@ -347,8 +360,12 @@ async function pollConstruction() {
 
 // Boot.
 resize();
+// The geometry source: the generated canonical world, the legacy building when explicitly selected, or (only if the
+// generated world cannot be loaded after retries) the legacy building as an identified fallback while it retries.
+let siteSource = 'legacy', siteError = null;
 if (params.get('world') !== 'legacy') {
-  try { const r = await fetch('/api/site', { cache: 'no-store' }); if (r.ok) siteWorld = (await r.json()).world; } catch { /* no generated world: the legacy building */ }
+  const r = await loadSite(fetchSite, { attempts: 3, wait: k => new Promise(res => setTimeout(res, 400 * k)) });
+  siteWorld = r.world; siteSource = r.world ? 'generated' : 'unavailable'; siteError = r.error;
 }
 const demoMode = params.get('demo') === 'construction' && !!siteWorld;
 if (demoMode) { siteWorld = structuredClone(siteWorld); siteWorld.simulated = true; } // never saved; refuses live HQ events
@@ -374,9 +391,14 @@ if (demoMode) {
   for (let k = 0; k < target; k++) { const last = k === target - 1; demo.applyCanonical(); if (last && walk) rebuildWorld(); demo.applyAgents(); store.flush(); }
   if (target && !walk) rebuildWorld();
   $('sim-note').textContent = target ? `Construction demo at step ${target} of ${DEMO_STEPS.length}: ${DEMO_STEPS[target - 1].label}.` : 'Construction demo ready: press "Meeting room construction: next step".';
-} else if (siteWorld && !siteWorld.simulated) pollSite();
+} else if (siteSource !== 'legacy') {
+  siteSync = createSiteSync({ fetchSite, source: siteSource, world: siteWorld, apply: w => { siteWorld = w; rebuildWorld(); showSource(); }, report: showSource });
+  pollSite();
+}
+if (params.get('demo') === 'construction' && !demoMode) $('sim-note').textContent = 'The construction demo needs the generated world, which is unavailable right now.';
+showSource();
 // ?camera=room:<id>|agent:<id>|overview|building: frame a view on load (reproducible screenshots).
 if (params.get('camera')) setTimeout(() => focus(params.get('camera')), 50);
 $('empty').hidden = Object.keys(store.world.agents).length > 0;
 invalidate();
-window.hillinkWorld = { get siteWorld() { return siteWorld; }, get demo() { return demo; }, demoStep, why: id => explainAgent(store.world, id), get commands() { return commandInfo; }, get constructionStatus() { return constructionStatus; }, store, get scene() { return scene; }, get theme() { return theme; }, camera, sim, focus, setTheme: applyTheme }; // Dev handle for tests and console.
+window.hillinkWorld = { get worldInfo() { return { source: siteSync?.state ?? siteSource, simulated: Boolean(siteWorld?.simulated), generator: siteWorld?.generator ?? null, seed: siteWorld?.seed ?? null, schema: siteWorld?.schema ?? null, fingerprint: siteWorld ? worldFingerprint(siteWorld) : null, historyLength: siteWorld?.history?.length ?? 0, layout: theme?.layout?.id ?? null, error: siteSync?.error ?? siteError }; }, get siteWorld() { return siteWorld; }, get demo() { return demo; }, demoStep, why: id => explainAgent(store.world, id), get commands() { return commandInfo; }, get constructionStatus() { return constructionStatus; }, store, get scene() { return scene; }, get theme() { return theme; }, camera, sim, focus, setTheme: applyTheme }; // Dev handle for tests and console.

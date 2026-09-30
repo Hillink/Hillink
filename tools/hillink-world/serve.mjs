@@ -84,26 +84,39 @@ export function hqClient(base = 'http://127.0.0.1:4312', { fetchImpl = fetch, ti
 // Pass 5B: the live bridge. HQ's facts (its World contract feed) are applied to the persisted canonical world through
 // the contract (procgen/contract.mjs): only HQ events, each once, recorded in history. The cursor (the last HQ journal
 // sequence applied) lives beside the world file, so a restart continues where it stopped. Never writes to HQ.
-export function siteFeed({ hq, site, cursorFile, intervalMs = 15000 }) {
-  let cursor = 0, busy = false;
-  try { cursor = Number(JSON.parse(fs.readFileSync(cursorFile, 'utf8')).seq) || 0; } catch { /* first run */ }
-  const status = { cursor, applied: 0, refused: 0, error: null };
+//
+// Durability (Pass 5B correction): the durable cursor never runs ahead of the durably saved world. Applying a batch
+// marks the world dirty; the cursor file is written only after the world holding those facts has been saved. A failed
+// save leaves the world dirty and the durable cursor where it was, and every later tick retries the save first, even
+// when HQ has nothing new. A restart after a failed save reloads the older world with the older cursor, so HQ delivers
+// the lost facts again; a crash between the two writes leaves the cursor behind, and the applied-id set makes the
+// redelivered facts no-ops. Each fact ends up in the durable world exactly once.
+const writeCursorFile = (cursorFile, seq) => { fs.mkdirSync(path.dirname(cursorFile), { recursive: true }); const tmp = `${cursorFile}.${process.pid}.tmp`; fs.writeFileSync(tmp, JSON.stringify({ seq })); fs.renameSync(tmp, cursorFile); };
+export function siteFeed({ hq, site, cursorFile, intervalMs = 15000, writeCursor = seq => writeCursorFile(cursorFile, seq), autostart = true }) {
+  let durable = 0, busy = false;
+  try { durable = Number(JSON.parse(fs.readFileSync(cursorFile, 'utf8')).seq) || 0; } catch { /* first run */ }
+  let cursor = durable, dirty = false;
+  const status = { cursor, durableCursor: durable, dirty, applied: 0, refused: 0, error: null };
+  const persist = () => {
+    try { if (dirty) { site.save(); dirty = false; } } catch (error) { throw Error(`world save failed (will retry): ${error.message}`); }
+    if (cursor !== durable) { writeCursor(cursor); durable = cursor; }
+  };
   const tick = async () => {
     if (busy) return; busy = true;
     try {
+      persist(); // an earlier failed save is retried before anything else
       const body = await hq.activity(cursor);
-      let changed = false;
       for (const item of body.activity ?? []) {
         const ev = fromHqActivity(item);
-        if (ev) { const r = applyHqEvent(site.world, ev); if (r.applied) { changed = true; status.applied++; } else if (r.reason !== 'already applied') status.refused++; }
+        if (ev) { const r = applyHqEvent(site.world, ev); if (r.applied) { dirty = true; status.applied++; } else if (r.reason !== 'already applied') status.refused++; }
         cursor = Math.max(cursor, Number(item.seq) || 0);
       }
-      if (changed) site.save();
-      fs.mkdirSync(path.dirname(cursorFile), { recursive: true }); fs.writeFileSync(cursorFile, JSON.stringify({ seq: cursor }));
-      Object.assign(status, { cursor, error: null });
-    } catch (error) { status.error = String(error.cause?.code ?? error.message).slice(0, 200); } finally { busy = false; }
+      persist();
+      status.error = null;
+    } catch (error) { status.error = String(error.cause?.code ?? error.message).slice(0, 200); } finally { Object.assign(status, { cursor, durableCursor: durable, dirty }); busy = false; }
   };
-  tick(); const timer = setInterval(tick, intervalMs); timer.unref?.();
+  let timer = null;
+  if (autostart) { tick(); timer = setInterval(tick, intervalMs); timer.unref?.(); }
   return { tick, status, stop: () => clearInterval(timer) };
 }
 

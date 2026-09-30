@@ -4,6 +4,10 @@
 // shots.json: { base: 'http://127.0.0.1:4320', browser?: '<path>', width?, height?, shots: [{ name, path, waitMs?,
 //   until?: '<JS expression that becomes true>', untilMs?, eval?: '<JS run after load>', width?, height? }] }
 // The World server must already be running. Every shot is a fresh page load, so each is reproducible from its URL.
+// Evidence integrity (Pass 5B correction): a shot whose `until` prerequisite never becomes true, or whose `expect`
+// (an optional JS expression checked after `after`) is false, FAILS: no screenshot is written for it, and the run
+// exits non-zero. Each note also records which world was on screen (hillinkWorld.worldInfo: generated, legacy or
+// fallback; simulated or not; generator, seed and fingerprint), written to notes.json beside the images.
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -41,6 +45,7 @@ async function page() {
 }
 const evaluate = async (p, expr) => { const r = await p.send('Runtime.evaluate', { expression: expr, awaitPromise: true, returnByValue: true }); if (r.exceptionDetails) throw Error(r.exceptionDetails.exception?.description ?? r.exceptionDetails.text); return r.result.value; };
 
+const failures = [], notes = [];
 try {
   await devtools();
   for (const shot of spec.shots) {
@@ -54,16 +59,32 @@ try {
     await loaded;
     await sleep(shot.settleMs ?? 1200);
     if (shot.eval) await evaluate(p, shot.eval);
-    if (shot.until) { const t0 = Date.now(); while (!(await evaluate(p, shot.until)) && Date.now() - t0 < (shot.untilMs ?? 30000)) await sleep(100); }
-    if (shot.waitMs) await sleep(shot.waitMs);
-    if (shot.after) await evaluate(p, shot.after);
+    let failed = null;
+    if (shot.until) {
+      const t0 = Date.now(); let ok = false;
+      while (!(ok = Boolean(await evaluate(p, shot.until).catch(() => false))) && Date.now() - t0 < (shot.untilMs ?? 30000)) await sleep(100);
+      if (!ok) failed = `prerequisite never became true within ${shot.untilMs ?? 30000} ms: ${shot.until}`;
+    }
+    if (!failed && shot.waitMs) await sleep(shot.waitMs);
+    if (!failed && shot.after) await evaluate(p, shot.after);
+    if (!failed && shot.expect && !(await evaluate(p, shot.expect).catch(() => false))) failed = `expectation false: ${shot.expect}`;
+    const world = await evaluate(p, 'globalThis.hillinkWorld?.worldInfo ?? null').catch(() => null);
     const note = shot.note ? await evaluate(p, shot.note).catch(e => `note failed: ${e.message}`) : null;
-    const { data } = await p.send('Page.captureScreenshot', { format: 'png' });
-    fs.writeFileSync(path.join(out, `${shot.name}.png`), Buffer.from(data, 'base64'));
-    console.log(`${shot.name}.png${note ? `  ${typeof note === 'string' ? note : JSON.stringify(note)}` : ''}`);
+    if (failed) {
+      failures.push(`${shot.name}: ${failed}`);
+      console.log(`FAILED ${shot.name}: ${failed}`);
+    } else {
+      const { data } = await p.send('Page.captureScreenshot', { format: 'png' });
+      fs.writeFileSync(path.join(out, `${shot.name}.png`), Buffer.from(data, 'base64'));
+      const src = world ? `[world: ${world.source}${world.simulated ? ', simulated copy' : ''}, ${world.generator ?? 'hand-built'}${world.fingerprint ? ` ${String(world.fingerprint).slice(0, 12)}` : ''}]` : '[world: unknown]';
+      console.log(`${shot.name}.png  ${src}${note ? `  ${typeof note === 'string' ? note : JSON.stringify(note)}` : ''}`);
+      notes.push({ name: shot.name, path: shot.path, world, note });
+    }
     await fetch(`http://127.0.0.1:${port}/json/close/${p.targetId}`).catch(() => {});
     p.close();
   }
+  fs.writeFileSync(path.join(out, 'notes.json'), JSON.stringify({ base: spec.base, at: new Date().toISOString(), shots: notes, failures }, null, 2));
+  if (failures.length) { console.error(`${failures.length} shot(s) failed; their screenshots were not written:\n${failures.join('\n')}`); process.exitCode = 1; }
 } finally {
   proc.kill();
   await sleep(300);
