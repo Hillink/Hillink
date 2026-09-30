@@ -2,6 +2,7 @@
 // active skin's materials. Everything is vector drawing in plan space through the projection:
 // no images. `d` is the draw context: { ctx, P, M, T (seconds), lw, room(id) -> activity, ... }.
 import { SIZES } from '../world/scale.mjs';
+import { wind } from '../engine/environment.mjs';
 const TAU = Math.PI * 2;
 // Pass 2: every landmark a character meets (seat, surface, backrest, arm) comes from world/scale.mjs SIZES.
 const S = SIZES;
@@ -219,9 +220,10 @@ export const PROPS = {
     const blink = Math.sin(d.T * 4) > 0.3; ctx.fillStyle = blink ? '#ff3b30' : '#5a1510'; ctx.beginPath(); ctx.arc(tx, ty - 3, 2.2, 0, TAU); ctx.fill();
   },
   tree(d, it) {
-    const f = it.floor, sway = Math.sin(d.T * 0.7 + it.x) * 1.5;
+    // Pass 5C: wind with gusts that roll across the map (engine/environment.mjs); the crown sways more than the base.
+    const f = it.floor, w = wind(d.T, it.x, it.z), sway = w * 3.2;
     prism(d, f, { x0: it.x - 3, x1: it.x + 3, z0: it.z - 3, z1: it.z + 3, h1: it.h * 0.45 }, '#6b4a2f');
-    for (const [dx, dz, h, r, c] of [[0, 2, it.h * 0.55, 20, d.M.leaf], [-12, 0, it.h * 0.62, 15, d.M.leaf], [12, -2, it.h * 0.64, 15, d.M.leafLight], [sway, 0, it.h * 0.82, 17, d.M.leafLight], [-6 + sway, 4, it.h * 0.95, 11, d.M.leaf]]) blob(d, f, it.x + dx, it.z + dz, h, r, c);
+    for (const [dx, dz, h, r, c] of [[sway * 0.3, 2, it.h * 0.55, 20, d.M.leaf], [-12 + sway * 0.4, 0, it.h * 0.62, 15, d.M.leaf], [12 + sway * 0.45, -2, it.h * 0.64, 15, d.M.leafLight], [sway * 0.8, 0, it.h * 0.82, 17, d.M.leafLight], [-6 + sway, 4, it.h * 0.95, 11, d.M.leaf]]) blob(d, f, it.x + dx, it.z + dz, h, r, c);
   },
   hedge(d, it) { const b = box(it), f = it.floor; prism(d, f, { ...b, h1: it.h }, d.M.leaf); },
   planter(d, it) { const b = box(it), f = it.floor; prism(d, f, { ...b, h1: 10 }, d.M.exteriorDark); for (let i = 0; i < 4; i++) blob(d, f, b.x0 + 6 + i * 9, it.z, 14, 5, i % 2 ? d.M.leafLight : '#e76f51'); },

@@ -10,6 +10,7 @@ import { stationPoint } from '../core/behavior.mjs';
 import { hash } from './ambience.mjs';
 import { turnToward } from './motion.mjs';
 import { intentOf, setClip, FACING_ANGLE, BUILD_CLIP, variantOfProject } from './animation.mjs';
+import { publicSpots, npcPlan } from './npcs.mjs';
 
 export const STATES = ['idle', 'react', 'stand', 'sit', 'walk', 'carry', 'work', 'type', 'inspect', 'read', 'talk', 'meeting', 'blocked', 'waiting', 'celebrate', 'offline', 'assemble', 'survey', 'measure', 'dig', 'paint', 'install', 'lift', 'pickup'];
 export const PRODUCTIVE_STATES = new Set(['work', 'type', 'inspect', 'read']);
@@ -28,7 +29,7 @@ export function play(e, state, now) { return setClip(e, state, now, { intent: e.
 // the canonical project it stands at (layout.projects).
 export function resolveState(e, now, layout = null) {
   if (e.departAt > now) return now < (e.reactEnd ?? 0) ? 'react' : e.posture === 'sit' ? 'stand' : 'react';
-  if (e.gait === 'walk' || e.gait === 'board') return e.carrying ? 'carry' : 'walk';
+  if (e.gait === 'walk' || e.gait === 'board' || (e.moving && !e.gait && !e.ride)) return e.carrying ? 'carry' : 'walk'; // setting off counts as walking
   if (e.gait === 'wait-lift' || e.gait === 'ride') return e.carrying ? 'carry' : 'idle';
   if (e.errand) return e.errand.phase === 'give' ? 'talk' : 'carry';
   if (e.visit?.phase === 'work' && !e.moving) return e.visit.kind === 'commit' ? 'assemble' : 'survey';
@@ -101,6 +102,58 @@ export class IsoWorldView extends WorldView {
   constructor(scene, effects, layout, scenery) {
     super(scene, effects, layout, scenery);
     for (const l of Object.values(this.lifts)) { l.ambient = false; l.floors = layout.lifts[l.id]?.floors; l.speed = scenery?.liftSpeed ?? l.speed; }
+    if (layout.generated) this.initAmbient(); else this.ambient = [];
+  }
+  // Pass 5C: ambient people (engine/npcs.mjs). Created once per layout; stepped with the same locomotion as agents.
+  initAmbient() {
+    const L = this.layout, plaza = L.locationById.plaza?.door;
+    this.ambientSpots = publicSpots(L);
+    if (!plaza || this.ambientSpots.length < 2) { this.ambient = []; return; }
+    this.ambientSpots.push({ key: 'plaza:outside', room: 'plaza', point: plaza, pose: 'stand', facing: 'front', use: 'look' });
+    const n = Math.min(4, Math.max(2, Math.floor(this.ambientSpots.length / 3)));
+    this.ambient = Array.from({ length: n }, (_, i) => this.scene.add({ id: `ambient:${i}`, kind: 'ambient', layer: LAYERS.agent, x: plaza[0], y: plaza[1], w: this.size.agent[0], h: this.size.agent[1], anchor: 'feet', index: i, plan: npcPlan(i, L.world?.seed?.length ?? 0), phase: 'away', trip: 0, trips: 0, alpha: 0, facing: 1, dir: 'front', heading: Math.PI / 2 }));
+  }
+  stepAmbient(e, dt, now, instant, stepPath) {
+    const P = e.plan, L = this.layout, spots = this.ambientSpots;
+    e.t0 ??= now;
+    const clip = s => setClip(e, s, now, { intent: s === 'walk' ? 'walking' : 'onBreak', variant: 'ambient' });
+    if (e.phase === 'away') { e.alpha = 0; if (now - e.t0 >= (e.returnAt ?? P.arriveAt)) { e.phase = 'arriving'; e.trips = 0; e.x = spots.at(-1).point[0]; e.y = spots.at(-1).point[1]; this.nextAmbient(e, now); } return false; }
+    if (e.standUntil > now) { clip('stand'); return true; }
+    if (e.moving) {
+      stepPath(e, dt, { instant, speed: this.speed * 0.9, lifts: this.lifts, metric: L.metric, arriveDistance: L.arriveDistance });
+      e.alpha = Math.min(1, e.alpha + dt * 2); this.scene.moved(e); clip(e.moving ? 'walk' : 'idle');
+      if (!e.moving) { e.arrivedAt = now; const s = e.target; e.faceGoal = s?.facing ?? null; e.pendingSit = s?.pose === 'sit'; }
+      return true;
+    }
+    if (e.faceGoal) { turnToward(e, FACING_ANGLE[e.faceGoal], dt); if (Math.abs(Math.atan2(Math.sin(e.heading - FACING_ANGLE[e.faceGoal]), Math.cos(e.heading - FACING_ANGLE[e.faceGoal]))) < 0.02) { e.dir = e.faceGoal; e.faceGoal = null; } clip('idle'); return true; }
+    if (e.pendingSit) { e.pendingSit = false; e.posture = 'sit'; e.sitUntil = now + SIT_MS; }
+    if (e.sitUntil > now) { clip('sit'); return true; }
+    e.use = e.target?.use; clip('idle');
+    // Agents always have right of way: if an agent is placed at (or heading to) this spot, move on.
+    if (e.phase === 'visiting' && e.target && now > (e.checkAt ?? 0)) { e.checkAt = now + 1000; for (const o of this.scene.entities.values()) if (o.kind === 'agent' && (o.placeKey === e.target.key || o.spot === e.target.key)) { e.stayUntil = now; break; } }
+    if (e.phase === 'leaving') { e.alpha = Math.max(0, e.alpha - dt * 1.5); if (e.alpha <= 0) { e.phase = 'away'; e.returnAt = now - e.t0 + 20000 + hash(e.index * 3.3 + e.trip) * 25000; } return true; }
+    if (now >= e.stayUntil) {
+      if (e.posture === 'sit') { e.posture = 'stand'; e.standUntil = now + STAND_MS; return true; }
+      this.nextAmbient(e, now);
+    }
+    return false;
+  }
+  // The next destination: a free public spot (never one an agent or another ambient person uses or is heading to),
+  // or, after a few stays, the way out.
+  nextAmbient(e, now) {
+    const P = e.plan, spots = this.ambientSpots, L = this.layout;
+    const taken = new Set();
+    for (const o of this.scene.entities.values()) { if (o.kind === 'agent') { taken.add(o.spot); taken.add(o.placeKey); if (o.dest) taken.add(`${o.dest.location}:${this.pointAt(...o.dest.target)?.id}`); } if (o.kind === 'ambient' && o !== e && o.target) taken.add(o.target.key); }
+    let target;
+    if (e.trips >= P.tripsBeforeLeaving) { target = spots.at(-1); e.phase = 'leaving'; }
+    else {
+      const free = spots.filter(s => s.key !== e.target?.key && (s.key === 'plaza:outside' || !taken.has(s.key)));
+      target = free[P.pick(e.trip, free.length)] ?? spots.at(-1);
+      e.phase = 'visiting';
+    }
+    const path = L.route([e.x, e.y], target.room, target.point);
+    e.trip += 1; e.trips += 1; e.target = target; e.use = null; e.stayUntil = now + P.stayMs(e.trip) + (path ? 0 : 5000);
+    if (path) startPath(e, path, now);
   }
   sync(world, changed, now) {
     super.sync(world, changed, now);
@@ -190,6 +243,7 @@ export class IsoWorldView extends WorldView {
     const moving = super.step(dt, now, opts, stepPath);
     let busy = false;
     for (const e of this.scene.entities.values()) if (e.kind === 'agent') busy = this.control(e, now, opts.instant) || busy;
+    for (const e of this.ambient ?? []) busy = this.stepAmbient(e, dt, now, opts.instant, stepPath) || busy;
     return moving || busy;
   }
   // Per-character controller: arrivals, turning to face, sitting, standing, the site work loop, idle wandering, and
@@ -249,7 +303,7 @@ export class IsoWorldView extends WorldView {
       return;
     }
     if (e.moving || e.departAt || e.faceGoal || !e.spot?.startsWith('site:') || e.spot !== e.placeKey || now < (e.nextLoop ?? Infinity)) return;
-    const st = e.anim?.state, site = this.layout.locationById[e.spot.slice(0, e.spot.lastIndexOf(':'))];
+    const st = e.anim?.state, site = this.layout.locationById[e.spotInfo?.room];
     if (!site?.site) return;
     const haul = st === 'lift' || st === 'measure', inspect = st === 'survey';
     if (!haul && !inspect) { e.nextLoop = now + LOOP_MS; return; }
@@ -271,7 +325,7 @@ export class IsoWorldView extends WorldView {
     e.nextWander = now + 18000 + hash(now / 1000 + e.id.length) * 30000;
     if (here?.room !== 'lounge') return;
     const taken = new Set();
-    for (const o of this.scene.entities.values()) if (o.kind === 'agent' && o !== e) { if (o.spot) taken.add(o.spot); if (o.placeKey) taken.add(o.placeKey); if (o.dest) taken.add(`${o.dest.location}:${this.pointAt(...o.dest.target)?.id}`); }
+    for (const o of this.scene.entities.values()) if (o.kind === 'agent' && o !== e) { if (o.spot) taken.add(o.spot); if (o.placeKey) taken.add(o.placeKey); if (o.dest) taken.add(`${o.dest.location}:${this.pointAt(...o.dest.target)?.id}`); } for (const o of this.ambient ?? []) if (o.target && o.phase !== 'away') taken.add(o.target.key);
     const free = Object.values(this.layout.stationInfo).filter(p => p.room === 'lounge' && IDLE_USES.has(p.use) && !taken.has(`lounge:${p.id}`) && `lounge:${p.id}` !== e.spot);
     if (!free.length) return;
     const pick = free[Math.floor(hash(now / 1000 + e.id.charCodeAt(0)) * free.length)];

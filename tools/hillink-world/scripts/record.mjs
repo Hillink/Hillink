@@ -53,6 +53,9 @@ try {
   for (const clip of spec.clips) {
     const p = await page(), base = clip.base ?? spec.base;
     await p.send('Page.enable'); await p.send('Runtime.enable');
+    const errors = [];
+    p.on('Runtime.exceptionThrown', ev => errors.push(ev.exceptionDetails?.exception?.description ?? ev.exceptionDetails?.text));
+    p.on('Runtime.consoleAPICalled', ev => { if (ev.type === 'error') errors.push(ev.args.map(x => x.value ?? x.description).join(' ')); });
     await p.send('Storage.clearDataForOrigin', { origin: new URL(base).origin, storageTypes: 'all' });
     await p.send('Emulation.setDeviceMetricsOverride', { width: clip.width ?? W, height: clip.height ?? H, deviceScaleFactor: 1, mobile: false });
     const loaded = p.once('Page.loadEventFired');
@@ -76,6 +79,8 @@ try {
     }
     const world = await evaluate(p, 'globalThis.hillinkWorld?.worldInfo ?? null').catch(() => null);
     const note = clip.note ? await evaluate(p, clip.note).catch(e => `note failed: ${e.message}`) : null;
+    if (errors.length) console.log(`  page errors in ${clip.name}: ${[...new Set(errors)].slice(0, 3).join(' | ').slice(0, 800)}`);
+    if (!failed && errors.length) failed = `the page threw: ${String(errors[0]).slice(0, 200)}`;
     if (!failed && frames.length < clip.seconds * 5) failed = `only ${frames.length} frames captured in ${clip.seconds} s`;
     if (failed) { failures.push(`${clip.name}: ${failed}`); console.log(`FAILED ${clip.name}: ${failed}`); }
     else {

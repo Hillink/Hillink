@@ -19,10 +19,12 @@ import { vehiclesAt, hash, smoothPolyline } from '../engine/ambience.mjs';
 import { PRODUCTIVE_STATES, SITE_STATES, actionText } from '../engine/iso-view.mjs';
 import { blendOf } from '../engine/animation.mjs';
 import { rigFor, dress } from './rigs.mjs';
+import { lookOfNpc } from '../engine/npcs.mjs';
 import { jobOf } from '../core/job.mjs';
 import { PRODUCTIVE_ACTIVITIES as WORKING } from '../core/truth.mjs';
 import { placeLabel } from './iso-skin.mjs';
 import { STAGE_LABEL, stageIndex } from '../procgen/construction.mjs';
+import { wind, flutter, cloudShadows, siteMachinery } from '../engine/environment.mjs';
 import { represent } from '../procgen/themes.mjs';
 import { frames } from '../procgen/camera.mjs';
 import { terrainOf } from '../procgen/world.mjs';
@@ -100,6 +102,20 @@ export function createSiteSkin(layout, skinId = 'real') {
       const w = { ...w0, floor: f, x0: w0.x0 * U, x1: w0.x1 * U };
       flat(f, d => { const dd = Object.create(d); dd.P = { ...P, g: { ...g, depth: r.z1 } }; DECOR[w.type]?.(dd, w); });
     }
+  }
+  // Pass 5C: a flag by each building's entrance, waving in the same wind as the trees.
+  for (const door of Object.values(world.doors).filter(dr => dr.status === 'built' && (dr.a === 'outside' || dr.b === 'outside'))) {
+    const c = view.toView((door.seg.x1 + door.seg.x2) / 2, (door.seg.y1 + door.seg.y2) / 2), fx = c.x * U - 230, fz = c.z * U - 150, poleH = HT * 0.95;
+    const b = { x0: fx - 3, x1: fx + 3, z0: fz - 3, z1: fz + 3 };
+    add(0, { ...b, sb: boxBounds(P, { ...b, h1: poleH + 10 }, 0), draw: d => {
+      const { ctx } = d, t = d.reduced ? 0 : d.T;
+      prism(d, 0, { x0: fx - 4, x1: fx + 4, z0: fz - 4, z1: fz + 4, h1: 4 }, '#6b7280');
+      const [bx, by] = P.at(fx, fz, 0, 0), [tx, ty] = P.at(fx, fz, 0, poleH);
+      ctx.strokeStyle = '#c7ccd3'; ctx.lineWidth = 1.6; ctx.beginPath(); ctx.moveTo(bx, by); ctx.lineTo(tx, ty); ctx.stroke();
+      const len = 32, hgt = 18, n = 10, top = [], bot = [];
+      for (let k = 0; k <= n; k++) { const u = k / n, dz = flutter(t, u, fx * 0.01) * len, sag = u * u * 3; top.push(P.at(fx + u * len, fz + dz, 0, poleH - 2 - sag)); bot.push(P.at(fx + u * len, fz + dz, 0, poleH - 2 - hgt - sag)); }
+      poly(ctx, [...top, ...bot.reverse()], M.fantasy ? '#8e2a2a' : '#e21b23', INK, 0.8);
+    } });
   }
   // Stairs and the elevator shaft (built: a flight and a glass shaft; reserved: a marked-out slot for the future).
   for (const s of spaces.filter(s => s.primitive === 'staircase' || s.primitive === 'elevator')) {
@@ -222,7 +238,11 @@ export function createSiteSkin(layout, skinId = 'real') {
     for (const { pts, W } of roads) { for (const q of strip(pts, W + 10)) poly(ctx, q.map(([x, z]) => P.at(x, z, 0)), M.pavement); }
     for (const { pts, W } of roads) { for (const q of strip(pts, W)) poly(ctx, q.map(([x, z]) => P.at(x, z, 0)), M.road); ctx.strokeStyle = M.roadLine; ctx.lineWidth = 1.6; ctx.setLineDash([30, 24]); ctx.beginPath(); pts.forEach(([x, z], i) => (i ? ctx.lineTo(...P.at(x, z, 0)) : ctx.moveTo(...P.at(x, z, 0)))); ctx.stroke(); ctx.setLineDash([]); }
     for (const { pts, W, p } of paths) for (const q of strip(pts, W)) poly(ctx, q.map(([x, z]) => P.at(x, z, 0)), p.status === 'built' ? M.pavement : 'rgba(150,120,80,0.35)');
+    // Pass 5C: cloud shadows drifting across the ground (ambient; culled with the frame).
+    if (!d.reduced) for (const c of cloudShadows(d.T, groundBox)) { ctx.save(); ctx.globalAlpha = c.alpha; poly(ctx, Array.from({ length: 18 }, (_, k) => P.at(c.x + Math.cos((k / 18) * TAU) * c.rx, c.z + Math.sin((k / 18) * TAU) * c.rz, 0)), '#0b1a10'); ctx.restore(); }
   }
+  // The ground the clouds drift over: the settlement's roads and spaces, generously padded.
+  const groundBox = (() => { const xs = [], zs = []; for (const s of spaces) { const r = rp(s); xs.push(r.x0, r.x1); zs.push(r.z0, r.z1); } for (const r of roads) for (const [x, z] of r.pts) { xs.push(x); zs.push(z); } return { x0: Math.min(...xs) - 900, x1: Math.max(...xs) + 900, z0: Math.min(...zs) - 600, z1: Math.max(...zs) + 600 }; })();
   const vehicleRoutes = vehicleRoutesOf(layout);
   const CAR = STREET_SCALE.car;
   // Pass 5C: vehicles are oriented boxes that turn with the road (no snapping between two axis-aligned shapes), fade
@@ -311,6 +331,23 @@ export function createSiteSkin(layout, skinId = 'real') {
         if (it.type === 'chair' || it.type === 'officeChair') { PROPS[it.type](d, it, 'seat'); PROPS[it.type](d, it, 'back'); } else PROPS[it.type]?.(d, it);
       }
     }
+    // Pass 5C: machinery, moving only while the build is really under way (engine/environment.mjs siteMachinery).
+    if (at('site-preparation') && !at('inspection')) {
+      const mach = siteMachinery(d.reduced ? 0 : T, p), mx = u.x1 + 22, mz = u.z1 + 18, top = HT * 1.9;
+      prism(d, f, { x0: mx - 4, x1: mx + 4, z0: mz - 4, z1: mz + 4, h1: 6 }, '#6b7280');
+      prism(d, f, { x0: mx - 2, x1: mx + 2, z0: mz - 2, z1: mz + 2, h0: 6, h1: top }, M.fantasy ? '#7a5534' : '#e0a030', { outline: false });
+      const jl = Math.min(140, (u.x1 - u.x0) * 0.8), ex = mx + Math.cos(Math.PI - mach.jib) * jl, ez = mz - Math.sin(mach.jib) * jl * 0.6;
+      ctx.strokeStyle = M.fantasy ? '#7a5534' : '#d08a20'; ctx.lineWidth = 2.2; ctx.beginPath(); ctx.moveTo(...pp(mx - (ex - mx) * 0.3, mz - (ez - mz) * 0.3, top)); ctx.lineTo(...pp(ex, ez, top)); ctx.stroke();
+      const hookH = top - 18 - mach.hook * (top - 40);
+      ctx.strokeStyle = '#39414b'; ctx.lineWidth = 0.7; ctx.beginPath(); ctx.moveTo(...pp(ex, ez, top)); ctx.lineTo(...pp(ex, ez, hookH)); ctx.stroke();
+      prism(d, f, { x0: ex - 5, x1: ex + 5, z0: ez - 4, z1: ez + 4, h0: hookH - 8, h1: hookH }, M.fantasy ? '#8a6a44' : '#c8a26a');
+      if (!at('structure')) {
+        // Mixer: a drum that turns while the foundation is poured.
+        const [cx, cy] = pp(u.x0 - 20, u.z0 + 14, 12), r = 9;
+        ctx.fillStyle = M.fantasy ? '#6b5236' : '#9aa3ad'; ctx.beginPath(); ctx.ellipse(cx, cy, r * 1.3, r, 0, 0, TAU); ctx.fill(); ctx.strokeStyle = INK; ctx.lineWidth = 1; ctx.stroke();
+        ctx.strokeStyle = '#4b5561'; ctx.lineWidth = 1.4; for (let k = 0; k < 3; k++) { const a = mach.drum + (k * TAU) / 3; ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx + Math.cos(a) * r * 1.2, cy + Math.sin(a) * r * 0.9); ctx.stroke(); }
+      }
+    }
     // Status: stage plaque, and the facts that stop work.
     const [lx, ly] = pp((u.x0 + u.x1) / 2, u.z0, HT + 16);
     d.late.push(() => {
@@ -378,6 +415,11 @@ export function createSiteSkin(layout, skinId = 'real') {
     if (selected || hovered || PRODUCTIVE_STATES.has(st) || SITE_STATES.has(st)) d.late.unshift(() => drawFigure(ctx, { ...fig, alpha: selected ? 0.45 : 0.3 }));
     d.late.push(() => badge(d, e, a, x, head.top, hovered, selected));
   }
+  // Pass 5C: ambient people (engine/npcs.mjs): same figures and locomotion, muted clothes, no name or status badge.
+  function drawAmbient(d, e) {
+    const dressed = dress(rig, e.anim), t = (d.now - (e.anim?.since ?? d.now)) / 1000;
+    drawFigure(d.ctx, { x: e.x, y: e.y, h: e.h, dir: e.dir ?? 'front', posture: e.posture, state: dressed.clip, prev: d.reduced ? null : dressed.prev, blend: blendOf(e.anim, d.now), props: dressed.props, gait: e.gaitAmount ?? 1, t, time: d.reduced ? 0 : d.T + e.index * 1.7, stride: e.stride ?? 0, look: lookOfNpc(e.index, skinId), use: e.use, moving: e.moving, alpha: 0.92 * e.alpha });
+  }
   function badge(d, e, a, x, top, hovered, selected) {
     const { ctx, env } = d, zoom = env.zoom, k = Math.min(1.8, Math.max(0.7, 1 / zoom)), cy = top - 4 * k, ring = dotColor(e, a);
     if (a.activity === 'error') { ctx.beginPath(); ctx.arc(x, cy - 8 * k, 5 * k, 0, TAU); ctx.fillStyle = '#e5484d'; ctx.fill(); text(ctx, '!', x, cy - 7.5 * k, 7.5 * k, '#fff', { weight: 800 }); }
@@ -396,6 +438,7 @@ export function createSiteSkin(layout, skinId = 'real') {
   function frame(ctx, env) {
     const now = env.time, T = env.reducedMotion ? 0 : now / 1000, world0 = env.world ?? { agents: {}, tasks: {}, prs: {}, testRuns: {}, systems: {}, issues: {} };
     const agents = [...env.scene.entities.values()].filter(e => e.kind === 'agent');
+    const ambient = [...env.scene.entities.values()].filter(e => e.kind === 'ambient' && e.alpha > 0.01);
     const systems = Object.values(world0.systems ?? {}), sysState = kind => systems.find(s => s.kind === kind)?.state ?? 'unknown';
     const tasks = Object.values(world0.tasks ?? {});
     const d = {
@@ -423,6 +466,7 @@ export function createSiteSkin(layout, skinId = 'real') {
       if (f !== 0 || true) drawSlabs(d, f);
       const items = (staticItems[f] ?? []).filter(onScreen);
       for (const e of agents) { if (inCar(e)) continue; const pl = layout.planAt(e.x, e.y); if (!pl || pl.floor !== f) continue; items.push({ ...charBox(e, pl.x, pl.z), draw: () => drawAgent(d, e) }); }
+      for (const e of ambient) { const pl = layout.planAt(e.x, e.y); if (!pl || pl.floor !== f) continue; items.push({ ...charBox(e, pl.x, pl.z), draw: () => drawAmbient(d, e) }); }
       if (f === 0) for (const v of cars) { const L = STREET_SCALE.car.length / 2; const box = { x0: v.x - L, x1: v.x + L, z0: v.y - L, z1: v.y + L }; items.push({ ...box, sb: boxBounds(P, { ...box, h1: STREET_SCALE.car.height + 4 }, 0), draw: () => drawVehicle(d, v) }); }
       for (const l of lifts) if (l.floors.includes(f)) {
         const lift = env.scene.get(`lift:${l.id}:back`)?.lift; if (!lift) continue;

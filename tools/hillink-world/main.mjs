@@ -98,7 +98,8 @@ function frame(now) {
   store.flush();
   const instant = reducedMotion.matches;
   const moving = view.step(dt, now, { instant }, stepPath);
-  if (follow) { const e = scene.get(follow); if (e && !camera.tween) { const c = camera.centerFor(e.x, e.y - e.h / 2); camera.x += (c.x - camera.x) * 0.12; camera.y += (c.y - camera.y) * 0.12; camera.clamp(); } }
+  // Pass 5C: follow is frame-rate independent (the same glide at 30 or 144 fps), so a tracked walker never jitters.
+  if (follow) { const e = scene.get(follow); if (e && !camera.tween) { const c = camera.centerFor(e.x, e.y - e.h / 2), k = 1 - Math.exp(-dt * 7); camera.x += (c.x - camera.x) * k; camera.y += (c.y - camera.y) * k; camera.clamp(); } }
   const cameraMoving = camera.step(now);
   const fx = effects.active(now);
   // Art themes always have ambient life (water, machinery, staff); the blueprint only animates its agents.
@@ -398,6 +399,26 @@ if (demoMode) {
 if (params.get('demo') === 'construction' && !demoMode) $('sim-note').textContent = 'The construction demo needs the generated world, which is unavailable right now.';
 showSource();
 // ?camera=room:<id>|agent:<id>|overview|building: frame a view on load (reproducible screenshots).
+// Pass 5C: watchable scenarios. ?play=office|workstation|meeting loops a scripted, clearly simulated sequence (only in
+// simulation mode, under the SIMULATION banner); ?demo=construction&autoplay=<seconds> steps the construction demo on
+// its own. They exist to watch motion; they never run against live HQ.
+const PLAYS = {
+  office: { every: 80, steps: [[1, 'claudeCodes'], [6, 'codexTests'], [30, 'claudeMessagesCodex'], [44, 'testPasses'], [52, 'taskCompletes'], [66, 'allIdle']] },
+  workstation: { every: 48, steps: [[2, 'claudeCodes'], [28, 'taskCompletes'], [38, 'allIdle']] },
+  meeting: { every: 60, steps: [[2, 'teamMeeting'], [34, 'endMeeting'], [44, 'allIdle']] },
+};
+function startPlay(kind) {
+  const p = PLAYS[kind]; if (!p) return;
+  const run = key => { if (key === 'allIdle') sim.allIdle(); else sim.run(key); };
+  const cycle = () => { for (const [at, key] of p.steps) setTimeout(() => run(key), at * 1000); };
+  cycle(); setInterval(cycle, p.every * 1000);
+  $('sim-note').textContent = `Playing the "${kind}" scenario on a loop (simulated events, not real Hillink activity).`;
+}
+if (mode === 'sim' && !demoMode && params.get('play')) startPlay(params.get('play'));
+if (demoMode && Number(params.get('autoplay')) > 0) {
+  const every = Math.max(2, Number(params.get('autoplay'))) * 1000;
+  const timer = setInterval(() => { if (!demo || demo.done) return clearInterval(timer); demoStep(); }, every);
+}
 if (params.get('camera')) setTimeout(() => focus(params.get('camera')), 50);
 $('empty').hidden = Object.keys(store.world.agents).length > 0;
 invalidate();
