@@ -97,9 +97,12 @@ test('movement: walking, arriving (slower) and stationary are movement states, n
   stepPath(e, 0.1, opts); assert.equal(e.motion, 'walking');
   let guard = 0; while (e.motion === 'walking' && guard++ < 200) stepPath(e, 0.05, opts);
   assert.equal(e.motion, 'arriving');
-  const before = P.plan(e.x, e.y, 1)[0]; stepPath(e, 0.1, opts); const step = P.plan(e.x, e.y, 1)[0] - before;
-  assert.ok(step < AGENT.walkSpeed * 0.1 * 0.6, 'the last stretch is taken slower');
-  while (e.moving && guard++ < 400) stepPath(e, 0.05, opts);
+  // Pass 5C: arriving is braking. The last stretch is taken slower on average, and ever slower.
+  const x0 = P.plan(e.x, e.y, 1)[0]; let steps = 0, prev = Infinity, slowing = true;
+  while (e.moving && guard++ < 400) { const b = P.plan(e.x, e.y, 1)[0]; stepPath(e, 0.05, opts); const s = P.plan(e.x, e.y, 1)[0] - b; if (s > prev + 1e-6) slowing = false; prev = s; steps++; }
+  const mean = (P.plan(e.x, e.y, 1)[0] - x0) / (steps * 0.05);
+  assert.ok(mean < AGENT.walkSpeed * 0.7, `the last stretch is taken slower (braking to a stop averages about 60% of pace) (${mean.toFixed(1)} vs ${AGENT.walkSpeed})`);
+  assert.ok(slowing, 'and it only slows down, to a stop');
   assert.equal(e.motion, 'stationary');
 });
 

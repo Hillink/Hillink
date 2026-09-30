@@ -301,22 +301,60 @@ export function createGeneratedLayout(world, { theme = 'real' } = {}) {
   }
   // A route: projected waypoints, each carrying its plan position (.at: floor, x, z). null when the destination cannot
   // be reached through the navigation graph and checked connectors: the caller must keep the character where it is.
+  // Pass 5C: a route is shaped for walking, not just for connectivity. The graph path (grid cells simplified to their
+  // turns, so a diagonal crossing is a staircase of little L-steps) is string-pulled: any run of points inside one
+  // space is replaced by a straight stretch whenever that stretch is checked clear on the space's walk grid. Doors,
+  // lift landings, storey changes and the destination always stay. Remaining corners inside a space are rounded
+  // with a short curve, again only where the curve is checked clear, so characters turn instead of pivoting.
+  const CORNER = 0.32 * U; // corner radius (render units), a little under a stride
+  function shape(points) {
+    const fixed = p => p.lift || p.at.node?.startsWith?.('door:') || p.at.node?.startsWith?.('sitegate:');
+    const out = [points[0]];
+    let i = 0;
+    while (i < points.length - 1) {
+      let j = i + 1;
+      for (let k = points.length - 1; k > i + 1; k--) {
+        const run = points.slice(i, k + 1);
+        if (run.some(q => q.at.floor !== points[i].at.floor) || run.slice(1, -1).some(fixed) || points[k].lift) continue;
+        if (connectorClear(points[i].at, points[k].at, points[i].at.floor)) { j = k; break; }
+      }
+      out.push(points[j]); i = j;
+    }
+    // Round the corners that remain (never at a lift, a storey change or the two ends).
+    const round = [out[0]];
+    for (let k = 1; k < out.length - 1; k++) {
+      const A = out[k - 1].at, C = out[k].at, Bn = out[k + 1].at, p = out[k];
+      if (p.lift || out[k + 1].lift || A.floor !== C.floor || Bn.floor !== C.floor) { round.push(p); continue; }
+      const la = Math.hypot(A.x - C.x, A.z - C.z), lb = Math.hypot(Bn.x - C.x, Bn.z - C.z);
+      const turn = Math.abs(Math.atan2((C.x - A.x) * (Bn.z - C.z) - (C.z - A.z) * (Bn.x - C.x), (C.x - A.x) * (Bn.x - C.x) + (C.z - A.z) * (Bn.z - C.z)));
+      const r = Math.min(CORNER, la * 0.45, lb * 0.45);
+      if (turn < 0.2 || r < U * 0.08) { round.push(p); continue; }
+      const q0 = { x: C.x + (A.x - C.x) * r / la, z: C.z + (A.z - C.z) * r / la }, q1 = { x: C.x + (Bn.x - C.x) * r / lb, z: C.z + (Bn.z - C.z) * r / lb };
+      const curve = [0, 0.25, 0.5, 0.75, 1].map(t => ({ x: (1 - t) ** 2 * q0.x + 2 * (1 - t) * t * C.x + t * t * q1.x, z: (1 - t) ** 2 * q0.z + 2 * (1 - t) * t * C.z + t * t * q1.z, floor: C.floor }));
+      const ok = connectorClear(A, curve[0], C.floor) && curve.every((c, n) => !n || connectorClear(curve[n - 1], c, C.floor)) && connectorClear(curve.at(-1), Bn, C.floor);
+      if (!ok) { round.push(p); continue; }
+      for (const c of curve) { const q = P.at(c.x, c.z, c.floor); q.at = { ...c, node: null, curve: true }; round.push(q); }
+    }
+    if (out.length > 1) round.push(out.at(-1));
+    return round;
+  }
   function route(from, toLocationId, toPoint) {
     const s = attach(from), e = attach(toPoint);
     if (!s || !e) return null;
     const path = shortest(s.id, e.id); if (!path) return null;
-    const out = [];
+    const pts = [];
+    const start = [from[0], from[1]]; start.at = { ...s.at, node: '~start' }; pts.push(start);
     path.forEach((n, i) => {
       const ride = i > 0 && liftOf[n] && liftOf[n] === liftOf[path[i - 1]];
       if (ride && i + 1 < path.length && liftOf[path[i + 1]] === liftOf[n]) return;
-      if (i === 0 && dist(navNodes[n], from) < 0.5) return;
       const p = [...navNodes[n]];
       if (ride) p.lift = liftOf[n];
       p.at = { floor: plan[n].floor, x: plan[n].x, z: plan[n].z, node: n };
-      out.push(p);
+      pts.push(p);
     });
-    if (!out.length || dist(out.at(-1), toPoint) > 0.5) { const p = [toPoint[0], toPoint[1]]; p.at = { floor: e.at.floor, x: e.at.x, z: e.at.z, node: null }; out.push(p); }
-    return out;
+    if (dist(pts.at(-1), toPoint) > 0.5) { const p = [toPoint[0], toPoint[1]]; p.at = { floor: e.at.floor, x: e.at.x, z: e.at.z, node: null }; pts.push(p); }
+    const out = shape(pts).slice(1).filter((p, i) => i > 0 || p.lift || dist(p, from) >= 0.5);
+    return out.length ? out : [Object.assign([toPoint[0], toPoint[1]], { at: { floor: e.at.floor, x: e.at.x, z: e.at.z, node: null } })];
   }
   const metric = (a, b) => { const dy = b[1] - a[1], dz = -dy / g.sky, dx = b[0] - a[0] - dz * g.skx; return Math.hypot(dx, dz); };
 
