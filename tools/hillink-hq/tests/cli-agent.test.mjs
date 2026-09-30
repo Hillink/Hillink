@@ -4,6 +4,7 @@ import { EventEmitter } from 'node:events';
 import { CliAgentAdapter, cliAgents, connectCliAgents } from '../cli-agent-adapter.mjs';
 import { Engine } from '../engine.mjs';
 import { MemoryStore } from '../store.mjs';
+import { subscriptionProbe } from './compute-helpers.mjs';
 
 function fakeChild() {
   const child = new EventEmitter();
@@ -18,6 +19,8 @@ function fixture(spec = cliAgents.claude, options = {}) {
   const spawned = [], events = [];
   const spawn = (command, args, opts) => { const child = fakeChild(); spawned.push({ command, args, opts, child }); return child; };
   const adapter = new CliAgentAdapter(spec, { spawn, graceMs: 10, env: { PATH: '/bin', HOME: '/home/k', ANTHROPIC_API_KEY: 'a', OPENAI_API_KEY: 'o', SUPABASE_SERVICE_ROLE_KEY: 'secret', STRIPE_SECRET_KEY: 'secret' }, ...options });
+  // Pass 4: the engine only dispatches after health verified the subscription sign-in; these tests start directly.
+  adapter.healthCache = { at: Date.now(), result: { status: 'IDLE', detail: 'verified', auth: 'subscription' } };
   const start = async (description = 'Where is agentStatus defined?') => {
     await adapter.start({ task: { operation: 'review-repo', safety: 'local-read-only', description }, runId: 'run', emit: e => events.push(e) });
     return spawned.at(-1).child;
@@ -50,7 +53,9 @@ test('launch is read-only, prompt travels over stdin, and secrets are not inheri
   const cx = codex.spawned[0];
   assert.deepEqual(cx.args.slice(0, 4), ['exec', '--json', '--sandbox', 'read-only']);
   assert.ok(cx.args.includes('approval_policy=never'));
-  assert.deepEqual(Object.keys(cx.opts.env).sort(), ['HOME', 'OPENAI_API_KEY', 'PATH']);
+  // Pass 4: no OPENAI_API_KEY (it would bill the API), and Codex itself refuses anything but the ChatGPT sign-in.
+  assert.ok(cx.args.includes('forced_login_method=chatgpt'));
+  assert.deepEqual(Object.keys(cx.opts.env).sort(), ['HOME', 'PATH']);
 });
 
 test('Codex stream: transport retries are not progress; turn.completed finishes with the last message', async () => {
@@ -123,7 +128,7 @@ test('health: missing CLI is OFFLINE, installed CLI is IDLE, and results are cac
   const missing = new CliAgentAdapter(cliAgents.codex, { spawn: () => { calls++; const c = fakeChild(); queueMicrotask(() => c.emit('error', Object.assign(Error('spawn codex ENOENT'), { code: 'ENOENT' }))); return c; } });
   assert.equal((await missing.health()).status, 'OFFLINE');
   assert.equal((await missing.health()).status, 'OFFLINE'); assert.equal(calls, 1);
-  const present = new CliAgentAdapter(cliAgents.claude, { spawn: () => { const c = fakeChild(); queueMicrotask(() => { c.stdout.emit('data', Buffer.from('2.1.284 (Claude Code)\n')); c.exit(0); }); return c; } });
+  const present = new CliAgentAdapter(cliAgents.claude, { spawn: (cmd, args) => { const c = fakeChild(); if (!subscriptionProbe(args, c)) queueMicrotask(() => { c.stdout.emit('data', Buffer.from('2.1.284 (Claude Code)\n')); c.exit(0); }); return c; } });
   const health = await present.health();
   assert.equal(health.status, 'IDLE'); assert.match(health.detail, /2\.1\.284/);
 });
@@ -135,7 +140,7 @@ test('only read-only repository reviews are accepted', async () => {
 
 test('engine end to end: a review task routes to Claude and ends DONE with the answer as evidence', async () => {
   const spawned = [];
-  const spawn = (command, args) => { const c = fakeChild(); spawned.push({ args, c }); if (args[0] === '--version') queueMicrotask(() => c.exit(0)); return c; };
+  const spawn = (command, args) => { const c = fakeChild(); spawned.push({ args, c }); if (!subscriptionProbe(args, c) && args[0] === '--version') queueMicrotask(() => c.exit(0)); return c; };
   const engine = new Engine({ store: new MemoryStore(), adapters: {} });
   engine.initialize(); connectCliAgents(engine, { spawn });
   await engine.tick();

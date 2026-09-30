@@ -13,6 +13,7 @@ import { CliAgentAdapter, cliAgents } from '../cli-agent-adapter.mjs';
 import { ClaudeImplementer, ClaudeRouter, implementationArgs, changedFiles, testCounts } from '../implementation-runner.mjs';
 import { validateImplementation, checkPath, inScope } from '../implementation-policy.mjs';
 import { TOOL_NAMES, TOOL_DEFINITIONS, createToolbox } from '../orchestrator-tools.mjs';
+import { allowMetered, testGrant, subscriptionProbe } from './compute-helpers.mjs';
 
 const git = (cwd, ...args) => execFileSync('git', args, { cwd, encoding: 'utf8', windowsHide: true });
 function tempRepo() {
@@ -52,10 +53,12 @@ function setup({ files = GREETING, claude = {}, contract = CONTRACT, implementer
   const repo = tempRepo(), worktreeRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'hq-impl-wt-'));
   const fake = fakeClaude(files, claude);
   const review = new CliAgentAdapter(cliAgents.claude, { spawn: fake.spawn, env: { PATH: process.env.PATH }, cwd: repo, graceMs: 10 });
+  review.healthCache = { at: Date.now(), result: { status: 'IDLE', detail: 'fake Claude', auth: 'subscription' } }; // Pass 4: sign-in verified
   const implementer = new ClaudeImplementer({ repoRoot: repo, worktreeRoot, claudeBin: 'claude-test.exe', spawn: fake.spawn, env: { PATH: process.env.PATH, SystemRoot: process.env.SystemRoot, TEMP: os.tmpdir() }, pulseMs: 50, unsandboxed: true, ...opts });
   const engine = new Engine({ store: new MemoryStore(), adapters: { 'local-checks': { health: async () => ({ status: 'IDLE' }), start: async () => {}, cancel: async () => true }, 'cli-claude': new ClaudeRouter({ ...review, health: async () => ({ status: 'IDLE', detail: 'fake Claude' }), start: r => review.start(r), cancel: id => review.cancel(id), close: () => {} }, implementer) }, now: () => clock, config: { heartbeatMs: 600_000, progressMs: 600_000 } });
   engine.initialize();
   engine.configureAgent('claude', { capabilities: ['implement', 'review', 'review-repo', 'implement-repo'], executionAdapter: 'cli-claude' });
+  allowMetered(engine); // Pass 4: sandboxed implementation is metered; these tests run with Kyle's authorization
   const orchestration = () => engine.createTask({ title: 'Kyle asks ChatGPT', description: 'x', operation: 'review-repo', safety: 'local-read-only', priority: 10 });
   const done = async id => { for (let i = 0; i < 400; i++) { await new Promise(r => setTimeout(r, 25)); if (['DONE', 'BLOCKED'].includes(engine.state.tasks[id].stage)) return engine.state.tasks[id]; } throw Error(`task stuck at ${engine.state.tasks[id].stage}`); };
   return { engine, repo, worktreeRoot, fake, implementer, orchestration, done, contract, tick: () => engine.tick() };

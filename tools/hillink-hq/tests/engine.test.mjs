@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { Engine, agentStatus, emptyState, reduce } from '../engine.mjs';
 import { MemoryStore } from '../store.mjs';
 import { deliverNotifications } from '../notifications.mjs';
+import { registerRoute } from '../compute/registry.mjs';
 
 function setup(overrides = {}) {
   let clock = 1000;
@@ -115,6 +116,7 @@ test('hung health adapter cannot stop a different capable worker', async () => {
   const s = setup({ health: () => new Promise(() => {}) }); s.engine.config.adapterTimeoutMs = 15;
   s.engine.adapters.healthy = { health: async () => ({ status: 'IDLE' }), start: async r => s.started.push(r), cancel: async () => true };
   s.engine.register({ ...s.engine.state.agents['hq-verifier'], id: 'healthy', name: 'Healthy', executionAdapter: 'healthy' });
+  registerRoute({ adapterId: 'healthy', operations: ['verify-hq'], computeClass: 'LOCAL', provider: 'local', backend: 'test adapter' }); // Pass 4: unclassified routes are metered
   s.task(); await s.engine.tick();
   assert.equal(s.started.length, 1); assert.equal(s.engine.snapshot().agents.find(a => a.id === 'hq-verifier').status, 'UNKNOWN');
   assert.equal(s.started[0].task.agentId, 'healthy');

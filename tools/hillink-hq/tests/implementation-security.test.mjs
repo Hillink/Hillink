@@ -12,6 +12,7 @@ import { MemoryStore } from '../store.mjs';
 import { CliAgentAdapter, cliAgents } from '../cli-agent-adapter.mjs';
 import { ClaudeImplementer, ClaudeRouter } from '../implementation-runner.mjs';
 import { checkPath, validateImplementation } from '../implementation-policy.mjs';
+import { allowMetered, testGrant, subscriptionProbe } from './compute-helpers.mjs';
 
 const git = (cwd, ...args) => execFileSync('git', args, { cwd, encoding: 'utf8', windowsHide: true });
 function tempRepo(extra = () => {}) {
@@ -50,10 +51,12 @@ function setup(ops, { repoExtra, holdMs, contract = CONTRACT, implementer: opts 
   const repo = tempRepo(repoExtra), worktreeRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'hq-sec-wt-'));
   const fake = fakeClaude(ops, { holdMs });
   const review = new CliAgentAdapter(cliAgents.claude, { spawn: fake.spawn, env: { PATH: process.env.PATH }, cwd: repo, graceMs: 10 });
+  review.healthCache = { at: Date.now(), result: { status: 'IDLE', detail: 'fake Claude', auth: 'subscription' } }; // Pass 4: sign-in verified
   const implementer = new ClaudeImplementer({ repoRoot: repo, worktreeRoot, claudeBin: 'claude-test.exe', spawn: fake.spawn, env: { PATH: process.env.PATH, SystemRoot: process.env.SystemRoot, TEMP: os.tmpdir(), TMP: os.tmpdir() }, pulseMs: 50, unsandboxed: true, ...opts });
   const engine = new Engine({ store: new MemoryStore(), adapters: { 'local-checks': { health: async () => ({ status: 'IDLE' }), start: async () => {}, cancel: async () => true }, 'cli-claude': new ClaudeRouter({ health: async () => ({ status: 'IDLE' }), start: r => review.start(r), cancel: id => review.cancel(id), close: () => {} }, implementer) }, config: { heartbeatMs: 600_000, progressMs: 600_000 } });
   engine.initialize();
   engine.configureAgent('claude', { capabilities: ['implement', 'review', 'review-repo', 'implement-repo'], executionAdapter: 'cli-claude' });
+  allowMetered(engine); // Pass 4: sandboxed implementation is metered; these tests run with Kyle's authorization
   const create = () => engine.createTask({ title: 'impl', description: contract.objective, operation: 'implement-repo', safety: 'local-worktree-write', priority: 50, preferredAgentId: 'claude', implementation: contract });
   const settle = async id => { for (let i = 0; i < 600; i++) { await new Promise(r => setTimeout(r, 25)); const t = engine.state.tasks[id]; if (['DONE', 'BLOCKED'].includes(t.stage) || Object.values(engine.state.runs).some(r => r.taskId === id && r.endedAt)) return t; } throw Error('stuck'); };
   const branches = () => git(repo, 'branch', '--list', 'hq/impl/*', '--format=%(refname:short) %(objectname)').trim().split('\n').filter(Boolean);
@@ -125,7 +128,7 @@ test('ATTACK 8: re-running the same task never reuses or collides with an earlie
   // Simulate HQ re-dispatching the same task (requeue after a rate limit) by starting it again directly.
   const task = s.engine.state.tasks[id];
   const events = [];
-  await s.implementer.start({ task: { ...task, stage: 'READY' }, runId: '22222222-aaaa-bbbb-cccc-000000000000', emit: e => events.push(e) });
+  await s.implementer.start({ task: { ...task, stage: 'READY' }, runId: '22222222-aaaa-bbbb-cccc-000000000000', emit: e => events.push(e), compute: testGrant(task.id, '22222222-aaaa-bbbb-cccc-000000000000') });
   for (let i = 0; i < 400 && !events.some(e => ['COMPLETED', 'FAILED', 'BLOCKED'].includes(e.kind)); i++) await new Promise(r => setTimeout(r, 25));
   assert.equal(events.at(-1).kind, 'COMPLETED', events.at(-1).summary);
   const names = s.branches().map(b => b.split(' ')[0]);
@@ -143,7 +146,7 @@ test('permission isolation: R → I → R → I(fail) → R, repeatedly; reviews
     if (step === 'R') { assert.equal(tools, 'Read,Grep,Glob'); assert.deepEqual(writes, []); assert.ok(!r.args.includes('--permission-mode')); assert.equal(path.resolve(r.opts.cwd), path.resolve(s.repo)); }
     else { assert.equal(tools, 'Read,Grep,Glob,Edit,Write'); assert.ok(writes.length > 0); assert.ok(!r.args.some(a => /Bash/.test(a))); assert.notEqual(path.resolve(r.opts.cwd), path.resolve(s.repo)); }
   }
-  assert.deepEqual(cliAgents.claude.args(), ['-p', '--output-format', 'stream-json', '--verbose', '--tools', 'Read,Grep,Glob', '--strict-mcp-config', '--no-session-persistence', '--max-turns', '40'], 'the shared review spec was never mutated');
+  assert.deepEqual(cliAgents.claude.args(), ['-p', '--output-format', 'stream-json', '--verbose', '--tools', 'Read,Grep,Glob', '--setting-sources', 'user', '--strict-mcp-config', '--no-session-persistence', '--max-turns', '40'], 'the shared review spec was never mutated');
 });
 
 test('contract abuse: duplicates collapse, overlapping scopes stay within their union, limits hold', () => {

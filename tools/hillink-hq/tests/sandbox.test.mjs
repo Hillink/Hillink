@@ -13,6 +13,7 @@ import path from 'node:path';
 import { WslSandbox, checkPatch, INSTANCE_PREFIX } from '../sandbox.mjs';
 import { ClaudeImplementer } from '../implementation-runner.mjs';
 import { validateImplementation } from '../implementation-policy.mjs';
+import { allowMetered, testGrant, subscriptionProbe } from './compute-helpers.mjs';
 
 const git = (cwd, ...args) => execFileSync('git', args, { cwd, encoding: 'utf8', windowsHide: true });
 const FAKE_KEY = ['sk', 'ant', 'test'].join('-') + '-' + 'Q'.repeat(48); // assembled at runtime; not a real key
@@ -89,7 +90,7 @@ async function run({ wsl = {}, patch, env = { HQ_SANDBOX_ANTHROPIC_API_KEY: FAKE
   const implementer = new ClaudeImplementer({ repoRoot: repo, worktreeRoot, claudeBin: 'claude-host.exe', spawn: fake.spawn, env, sandbox, pulseMs: 50, cliOptions: { graceMs: 10 } });
   const events = [], runId = 'run-abc123';
   const task = { id: 'a1b2c3d4-0000-0000-0000-000000000000', operation: 'implement-repo', safety: 'local-worktree-write', implementation: CONTRACT, description: 'x' };
-  await implementer.start({ task, runId, emit: e => events.push(e) });
+  await implementer.start({ task, runId, emit: e => events.push(e), compute: testGrant(task.id, runId) });
   const promise = implementer.runs.get(runId).promise;
   if (cancelAfter) { for (let i = 0; i < 200 && !fake.received.prompt; i++) await new Promise(r => setTimeout(r, 10)); assert.equal(await implementer.cancel(runId), true); }
   await promise;
@@ -122,9 +123,9 @@ test('patch checks: links, submodules, .git, traversal, secrets and oversize are
 test('fail closed: no sandbox, or a missing or tampered base image, means no implementation at all', async () => {
   const repo = tempRepo();
   const bare = new ClaudeImplementer({ repoRoot: repo, claudeBin: 'x' });
-  await assert.rejects(bare.start({ task: { id: 'a1b2c3d4', operation: 'implement-repo', safety: 'local-worktree-write', implementation: CONTRACT }, runId: 'r', emit: () => {} }), /no OS sandbox/);
+  await assert.rejects(bare.start({ task: { id: 'a1b2c3d4', operation: 'implement-repo', safety: 'local-worktree-write', implementation: CONTRACT }, runId: 'r', emit: () => {}, compute: testGrant('a1b2c3d4', 'r') }), /no OS sandbox/);
   const missing = new ClaudeImplementer({ repoRoot: repo, claudeBin: 'x', sandbox: new WslSandbox({ home: fs.mkdtempSync(path.join(os.tmpdir(), 'hq-sbx-none-')) }) });
-  await assert.rejects(missing.start({ task: { id: 'a1b2c3d4', operation: 'implement-repo', safety: 'local-worktree-write', implementation: CONTRACT }, runId: 'r', emit: () => {} }), /base image not built/);
+  await assert.rejects(missing.start({ task: { id: 'a1b2c3d4', operation: 'implement-repo', safety: 'local-worktree-write', implementation: CONTRACT }, runId: 'r', emit: () => {}, compute: testGrant('a1b2c3d4', 'r') }), /base image not built/);
   const home = baseImage(); fs.writeFileSync(path.join(home, 'base.tar'), 'tampered');
   await assert.rejects(new WslSandbox({ home }).verifyBase(), /checksum mismatch/);
 });

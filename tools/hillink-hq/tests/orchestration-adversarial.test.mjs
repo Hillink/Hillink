@@ -8,6 +8,8 @@ import { validateObjectiveInput, implementationEligibility, gatesFor } from '../
 import { worldActivity } from '../orchestration/activity.mjs';
 import { TOOL_NAMES, TOOL_DEFINITIONS, createToolbox } from '../orchestrator-tools.mjs';
 import { harness, scriptedAgent, handoffText, investigation, review, greetingFiles, git, role } from './orchestration-harness.mjs';
+import { allowMetered, testGrant, subscriptionProbe } from './compute-helpers.mjs';
+import { registerRoute } from '../compute/registry.mjs';
 
 const FIX = { objective: 'greet() is missing; find out why and fix it.', type: 'fix', scope: ['sandbox/hq-implementation/'] };
 const codexOk = (inv = investigation(), rev = review()) => scriptedAgent('Codex', task => ({ text: handoffText(role(task) === 'investigate' ? inv : rev) }));
@@ -220,6 +222,8 @@ test('an orchestrator decision the orchestrator never answers escalates to Kyle 
   const turns = [];
   h.engine.adapters['fake-openai'] = { remote: true, health: async () => ({ status: 'IDLE' }), cancel: async () => true, async start({ task, emit }) { turns.push(task); setImmediate(() => { emit({ kind: 'ACK', summary: 'ok' }); emit({ kind: 'MODEL_RESULT', summary: 'I think it is fine.' }); emit({ kind: 'COMPLETED', summary: 'answered' }); }); } };
   h.engine.configureAgent('chatgpt', { executionAdapter: 'fake-openai', capabilities: ['plan', 'coordinate'] });
+  // Pass 4: an in-HQ ChatGPT is metered; this scenario runs with it authorized (the harness authorizes spend).
+  registerRoute({ adapterId: 'fake-openai', operations: ['orchestrate'], computeClass: 'METERED_API', provider: 'openai', perRunCapUsd: 0.25, backend: 'fake OpenAI', why: 'test', alternatives: [] });
   const id = h.conductor.submit(FIX);
   await h.drive(() => Object.values(h.objective(id).decisions).some(d => d.resume.authority === 'kyle' && d.status === 'PENDING'));
   for (let i = 0; i < 10; i++) await h.tick();
@@ -250,6 +254,7 @@ test('restart after a crash mid-implementation (found in the real crash test): s
   const e1 = new Engine({ store, adapters: { 'cli-claude': hang }, config: { heartbeatMs: 600_000, progressMs: 600_000 } });
   e1.initialize();
   e1.configureAgent('claude', { capabilities: ['review-repo', 'implement-repo'], executionAdapter: 'cli-claude' });
+  allowMetered(e1);
   e1.createTask({ title: 'impl', description: 'd', operation: 'implement-repo', safety: 'local-worktree-write', priority: 50, preferredAgentId: 'claude', implementation: { objective: 'x', scope: ['sandbox/x/'], acceptanceCriteria: 'y', constraints: 'z', tests: ['sandbox/x/a.test.mjs'] } });
   await e1.tick();
   const runId = Object.keys(e1.state.runs)[0];
@@ -260,12 +265,12 @@ test('restart after a crash mid-implementation (found in the real crash test): s
   const fakeClaude = { health: async () => ({ status: 'IDLE' }), start: async () => {}, cancel: async () => false };
   const registered = new Set(['Ubuntu', box]);
   let cleaned = 0;
-  const failing = await createHQ({ port: 0, store, intervalMs: 20, adapters: { 'local-checks': fakeClaude, 'cli-claude': fakeClaude }, implementation: true, env: { HQ_CLAUDE_BIN: 'claude.exe' }, sandboxFactory: () => ({ available: () => ({ ok: true }), cleanupStale: async () => [], list: async () => { throw Error('wsl unavailable'); } }) });
+  const failing = await createHQ({ port: 0, store, intervalMs: 20, adapters: { 'local-checks': fakeClaude, 'cli-claude': fakeClaude }, implementation: true, computeMode: 'BUDGETED', env: { HQ_CLAUDE_BIN: 'claude.exe' }, sandboxFactory: () => ({ available: () => ({ ok: true }), cleanupStale: async () => [], list: async () => { throw Error('wsl unavailable'); } }) });
   await new Promise(r => setTimeout(r, 150));
   assert.equal(failing.engine.state.runs[runId].endedAt, null, 'unproven: still parked');
   await failing.close();
   // Restart with a working sandbox: the stale instance is destroyed at start, then HQ proves the run stopped.
-  const hq = await createHQ({ port: 0, store, intervalMs: 20, adapters: { 'local-checks': fakeClaude, 'cli-claude': fakeClaude }, implementation: true, env: { HQ_CLAUDE_BIN: 'claude.exe' }, sandboxFactory: () => ({ available: () => ({ ok: true }), cleanupStale: async () => { cleaned += 1; registered.delete(box); return [box]; }, list: async () => [...registered] }) });
+  const hq = await createHQ({ port: 0, store, intervalMs: 20, adapters: { 'local-checks': fakeClaude, 'cli-claude': fakeClaude }, implementation: true, computeMode: 'BUDGETED', env: { HQ_CLAUDE_BIN: 'claude.exe' }, sandboxFactory: () => ({ available: () => ({ ok: true }), cleanupStale: async () => { cleaned += 1; registered.delete(box); return [box]; }, list: async () => [...registered] }) });
   await new Promise(r => setTimeout(r, 150));
   assert.equal(cleaned, 1);
   const res = await fetch(`${hq.origin}/api/session`, { headers: { 'x-hq-client': 'command-center' } }).then(r => r.json());

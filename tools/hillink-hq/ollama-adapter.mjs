@@ -8,8 +8,15 @@ export async function discoverModels(request = fetch) {
   return body.models.filter(m => typeof m.name === 'string' && m.name.length < 200 && typeof m.details?.family === 'string');
 }
 
+// Pass 4: Ollama "cloud" models (name suffix -cloud / :cloud) run on ollama.com under an account, not on this
+// machine. They are not LOCAL compute, so HQ never connects or runs them.
+export const isCloudModel = name => /(^|[:-])cloud$/i.test(String(name ?? '')) || /-cloud\b/i.test(String(name ?? ''));
+
 export class OllamaAdapter {
-  constructor(model, { request = fetch } = {}) { this.model = model; this.request = request; this.runs = new Map(); }
+  constructor(model, { request = fetch } = {}) {
+    if (isCloudModel(model)) throw Error(`Refusing Ollama cloud model ${String(model).slice(0, 80)}: not local compute.`);
+    this.model = model; this.request = request; this.runs = new Map();
+  }
   async health() {
     const models = await discoverModels(this.request);
     return models.some(m => m.name === this.model) ? { status: 'IDLE', detail: `Installed model ${this.model} available for HQ text summaries; external client load is unknown.` } : { status: 'OFFLINE', detail: `Configured model ${this.model} is not installed; no automatic download.` };
@@ -91,7 +98,7 @@ export class OllamaAdapter {
 export async function connectOllama(engine, request = fetch) {
   const models = await discoverModels(request);
   for (const family of ['gemma', 'qwen']) {
-    const model = models.filter(m => m.details.family.startsWith(family)).sort((a, b) => a.size - b.size)[0];
+    const model = models.filter(m => m.details.family.startsWith(family) && !isCloudModel(m.name) && !m.remote_host).sort((a, b) => a.size - b.size)[0];
     if (!model || engine.state.agents[family].assignment) continue;
     const adapterId = `ollama-${family}`;
     engine.adapters[adapterId] = new OllamaAdapter(model.name, { request });
