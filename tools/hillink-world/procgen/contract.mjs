@@ -29,6 +29,13 @@ export const HQ_EVENT_TYPES = {
   // Pass 5B construction facts: implementation evidence for a project's task, a review verdict, Kyle's approval.
   WORK_COMMITTED: need('taskId'),
   REVIEW_VERDICT: need('verdict'),
+  // HQ's objective (not one agent's task) entered verification or review: the project is inspected.
+  INSPECTION_STARTED: need('objectiveId'),
+  // A project's implementation task finished successfully in HQ.
+  IMPLEMENTATION_DONE: need('taskId'),
+  // HQ's objective ended. For a construction project's objective, COMPLETE (HQ finishes an objective only after its
+  // verification and an approving review) completes and verifies the build; FAILED or CANCELLED stops it.
+  OBJECTIVE_FINISHED: need('objectiveId', 'outcome'),
   APPROVAL_GRANTED: need(),
   CONSTRUCTION_REQUESTED: need('capabilityId'),
   CONSTRUCTION_COMPLETED: need('capabilityId'),
@@ -60,7 +67,7 @@ export function applyHqEvent(world, ev, { record = true } = {}) {
   if (world.applied[ev.id]) return { applied: false, reason: 'already applied' };
   const ops = world.ops, agent = id => (ops.agents[id] ??= { id, activity: 'idle', taskId: null, spaceId: null, since: null });
   const at = Number.isFinite(ev.at) ? ev.at : null;
-  const project = projectOfTask(world, ev.taskId), by = ev.id;
+  const project = projectOfTask(world, ev.taskId) ?? (ev.objectiveId ? Object.values(world.projects ?? {}).find(p => p.objectiveId === ev.objectiveId) ?? null : null), by = ev.id;
   const refuse = reason => ({ applied: false, reason });
   const locate = (id, activity) => {
     const a = agent(id); a.activity = activity; a.since = at;
@@ -76,6 +83,7 @@ export function applyHqEvent(world, ev, { record = true } = {}) {
       // A task for an objective that asked for a capability works on that capability's project.
       const p = Object.values(world.projects ?? {}).find(q => q.objectiveId && q.objectiveId === ev.objectiveId);
       if (p && !p.taskIds.includes(ev.taskId)) p.taskIds = [...p.taskIds, ev.taskId];
+      if (p) transition.resume(world, p); // HQ dispatching the project's work again means any approval gate was passed
       break;
     }
     case 'AGENT_WORKING': locate(ev.agentId, 'working'); break;
@@ -84,8 +92,19 @@ export function applyHqEvent(world, ev, { record = true } = {}) {
       if (project) { const r = transition.inspect(world, project, { at, by }); if (r) return refuse(r); }
       locate(ev.agentId, ev.type === 'TESTING' ? 'testing' : 'reviewing'); break;
     }
+    case 'IMPLEMENTATION_DONE': {
+      if (!projectOfTask(world, ev.taskId)) return refuse(`task ${ev.taskId} is not a construction project's task`);
+      const r = transition.finished(world, project, { at, by }); if (r) return refuse(r);
+      break;
+    }
+    case 'INSPECTION_STARTED': {
+      if (!project) return refuse(`objective ${ev.objectiveId} is not a construction project's objective`);
+      if (!['furnishing', 'inspection'].includes(project.stage)) return refuse(`${project.id} is at ${project.stage}; inspection needs the fit-out finished`);
+      const r = transition.inspect(world, project, { at, by }); if (r) return refuse(r);
+      break;
+    }
     case 'WORK_COMMITTED': {
-      if (!project) return refuse(`task ${ev.taskId} is not a construction project's task`);
+      if (!projectOfTask(world, ev.taskId)) return refuse(`task ${ev.taskId} is not a construction project's task`);
       const r = transition.evidence(world, project, { at, by, ref: ev.ref }); if (r) return refuse(r);
       break;
     }
@@ -103,6 +122,17 @@ export function applyHqEvent(world, ev, { record = true } = {}) {
       if (ev.taskId && ops.tasks[ev.taskId]) ops.tasks[ev.taskId].status = status;
       if (ev.objectiveId && ops.objectives[ev.objectiveId]) ops.objectives[ev.objectiveId].status = status;
       if (ev.agentId) { const a = agent(ev.agentId); a.activity = status; a.since = at; }
+      break;
+    }
+    case 'OBJECTIVE_FINISHED': {
+      const outcome = String(ev.outcome).toUpperCase();
+      if (ops.objectives[ev.objectiveId]) ops.objectives[ev.objectiveId].status = outcome.toLowerCase();
+      if (!project) break;
+      if (outcome === 'COMPLETE') {
+        const r = transition.complete(world, project, { at, by }); if (r) return refuse(r);
+        try { setConstruction(world, project.id, 'built', { record: false }); } catch (error) { project.completed = false; return refuse(error.message); }
+        transition.operational(world, project, { at, by }); world.capabilities[project.id].status = 'operational';
+      } else transition.block(world, project, { at, by, reason: ev.reason ?? `objective ${outcome.toLowerCase()} in HQ` });
       break;
     }
     case 'TASK_FINISHED': if (ops.tasks[ev.taskId]) ops.tasks[ev.taskId].status = String(ev.outcome).toLowerCase(); break;
@@ -149,16 +179,21 @@ const FROM_ACTIVITY = {
   FILE_EDITING: i => ({ type: 'IMPLEMENTATION_STARTED', agentId: i.agentId, taskId: i.taskId }),
   IMPLEMENTATION_STARTED: i => ({ type: 'IMPLEMENTATION_STARTED', agentId: i.agentId, taskId: i.taskId }),
   TESTING: i => ({ type: 'TESTING', agentId: i.agentId, taskId: i.taskId }),
-  VERIFYING: i => (i.agentId ? { type: 'TESTING', agentId: i.agentId, taskId: i.taskId } : null),
-  REVIEWING: i => (i.agentId ? { type: 'REVIEW', agentId: i.agentId, taskId: i.taskId } : null),
-  BLOCKED: i => ({ type: 'BLOCKED', agentId: i.agentId, taskId: i.taskId, objectiveId: i.objectiveId }),
-  APPROVAL_REQUIRED: i => ({ type: 'WAITING_FOR_KYLE', taskId: i.taskId, objectiveId: i.objectiveId }),
-  DECISION_REQUIRED: i => ({ type: 'WAITING_FOR_KYLE', taskId: i.taskId, objectiveId: i.objectiveId }),
-  SPEND_APPROVAL_REQUIRED: i => ({ type: 'WAITING_FOR_KYLE', taskId: i.taskId, objectiveId: i.objectiveId }),
+  VERIFYING: i => (i.agentId ? { type: 'TESTING', agentId: i.agentId, taskId: i.taskId } : i.objectiveId ? { type: 'INSPECTION_STARTED', objectiveId: i.objectiveId } : null),
+  REVIEWING: i => (i.agentId ? { type: 'REVIEW', agentId: i.agentId, taskId: i.taskId } : i.objectiveId ? { type: 'INSPECTION_STARTED', objectiveId: i.objectiveId } : null),
+  BLOCKED: i => ({ type: 'BLOCKED', agentId: i.agentId, taskId: i.taskId, objectiveId: i.objectiveId, reason: i.summary }),
+  APPROVAL_REQUIRED: i => ({ type: 'WAITING_FOR_KYLE', taskId: i.taskId, objectiveId: i.objectiveId, reason: i.summary }),
+  DECISION_REQUIRED: i => ({ type: 'WAITING_FOR_KYLE', taskId: i.taskId, objectiveId: i.objectiveId, reason: i.summary }),
+  SPEND_APPROVAL_REQUIRED: i => ({ type: 'WAITING_FOR_KYLE', taskId: i.taskId, objectiveId: i.objectiveId, reason: i.summary }),
+  SPEND_AUTHORIZED: i => (i.taskId || i.objectiveId ? { type: 'APPROVAL_GRANTED', taskId: i.taskId, objectiveId: i.objectiveId } : null),
+  // Pass 5B: a failed, blocked or uncertain implementation stops the build; a review verdict decides inspection.
+  IMPLEMENTATION_FINISHED: i => (!i.taskId ? null : i.outcome === 'completed' ? { type: 'IMPLEMENTATION_DONE', taskId: i.taskId, agentId: i.agentId } : { type: 'BLOCKED', agentId: i.agentId, taskId: i.taskId, objectiveId: i.objectiveId, reason: `implementation ${i.outcome ?? 'stopped'}` }),
+  HANDOFF_RECEIVED: i => (i.stepKind === 'review' && i.verdict ? { type: 'REVIEW_VERDICT', taskId: i.taskId, objectiveId: i.objectiveId, verdict: i.verdict === 'approve' ? 'approved' : 'changes' } : null),
   COMMIT: i => (i.taskId ? { type: 'WORK_COMMITTED', taskId: i.taskId, agentId: i.agentId, ref: String(i.summary ?? '').slice(0, 80) } : null),
   AGENT_FINISHED: i => (i.agentId ? { type: 'AGENT_IDLE', agentId: i.agentId } : null),
-  COMPLETE: i => (i.taskId ? { type: 'TASK_FINISHED', taskId: i.taskId, outcome: 'COMPLETE' } : null),
-  FAILED: i => (i.taskId ? { type: 'TASK_FINISHED', taskId: i.taskId, outcome: 'FAILED' } : null),
+  COMPLETE: i => (i.taskId ? { type: 'TASK_FINISHED', taskId: i.taskId, outcome: 'COMPLETE' } : i.objectiveId ? { type: 'OBJECTIVE_FINISHED', objectiveId: i.objectiveId, outcome: 'COMPLETE' } : null),
+  FAILED: i => (i.taskId ? { type: 'TASK_FINISHED', taskId: i.taskId, outcome: 'FAILED' } : i.objectiveId ? { type: 'OBJECTIVE_FINISHED', objectiveId: i.objectiveId, outcome: 'FAILED' } : null),
+  CANCELLED: i => (i.objectiveId && !i.taskId ? { type: 'OBJECTIVE_FINISHED', objectiveId: i.objectiveId, outcome: 'CANCELLED' } : null),
 };
 export function fromHqActivity(item) {
   const f = FROM_ACTIVITY[item?.type];

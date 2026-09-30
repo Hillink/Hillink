@@ -27,6 +27,8 @@ import { Effects, stepPath } from '../engine/motion.mjs';
 import { IsoWorldView } from '../engine/iso-view.mjs';
 import { createConstructionDemo, DEMO_STEPS, DEMO_CAPABILITY } from '../sim/construction-demo.mjs';
 import { siteFeed } from '../serve.mjs';
+import { fromHqActivity } from '../procgen/contract.mjs';
+import { worldActivity } from '../../hillink-hq/orchestration/activity.mjs';
 
 const SEEDS = ['hillink', 'alpha', 'bravo', 'charlie', 'delta', 'echo'];
 let n = 0;
@@ -240,6 +242,91 @@ test('the live bridge applies HQ activity to the persisted world once, through t
   assert.equal(deserializeWorld(fs.readFileSync(path.join(dir, 'site.json'), 'utf8')).ops.agents.claude.activity, 'implementing', 'saved');
   const again = siteFeed({ hq: hqFake, site, cursorFile, intervalMs: 1e9 }); await again.tick(); again.stop();
   assert.equal(asked.at(-1), 6, 'it resumes after the last applied sequence'); assert.equal(again.status.applied, 0);
+});
+
+// HQ's real journal (through its own World contract, orchestration/activity.mjs) driving a construction project.
+function hqJournal() {
+  let seq = 0; const events = [];
+  const j = (type, data) => { events.push({ seq: ++seq, at: seq * 10, type, data }); };
+  return {
+    events,
+    objective: (id, to) => j('OBJECTIVE_TRANSITION', { objectiveId: id, to }),
+    task: (id, objectiveId, operation = 'implement-repo') => j('TASK_CREATED', { id, operation, link: { objectiveId, stepId: `${id}-step` } }),
+    dispatch: (taskId, agentId, runId = `run-${taskId}`) => j('DISPATCHED', { taskId, agentId, runId }),
+    worker: (taskId, kind, extra = {}) => j('WORKER_EVENT', { runId: `run-${taskId}`, kind, ...extra }),
+    review: (taskId, objectiveId, verdict) => j('HANDOFF_ACCEPTED', { objectiveId, stepId: `${taskId}-step`, taskId, agentId: 'codex', handoff: { kind: 'review', verdict } }),
+    spend: objectiveId => j('SPEND_AUTHORIZED', { amountUsd: 1, scope: { objectiveId } }),
+  };
+}
+function liveProject(objective = 'obj-live') {
+  const w = createWorld({ seed: 'hillink' });
+  // Until HQ emits the capability vocabulary itself (5C), the project is opened with HQ-sourced contract events.
+  assert.equal(applyHqEvent(w, hq('CAPABILITY_REQUESTED', { capability: DEMO_CAPABILITY, objectiveId: objective })).applied, true);
+  assert.equal(applyHqEvent(w, hq('CONSTRUCTION_REQUESTED', { capabilityId: DEMO_CAPABILITY.id })).applied, true);
+  return { w, p: () => w.projects[DEMO_CAPABILITY.id], cap: () => w.capabilities[DEMO_CAPABILITY.id] };
+}
+const feed = (w, events, since = 0) => worldActivity(events, { since }).map(i => ({ i, ev: fromHqActivity(i) })).filter(x => x.ev).map(({ i, ev }) => ({ type: i.type, ...applyHqEvent(w, ev) }));
+
+test('live bridge: HQ reporting BLOCKED stops construction; builders leave the site until new evidence', () => {
+  const { w, p } = liveProject(), J = hqJournal();
+  J.task('impl', 'obj-live'); J.dispatch('impl', 'claude'); J.worker('impl', 'ACK'); J.worker('impl', 'COMMIT');
+  feed(w, J.events);
+  assert.equal(p().stage, 'foundation'); assert.ok(p().taskIds.includes('impl'), 'HQ dispatch links the task to the project');
+  assert.ok(createGeneratedLayout(w).placeFor({ id: 'claude', activity: 'coding', taskId: 'impl' }), 'the builder works on site');
+  const n0 = J.events.length; J.objective('obj-live', 'BLOCKED');
+  feed(w, J.events, n0);
+  assert.ok(p().blocked, 'blocked'); assert.equal(p().stage, 'foundation', 'nothing advances');
+  assert.equal(createGeneratedLayout(w).placeFor({ id: 'claude', activity: 'coding', taskId: 'impl' }), null, 'nobody builds on a blocked site');
+  const n1 = J.events.length; J.objective('obj-live', 'COMPLETE');
+  const r = feed(w, J.events, n1);
+  assert.equal(r[0].applied, false, 'a blocked project cannot complete'); assert.notEqual(w.capabilities[DEMO_CAPABILITY.id].status, 'operational');
+  // A failed implementation is a block too.
+  const b = liveProject('obj-fail'), K = hqJournal();
+  K.task('impl2', 'obj-fail'); K.dispatch('impl2', 'claude'); K.worker('impl2', 'ACK'); K.worker('impl2', 'FAILED');
+  feed(b.w, K.events);
+  assert.match(b.p().blocked, /implementation failed/);
+});
+
+test('live bridge: a review asking for changes (or rejecting) never becomes operational', () => {
+  for (const verdict of ['request_changes', 'reject']) {
+    const { w, p, cap } = liveProject(), J = hqJournal();
+    J.task('impl', 'obj-live'); J.dispatch('impl', 'claude'); J.worker('impl', 'ACK'); J.worker('impl', 'COMMIT'); J.worker('impl', 'COMPLETED');
+    J.objective('obj-live', 'VERIFYING'); J.task('rev', 'obj-live', 'review-repo'); J.dispatch('rev', 'codex'); J.objective('obj-live', 'REVIEWING');
+    J.review('rev', 'obj-live', verdict); J.objective('obj-live', 'COMPLETE');
+    const r = feed(w, J.events);
+    assert.equal(p().stage, 'inspection'); assert.equal(p().rework, true, `${verdict} is rework`);
+    assert.equal(r.at(-1).applied, false, 'HQ completing the objective does not complete a rejected build'); assert.match(r.at(-1).reason, /review is not approved/);
+    assert.equal(p().completed, false); assert.notEqual(cap().status, 'operational'); assert.notEqual(cap().status, 'built');
+  }
+});
+
+test("live bridge: Kyle's approval means the site waits; HQ resuming the work lifts it", () => {
+  const { w, p } = liveProject(), J = hqJournal();
+  J.task('impl', 'obj-live'); J.dispatch('impl', 'claude'); J.worker('impl', 'ACK'); J.worker('impl', 'COMMIT');
+  J.objective('obj-live', 'AWAITING_APPROVAL');
+  feed(w, J.events);
+  assert.ok(p().waiting, 'waiting for Kyle');
+  assert.equal(createGeneratedLayout(w).placeFor({ id: 'claude', activity: 'coding', taskId: 'impl' }), null, 'builders wait off site');
+  const n = J.events.length; J.spend('obj-live'); feed(w, J.events, n);
+  assert.equal(p().waiting, null, 'Kyle approved');
+  J.objective('obj-live', 'AWAITING_DECISION'); feed(w, J.events, n + 1); assert.ok(p().waiting);
+  const m = J.events.length; J.task('impl-b', 'obj-live'); J.dispatch('impl-b', 'claude'); feed(w, J.events, m);
+  assert.equal(p().waiting, null, 'HQ dispatching the work again means the gate was passed');
+});
+
+test('live bridge: implementation, verification, an approving review and HQ completion make the room operational', () => {
+  const { w, p, cap } = liveProject(), J = hqJournal();
+  J.task('impl', 'obj-live'); J.dispatch('impl', 'claude'); J.worker('impl', 'ACK');
+  J.objective('obj-live', 'REVIEWING'); // out of order: refused, the site is not ready for inspection
+  J.worker('impl', 'COMMIT'); J.worker('impl', 'TEST_STARTED'); J.worker('impl', 'COMPLETED');
+  J.objective('obj-live', 'VERIFYING'); J.task('rev', 'obj-live', 'review-repo'); J.dispatch('rev', 'codex'); J.objective('obj-live', 'REVIEWING');
+  J.review('rev', 'obj-live', 'approve'); J.objective('obj-live', 'COMPLETE');
+  const r = feed(w, J.events);
+  assert.equal(r.find(x => x.type === 'REVIEWING').applied, false, 'no inspection before the fit-out');
+  assert.equal(r.find(x => x.type === 'TESTING').applied, true, 'builders testing mid-build is work on site, not an inspection');
+  assert.equal(p().stage, 'operational'); assert.equal(cap().status, 'operational');
+  assert.deepEqual([...new Set(p().history.map(h => h.stage))], ['planning', 'site-preparation', 'foundation', 'furnishing', 'inspection', 'operational']);
+  assert.ok(createGeneratedLayout(w).locations.some(l => l.spaceId === cap().placement.spaceId), 'the finished room joins navigation');
 });
 
 // The old World's baseline behaviours, run by its own engine on the generated building.

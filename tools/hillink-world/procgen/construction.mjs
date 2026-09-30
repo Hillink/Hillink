@@ -12,7 +12,8 @@
 //   operational         HQ reports it complete after an approved review (CONSTRUCTION_COMPLETED), then verified
 //
 // Flags, also only from HQ: blocked (the task is BLOCKED; builders stop, nothing advances until new evidence),
-// waiting (Kyle's approval is required), rework (the review asked for changes: back to systems, and it cannot be
+// waiting (Kyle's approval is required: builders stop and it cannot complete until HQ reports new work or the
+// approval), rework (the review asked for changes: back to systems, and it cannot be
 // completed until it is inspected and approved again). The canonical structures stay 'planned' during planning,
 // 'under-construction' while being built and become 'built' (walkable, furnished, usable) only on completion.
 export const STAGES = ['planning', 'site-preparation', 'foundation', 'structure', 'exterior', 'systems', 'furnishing', 'inspection', 'operational'];
@@ -42,14 +43,26 @@ export const transition = {
     if (stageIndex(p.stage) < stageIndex('site-preparation')) return `${p.id} has not been requested for construction`;
     if (p.completed) return `${p.id} is already complete`;
     // New work after a block or a rejected review resumes the build.
-    p.blocked = null; p.evidence += 1; p.approved = false;
+    p.blocked = null; p.waiting = null; p.evidence += 1; p.approved = false;
     if (p.rework) { p.rework = false; p.stage = 'systems'; record(p, p.stage, at, by, `rework: ${ref ?? 'new evidence'}`); return null; }
     if (p.stage === 'inspection') { p.stage = 'furnishing'; record(p, p.stage, at, by, `changed after inspection started: ${ref ?? 'new evidence'}`); return null; }
     const next = STAGES[Math.min(stageIndex(p.stage) + 1, stageIndex('furnishing'))];
     if (next !== p.stage) { p.stage = next; record(p, p.stage, at, by, ref ?? 'implementation evidence'); }
     return null;
   },
+  // HQ reports the implementation finished successfully: all the build evidence is in, so the fit-out is done.
+  finished(world, p, { at, by }) {
+    if (stageIndex(p.stage) < stageIndex('site-preparation')) return `${p.id} has not been requested for construction`;
+    if (p.completed || p.stage === 'inspection') return null;
+    p.blocked = null; p.waiting = null;
+    if (p.rework) p.rework = false;
+    if (p.stage !== 'furnishing') { p.stage = 'furnishing'; record(p, p.stage, at, by, 'HQ reports the implementation finished'); }
+    return null;
+  },
   inspect(world, p, { at, by }) {
+    // Tests the builders run mid-build are work on site, not an inspection: the stage does not move.
+    if (BUILD_STAGES.includes(p.stage) && p.stage !== 'furnishing') return null;
+    p.waiting = null;
     if (p.stage !== 'furnishing') return p.stage === 'inspection' ? null : `${p.id} is at ${p.stage}; inspection needs the fit-out finished`;
     p.stage = 'inspection'; record(p, p.stage, at, by, 'HQ is testing or reviewing the work');
     return null;
@@ -63,6 +76,7 @@ export const transition = {
   complete(world, p, { at, by }) {
     if (p.stage !== 'inspection' || !p.approved) return `${p.id} cannot be completed: ${p.stage !== 'inspection' ? `it is at ${p.stage}` : 'its review is not approved'}`;
     if (p.blocked) return `${p.id} is blocked: ${p.blocked}`;
+    if (p.waiting) return `${p.id} is waiting for Kyle: ${p.waiting}`;
     p.completed = true; record(p, p.stage, at, by, 'HQ reported it complete');
     return null;
   },
@@ -79,4 +93,5 @@ export const transition = {
 // What the structures of a project should be, from its stage (canonical status used by navigation and furnishing).
 export const statusForStage = p => (p.completed ? 'built' : stageIndex(p.stage) >= stageIndex('site-preparation') ? 'under-construction' : 'planned');
 // Whether builders work on site right now: only while HQ reports implementation for the project and it is not blocked.
-export const buildersWork = p => !p.blocked && !p.completed && BUILD_STAGES.includes(p.stage);
+// Waiting for Kyle stops the site as surely as a block does.
+export const buildersWork = p => !p.blocked && !p.waiting && !p.completed && BUILD_STAGES.includes(p.stage);

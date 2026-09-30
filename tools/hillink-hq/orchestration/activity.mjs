@@ -3,7 +3,8 @@
 // Nothing here reads model output: summaries are HQ-authored strings. Agent answers (untrusted text) never reach the
 // World through this contract.
 //
-// Activity item: { v, seq, at, type, activity, objectiveId, taskId, stepId, stepKind, agentId, summary }
+// Activity item: { v, seq, at, type, activity, objectiveId, taskId, stepId, stepKind, agentId, summary } (+ verdict on a
+// review HANDOFF_RECEIVED: approve | request_changes | reject)
 //   seq      the journal sequence number of the event it came from (monotonic; use it as a cursor)
 //   type     one of ACTIVITY_TYPES
 //   activity the broad animation state for the agent or objective: one of ACTIVITIES
@@ -34,7 +35,13 @@ export function worldActivity(events, { since = 0, limit = 500 } = {}) {
       case 'OBJECTIVE_CREATED': push(e, { type: 'TASK_CREATED', activity: 'planning', objectiveId: d.id, summary: `Objective received: ${String(d.input?.title ?? '').slice(0, 120)}` }); break;
       case 'OBJECTIVE_TRANSITION': if (STATUS_TYPE[d.to]) push(e, { type: STATUS_TYPE[d.to], activity: STATUS_ACTIVITY[d.to], objectiveId: d.objectiveId, summary: `Objective ${d.to.toLowerCase().replace(/_/g, ' ')}.` }); break;
       case 'STEP_RETRY': push(e, { type: 'RETRYING', activity: 'waiting', objectiveId: d.objectiveId, stepId: d.stepId, summary: `Retrying a step (${d.reason}, ${d.count}/${d.max}).` }); break;
-      case 'HANDOFF_ACCEPTED': push(e, { type: 'HANDOFF_RECEIVED', activity: 'done', objectiveId: d.objectiveId, stepId: d.stepId, taskId: d.taskId, agentId: d.agentId ?? null, stepKind: d.handoff?.kind ?? null, summary: `${d.handoff?.kind ?? 'Handoff'} accepted by HQ.` }); break;
+      case 'HANDOFF_ACCEPTED': {
+        // Pass 5B (additive): a review handoff carries its validated verdict (an enum HQ checked, never model text), so
+        // the World can tell an approved review from one that asked for changes.
+        const verdict = d.handoff?.kind === 'review' && ['approve', 'request_changes', 'reject'].includes(d.handoff.verdict) ? { verdict: d.handoff.verdict } : {};
+        push(e, { type: 'HANDOFF_RECEIVED', activity: 'done', objectiveId: d.objectiveId, stepId: d.stepId, taskId: d.taskId, agentId: d.agentId ?? null, stepKind: d.handoff?.kind ?? null, ...verdict, summary: `${d.handoff?.kind ?? 'Handoff'} accepted by HQ.` });
+        break;
+      }
       case 'HANDOFF_REJECTED': push(e, { type: 'HANDOFF_REJECTED', activity: 'waiting', objectiveId: d.objectiveId, stepId: d.stepId, taskId: d.taskId, summary: 'HQ rejected a handoff that failed validation.' }); break;
       case 'TASK_CREATED': {
         const t = { id: d.id, operation: d.operation, objectiveId: d.link?.objectiveId ?? null, stepId: d.link?.stepId ?? null };

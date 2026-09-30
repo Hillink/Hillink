@@ -194,12 +194,12 @@ export function createGeneratedLayout(world, { theme = 'real' } = {}) {
     offline: place('lounge', ['relax', 'table'], place('queue', ['wait'])),
   };
   // An agent on a construction project's task works at its site while HQ reports the build (never after it is
-  // complete, never while it is blocked); testing or reviewing it is an inspection on site.
+  // complete, never while it is blocked or waiting for Kyle); testing or reviewing it is an inspection on site.
   const PRODUCTIVE = new Set(['coding', 'thinking', 'testing', 'reviewing', 'researching']);
   function placeFor(agent) {
     if (!agent?.taskId || !PRODUCTIVE.has(agent.activity)) return null;
     const p = Object.values(projects).find(q => q.taskIds.includes(agent.taskId));
-    if (!p || p.completed || p.blocked || !siteStations[p.id]) return null;
+    if (!p || p.completed || p.blocked || p.waiting || !siteStations[p.id]) return null;
     const inspecting = ['testing', 'reviewing'].includes(agent.activity) || p.stage === 'inspection';
     if (!inspecting && !buildersWork(p)) return null;
     return { location: `site:${p.id}`, stations: inspecting ? [...siteStations[p.id].inspect, ...siteStations[p.id].build] : siteStations[p.id].build, clip: inspecting ? 'review' : 'work' };
