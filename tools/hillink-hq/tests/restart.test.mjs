@@ -153,6 +153,21 @@ test('an HQ that dies while the supervisor is still bringing it up is retried by
   assert.ok(!h.logs.some(l => l.event === 'hq-exited'), 'the boot crash was not treated as a runtime exit');
 });
 
+test('boot after an unclean death: a lock whose pid is gone is released; a live or unreadable lock blocks the launch', async () => {
+  // On Windows an HQ child dies with a killed supervisor and leaves controller.lock behind.
+  const stale = harness(); stale.lock.set(31337);
+  assert.equal(await stale.sup.start(), true, 'the next supervisor starts HQ');
+  assert.ok(stale.logs.some(l => l.event === 'stale-lock-released' && l.pid === 31337));
+  const live = harness(); live.lock.set(424243); live.alive.add(424243);
+  assert.equal(await live.sup.start(), false);
+  assert.equal(live.children.length, 0, 'never starts beside a live controller');
+  assert.match(live.statuses.at(-1).diagnostic, /another HQ is running/);
+  const unreadable = harness(); unreadable.lock.set(-1);
+  assert.equal(await unreadable.sup.start(), false);
+  assert.equal(unreadable.children.length, 0);
+  assert.match(unreadable.statuses.at(-1).diagnostic, /unreadable/);
+});
+
 // ---------------------------------------------------------------- HQ side
 const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), 'hq-restart-'));
 const fakeSupervisor = (ack = { accepted: true }) => ({ calls: [], async request(r) { this.calls.push(r); return { id: r.id, ...ack }; } });

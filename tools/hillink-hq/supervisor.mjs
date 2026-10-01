@@ -136,6 +136,12 @@ export class Supervisor {
     let diagnostic = null;
     for (let attempt = 1; attempt <= this.limits.maxAttempts; attempt++) {
       if (this.down) await this.down.close().catch(() => {});
+      // A controller.lock left by an HQ that died uncleanly (e.g. the previous supervisor was killed: on Windows its
+      // HQ child dies with it) is released only once its pid is proven gone; one held by a live process means another
+      // HQ is running, and none is started beside it.
+      const owner = this.lock.owner();
+      if (owner === -1 || (owner != null && this.isAlive(owner))) { diagnostic = owner === -1 ? 'controller.lock exists but is unreadable; inspect it before starting HQ (none was started).' : `controller.lock is held by a live process (${owner}): another HQ is running; none was started beside it.`; this.log({ event: 'launch-refused', id, kind, reason: diagnostic }); break; }
+      if (owner != null) { this.lock.release(); this.log({ event: 'stale-lock-released', id, kind, pid: owner }); }
       let child;
       try { child = this.launch(); } catch (error) { diagnostic = `launch failed: ${String(error.message).slice(0, 300)}`; child = null; }
       if (child) {
