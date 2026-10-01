@@ -192,6 +192,49 @@ HILLINK APPLICATION:
 
 ---
 
+## 0. One canonical agent, two visual aliases [Kyle, 2026-10-01 00:13Z]
+
+**Real and Fantasy versions of an agent are not separate agents.** They are two visual aliases of one canonical agent.
+
+```
+CANONICAL WORLD STATE (one Claude, one ChatGPT, one Codex)
+            ↓
+VISUAL TRANSLATION LAYER (theme)
+          ↙        ↘
+   Real alias     Fantasy alias
+```
+
+- **ONE canonical agent:** Claude, ChatGPT, Codex, and every future agent (Agent #4 and on).
+- **A visual alias** is a theme's rendering of that agent: "Real Claude" and "Fantasy Claude" are two views of the same
+  Claude, not two or three entities.
+- **Aliases own nothing canonical.** They never independently hold:
+  - task state, lifecycle state, work state or activity
+  - construction authority, progress or completion
+  - blocked or waiting state
+  - agent identity or capability
+  All of that belongs to the canonical agent and system state. A theme only **reads** it and translates it.
+- **Same event, two pictures.**
+
+  | Canonical | Real alias | Fantasy alias |
+  |---|---|---|
+  | Claude is implementing or building | Claude at a modern builder workspace with the right tools | dwarf artificer Claude hammering at the forge |
+  | Codex is inspecting or testing | cyborg Codex with modern test equipment | cyborg Codex inspecting arcane machinery |
+  | ChatGPT is coordinating | the King at a planning wall or status board | the King at the command table |
+
+- **No drift.** Switching theme changes only the picture. It never creates, removes, duplicates or changes the state of
+  an agent. There is never a "Real World state" and a separate "Fantasy World state".
+- **Extensible.** A new agent gets one canonical record, and each theme supplies an alias. Both aliases inherit the
+  Hillink visual language and express the same identity (§4, §5, §19).
+- [proposed] **Alias data is appearance-only.** An alias record holds sprite, wardrobe, equipment, palette and
+  workstation art per theme, keyed by the canonical agent id. It has no state fields, and any it carries are ignored.
+  The appearance-is-data-never-code rule applies.
+- [proposed] **Acceptance test for any future implementation:** for the same canonical World, both themes show the same
+  set of agent ids, with the same activity, task, lifecycle, blocked or waiting state, needs-owner flag and
+  construction stage. Rendering either theme leaves the World unchanged.
+- [code] This already matches the architecture: one `store.world` feeds both skins. Derived Fantasy entities are marked
+  `canonical: false` (`themes/fantasy/entities.mjs`). 5H's truth-equivalence tests check that rendering doesn't change
+  World state. Aliases make the rule explicit for the art.
+
 ## 1. Core visual identity
 
 [proposed] **Hillink is a miniature, handcrafted, pixel-art organization seen from a fixed isometric camera, which
