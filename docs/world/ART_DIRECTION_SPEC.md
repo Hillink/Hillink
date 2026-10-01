@@ -190,6 +190,94 @@ HILLINK APPLICATION:
 - This defines the **clip matrix (§6)**, the **archetype range (§5, §19)** and the **status icon vocabulary (§21)**.
 - It adds a `run` clip, which is not in 5H's clip list.
 
+### REFERENCE 5: Batch 2A concept board (`ref5-batch2a-board.png`) [Kyle, 2026-10-01 00:25Z]
+
+This is a concept board, not a screenshot. It supplements refs 1–4. Kyle said it is for calibration: pixel density,
+character-to-environment scale, density, lighting, materials, silhouettes, T0 scale, construction and time of day.
+
+It has seven panels:
+1. a master gameplay shot of Real
+2. Real character sheets
+3. the Real T0 exterior, and 3B the Real T0 interior
+4. the Fantasy T0 exterior, and 4B the Fantasy T0 interior
+5. Real construction
+6. Fantasy construction
+7. day, dusk and night
+
+USE:
+- **Pixel density at gameplay zoom** (panel 1).
+  - Characters measure about 24 art pixels tall.
+  - Each art pixel is about 2.5 board pixels.
+  - Faces are a few pixels, with eyes as single dark pixels.
+  - The crown, beard mass, hard hat and red eye all still read at this size.
+  - This confirms the §3 range and narrows it to about 22–26 pixels.
+- **Character-to-room scale** (panel 1).
+  - A character is roughly 1/2 to 1/2.5 of a floor-to-floor storey: cosier than ref 3a's 1/3.
+  - Desks, chairs and monitors fit the body.
+  - Doors and stairs are clearly sized for the characters.
+- **Interior density** (panels 1, 3B, 4B).
+  - Every wall bay has 2–4 items: lamps, frames, a map, shelves, a pinboard.
+  - Every floor bay has a furniture cluster plus a plant.
+  - The lower floor mixes lounge, planning and storage: sofa, world map, shelves, crates.
+  - The server bay is a wall of racks with blue LEDs.
+- **Warm local lighting.**
+  - Pendant lamps hang every 2–3 tiles, with amber pools.
+  - Monitors give cyan and rack LEDs give blue as secondary light.
+  - Outside, a campfire and lamp posts.
+- **Materials**: dark timber beams, stone or brick walls, concrete slabs and plaster; foliage overgrowing the
+  building's edges and roof.
+- **Real T0** (panels 3, 3B):
+  - Outside, a small finished building: a concrete and brick front, a wall sign, lit windows, rooftop solar panels, a
+    lattice mast with a dish, crates and planters, and a van.
+  - Inside, three workstations in a row on the work floor, a planning lounge (map and sofa), stairs and a small server
+    bay.
+  - Small but legitimate: exactly what [Kyle C5] asks for.
+- **Fantasy T0** (panels 4, 4B):
+  - Outside, a small stone keep with a timber upper storey and a watchtower, a banner, warm windows, a waterfall and a
+    dock.
+  - Inside, three work spots under banners, with a hearth or forge on the lower floor.
+- **Construction** (panels 5, 6).
+  - Both are shown as **isometric plot tiles**: site, foundation, frame, walls and roof, interior, operational.
+  - Real goes fenced dirt plot, slab, frame, enclosed building, lit interior, finished building with greenery.
+  - Fantasy goes plot, stone footing ring, timber frame, stone keep shell, interior, finished keep with a flag.
+  - Both show "walls + roof" as one step, which matches §17's shared `exterior` stage.
+- **Time of day** (panel 7).
+  - The **same assets** are shown at day, dusk and night.
+  - Only the sky, ambient tint and how strong the light pools look change.
+  - Windows glow at all three times; the glow just dominates more at night.
+  - This confirms [Kyle C6]: light is a parameter, not baked in.
+- **Role tells on the character sheet** (panel 2):
+  - ChatGPT has speech, idea, a sceptre and a monitor.
+  - Claude has blueprints, a flow diagram and a hard hat while building.
+  - Codex has a tablet, screens and a magnifier.
+  These match the §6 per-archetype `work` clips.
+
+DO NOT COPY:
+- **The side-scroller camera** [Kyle]. Every panel except 5 and 6 is a side cutaway.
+- **Large floating name labels** over agents and rooms [Kyle C13].
+- **The "HILINK" spelling** on the HQ sign. The brand is **Hillink**.
+- **The fantasy castle on Real's horizon** (panels 1 and 7) [Kyle C11].
+- **Codex with a red visor across both eyes.** About half of the Codex frames in panel 2 show a red band over both eyes,
+  and some show a helmet or cap. That contradicts the lock of **ONE red eye, not a full robot** [Kyle C2]. Treated as
+  a reference artifact.
+- **Codex's hair colour varies** between frames (black and brown). Treated as a reference inconsistency.
+- **Hard-hat workers who look like Claude.** The ambient worker in the server bay and outside T0 wears the same yellow
+  hard hat as construction Claude. See §25 C15.
+- **Modern monitors in the Fantasy interior** (panel 4B). This conflicts with the Fantasy material language (§8). See
+  §25 C17.
+- **The Real T0 exterior and interior don't match**: one storey outside, two inside. See §25 C16.
+- **Construction "frame" in Real drawn as timber.** In Real it should be steel, per §8 and §17. Treated as a reference
+  simplification.
+
+HILLINK APPLICATION:
+- Use the board's density, lighting, materials and scale **inside Hillink's isometric cutaway** (§15). The side
+  cutaway's "rooms in a row" become isometric rooms with back and side walls carrying the wall dressing.
+- Panels 5 and 6 are already isometric and can be followed closely for the plot-tile construction look, mapped to the
+  10 truthful stages in §17.
+- Real T0 and Fantasy T0 compositions (§18) are taken from panels 3 and 4: three workstations, one planning corner and
+  one small compute corner (Real) or hearth (Fantasy), in one compact building.
+- Panel 7 defines how lighting is tested: one scene rendered at three ambient settings with the same assets (§9).
+
 ---
 
 ## 0. One canonical agent, two visual aliases [Kyle, 2026-10-01 00:13Z]
@@ -225,6 +313,8 @@ VISUAL TRANSLATION LAYER (theme)
   an agent. There is never a "Real World state" and a separate "Fantasy World state".
 - **Extensible.** A new agent gets one canonical record, and each theme supplies an alias. Both aliases inherit the
   Hillink visual language and express the same identity (§4, §5, §19).
+- [Kyle C12] **Kyle's avatar is not an agent.** It represents the human owner. It appears only for owner
+  interactions, never does AI work and never counts in the agent population.
 - [proposed] **Alias data is appearance-only.** An alias record holds sprite, wardrobe, equipment, palette and
   workstation art per theme, keyed by the canonical agent id. It has no state fields, and any it carries are ignored.
   The appearance-is-data-never-code rule applies.
@@ -275,8 +365,9 @@ The pillars:
 
 - [ref 3c, 4] About 3 heads tall. The head is about 1/3 of the height *including hair or headgear*. The face itself is
   smaller.
-- [proposed] At art scale, characters are **about 20–24 art pixels tall**. Most are humanoid; a broad build such as the
-  dwarf is about 20.
+- [proposed, narrowed by ref 5] At art scale, characters are **about 22–26 art pixels tall** at default zoom. Ref 5's
+  gameplay shot measures about 24. Most are humanoid; the broad dwarf is about 2 pixels shorter and wider.
+  [open] The final number waits on the dedicated pixel-density reference.
   - The head is about 8 pixels.
   - Eyes are 1×1 or 1×2 pixels with no visible whites at default zoom.
   - The torso is about 6–7 pixels, the legs about 5–6 pixels, and the feet 2 pixels.
@@ -400,6 +491,8 @@ The pillars:
 - [ref 1–3] **Warm, local key lights inside and a cool ambient outside.** The default time is dusk or evening.
   [Kyle C6] Hillink is **not** permanently locked to dusk. Dusk or evening stays the showcase condition for visual
   development because it shows lighting best.
+- [ref 5] **Time-of-day behaviour:** the same assets serve day, dusk and night. Only sky, ambient tint and light-pool
+  strength change. Interior lights glow at all times and dominate more at night.
 - [Kyle C6] The art system must keep a future day/night cycle possible: light sources, ambient colour and sky are
   parameters, not baked into sprites. [proposed] Sprites carry base colours only. Ambient tint and light pools are a
   separate pass. No day/night system is built in this pass.
@@ -421,7 +514,7 @@ The pillars:
   | Element | Size |
   |---|---|
   | Door | 1.3h tall, 0.6h wide |
-  | Storey (floor to floor) | 2.6h, matching ref 3a where characters are about 1/3 of the storey |
+  | Storey (floor to floor) | about 2–2.6h. Ref 3a reads about 2.6h, ref 5 is cosier at about 2–2.5h. [open] Final value waits on the pixel-density reference |
   | Desk | 0.45h |
   | Chair seat | 0.3h |
   | Server rack | 1.1h |
@@ -614,7 +707,14 @@ The pillars:
   - **Fantasy T0:** a compact, established outpost, small keep or workshop suitable for three agents.
   - The progression visibly grows toward the larger HQ or settlement.
   - This replaces the ref 3d camp and single glass room in the table above as T0 *candidates*.
-- [open] The exact T0 appearance in both themes is waiting on reference images (§24).
+- [ref 5, proposed] **T0 compositions**, small but finished:
+  - **Real T0:** one compact building with a concrete and brick front, wall signage, rooftop solar panels and a
+    mast with a dish. Inside: three workstations (ChatGPT, Claude, Codex), a planning corner (map wall, sofa), a
+    small compute corner (2–4 racks) and stairs if there is an upper level.
+  - **Fantasy T0:** a small stone keep with a timber upper storey and a watchtower. Inside: three work spots under
+    banners, plus a hearth or forge.
+- [open] Final T0 looks, including whether Real T0 has one storey or two (§25 C16), wait on the dedicated T0
+  references.
 - [code] The default simulation boots with only Claude and Codex (`sim/simulator.mjs` `SIM_ROSTER`). ChatGPT appears
   only when an evidence script registers it, so the three-agent start is not what you see on boot today. The vertical
   slice should register all three by default.
@@ -743,7 +843,7 @@ These stay open until Reference Batch 2 or later.
 10. **Lighting variations:** dusk showcase plus at least one other time, to prove the system isn't dusk-locked (C6).
 11. **Environmental detail:** close-ups of prop clusters and wall dressing for each workspace (Claude, Codex,
     ChatGPT), in both themes.
-12. **Kyle avatar (C12)** and **room labels (C13):** still undecided. See §25.
+12. **Kyle's avatar appearance (C14)** and the new Batch 2A conflicts (C15–C18). See §25.
 
 ---
 
@@ -764,13 +864,18 @@ Resolved by Kyle on 2026-10-01 at 00:12Z:
 | C9 | Sprite authoring | **Hybrid.** Bespoke authored identities for the core agents; a modular system (body plans, equipment, palettes, materials, props, animation, attachments) for everything reusable and for future agents, who can be refined later. All production art is original; references are never shipped or traced. |
 | C10 | Construction stages | **Canonical authority does not change.** Visual stages map underneath the canonical stages. Sub-stages are allowed only if they can be derived deterministically without false progress; otherwise the limitation is documented. Only walls and roof share a stage; §17 has the mapping and how that pair is drawn. |
 | C11 | Cross-theme backdrop | **No fantasy castle behind Real.** Each theme stays physically coherent. Subtle shared motifs are fine, but the settings never blend. |
+| C12 | Kyle avatar (resolved 2026-10-01 00:25Z) | **Kyle may have a visual avatar. He is NOT an AI agent.** He represents the human owner and player. He appears only for legitimate owner interactions: NEEDS KYLE, approvals, owner decisions, meetings, inspections or visits, and ceremonies. He never autonomously performs AI work and never adds to the apparent agent population. His exact appearance is still open. |
+| C13 | Room labels (resolved 2026-10-01 00:25Z) | **Environment first, text second.** Rooms are recognized by their physical design. Labels may appear on hover, on selection, in the inspector, in a map view, or as subtle architectural signage. No large permanent floating labels. |
 
-Still open:
+Still open (new from Reference 5):
 
 | # | Question | Agent leaning (not a decision) |
 |---|---|---|
-| C12 | **Kyle avatar:** ref 4 has an owner avatar. Does Kyle appear in the World? | No permanent avatar. Owner presence is shown by the sealed scroll or flagged board item (§13). |
-| C13 | **Room labels:** refs 1–2 use signs, but the brief wants rooms identified by props | No floating labels. Labels show on hover, or as an in-world sign where a real building would have one. |
+| C14 | **Kyle avatar appearance:** how Kyle looks, and how his avatar stays clearly separate from agents (no nameplate status, no work clips) | A distinct human owner silhouette. Visible only during owner interactions (C12). |
+| C15 | **Claude's hard hat vs ambient workers:** ref 5's ambient workers wear the same yellow hard hat as construction Claude, so they read as Claude look-alikes | Claude is never confusable. Ambient workers get a different hat colour and no beard, are smaller in scale, and never wear orange-brown. |
+| C16 | **Real T0 size:** ref 5 shows one storey outside but two storeys inside | Needs the T0 reference. Leaning: one compact building, two small levels if the three workstations, planning corner and compute corner need it. |
+| C17 | **Monitors in Fantasy:** ref 5 panel 4B puts modern screens on Fantasy desks | Keep the material split (§8). Fantasy uses scrying glass, crystals, maps and ledgers, never modern monitors. |
+| C18 | **How literal Real wardrobe is:** ref 5's "Real" sheet still has ChatGPT in a crown and long cape, and Claude in a tank top | The crown stays as the silhouette lock (Kyle). Leaning: Real swaps the cape for a green and gold jacket or long coat with a crown or crown pin, so it's clearly the King but office-appropriate. Needs the Real-agents reference. |
 
 ---
 
