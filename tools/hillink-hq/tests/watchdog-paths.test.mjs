@@ -174,6 +174,39 @@ test('long HQ-owned verification: the local verifier running one 4-minute test s
   assert.equal(engine.state.tasks[id].stage, 'DONE');
 });
 
+// Recorded from Claude Code 2.1.287 (2026-10-01): extended thinking streams NO text. Each thinking_delta carries
+// thinking: "" and an estimated token count, alongside system thinking_tokens records. The d9a2b0c/d9d97ff adapter
+// counted only characters, so a long think was silence: this is the investigation killed in objective cdecc7d0.
+const thinkStart = { type: 'stream_event', event: { type: 'content_block_start', index: 0, content_block: { type: 'thinking', thinking: '', signature: '' } }, parent_tool_use_id: null };
+const thinkDelta = est => ({ type: 'stream_event', event: { type: 'content_block_delta', index: 0, delta: { type: 'thinking_delta', thinking: '', estimated_tokens: est } }, parent_tool_use_id: null });
+const thinkTokens = est => ({ type: 'system', subtype: 'thinking_tokens', estimated_tokens: est, estimated_tokens_delta: 50 });
+const blockStop = { type: 'stream_event', event: { type: 'content_block_stop', index: 0 }, parent_tool_use_id: null };
+
+test('cdecc7d0 reproduced: an investigation whose model thinks for 4 minutes (empty thinking deltas) stays RUNNING and completes', async () => {
+  const h = hq(); const r = await h.start('claude', 'Investigate with deep thinking');
+  r.child.lines(msgStart, thinkStart);
+  let est = 0;
+  for (let e = 0; e < 240_000; e += 5_000) {
+    h.clock.t += 5_000; r.pulse(); est += 150; r.child.lines(thinkTokens(est), thinkDelta(est));
+    assert.equal(r.status(), 'RUNNING', `thinking at ${(e + 5_000) / 1000} s`);
+    await h.engine.tick();
+  }
+  assert.ok(r.task().evidence.some(e => /^Claude is thinking \(about \d+ tokens so far\)\.$/.test(e.summary)), 'thinking is reported as progress (counts only)');
+  r.child.lines({ type: 'stream_event', event: { type: 'content_block_delta', index: 0, delta: { type: 'signature_delta', signature: 'sig' } } }, blockStop, delta(300), ...answer('Root cause found.'));
+  r.child.emit('close', 0, null);
+  assert.equal(r.task().stage, 'DONE');
+});
+
+test('a think with no token estimates at all is still a bounded quiet phase: RUNNING within it, STALLED past 10 minutes', async () => {
+  const h = hq(); const r = await h.start('claude', 'Silent think');
+  r.child.lines(msgStart, thinkStart);
+  await r.quiet(QUIET_BOUNDS.thinkingMs);
+  h.clock.t += 5_000; r.pulse();
+  assert.equal(r.status(), 'STALLED');
+  await h.engine.tick();
+  assert.match(h.engine.state.events.filter(e => e.type === 'RECOVERY').at(0).data.reason, /the model thinking .* past its 600 s bound/);
+});
+
 // ------------------------------------------------------------------ genuine failures are still caught
 test('genuine silent hung worker: a live Claude with no declared phase is STALLED at 120 s, terminated, parked and quarantined', async () => {
   const h = hq(); const r = await h.start('claude', 'Investigation that hangs');

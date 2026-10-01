@@ -23,9 +23,13 @@ export const COMPACTION_MAX_MS = 10 * 60_000;
 //   model     - a request is with the model and no token has arrived yet (after start, and after each tool result)
 //   tool:<id> - Claude Code is executing a tool call it announced (Read/Grep/Glob, or an HQ broker tool) and waits
 //   compaction- Claude Code declared it is compacting its context
+//   thinking  - the model is in an extended-thinking block. Claude Code does not stream thinking text (each
+//               thinking_delta carries an empty string plus an estimated token count, measured 2026-10-01 on
+//               2.1.287), so a long think printed no characters and was killed as STALLED (objective cdecc7d0). The
+//               estimated token counts are progress; the phase covers a think whose counts do not arrive.
 // Phases end when the stream shows the state is over (first token, the tool's result, the compaction's end); a
 // phase past its bound makes the run STALLED. Nothing here depends on the model's text, only on protocol records.
-export const QUIET_BOUNDS = Object.freeze({ modelMs: 5 * 60_000, toolMs: 5 * 60_000, slowToolMs: 7 * 60_000, compactionMs: COMPACTION_MAX_MS });
+export const QUIET_BOUNDS = Object.freeze({ modelMs: 5 * 60_000, toolMs: 5 * 60_000, slowToolMs: 7 * 60_000, compactionMs: COMPACTION_MAX_MS, thinkingMs: 10 * 60_000 });
 const SLOW_TOOLS = new Set(['mcp__hq__run_tests']); // the broker's run_tests is bounded by HQ at 330 s
 const toolPhaseId = id => `tool:${String(id).replace(/[^A-Za-z0-9_-]/g, '').slice(0, 90) || 'unknown'}`;
 const begin = (run, id, reason, boundMs) => { run.phases ??= new Set(); if (run.phases.has(id) || run.phases.size >= 12) return []; run.phases.add(id); return [{ id, state: 'begin', reason, boundMs }]; };
@@ -91,6 +95,21 @@ export const cliAgents = {
         return [withPhases({ kind: 'PROGRESS', summary: `Claude Code finished compacting its context (${seconds} s).`, compacting: false }, phases)];
       }
       // A subagent's records (parent_tool_use_id) belong to the tool call that spawned it; they never end its phases.
+      // Extended thinking: the token estimates Claude Code reports while the model thinks (never the thinking itself).
+      const thinkingEstimate = message.type === 'system' && message.subtype === 'thinking_tokens' ? message.estimated_tokens : message.type === 'stream_event' && message.event?.delta?.type === 'thinking_delta' ? message.event.delta.estimated_tokens : null;
+      if (Number.isFinite(thinkingEstimate) && thinkingEstimate > (run.thinkingTokens ?? 0) && run.acknowledged && !message.parent_tool_use_id) {
+        run.thinkingTokens = thinkingEstimate;
+        const now = run.now();
+        if (run.thinkingReportedAt != null && now - run.thinkingReportedAt < STREAM_PROGRESS_MS) return [];
+        run.thinkingReportedAt = now;
+        return [{ kind: 'MODEL_OUTPUT', summary: `Claude is thinking (about ${Math.round(thinkingEstimate)} tokens so far).`, streaming: true, thinking: true }];
+      }
+      if (message.type === 'system' && message.subtype === 'thinking_tokens') return [];
+      if (message.type === 'stream_event' && run.acknowledged && !message.parent_tool_use_id && message.event?.type === 'content_block_start' && ['thinking', 'redacted_thinking'].includes(message.event.content_block?.type)) {
+        run.thinkingTokens = 0;
+        return [withPhases({ kind: 'PROGRESS', summary: 'Claude is thinking.' }, [...endAll(run, id => id === 'model' || id.startsWith('tool:')), ...begin(run, 'thinking', 'the model thinking (extended thinking is not streamed)', QUIET_BOUNDS.thinkingMs)])];
+      }
+      if (message.type === 'stream_event' && run.acknowledged && !message.parent_tool_use_id && message.event?.type === 'content_block_stop' && run.phases?.has('thinking')) return [{ kind: 'PROGRESS', summary: 'Claude finished thinking.', phases: end(run, ['thinking']) }];
       if (message.type === 'stream_event' && message.event?.type === 'message_start' && run.acknowledged && !message.parent_tool_use_id) {
         // The model is answering: it is not waiting on any tool any more, and its first token is on the way.
         const closed = endAll(run, id => id === 'model' || id.startsWith('tool:'));
