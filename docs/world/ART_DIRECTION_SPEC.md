@@ -1,4 +1,4 @@
-# HILLINK ART DIRECTION SPEC — DRAFT 1 (revision 3)
+# HILLINK ART DIRECTION SPEC — DRAFT 1 (revision 4)
 
 Status: **the overall direction is approved by Kyle as a working foundation (2026-10-01 00:12Z). That is not approval to
 implement.** No artwork, no vertical slice and no Pass 5I until Kyle approves. Kyle's decisions are in §25. Questions
@@ -9,13 +9,15 @@ that need more references stay [open] (§24).
 - **6B** for the Real agent aliases.
 - **6C** for the Fantasy HQ environment.
 - **6D** for the Fantasy agent aliases.
+- **7A** for Real functional spaces (workstations, server bay, Real prop families) [Kyle 00:51Z].
+- **7B** for Fantasy functional spaces (workstations, Arcane Core/Archive, Fantasy prop families, banners) [Kyle 00:51Z].
 
 Earlier references stay valid for what they were approved for. Where an older *character* reference conflicts with 6B or
 6D, 6B or 6D wins. Where a generated incidental detail conflicts with this spec, the spec wins.
 
 Written 2026-10-01 on `claude/world-5h`, in answer to "PASS 5H — ITERATION 2" (Kyle, 2026-10-01 00:06Z).
 
-References are stored in `docs/world/references/pass5h-iter2/` (ref1–ref6, plus `ref6r-6a-6d-aliases.png`). The 5H iteration 1 evidence it is compared
+References are stored in `docs/world/references/pass5h-iter2/` (ref1–ref6, `ref6r-6a-6d-aliases.png`, `ref7a-real-functional-spaces.png` and `ref7b-fantasy-functional-spaces.png`). The 5H iteration 1 evidence it is compared
 against is in `docs/world/evidence/pass5h/`.
 
 Every rule carries one of these labels:
@@ -115,7 +117,9 @@ Applies to: Fantasy, architecture, terrain, lighting, props and construction.
 USE:
 - The forge has a red tiled roof, a stone chimney with smoke, an anvil and a glowing hearth, and the dwarf working.
 - The throne-command hall has stone walls, blue and gold banners, a red carpet, and the King on a throne with tables.
+  *(Banner colour superseded by C26: Fantasy organizational banners are green and gold; blue is a local secondary.)*
 - The artificer's workshop has a glowing arcane ring device, with the cyborg inspecting it.
+  *(Naming superseded by C25: "forge / artificer workshop" is Claude's space; Codex's is the arcane-mechanical analysis station.)*
 - Terrain has stone terraces, stairs and a waterfall into a pool. There is a dock with a campfire, torches on posts,
   and dense trees and bushes.
 - Paths are irregular cobble.
@@ -361,7 +365,8 @@ USE:
   - **ChatGPT:** command and planning, with a world map, three monitors, a leather armchair and plants. The green and
     gold banners are **not** carried into Real [Kyle C22].
   - **Claude:** engineering and building, with a pegboard wall of tools, parts bins, boxes, a workbench desk with
-    monitors and a red task chair.
+    monitors and a red task chair. *(Superseded by 7A.4: Real Claude's space is a construction workshop, not a
+    monitor desk.)*
   - **Codex:** inspection and testing, with server racks and blue LEDs, two monitors with readouts, a darker, cooler
     corner and diagnostic gear.
 - **Prop kit** (panel 8): sofas, armchairs, desk chairs, desks, a fridge, a cabinet, monitors, lamps, potted plants,
@@ -542,7 +547,139 @@ DO NOT COPY:
 
 HILLINK APPLICATION:
 - These are the Fantasy aliases in §4.
-- The exact balance of arcane and mechanical in Fantasy Codex is still subject to refinement [Kyle]. See C23.
+- The exact balance of arcane and mechanical in Fantasy Codex was open here; **resolved by C23 (00:51Z):** an
+  arcane-mechanical hybrid with one red eye (§4).
+
+### REFERENCE 7A: Real T0 functional spaces (`ref7a-real-functional-spaces.png`) [Kyle, 2026-10-01 00:51Z]
+
+The board is the same building as 6A, with no fantasy elements, at 24 px in 2.5D isometric. It has nine panels:
+- 7A.1 overview
+- 7A.2 character context
+- 7A.3–7A.6 close-ups of the four functional spaces, each with key props and gameplay-scale clips
+- 7A.7 prop set
+- 7A.8 lighting
+- 7A.9 scale
+
+Authoritative for Real functional spaces. 6A still wins on the overall building and 6B on the characters.
+
+USE:
+- **7A.3 command / orchestration office (ChatGPT, boss in a black suit).**
+  - Props: an executive desk with monitors and a leather chair, a large wall map or plans, a bookshelf, a globe,
+    a lamp, plants and a rug.
+  - Clips: idle, walk, look at map, write, point, talk, interact.
+- **7A.4 construction / builder workshop (Claude, hard-hat construction worker).**
+  - Props: a workbench with blueprints, wall-hung tools, a red tool chest, material stacks, shelving, a stepladder
+    and traffic cones.
+  - Clips: idle, walk, hammer, build, carry, look at plan, talk.
+- **7A.5 engineering / testing station (Codex, engineer with glasses, hoodie and tablet).**
+  - Props: a desk with two monitors, a laptop or tablet, test equipment, components, a whiteboard with diagrams, a
+    lamp and plants.
+  - Clips: idle, walk, study, inspect, write, interact, talk.
+- **7A.6 server / infrastructure bay.**
+  - Props: server racks with blue LEDs behind glass, a console, network gear, cables, a tool cart, crates, a plant and
+    a light.
+  - Station clips (performed by an agent who is there): idle, inspect, interact, maintain.
+- **7A.7 prop set.** One coherent modern vocabulary: sofa, shelving, cabinets, lockers, monitors, racks, plants, mugs,
+  maps, chairs and tables.
+- **7A.8 lighting.** The same room at day (bright), dusk (warm) and night (moody), matching §9.
+- **7A.9 scale.** Character 24 px, door about 1.4×, chair about 0.5×, table about 0.5×.
+- **Density per close-up.** Each station is compact, inhabited and readable, with clear floor around the agent.
+
+DO NOT COPY:
+- **The second hard-hat worker beside Claude in 7A.1.** He duplicates Claude's silhouette and violates C15. Real
+  helpers wait on C24.
+- **The two large green "HILLINK" fabric banners in 7A.3.** They are too prominent for understated branding and sit
+  close to the C22 line. Branding is reduced to modern formats (§11).
+- Generated text and the floating name labels (C13).
+- The overview's density. 7A.1 is close to the upper bound and its floor is nearly full. Use the close-ups for station
+  density and keep negative space (§7).
+- Exact prop positions, duplicated objects and the floor plan of the composite.
+
+HILLINK APPLICATION:
+- **The four Real functional spaces** (§11): three agent stations plus a server bay that is infrastructure, not an
+  agent or department.
+- **Real prop families** (§11, §16): office, construction, engineering, server/infrastructure, storage, lighting,
+  plants, planning, general clutter.
+- **Per-role clip sets** (§6). They match 7B exactly.
+
+### REFERENCE 7B: Fantasy T0 functional spaces (`ref7b-fantasy-functional-spaces.png`) [Kyle, 2026-10-01 00:51Z]
+
+The board is the same building as 6C, with no modern monitors, at 24 px in 2.5D isometric. Its panels are labelled
+7A–7J on the image; here they are cited as "7B 7C" and so on:
+- 7B 7A overview, 7B 7B character context
+- 7B 7C–7B 7F close-ups of the four functional spaces
+- 7B 7G banner and colour reference
+- 7B 7H prop set, 7B 7I lighting, 7B 7J scale
+
+Authoritative for Fantasy functional spaces and Fantasy banners. 6C still wins on the overall building and 6D on the
+characters.
+
+USE:
+- **7B 7C war / command table (ChatGPT, King in green and gold).**
+  - Props: a large map table with markers and scrolls, an astrolabe, a bookshelf, green and gold banners, candles
+    and plants. The chair reads as a command seat.
+  - Clips: idle, walk, look at map, write, point, talk, interact.
+- **7B 7D forge / builder workshop (Claude, dwarf artificer).**
+  - Props: a real stone forge with fire, an anvil, wall tools, materials, blueprints on an easel, a workbench, crates
+    and barrels.
+  - Clips: idle, walk, hammer, build, carry, look at plan, talk.
+  - This is the forge that 6C lacked.
+- **7B 7E arcane analysis station (Codex, red-eyed arcane inspector).**
+  - Props: a violet arcane orb, scrolls, brass instruments (wheels, gears), books, diagnostic tools, mechanical
+    components and a crystal lamp.
+  - Clips: idle, walk, study, inspect, write, interact, talk.
+  - It mixes brass mechanism with contained magic, which shows C23's hybrid directly.
+- **7B 7F Arcane Core / Archive (Fantasy server equivalent).**
+  - Props: a contained blue core crystal, rune columns, a scroll archive, conduits, a control table and a crystal
+    lamp.
+  - Station clips: idle, inspect, interact, maintain.
+- **7B 7G banners.** Primary green and gold; secondary blue and gold. The board's note says to use green as the primary
+  Hillink colour and blue for support and Codex's area. This confirms C26.
+- **7B 7H prop set.** Tables, chairs, shelves, chests, cabinets, benches, rugs and plants, all in timber, iron and
+  cloth.
+- **7B 7I lighting.** Day, dusk and night of the same room, matching §9.
+- **7B 7J scale.** It matches 7A.9: character 24 px, door about 1.4×, chair and table about 0.5×.
+
+DO NOT COPY:
+- **The screen-like blue panels** on Codex's desk (7B 7E) and on the core's control table (7B 7F). They come close to
+  monitors. Under C17 they are drawn as rune slates or crystal panes (§12).
+- **Blue-and-gold banners as organizational heraldry.** Blue is a local secondary only (C26).
+- Generated text, the floating name labels, and the mislabelled panel letters.
+- The overview's density and exact layout, as in 7A.
+- Any reading of the Arcane Core as "server racks with medieval textures". The rune columns must not repeat the rack
+  rhythm of LED-dotted slabs.
+
+HILLINK APPLICATION:
+- **The four Fantasy functional spaces** (§12).
+- **Fantasy prop families** (§12, §16): command/planning, forge/building, arcane engineering, archive/core, storage,
+  lighting/fire, plants, books/scrolls, general clutter.
+- **Banner rule** (C26).
+- **The Fantasy Codex hybrid** (C23).
+
+### 7A ↔ 7B paired comparison (semantic mappings) [Kyle C25, 00:51Z]
+
+Each row is **one canonical space with two visual readings**, not two systems. The pair shares its location role,
+its slot in the T0 layout, the light-equals-activity behaviour and the clip set.
+
+| Canonical space | Real (7A) | Fantasy (7B) | Shared clips | Light when active |
+|---|---|---|---|---|
+| Orchestration (ChatGPT) | command / orchestration office: executive desk, displays, wall map, documents, books | war / command table: map, markers, scrolls, astrolabe, correspondence, candles, green and gold banners | idle, walk, look at map, write, point, talk, interact | desk lamp and monitors ↔ candles |
+| Building (Claude) | construction / builder workshop: workbench, tools, tool chest, blueprints, materials, ladder | forge / artificer workshop: forge, anvil, hammer, tools, plans, materials, crates, barrels | idle, walk, hammer, build, carry, look at plan, talk | work lamp ↔ forge fire |
+| Inspection / testing (Codex) | engineering / testing station: monitors, laptop or tablet, test equipment, components, whiteboard | arcane-mechanical analysis station: orb, brass instruments, diagrams, scrolls, books, components | idle, walk, study, inspect, write, interact, talk | monitor cyan ↔ violet/blue arcane glow |
+| Infrastructure (no agent) | server / infrastructure bay: racks, networking, console, cables, tool cart | Arcane Core / Archive: contained crystal, rune columns, conduits, scroll archive, control table | idle, inspect, interact, maintain | rack LEDs ↔ crystal pulse |
+
+What the pair agrees on:
+- **Scale.** 24 px characters; door, chair and table proportions are identical.
+- **Lighting.** The same three times of day.
+- **Density.** Per-station density is the same.
+- **Agent roles.** Each role is in its own station.
+- **Clip sets.** One set per role, identical across themes.
+
+What deliberately differs:
+- **Materials.** Real uses concrete, glass and steel; Fantasy uses stone, timber and iron.
+- **Light sources.** Real uses electric light; Fantasy uses fire and crystal.
+- **Branding.** Real has an understated logo; Fantasy has green and gold banners.
+- **Codex's look.** The Real alias has no cybernetics; the Fantasy alias is the hybrid with one red eye.
 
 ---
 
@@ -572,7 +709,7 @@ VISUAL TRANSLATION LAYER (theme)
   | Canonical | Real alias | Fantasy alias |
   |---|---|---|
   | Claude is implementing or building | construction-worker Claude physically building with modern tools and materials | dwarf artificer Claude with hammer and forge |
-  | Codex is inspecting or testing | engineer Codex with engineering and testing equipment | arcane or cyborg Codex inspecting with Fantasy tools |
+  | Codex is inspecting or testing | engineer Codex with engineering and testing equipment | arcane-mechanical Codex analysing at his arcane-mechanical station |
   | ChatGPT is coordinating | the boss (black suit) at planning displays and the strategy table | King ChatGPT at the command table |
 
 - **No drift.** Switching theme changes only the picture. It never creates, removes, duplicates or changes the state of
@@ -678,16 +815,18 @@ The pillars:
   - **Codex (one canonical agent):**
     - **Real: an engineer.** A human man in technical or professional workwear, with engineering tools, a computer,
       plans or inspection gear. No cybernetic eye, no cybernetic shoulder, no armour, no robot silhouette.
-    - **Fantasy: a cyborg and arcane technical inspector.** Human, with dark hair and **ONE red eye** [C2], fantasy
-      technical clothing and arcane inspection tools. Never a visor across both eyes, never two cybernetic eyes, never a
-      full robot. The arcane/mechanical balance is still open (C23).
+    - **Fantasy: an ARCANE-MECHANICAL HYBRID inspector** [Kyle C23, 00:51Z]. Not a pure wizard and not a pure machine.
+      Human, with dark hair and **ONE red eye** [C2] (Fantasy alias only). Mechanical half: the red eye, brass
+      fittings, precision instruments and mechanical components. Arcane half: controlled magical energy, an orb or
+      crystal, runes, scrolls and books. Never a visor across both eyes, never two cybernetic eyes, never a full
+      robot or plated body, never a pointed-hat, long-beard wizard.
 - [proposed] Palettes per alias, from the 6B and 6D swatches:
 
   | Agent | Real | Fantasy |
   |---|---|---|
   | ChatGPT | black and charcoal with a white shirt; a small accent is optional | green and gold [C1] |
   | Claude | orange hi-vis and tan with a brown tool belt and a yellow-orange hard hat | orange-brown and leather, with forge-orange glow |
-  | Codex | grey and blue-grey, with a screen-blue accent | dark blue and grey, with a red eye and violet arcane glow |
+  | Codex | grey and blue-grey, with a screen-blue accent | dark blue and grey with brass trim, a red eye, and blue/violet arcane glow (blue is Codex's local secondary, C26) |
 
 - [Kyle] **Identity is stable across animation.** Walking Claude is the same Claude, working Codex doesn't change
   form, and seated ChatGPT keeps his proportions. This holds **within** each alias.
@@ -700,7 +839,7 @@ The pillars:
 - [Kyle] The three core roles, with their alias per theme:
   - **ChatGPT = orchestrator.** Real: boss or executive. Fantasy: King.
   - **Claude = builder.** Real: construction worker. Fantasy: dwarf artificer.
-  - **Codex = inspector or engineer.** Real: engineer. Fantasy: cyborg or arcane inspector.
+  - **Codex = inspector or engineer.** Real: engineer. Fantasy: arcane-mechanical hybrid inspector [C23].
 - [proposed] An archetype is a data record. Its fields:
   - `body` (a body plan: humanoid-short, humanoid-standard, broad, small-winged, hunched, large-creature or mechanical)
   - `silhouetteSignature`
@@ -756,6 +895,21 @@ The pillars:
   - **ChatGPT:** Real works at the desk and gestures to planning displays. Fantasy works at the table and gestures over
     the map.
   - Future agents declare their own (ledger, outreach…).
+- [Kyle 00:51Z, 7A/7B] **Per-role clip parity across themes.** Both boards give each role the *same* clip set; only
+  the props and the alias performing it differ:
+
+  | Role | Clips (Real 7A = Fantasy 7B) | Real performs it at | Fantasy performs it at |
+  |---|---|---|---|
+  | ChatGPT | idle, walk, look at map, write, point, talk, interact | executive desk, wall map, displays | war/command table, map, scrolls |
+  | Claude | idle, walk, hammer, build, carry, look at plan, talk | workbench, materials, blueprints | forge, anvil, materials, plans |
+  | Codex | idle, walk, study, inspect, write, interact, talk | monitors, test equipment, whiteboard | orb, instruments, scrolls |
+  | Infrastructure (a place, not an agent) | idle, inspect, interact, maintain (performed by Codex) | server bay | Arcane Core/Archive |
+
+  - [proposed] These are `work` variants and named poses inside the §6 matrix (`look at map`, `point`, `write`,
+    `hammer`, `build`, `look at plan`, `study`, `maintain`), not a second clip system. Each maps to the existing
+    canonical activity; none implies state that isn't canonical.
+  - [proposed] "maintain" at the infrastructure station is a Codex pose shown only when canonical state puts Codex
+    there; the server bay or core never animates an agent by itself.
 - [proposed] Props held in clips use the 5H attachment points: handNear, handFar, back, hip and head.
 - [Kyle] Celebrate plays only on canonical completion. Animation never implies a state that isn't canonical.
 - [proposed] Characters are animated by frame swapping, not by rotating limbs, so the pixel grid stays clean.
@@ -774,6 +928,11 @@ The pillars:
     Codex runs checks.
   - **Edge breakup:** room edges, terrain edges and roofs get vegetation, debris or wear every few tiles. There are no
     perfectly clean runs longer than about 6 tiles. This is stricter in Fantasy, looser in Real.
+- [Kyle 00:51Z] **Compact, inhabited, purposeful, with navigable negative space.** Spaces are detailed, warm and
+  slightly imperfect or handcrafted, but never so cluttered that agents disappear, paths become unreadable,
+  animations are hidden, or every tile carries an object. Each area must be identifiable without labels; there are
+  no permanent floating labels [C13]. 7A/7B show the right density per station; their overview panels (7A.1, 7B 7A)
+  are the upper bound, not the target.
 - [proposed] **Readability guardrail:** density lives on walls, edges and corners. The centre path and the agent's
   standing spot stay clear and slightly lighter, so agents always read on top.
 
@@ -799,6 +958,7 @@ The pillars:
 - [ref 1–3] **Warm, local key lights inside and a cool ambient outside.** The default time is dusk or evening.
   [Kyle C6] Hillink is **not** permanently locked to dusk. Dusk or evening stays the showcase condition for visual
   development because it shows lighting best.
+- [ref 7A.8, 7B 7I] Day (bright), dusk (warm) and night (moody) of the *same* room in both themes confirm this rule.
 - [ref 5] **Time-of-day behaviour:** the same assets serve day, dusk and night. Only sky, ambient tint and light-pool
   strength change. Interior lights glow at all times and dominate more at night.
 - [Kyle C6] The art system must keep a future day/night cycle possible: light sources, ambient colour and sky are
@@ -817,14 +977,14 @@ The pillars:
 ## 10. Scale rules
 
 - [Kyle] Buildings are clearly larger than agents. Furniture and doors make sense. Characters don't dominate rooms.
-- [proposed] Using character height h (about 22 art pixels):
+- [Kyle 2B, ref 7A.9/7J] Using character height h = **24 art pixels**:
 
   | Element | Size |
   |---|---|
-  | Door | about 1.4h tall, 0.6h wide [ref 6] |
+  | Door | about 1.4h tall, 0.6h wide [ref 6, 7A.9/7J] |
   | Storey (floor to floor) | about 2–2.5h. Ref 6's T0 is a single storey with walls of about 2h visible in the cutaway; ref 3a reads about 2.6h |
-  | Desk | 0.45h |
-  | Chair seat | 0.3h |
+  | Desk or table | 0.45–0.5h [ref 7A.9/7J] |
+  | Chair seat | 0.3h (overall chair with back about 0.5h [ref 7A.9/7J]) |
   | Server rack | 1.1h |
   | Bookshelf | 1.1–1.3h |
   | Table lamp | 0.25h |
@@ -844,9 +1004,15 @@ The pillars:
 
   | Agent | Workspace | Story props |
   |---|---|---|
-  | **ChatGPT** (boss) | Executive and orchestration workstation [Kyle 00:40Z] | planning displays, a strategy table, a wall map or boards, communication tools, strategic documents |
-  | **Claude** (construction worker) | Construction and building workspace | tools, plans, materials, build equipment, components, practical clutter |
-  | **Codex** (engineer) | Engineering and testing workstation | technical drawings, diagnostics, computer equipment, inspection tools, servers nearby |
+  | **ChatGPT** (boss) | Command / orchestration office [Kyle 00:51Z, 7A.3] | executive desk, displays, planning material, maps, documents, books, communication tools, understated Hillink branding |
+  | **Claude** (construction worker) | Construction / builder workshop [Kyle 00:51Z, 7A.4] | workbench, construction tools, tool storage, plans and blueprints, materials, shelving, measuring equipment, ladders, construction equipment |
+  | **Codex** (engineer) | Engineering / testing station [Kyle 00:51Z, 7A.5] | monitors, technical drawings, testing equipment, components, diagnostics, whiteboard, laptop or tablet |
+  | *(no agent)* | Server / infrastructure bay [Kyle 00:51Z, 7A.6] | racks, networking, consoles, cables, technical storage, maintenance equipment |
+
+- [Kyle 00:51Z] **The server bay is infrastructure, not another agent or department.** It has no alias, no
+  identity and no work of its own. Codex visits it to inspect or maintain only when canonical state puts him there.
+- [Kyle 00:51Z, 7A.7] **Real prop families** (visual vocabulary, not a checklist; §16): office, construction,
+  engineering, server/infrastructure, storage, lighting, plants, planning, general clutter.
 
 - [Kyle, ref 6] **Real T0** is compact, finished, modern, warm, dense, functional, expandable, and designed for the
   three-agent organization.
@@ -870,6 +1036,10 @@ The pillars:
   and engineer Codex. Workstation props are visual metaphors for canonical activity; they create no capability or work.
 - [Kyle C22] **No royal theming in Real.** No green and gold banners or King motifs to make Real ChatGPT resemble the
   Fantasy King. Subtle Hillink branding in the environment is fine.
+  - [proposed, from 7A.3] 7A.3 hangs two large green "HILLINK" fabric banners in ChatGPT's office. Read as branding,
+    not royalty, but too prominent for "understated". Real branding uses modern formats (a wall logo, a framed print,
+    a sign or a small flat panel), at most one per room, in the Hillink green without gold heraldic trim, tassels or
+    hanging pennant shapes.
 
 ## 12. Fantasy rules
 
@@ -887,16 +1057,28 @@ The pillars:
   - stone, timber, hearth fire and banners
   - workshops and magical or medieval technical equivalents
   - warm local light, dense storytelling, clear circulation, expandable
-- [Kyle 00:40Z] **Fantasy workstations translate function:**
-  - **ChatGPT:** a throne or command area, maps, a war or planning table, messengers or magical equivalents.
-  - **Claude:** a forge or workshop, hammer, materials, crafting and building equipment.
-  - **Codex:** an inspection or engineering station, scrolls, plans, arcane diagnostics, mechanical or magical
-    inspection devices.
-  - No modern monitors [C17].
+- [Kyle 00:51Z, 7B; supersedes the 00:40Z list] **Fantasy workstations translate function** (C25):
+  - **ChatGPT (King): war / command table.** Maps, scrolls, markers, books, correspondence, astrolabe or planning
+    instruments, candles, and green and gold banners. A throne-like command chair is optional.
+  - **Claude (dwarf): forge / artificer workshop.** An actual forge, anvil, hammer, tools, workbench, plans,
+    materials, crates, barrels and construction supplies. Never a desk.
+  - **Codex: arcane-mechanical analysis station.** Magical diagnostics, precision instruments, diagrams, scrolls,
+    books, controlled magical energy, mechanical components and inspection tools.
+  - **Infrastructure (no agent): Arcane Core / Archive.** A contained magical core or crystal, runic systems,
+    conduits, archives and control apparatus. It is **not** "server racks with medieval textures".
+  - No modern monitors [C17]. Glowing slates or panels on the analysis station or core control table (as in 7B 7E/7F)
+    must read as runes, crystal or enchanted glass: irregular, framed in wood or brass, no rectangular bezel, no UI
+    chrome, no screen glow grid.
+- [Kyle C26, 00:51Z] **Banners and colour:** Fantasy organizational banners are **green and gold**. Blue is a
+  **local secondary** only, for Codex, arcane energy, magical technical systems and accents (7B 7G). No blue-and-gold
+  organizational banners.
+- [Kyle 00:51Z, 7B 7H] **Fantasy prop families** (visual vocabulary, not a checklist; §16): command/planning,
+  forge/building, arcane engineering, archive/core, storage, lighting/fire, plants, books/scrolls, general clutter.
 - [proposed] District signals are props and architecture, not labels:
-  - **Forge:** a smoking chimney and an anvil glow.
-  - **Command hall:** banners and a throne.
-  - **Workshop:** an arcane device glow.
+  - **Forge / artificer workshop (Claude):** a smoking chimney, forge fire and an anvil glow.
+  - **War / command table (ChatGPT):** green and gold banners over a map table.
+  - **Arcane-mechanical analysis station (Codex):** a contained blue/violet instrument glow and brass mechanisms.
+  - **Arcane Core / Archive (infrastructure):** a pulsing contained crystal, rune columns and scroll shelving.
   - **Gate:** a portcullis and torches.
 
 ## 13. Real ↔ Fantasy translation rules
@@ -905,23 +1087,27 @@ The pillars:
 
   | Canonical concept | Real | Fantasy |
   |---|---|---|
-  | build / implement | builder's workspace, workbench, code on monitors | forge or artificer's workshop, anvil, hammer |
-  | inspect / test / review | inspection lab, test bench, logs | arcane machinery inspected with the eye beam, rune device |
-  | orchestrate / plan | planning office, wall map, status board | King's command, war table, banners, throne |
-  | infrastructure / compute | server room, racks, LEDs | arcane engine, crystal conduits |
+  | orchestrate / plan | command / orchestration office: executive desk, wall map, displays | war / command table: maps, scrolls, markers, green and gold banners |
+  | build / implement | construction / builder workshop: workbench, tools, blueprints, materials | forge / artificer workshop: forge, anvil, hammer, materials |
+  | inspect / test / review | engineering / testing station: monitors, test equipment, whiteboard | arcane-mechanical analysis station: orb, instruments, scrolls |
+  | infrastructure / compute | server / infrastructure bay: racks, networking, consoles, cables | Arcane Core / Archive: contained crystal, rune columns, conduits, archives |
   | security | badge gate, cameras | gate, guards, fortifications |
-  | data / storage | storage room, archive shelves | vault, archive, library |
+  | data / storage (only when a separate capability exists) | storage room, archive shelves | vault or library; at T0 storage lives inside the Arcane Core / Archive |
   | communications | antennas, dish, network closet | towers, relays, observatory |
   | owner action needed | flagged item on the planning board | sealed scroll at the King's table |
   | construction | scaffolding, steel frame, glazing | timber frame, stone, thatch |
 
+- [Kyle C25, 00:51Z] **The four functional mappings are fixed:** command office ↔ war/command table, builder
+  workshop ↔ forge/artificer workshop, engineering/testing station ↔ arcane-mechanical analysis station, server bay ↔
+  Arcane Core/Archive. **Each pair is one canonical space with two visual readings, not two canonical systems.** The
+  pair shares location role, footprint slot, light-equals-activity behaviour and the §6 clip set.
 - [Kyle 00:40Z] **Role translation of the agents:**
 
   | Agent | Real alias | Fantasy alias |
   |---|---|---|
   | ChatGPT | boss, executive, orchestrator | King, orchestrator |
   | Claude | construction worker, builder | dwarf builder, artificer |
-  | Codex | engineer | arcane or cyborg inspector-engineer |
+  | Codex | engineer | arcane-mechanical hybrid inspector [C23] |
 
 - [proposed] **Parity rule:** every canonical state visible in one theme must be visible in the other, with the same
   location role, the same *pose semantics* (each alias may perform it in its own way, §0) and the same
@@ -969,6 +1155,12 @@ The pillars:
   - `theme` (real, fantasy or both)
   - `roles` (which workspace kinds use it)
   - `storyTag` (what it implies is happening)
+  - `family` [Kyle 00:51Z]: one of the theme's prop families (§11 Real, §12 Fantasy).
+- [Kyle 00:51Z] **Props are visual vocabulary, not a checklist.** A station draws from its families to read as its
+  function; it does not have to contain every listed item, and the 7A/7B key-prop rows are examples, not quotas.
+- [Kyle 00:51Z] Never carry generation artifacts into production props: generated text or misspellings, impossible
+  geometry, duplicated objects, inconsistent proportions, decorative characters, malformed props, impossible floor
+  plans, modern tech in Fantasy, or fantasy in Real. The written spec outranks any reference artifact.
 - [proposed] Props are placed by the existing 5H dressing rules (never on walks, stations, solids or plots), extended
   with the §7 cluster rules and the density targets.
 - [proposed] **Story props bound to state** (read-only) swap variants, such as an open book, a lit monitor or a
@@ -1048,10 +1240,10 @@ The pillars:
 - [Kyle 00:40Z, 6A/6C] **T0 compositions**, small but finished:
   - **Real T0 (6A):** a one-storey modern building of concrete, glass and steel, with the Hillink logo. Inside: three
     role corners (ChatGPT, Claude, Codex), one shared central zone, a server bay behind glass, an entrance and
-    circulation.
+    circulation. Station contents per 7A.
   - **Fantasy T0 (6C):** a compact stone outpost with corner towers and a timber interior. Inside: three role corners
-    (command and map, forge and hearth, arcane inspection), one shared central table, and the same circulation and
-    scale.
+    (war/command table, forge, arcane-mechanical analysis station), the Arcane Core/Archive in the server bay's slot,
+    one shared central table, and the same circulation and scale. Station contents per 7B.
 - [open] Exact exteriors at gameplay zoom, and the T0 → T1 step, still need references.
 - [code] The default simulation boots with only Claude and Codex (`sim/simulator.mjs` `SIM_ROSTER`). ChatGPT appears
   only when an evidence script registers it, so the three-agent start is not what you see on boot today. The vertical
@@ -1138,7 +1330,7 @@ The pillars:
 - **Character art:** vector chibi becomes pixel sprites at about 3 heads, with small eyes and no blush.
   - **Real (6B):** ChatGPT is the boss in a black suit, Claude is a hard-hat construction worker, and Codex is an
     engineer.
-  - **Fantasy (6D):** ChatGPT is the King, Claude is the dwarf artificer, and Codex is the cyborg or arcane inspector
+  - **Fantasy (6D):** ChatGPT is the King, Claude is the dwarf artificer, and Codex is the arcane-mechanical hybrid inspector
     with one red eye.
   - Each alias is its own design; continuity comes from role (§0, §4).
 - **Rendering:** smooth canvas vectors become a low-resolution pixel buffer, integer-upscaled.
@@ -1171,7 +1363,7 @@ The pillars:
 
 ## 24. Remaining visual questions requiring reference material [open]
 
-Resolved by refs 5–6D:
+Resolved by refs 5–7B:
 - pixel density (24 pixels)
 - Real T0 environment and materials (6A)
 - Real aliases (6B)
@@ -1179,19 +1371,24 @@ Resolved by refs 5–6D:
 - Fantasy aliases (6D)
 - the alias model (§0)
 - lighting behaviour
+- functional spaces in both themes, including Fantasy workstations without monitors (7A/7B, C25)
+- Fantasy Codex's arcane/mechanical balance (C23)
+- Fantasy banner colour (C26)
 
 Still open:
-1. **Fantasy workstations done properly:** Claude's forge as a forge (not a desk), Codex's arcane-analysis station,
-   ChatGPT's war table, and the Fantasy equivalent of servers. None of them use monitors (C17, C25).
-2. **Fantasy Codex's arcane/mechanical balance** (C23).
-3. **Construction at gameplay scale** for the 10 truthful stages (§17), in Real steel and Fantasy timber and stone,
+1. **Construction at gameplay scale** for the 10 truthful stages (§17), in Real steel and Fantasy timber and stone,
    with each theme's Claude performing it.
-4. **Ambient workers**, especially Real construction helpers versus construction-worker Claude (C24).
-5. **Kyle's avatar** (C14).
-6. **UI/HUD** in the pixel language.
-7. **Terrain edges** at T0 and as the World grows.
-8. **The T0 → T1 growth step** in each theme.
-9. **Fantasy environment banner colour** (C26).
+   This is the next major problem. Kyle's working sequence (not yet spec, not finalized here):
+   - Real: site → foundation → structural steel → walls + roof → systems → interior → operational.
+   - Fantasy: site → foundation → timber/stone → walls + roof → systems/craft infrastructure → interior → operational.
+2. **Ambient workers**, especially Real construction helpers versus construction-worker Claude (C24). Waits for the
+   construction reference.
+3. **Kyle's avatar** (C14). Not inferred from 7A or 7B.
+4. **UI/HUD** in the pixel language.
+5. **Terrain edges** at T0 and as the World grows.
+6. **The T0 → T1 growth step** in each theme.
+7. **The shared central zone in Fantasy:** 7B shows a central table and hearth but no clear Fantasy translation of
+   Real's sofa and table (6C's red sofa is rejected). Low priority.
 
 ---
 
@@ -1202,7 +1399,7 @@ Resolved by Kyle on 2026-10-01 at 00:12Z:
 | # | Conflict | Decision [Kyle] |
 |---|---|---|
 | C1 | ChatGPT's palette | **Green and gold** is the identity palette. Royal cream, gold and richer garment detail may be added; green stays recognizable. Neither reference is copied literally. *Scope narrowed 00:40Z: this applies to **Fantasy** ChatGPT. Real ChatGPT's identity is the all-black suit (6B).* |
-| C2 | Codex's design | **Half-human cyborg with ONE RED EYE.** A human or cybernetic body, not a full robot. The red eye is a permanent identity and silhouette feature. *Scope narrowed 00:40Z: this applies to **Fantasy** Codex. Real Codex is an engineer with no cybernetics (6B).* |
+| C2 | Codex's design | **Half-human cyborg with ONE RED EYE.** A human or cybernetic body, not a full robot. The red eye is a permanent identity and silhouette feature. *Scope narrowed 00:40Z: this applies to **Fantasy** Codex. Real Codex is an engineer with no cybernetics (6B). Refined 00:51Z by C23: an arcane-mechanical hybrid, still with one red eye.* |
 | C3 | Claude's headgear | **Red or orange hair and a full beard.** A hard hat or helmet appears only while actively doing construction work. *Scope narrowed 00:40Z: contextual headgear applies to **Fantasy** Claude. Real Claude's hard hat is part of his identity (6B).* |
 | C4 | Real HQ character identity | ~~Identities persist across themes… the same individual is recognizable in both.~~ **Superseded 00:40Z** by the alias model (§0): Real aliases are human role translations (boss, construction worker, engineer). They need not share anatomy, face, age, clothing or species with the Fantasy aliases. They are never generic: each reads as its role. |
 | C5 | Starting size | **Start small supersedes** the two-floor baseline as the starting state. The larger HQ is kept as an **earned growth stage**. Small is not primitive: Real T0 is a compact, finished small HQ; Fantasy T0 is a compact established outpost, small keep or workshop. Exact looks wait on references. |
@@ -1221,21 +1418,21 @@ Resolved by Kyle on 2026-10-01 at 00:12Z:
 | C22 | King banners in Real (resolved 00:40Z) | **No green and gold banners in Real** just to echo the King. Real ChatGPT's identity is the black-suit boss. Subtle Hillink branding is allowed, but his Real workspace is not royal-themed. |
 | C19 | Real materials (resolved 00:32Z) | **Real uses modern materials** (§11). Ref 5's lodge identity is rejected; its warmth, density, intimacy, storytelling, lighting and layout ideas are kept. Ref 6 is authoritative. |
 | C20 | T0 shared space (resolved 00:32Z) | **One modest shared multipurpose space** in T0, for planning, breaks and informal meetings. It is not a capability or department. No large lounge, cafeteria or recreation area for decoration. |
+| C23 | Fantasy Codex, arcane vs mechanical (resolved 00:51Z) | **An ARCANE-MECHANICAL HYBRID**, not a pure wizard and not a pure machine. He keeps **ONE RED EYE**, on the Fantasy alias only. Mechanical: the eye, brass fittings, precision instruments, components. Arcane: controlled magical energy, orb or crystal, runes, scrolls, books (§4). |
+| C25 | Fantasy functional spaces (resolved 00:51Z) | **Four fixed mappings:** Real command/orchestration office ↔ Fantasy war/command table; Real construction/builder workshop ↔ Fantasy forge/artificer workshop; Real engineering/testing station ↔ Fantasy arcane-mechanical analysis station; Real server/infrastructure bay ↔ Fantasy Arcane Core/Archive. **Not separate canonical systems** (§13). 6C's monitors, office chairs and desk-like forge remain rejected. |
+| C26 | Fantasy banner colour (resolved 00:51Z) | **Fantasy organizational banners are GREEN and GOLD primary.** Blue is a **local secondary** only, for Codex, arcane energy, magical technical systems and accents (§12). The earlier blue-and-gold-heraldry leaning is withdrawn. |
 | C13 | Room labels (resolved 2026-10-01 00:25Z) | **Environment first, text second.** Rooms are recognized by their physical design. Labels may appear on hover, on selection, in the inspector, in a map view, or as subtle architectural signage. No large permanent floating labels. |
 
 Still open:
 
 | # | Question | Agent leaning (not a decision) |
 |---|---|---|
-| C14 | **Kyle avatar appearance:** how Kyle looks, and how his avatar stays clearly separate from agents | A distinct human owner silhouette, visible only during owner interactions (C12). Never in a black suit, hard hat or glasses, so he can't be mistaken for a Real alias. |
-| C23 | **Fantasy Codex, arcane vs mechanical:** 6D mixes a red cybernetic eye and brass mechanisms with a hooded coat, staff and arcane book. Kyle says the balance is still subject to refinement. | Keep the cybernetic eye as the lock. Mechanical details in brass; arcane in the tools he uses (lens, staff, runes). |
-| C24 | **Real construction helpers vs Real Claude:** Real Claude is now a hard-hat construction worker, so ambient construction workers risk looking like him (C15) | Helpers get white or blue hard hats, no beard, a non-orange vest and a different build (§20). |
-| C25 | **6C's Fantasy desks:** they have monitors and office chairs, and Claude's corner reads as a desk rather than a forge | Treated as generation artifacts and rejected under C17. Needs a Fantasy workstation reference. |
-| C26 | **Fantasy banner colour:** 6C hangs blue and gold banners in the outpost, while Fantasy ChatGPT is green and gold | Blue and gold as Hillink's Fantasy heraldry (the organization), and green and gold for the King personally. Needs confirmation. |
+| C14 | **Kyle avatar appearance:** how Kyle looks, and how his avatar stays clearly separate from agents. Not to be inferred from any reference [Kyle 00:51Z]. | A distinct human owner silhouette, visible only during owner interactions (C12). Never in a black suit, hard hat or glasses, so he can't be mistaken for a Real alias. |
+| C24 | **Real construction helpers vs Real Claude:** Real Claude is a hard-hat construction worker, so ambient construction workers risk looking like him (C15). 7A.1 even shows a second hard-hat worker beside him. Ambient workers need their own faces, silhouettes, palettes, clothing and equipment [Kyle 00:51Z]. **Waits for the construction reference.** | Helpers get white or blue hard hats, no beard, a non-orange vest and a different build (§20). |
 
 ---
 
 ## Next steps (only after approval)
-REFERENCES → spec → review → **Reference Batch 2C (next)** → more references or corrections → approved visual language → small
+REFERENCES → spec → review → Reference Batch 2C (7A/7B, done) → **construction reference (next)** → more references or corrections → approved visual language → small
 vertical-slice prototype (one room, three agents, both themes) → visual review → refinement → propagation. [Kyle]
 No implementation, no Pass 5I and no World-wide redesign until Kyle approves.
