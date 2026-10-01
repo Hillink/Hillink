@@ -1,12 +1,21 @@
-# HILLINK ART DIRECTION SPEC — DRAFT 1 (revision 2)
+# HILLINK ART DIRECTION SPEC — DRAFT 1 (revision 3)
 
 Status: **the overall direction is approved by Kyle as a working foundation (2026-10-01 00:12Z). That is not approval to
-implement.** No artwork, no vertical slice and no Pass 5I until Kyle approves. Conflicts C1–C11 are resolved by Kyle
-(§25). Questions that need more references stay [open] (§24). Reference Batch 2 is expected.
+implement.** No artwork, no vertical slice and no Pass 5I until Kyle approves. Kyle's decisions are in §25. Questions
+that need more references stay [open] (§24).
+
+**Reference authority (Kyle, 2026-10-01 00:40Z):**
+- **6A** for the Real HQ environment.
+- **6B** for the Real agent aliases.
+- **6C** for the Fantasy HQ environment.
+- **6D** for the Fantasy agent aliases.
+
+Earlier references stay valid for what they were approved for. Where an older *character* reference conflicts with 6B or
+6D, 6B or 6D wins. Where a generated incidental detail conflicts with this spec, the spec wins.
 
 Written 2026-10-01 on `claude/world-5h`, in answer to "PASS 5H — ITERATION 2" (Kyle, 2026-10-01 00:06Z).
 
-References are stored in `docs/world/references/pass5h-iter2/` (ref1–ref4). The 5H iteration 1 evidence it is compared
+References are stored in `docs/world/references/pass5h-iter2/` (ref1–ref6, plus `ref6r-6a-6d-aliases.png`). The 5H iteration 1 evidence it is compared
 against is in `docs/world/evidence/pass5h/`.
 
 Every rule carries one of these labels:
@@ -128,15 +137,16 @@ USE:
 - Silhouettes are chunky, with dark selective outlines and textured clothing (leather, fur, metal).
 - Each character holds a role prop: the dwarf a hammer and axe, the cyborg a glowing eye and mechanical arm, the King a
   sceptre and scroll.
-- Each character is also drawn **at a modern desk with monitors**: the same characters inside Real HQ.
+- Each character is also drawn **at a modern desk with monitors**. *Superseded by 6B:* Real uses different human role
+  aliases, not these characters at desks.
 
 DO NOT COPY:
 - The exact sprites, pixel for pixel. Kyle said so.
 
 HILLINK APPLICATION:
-- This is the **primary character reference** together with Reference 4.
-- It raises the biggest open question: do Real HQ characters keep their archetype identity (dwarf, cyborg, King at
-  computers)? See §25 C4.
+- A **Fantasy** character reference, together with Reference 4. 6D outranks both where they differ.
+- The question it raised (do Real characters keep the dwarf, cyborg and King bodies?) is settled by 6B: **no**. Real
+  aliases are human role translations (§0, §4).
 
 **3d. Construction and growth progression (bottom right).**
 
@@ -188,6 +198,7 @@ DO NOT COPY:
 
 HILLINK APPLICATION:
 - This defines the **clip matrix (§6)**, the **archetype range (§5, §19)** and the **status icon vocabulary (§21)**.
+- Its ChatGPT, Claude and Codex sprites are **Fantasy** aliases. 6D outranks them where they differ.
 - It adds a `run` clip, which is not in 5H's clip list.
 
 ### REFERENCE 5: Batch 2A concept board (`ref5-batch2a-board.png`) [Kyle, 2026-10-01 00:25Z]
@@ -250,7 +261,8 @@ USE:
   - ChatGPT has speech, idea, a sceptre and a monitor.
   - Claude has blueprints, a flow diagram and a hard hat while building.
   - Codex has a tablet, screens and a magnifier.
-  These match the §6 per-archetype `work` clips.
+  These match the §6 per-archetype `work` clips. *Superseded by 6B for Real costumes:* this "Real" sheet still dressed
+  the agents as their Fantasy archetypes.
 
 DO NOT COPY:
 - **The side-scroller camera** [Kyle]. Every panel except 5 and 6 is a side cutaway.
@@ -258,8 +270,8 @@ DO NOT COPY:
 - **The "HILINK" spelling** on the HQ sign. The brand is **Hillink**.
 - **The fantasy castle on Real's horizon** (panels 1 and 7) [Kyle C11].
 - **Codex with a red visor across both eyes.** About half of the Codex frames in panel 2 show a red band over both eyes,
-  and some show a helmet or cap. That contradicts the lock of **ONE red eye, not a full robot** [Kyle C2]. Treated as
-  a reference artifact.
+  and some show a helmet or cap. That contradicts **Fantasy** Codex's lock of ONE red eye, not a full robot [Kyle C2].
+  Real Codex has no cybernetic eye at all (6B). Treated as a reference artifact.
 - **Codex's hair colour varies** between frames (black and brown). Treated as a reference inconsistency.
 - **Hard-hat workers who look like Claude.** The ambient worker in the server bay and outside T0 wears the same yellow
   hard hat as construction Claude. See §25 C15.
@@ -332,31 +344,22 @@ USE:
   - A shelf is about 1.2h.
   - A plant is about 0.8–1h.
   - A desk is about 0.45h.
-- **Real ChatGPT** (panels 2, 6): a young-looking orchestrator.
-  - A gold crown with gems.
-  - A green jacket with gold trim and an emblem on the back.
-  - A black tee with a gold emblem.
-  Modern King DNA [Kyle].
-- **Real Claude** (panels 2, 6): stout and broad.
-  - Red-orange hair and a full beard.
-  - A cream work shirt with rolled sleeves.
-  - A brown leather harness and belt with pouches, and a tool pack on his back.
-  - Work trousers and boots.
-  Modern builder with dwarf DNA [Kyle].
-- **Real Codex** (panels 2, 6): human, with dark hair.
-  - **ONE red cybernetic eye on one side.**
-  - A mechanical shoulder and arm on the same side.
-  - A dark technical jacket, with a back plate.
-  Restrained augmentation, with the human/cyborg contrast clear [Kyle].
-- **Clips** (panels 3, 4):
+- ~~Real character designs (panels 2, 6)~~ **SUPERSEDED by 6B (Kyle, 00:40Z).** This board carried too much Fantasy
+  design into Real. These earlier Real locks are withdrawn:
+  - Real ChatGPT's crown, and his green and gold jacket
+  - Real Claude as dwarf-like (stout dwarf body, harness costume), with the hard hat only contextual
+  - Real Codex's red cybernetic eye and cybernetic shoulder
+  - the requirement that the Real and Fantasy aliases share one physical face
+  The current Real aliases are in **REFERENCE 6A–6D** below and in §4.
+- **Clip semantics** (panels 3, 4), still valid with 6B's characters:
   - walk in profile, about 4 frames
   - ChatGPT: idle, working, talking, interacting
   - Claude: idle, working, building, reading
   - Codex: idle, inspecting, testing, using a tablet
   Proportions stay stable across all of them [Kyle].
 - **Workstations** (panel 5):
-  - **ChatGPT:** command and planning, with a world map, three monitors, green and gold wall banners, a leather armchair
-    and plants.
+  - **ChatGPT:** command and planning, with a world map, three monitors, a leather armchair and plants. The green and
+    gold banners are **not** carried into Real [Kyle C22].
   - **Claude:** engineering and building, with a pegboard wall of tools, parts bins, boxes, a workbench desk with
     monitors and a red task chair.
   - **Codex:** inspection and testing, with server racks and blue LEDs, two monitors with readouts, a darker, cooler
@@ -367,17 +370,16 @@ USE:
 - **Lighting** (panel 9): the same room at day, dusk and night with the same assets. This confirms §9.
 
 DO NOT COPY:
-- **Codex's look in the gameplay scene** (panel 1). At gameplay zoom his eye area reads as a red band across both eyes.
-  The single eye must read as single at 24 pixels: one bright red pixel cluster on one side only, never spanning both
-  eyes [Kyle C2].
+- **Codex's look in the gameplay scene** (panel 1). His eye area reads as a red band. Real Codex has no red eye at all
+  (6B). For **Fantasy** Codex, the single red eye must read as single at 24 pixels: one bright red cluster on one side,
+  never spanning both eyes [Kyle C2].
 - **The dog on the sofa** and any other decorative animals or people. They are not required, and never canonical
   [Kyle].
 - **Exact prop placement, the floor plan, or text on banners and screens.** Verify every word independently. The sign
   here correctly reads "HILLINK"; keep the spelling **Hillink** regardless of the reference [Kyle].
 - **Impossible geometry.** Walls that end in mid-air and railings that cut through rooms are generation artifacts.
 - **Floating name labels** over agents [Kyle C13].
-- **Real ChatGPT's face** as automatically final. It conflicts with the elderly, white-bearded Fantasy King. See §25
-  C21.
+- **All of this board's Real character designs.** They are superseded by 6B.
 
 HILLINK APPLICATION:
 - **Real T0 = this composition** in Hillink's isometric room system, as a single storey that matches its exterior (C16).
@@ -387,12 +389,160 @@ HILLINK APPLICATION:
   licence to resize the existing World arbitrarily [Kyle].
 - Workstation props are visual metaphors for canonical activity. They create no capability and no work [Kyle].
 - The panel 5 corners are the starting story-prop clusters for §11.
-- Panel 6 detail callouts (crown, jacket back, harness, cyber shoulder) define the **identity features that must survive
-  every view and clip** (§4).
+- ~~Panel 6 detail callouts define the identity features~~ Superseded: identity features now come from 6B (Real) and 6D
+  (Fantasy), §4.
 
 CONFLICTS / RESOLUTION:
-- C15, C16, C17, C18, C19 and C20 are resolved by Kyle with this reference. See §25.
-- New C21 (ChatGPT's face and age across aliases) and C22 (King banners in Real) are listed in §25.
+- C15, C16, C17, C19 and C20 were resolved by Kyle with this reference. See §25.
+- C18 was resolved here, then superseded by the 6A–6D alias model.
+- C21 and C22, raised here, were resolved by Kyle with 6A–6D. See §25.
+
+### REFERENCE 6A–6D: corrected alias board (`ref6r-6a-6d-aliases.png`) [Kyle, 2026-10-01 00:40Z]
+
+This board **corrects** Reference 6's character interpretation. Kyle asked for its four panels to be analysed
+separately, because each has its own authority:
+- **6A**: Real HQ environment
+- **6B**: Real agent aliases
+- **6C**: Fantasy HQ environment
+- **6D**: Fantasy agent aliases
+
+**The correction [Kyle].** One canonical agent has a Real alias and a Fantasy alias. **The aliases do not need to be the
+same physical character in different clothes.** Continuity across themes comes from:
+- role and behaviour
+- animation semantics
+- workstation and function
+- recurring identity cues and palette accents, where useful
+- personality and archetype
+It does **not** come from identical anatomy, face, age, clothing or species.
+
+#### 6A: Real HQ environment (authoritative for the Real environment)
+
+USE:
+- **The modern T0 HQ:** compact, complete, modern and expandable. It is one storey, and three exterior views show
+  the same building.
+- **Materials:**
+  - concrete walls with a large Hillink logo
+  - glass partitions with steel frames
+  - steel and dark metal trim
+  - rooftop AC units
+  - modern desks with monitors
+  - server racks with LED strips behind glass
+  - warm practical lamps
+  - plants
+  - books and shelving
+  - controlled clutter
+- **Open-plan organization:**
+  - ChatGPT's command and planning corner, with a wall map and planning displays.
+  - Claude's building and engineering corner, with shelving, tools and parts.
+  - Codex's inspection and testing corner, beside the server bay.
+  - One shared central zone (sofa and table) for planning, breaks and informal meetings [C20].
+- **A top-down floor plan** confirms one plausible, coherent volume [C16].
+- **Exterior:** a parking area with a pickup truck, planters, wall lamps and a paved approach.
+
+DO NOT COPY:
+- Generated text, accidental geometry or impossible spatial relationships.
+- The floating labels; rooms are identified by their environment [C13].
+- Decorative entities, such as the truck, as canonical entities or capabilities.
+
+HILLINK APPLICATION:
+- **This is Real T0** in Hillink's isometric room system (§11, §18).
+- It replaces Reference 6 panel 1 as the authority for the Real environment. The two agree on materials, layout program
+  and density.
+
+#### 6B: Real agent aliases (authoritative for Real characters)
+
+USE:
+- **Real ChatGPT is the BOSS, executive and orchestrator.**
+  - A human man in an **all-black suit**: black jacket, black tie, white shirt.
+  - Dark, neat hair and a polished executive look.
+  - Clips: idle, walk, work (desk), talk, interact.
+  - Gear: a phone and a watch.
+  - **No crown, no green king jacket, no medieval or fantasy clothing** [Kyle].
+- **Real Claude is a CONSTRUCTION WORKER and builder.**
+  - A human man (**not a dwarf**) with a red-orange beard and hair.
+  - A **hard hat** (yellow-orange), an orange hi-vis vest with reflective stripes, a tool belt, gloves, work boots and
+    tools (hammer, saw).
+  - Clips: idle, walk, work (build), use tool, talk.
+  - The hard hat is **part of his Real identity**, not only contextual [Kyle].
+- **Real Codex is an ENGINEER.**
+  - A human man with dark hair and **glasses**.
+  - A grey hoodie under a dark jacket, headphones around his neck, a tablet and a backpack.
+  - Clips: idle, walk, work (desk), inspect, talk.
+  - **No cybernetic eye, no cybernetic shoulder, no armour, no robot silhouette** [Kyle].
+- **Palette swatches** shown on the board:
+  - ChatGPT: blacks and greys with a white shirt.
+  - Claude: orange, brown and tan.
+  - Codex: greys and blues.
+
+DO NOT COPY:
+- Sprites pixel for pixel. Production art is original [C9].
+- Generated text.
+- The "CEO" job-title label as an in-world claim. The role is a visual metaphor for orchestration, not a capability.
+
+HILLINK APPLICATION:
+- These are the Real aliases in §4. All three are standard human body plans at 24 pixels.
+- Their silhouette signatures in Real:
+  - ChatGPT: a dark suit block with a white collar and tie.
+  - Claude: a hard hat with a hi-vis vest and a beard.
+  - Codex: glasses, headphones, a hoodie and a backpack.
+
+#### 6C: Fantasy HQ environment (authoritative for the Fantasy environment)
+
+USE:
+- **Fantasy T0 is a compact, established outpost.**
+  - Stone walls with crenellated corner towers and a timber interior structure.
+  - A dock on the water.
+  - A red flag outside.
+  - Three exterior views of the same building, and a top-down floor plan.
+- **The same organizational scale and program as 6A, translated:**
+  - ChatGPT's command and strategy corner, with a large map.
+  - Claude's forge and building corner, with a hearth.
+  - Codex's arcane inspection corner, with a glowing violet crystal device.
+  - A shared central table on a rug, and a seating zone.
+- **Materials:** stone, timber, iron, banners, candles, torches, hearth fire, rugs, shelves and crystals.
+- **Lighting:** warm candle and torch pools; a violet arcane glow at Codex's corner.
+- **Density and storytelling:** dense, with clear circulation.
+
+DO NOT COPY:
+- **Modern monitors and office chairs** at the Fantasy desks. They violate C17: Fantasy translates function, not
+  object.
+- **A modern red sofa** carried over from Real. Translate the function (a seating or rest zone) into Fantasy furniture,
+  such as a bench, settle or furs.
+- **Claude's corner as a desk.** It reads weakly as a forge. The Fantasy build station should be clearly a forge or
+  workshop (§11, §13).
+- Generated text and floating labels.
+
+HILLINK APPLICATION:
+- **This is Fantasy T0** (§12, §18): the same three role corners, shared zone and circulation as Real T0, in the
+  Fantasy material language.
+
+#### 6D: Fantasy agent aliases (authoritative for Fantasy characters)
+
+USE:
+- **Fantasy ChatGPT is the KING and orchestrator.**
+  - A young King with brown hair and a gold crown with a red gem.
+  - A green robe with a fur collar and gold trim, and a sceptre.
+  - Palette: greens and golds.
+  - Clips: idle, walk, work (table), talk, interact.
+- **Fantasy Claude is the DWARF artificer.**
+  - Dwarf anatomy, with a large red-orange beard and hair.
+  - Leather apron and armour, gloves, a hammer and tools.
+  - Palette: oranges and browns.
+  - Clips: idle, walk, work (forge), build, talk.
+- **Fantasy Codex is the ARCANE INSPECTOR.**
+  - A human with dark hair and **ONE red cybernetic eye**.
+  - A dark hooded coat with brass trim, and mechanical or arcane gear.
+  - A staff or tool, and an arcane book.
+  - Palette: dark blues, greys and violet.
+  - Clips: idle, walk, study (table), inspect, talk.
+
+DO NOT COPY:
+- Sprites pixel for pixel.
+- Generated text.
+
+HILLINK APPLICATION:
+- These are the Fantasy aliases in §4.
+- The exact balance of arcane and mechanical in Fantasy Codex is still subject to refinement [Kyle]. See C23.
 
 ---
 
@@ -421,14 +571,21 @@ VISUAL TRANSLATION LAYER (theme)
 
   | Canonical | Real alias | Fantasy alias |
   |---|---|---|
-  | Claude is implementing or building | Claude at a modern builder workspace with the right tools | dwarf artificer Claude hammering at the forge |
-  | Codex is inspecting or testing | cyborg Codex with modern test equipment | cyborg Codex inspecting arcane machinery |
-  | ChatGPT is coordinating | the King at a planning wall or status board | the King at the command table |
+  | Claude is implementing or building | construction-worker Claude physically building with modern tools and materials | dwarf artificer Claude with hammer and forge |
+  | Codex is inspecting or testing | engineer Codex with engineering and testing equipment | arcane or cyborg Codex inspecting with Fantasy tools |
+  | ChatGPT is coordinating | the boss (black suit) at planning displays and the strategy table | King ChatGPT at the command table |
 
 - **No drift.** Switching theme changes only the picture. It never creates, removes, duplicates or changes the state of
   an agent. There is never a "Real World state" and a separate "Fantasy World state".
+- **Aliases are thematic representations, not one body in two outfits** [Kyle 00:40Z].
+  - Cross-theme continuity comes from role, behaviour, animation semantics, workstation and function, deliberately
+    chosen recurring cues and palette accents, and personality or archetype.
+  - It does **not** require the same anatomy, face, age, clothing or species.
+  - Example: Real Claude is a human construction worker; Fantasy Claude is a dwarf artificer. Both build.
+- **Same canonical work, different performance.** One canonical activity may be animated differently by each alias
+  (for example, using a power tool versus hammering at a forge). Both must show the same canonical state.
 - **Extensible.** A new agent gets one canonical record, and each theme supplies an alias. Both aliases inherit the
-  Hillink visual language and express the same identity (§4, §5, §19).
+  Hillink visual language and express the same canonical *role* (§4, §5, §19).
 - [Kyle C12] **Kyle's avatar is not an agent.** It represents the human owner. It appears only for owner
   interactions, never does AI work and never counts in the agent population.
 - [proposed] **Alias data is appearance-only.** An alias record holds sprite, wardrobe, equipment, palette and
@@ -481,8 +638,8 @@ The pillars:
 
 - [ref 3c, 4] About 3 heads tall. The head is about 1/3 of the height *including hair or headgear*. The face itself is
   smaller.
-- [Kyle, ref 6] **Target: 24 art pixels tall** at normal gameplay zoom (narrowed from ref 5's 22–26). Most are
-  humanoid; the broad dwarf is about 2 pixels shorter and wider.
+- [Kyle, ref 6] **Target: 24 art pixels tall** at normal gameplay zoom (narrowed from ref 5's 22–26). All three Real
+  aliases are standard humans. In Fantasy, dwarf Claude is about 2 pixels shorter and wider.
   - The goal is the relationship between character, furniture, room and building. It is not permission to resize the
     World arbitrarily [Kyle].
   - The head is about 8 pixels.
@@ -498,45 +655,52 @@ The pillars:
 - [Kyle] A player must identify an agent without its nameplate.
 - [proposed] **Silhouette test:** a solid-black version of each sprite in front and side views must be distinguishable
   from every other agent's at 1× art scale.
-- [proposed] Each core agent owns one silhouette signature that no future agent may reuse:
-  - **ChatGPT:** the crown points plus a cape that widens the lower outline.
-  - **Claude:** a broad, short body with a beard mass, plus a hammer head above the shoulder.
-  - **Codex:** an asymmetric head, with one glowing eye and a mechanical plate, plus one mechanical arm.
-- [proposed] Each agent has one dominant hue, one secondary hue and one accent glow:
-  - **ChatGPT:** [Kyle C1] green and gold are the identity palette. Royal cream, gold and richer garment detail may be
-    added, but green must stay recognizable. Neither reference is copied literally.
-  - **Claude:** orange-brown, leather and steel, forge-orange glow. [Kyle C3] Visible red/orange hair and a full beard
-    always. A hard hat or helmet appears **only while he is actively doing construction work**, so equipment shows the
-    activity.
-  - **Codex:** [Kyle C2] a **half-human cyborg** (a human body with cybernetics, not a full robot) with **ONE RED EYE**.
-    The red eye is a permanent identity and silhouette feature in every view, clip and theme.
-- [Kyle, ref 6] **Identity locks per agent.** These hold in every view, clip and state:
-  - **ChatGPT:** King/Orchestrator. Green and gold palette, the crown motif and a regal silhouette.
-    - Real is a **modern orchestrator with King DNA** (a green and gold jacket, a literal crown allowed), not a medieval
-      costume in an office.
-  - **Claude:** Dwarf/Builder/Artificer. Shorter and stouter, with red-orange hair and a full red-orange beard.
-    - Real wears engineering workwear: work shirt, harness, belt, boots, tools.
-    - The yellow hard hat is **contextual** and appears only during actual construction work. He is recognized by body,
-      hair, beard, palette and builder language.
-  - **Codex:** half-human cyborg inspector. Clearly human, with dark human hair (never changing colour), **ONE red
-    cybernetic eye**, asymmetric cybernetic detail on one side and restrained augmentation.
-    - Never a visor across both eyes, never two cybernetic eyes, never a full robot.
-- [Kyle] **Identity is stable across animation.** Walking Claude is the same Claude. Working Codex doesn't become more
-  robotic. Seated ChatGPT keeps his proportions.
-- [Kyle C4] **Identity persists across themes.** The three agents never become generic humans in Real.
-  - Real changes wardrobe, equipment and presentation for a modern technology company.
-  - Fantasy uses the stronger archetype form.
-  - Each must be instantly recognizable as the same individual in either theme.
-  - [proposed] What stays fixed across themes: face, hair or beard, body plan, silhouette signature, identity palette
-    and Codex's red eye. What changes: clothing, held equipment and props.
-  - [open] What exactly the Real versions look like. Needs references (§24).
+- [proposed] Each core agent owns one silhouette signature **per alias**, and no future agent may reuse it in that theme:
+
+  | Agent | Real alias (6B) | Fantasy alias (6D) |
+  |---|---|---|
+  | ChatGPT | a dark suit block with a white collar and tie | crown points plus a robe or cape widening the lower outline |
+  | Claude | a hard hat and hi-vis vest plus a beard | a broad, short dwarf body with a beard mass, plus a hammer |
+  | Codex | glasses, headphones around the neck and a backpack | a hooded coat with an asymmetric head (one red eye) |
+
+- [Kyle 00:40Z] **Identity locks per alias.** These hold in every view, clip and state of that alias.
+  - **ChatGPT (one canonical agent):**
+    - **Real: the boss, executive and orchestrator.** A human man in an all-black suit, polished and authoritative. No
+      crown, no green king jacket, no medieval or fantasy clothing.
+    - **Fantasy: the King and orchestrator.** Crown, royal clothing, green and gold [C1], command symbolism, a regal
+      silhouette.
+  - **Claude (one canonical agent):**
+    - **Real: a construction worker and builder.** A human man, not a dwarf, in practical workwear. The **hard hat is
+      part of his Real identity**, with work boots and a tool belt or construction gear. He clearly reads as the person
+      physically building things. He keeps a red-orange beard and hair (6B).
+    - **Fantasy: a dwarf builder and artificer.** Dwarf anatomy, a large red-orange beard, forge and building identity,
+      hammer and tools, artificer styling. Headgear is contextual [C3].
+  - **Codex (one canonical agent):**
+    - **Real: an engineer.** A human man in technical or professional workwear, with engineering tools, a computer,
+      plans or inspection gear. No cybernetic eye, no cybernetic shoulder, no armour, no robot silhouette.
+    - **Fantasy: a cyborg and arcane technical inspector.** Human, with dark hair and **ONE red eye** [C2], fantasy
+      technical clothing and arcane inspection tools. Never a visor across both eyes, never two cybernetic eyes, never a
+      full robot. The arcane/mechanical balance is still open (C23).
+- [proposed] Palettes per alias, from the 6B and 6D swatches:
+
+  | Agent | Real | Fantasy |
+  |---|---|---|
+  | ChatGPT | black and charcoal with a white shirt; a small accent is optional | green and gold [C1] |
+  | Claude | orange hi-vis and tan with a brown tool belt and a yellow-orange hard hat | orange-brown and leather, with forge-orange glow |
+  | Codex | grey and blue-grey, with a screen-blue accent | dark blue and grey, with a red eye and violet arcane glow |
+
+- [Kyle] **Identity is stable across animation.** Walking Claude is the same Claude, working Codex doesn't change
+  form, and seated ChatGPT keeps his proportions. This holds **within** each alias.
+- [Kyle 00:40Z, supersedes C4's "same individual"] **Across themes, recognition comes from role, not anatomy.** A
+  player recognizes "the boss / the King", "the builder", "the engineer / inspector" by role, behaviour, workstation
+  and animation semantics. Shared motifs are optional and deliberate, never required.
 
 ## 5. Agent archetype rules
 
-- [Kyle] The three core identities are:
-  - **ChatGPT = King / Orchestrator**
-  - **Claude = Dwarf / Builder / Artificer**
-  - **Codex = Cyborg / Inspector**
+- [Kyle] The three core roles, with their alias per theme:
+  - **ChatGPT = orchestrator.** Real: boss or executive. Fantasy: King.
+  - **Claude = builder.** Real: construction worker. Fantasy: dwarf artificer.
+  - **Codex = inspector or engineer.** Real: engineer. Fantasy: cyborg or arcane inspector.
 - [proposed] An archetype is a data record. Its fields:
   - `body` (a body plan: humanoid-short, humanoid-standard, broad, small-winged, hunched, large-creature or mechanical)
   - `silhouetteSignature`
@@ -545,7 +709,8 @@ The pillars:
   - `clipOverrides` (for example, a winged agent hovers instead of walking)
   - `workVerb` (build, inspect, plan, ledger, outreach, analyze, review, model…)
   - `workstation` (§19)
-  - `fantasyForm` / `realForm` (§13)
+  - `realForm` / `fantasyForm` (§13): each alias has its own body plan, silhouette, palette and equipment. They may
+    differ in species, age and anatomy [Kyle 00:40Z].
 - [proposed] Body plans are shared skeletons. Archetypes are skins on them. A new archetype that fits an existing body
   plan needs only a palette, equipment and a work verb.
 - [Kyle] Scout, Treasurer, Oracle, Cyclops, Qwen, Gemma and Kyle are examples of range, not inhabitants.
@@ -557,15 +722,15 @@ The pillars:
   - plus 5H's `waiting`, `blocked` and `type` (seated)
   - Left-facing views mirror the right-facing ones, **except where mirroring would move an identity feature** (below).
 - [Kyle 2B §7, ref 6] **Mirroring must not break an identity lock.** 5H builds left-facing views by mirroring the
-  right-facing ones. For a symmetric agent that is harmless, but Codex's single red eye and his one-sided cybernetic
-  shoulder/arm would jump to the other side of his body whenever he turns. That breaks "identity and proportions stable
+  right-facing ones. For a symmetric agent that is harmless, but Fantasy Codex's single red eye and any one-sided
+  augmentation would jump to the other side of his body whenever he turns. That breaks "identity and proportions stable
   across every view and state" and the one-red-eye lock.
   - [proposed] Every archetype declares `asymmetric: true|false`. Asymmetric agents get authored left-facing views (or
     a mirrored base with the identity layer redrawn on the correct side), never a plain flip.
-  - [proposed] Codex's red eye and augmentation stay on one fixed side of his body in all five views, both facings and
-    every clip; in views where that side faces away, the eye glow may still show as a rim light, but never moves.
-  - [proposed] The same check applies to held items and one-sided details on any agent (ChatGPT's sceptre hand,
-    Claude's tool side) and to future agents; the §4 silhouette test is run on both facings.
+  - [proposed] Fantasy Codex's red eye and augmentation stay on one fixed side of his body in all five views, both facings
+    and every clip; in views where that side faces away, the eye glow may still show as a rim light, but never moves.
+  - [proposed] The same check applies to held items and one-sided details on any alias (Fantasy ChatGPT's sceptre hand,
+    either Claude's tool side, Real Codex's backpack strap) and to future agents; the §4 silhouette test is run on both facings.
 - [proposed] Frame counts at the 5H cycle timings:
 
   | Clip | Frames |
@@ -583,10 +748,13 @@ The pillars:
   | blocked | 3, plays once |
   | type | 3 |
 
-- [proposed] `work` is per archetype:
-  - Claude hammers at the anvil or desk.
-  - Codex scans with the eye beam or a tablet.
-  - ChatGPT gestures over a map or table.
+- [proposed] `work` is per alias (6B, 6D):
+  - **Claude:** Real uses tools on construction (`work (build)`, `use tool`). Fantasy hammers at the forge (`work
+    (forge)`, `build`).
+  - **Codex:** Real works at the desk and inspects with a tablet or gear. Fantasy studies at the table and inspects with
+    arcane tools.
+  - **ChatGPT:** Real works at the desk and gestures to planning displays. Fantasy works at the table and gestures over
+    the map.
   - Future agents declare their own (ledger, outreach…).
 - [proposed] Props held in clips use the 5H attachment points: handNear, handFar, back, hip and head.
 - [Kyle] Celebrate plays only on canonical completion. Animation never implies a state that isn't canonical.
@@ -666,7 +834,7 @@ The pillars:
 - [proposed] One isometric floor tile is about 0.9h wide. A single desk workstation is about 2×2 tiles including the
   chair.
 - [Kyle] When zoomed out, agents stay recognizable. [proposed] Below 2× zoom, core agents get a 1-pixel brighter rim,
-  and their silhouette signature (crown, hammer, eye glow) is kept visible by a level-of-detail sprite.
+  and their per-alias silhouette signature (§4) is kept visible by a level-of-detail sprite.
 
 ## 11. Real HQ rules
 
@@ -676,9 +844,9 @@ The pillars:
 
   | Agent | Workspace | Story props |
   |---|---|---|
-  | **Claude** | Builder's workspace | drafting table with blueprints, a workbench with tools and parts, a monitor with code, crates of components, a hammer on a rack |
-  | **Codex** | Inspection lab | test bench with an oscilloscope and probes, several monitors with graphs and logs, a magnifier lamp, a small rack, a checklist board |
-  | **ChatGPT** | Planning and oversight office | wall map or display with routes and tasks, a planning table with pins and cards, a raised desk overlooking the floor, a status board |
+  | **ChatGPT** (boss) | Executive and orchestration workstation [Kyle 00:40Z] | planning displays, a strategy table, a wall map or boards, communication tools, strategic documents |
+  | **Claude** (construction worker) | Construction and building workspace | tools, plans, materials, build equipment, components, practical clutter |
+  | **Codex** (engineer) | Engineering and testing workstation | technical drawings, diagnostics, computer equipment, inspection tools, servers nearby |
 
 - [Kyle, ref 6] **Real T0** is compact, finished, modern, warm, dense, functional, expandable, and designed for the
   three-agent organization.
@@ -698,9 +866,10 @@ The pillars:
   - a stack of boxes not yet unpacked
   - plants that are slightly overgrown
 - [ref 3a] Glass curtain walls show the interior from outside. Light spills onto the plaza at night.
-- [Kyle C4] Characters keep their identity in Real. ChatGPT is still recognizably the King, Claude the dwarf
-  builder and Codex the half-human cyborg, dressed for a modern technology company. [open] The exact Real wardrobe
-  needs references (§24).
+- [Kyle 00:40Z, 6A/6B] **Real agents are the 6B aliases:** boss ChatGPT in a black suit, construction-worker Claude
+  and engineer Codex. Workstation props are visual metaphors for canonical activity; they create no capability or work.
+- [Kyle C22] **No royal theming in Real.** No green and gold banners or King motifs to make Real ChatGPT resemble the
+  Fantasy King. Subtle Hillink branding in the environment is fine.
 
 ## 12. Fantasy rules
 
@@ -713,6 +882,17 @@ The pillars:
   - Roofs have a patched tile or two.
   - Fences lean.
   - Terraces step by height.
+- [Kyle 00:40Z, 6C] **Fantasy T0** is a compact, established outpost at the **same organizational scale** as Real T0.
+  It is not the same building or objects; it is the same organization translated:
+  - stone, timber, hearth fire and banners
+  - workshops and magical or medieval technical equivalents
+  - warm local light, dense storytelling, clear circulation, expandable
+- [Kyle 00:40Z] **Fantasy workstations translate function:**
+  - **ChatGPT:** a throne or command area, maps, a war or planning table, messengers or magical equivalents.
+  - **Claude:** a forge or workshop, hammer, materials, crafting and building equipment.
+  - **Codex:** an inspection or engineering station, scrolls, plans, arcane diagnostics, mechanical or magical
+    inspection devices.
+  - No modern monitors [C17].
 - [proposed] District signals are props and architecture, not labels:
   - **Forge:** a smoking chimney and an anvil glow.
   - **Command hall:** banners and a throne.
@@ -735,8 +915,17 @@ The pillars:
   | owner action needed | flagged item on the planning board | sealed scroll at the King's table |
   | construction | scaffolding, steel frame, glazing | timber frame, stone, thatch |
 
+- [Kyle 00:40Z] **Role translation of the agents:**
+
+  | Agent | Real alias | Fantasy alias |
+  |---|---|---|
+  | ChatGPT | boss, executive, orchestrator | King, orchestrator |
+  | Claude | construction worker, builder | dwarf builder, artificer |
+  | Codex | engineer | arcane or cyborg inspector-engineer |
+
 - [proposed] **Parity rule:** every canonical state visible in one theme must be visible in the other, with the same
-  location role, the same character pose and the same light-equals-activity behaviour. This extends 5H's truth
+  location role, the same *pose semantics* (each alias may perform it in its own way, §0) and the same
+  light-equals-activity behaviour. This extends 5H's truth
   equivalence to art.
 
 ## 14. Terrain rules
@@ -856,14 +1045,14 @@ The pillars:
   - **Fantasy T0:** a compact, established outpost, small keep or workshop suitable for three agents.
   - The progression visibly grows toward the larger HQ or settlement.
   - This replaces the ref 3d camp and single glass room in the table above as T0 *candidates*.
-- [ref 5, proposed] **T0 compositions**, small but finished:
-  - **Real T0:** one compact building with a concrete and brick front, wall signage, rooftop solar panels and a
-    mast with a dish. Inside: three workstations (ChatGPT, Claude, Codex), a planning corner (map wall, sofa), a
-    small compute corner (2–4 racks) and stairs if there is an upper level.
-  - **Fantasy T0:** a small stone keep with a timber upper storey and a watchtower. Inside: three work spots under
-    banners, plus a hearth or forge.
-- [open] Final T0 looks, including whether Real T0 has one storey or two (§25 C16), wait on the dedicated T0
-  references.
+- [Kyle 00:40Z, 6A/6C] **T0 compositions**, small but finished:
+  - **Real T0 (6A):** a one-storey modern building of concrete, glass and steel, with the Hillink logo. Inside: three
+    role corners (ChatGPT, Claude, Codex), one shared central zone, a server bay behind glass, an entrance and
+    circulation.
+  - **Fantasy T0 (6C):** a compact stone outpost with corner towers and a timber interior. Inside: three role corners
+    (command and map, forge and hearth, arcane inspection), one shared central table, and the same circulation and
+    scale.
+- [open] Exact exteriors at gameplay zoom, and the T0 → T1 step, still need references.
 - [code] The default simulation boots with only Claude and Codex (`sim/simulator.mjs` `SIM_ROSTER`). ChatGPT appears
   only when an evidence script registers it, so the three-agent start is not what you see on boot today. The vertical
   slice should register all three by default.
@@ -880,7 +1069,9 @@ The pillars:
   3. Pick a body plan and a silhouette feature that no existing agent owns (§4).
   4. Work verb → `work` clip variant and held prop.
   5. Workstation kind → workspace prop cluster, in both Real and Fantasy forms.
-  6. If needed, a new room or building module goes through §17.
+  6. **Two aliases from one role:** a Real alias (a human role translation) and a Fantasy alias (an archetype that may
+     differ in species or anatomy), linked by role and behaviour, not by shared anatomy [Kyle 00:40Z].
+  7. If needed, a new room or building module goes through §17.
 - [Kyle] Appearance and theme metadata stay data, never code. This 5H rule is kept.
 - [proposed] **Fallback art:** an unknown role gets a generic but finished-looking specialist (a hooded worker with a
   satchel, in its colour), never an unfinished placeholder.
@@ -922,6 +1113,9 @@ The pillars:
 - [proposed] To keep that distinction visible:
   - Ambient inhabitants have no nameplate, no status icon, no selection panel and no HUD count.
   - They use a reduced detail level and never an agent's silhouette signature or identity palette.
+  - [proposed, C15] Real Claude is himself a hard-hat construction worker (6B), so Real construction helpers must be
+    clearly different from him: a white or blue hard hat (never his yellow-orange), no beard, a different vest colour
+    (never his orange hi-vis), and a different build. See C24.
   - They don't appear in agent lists, and the renderer derives them from scenery data, never from World agents.
 
 ## 21. UI and status relationship to the World
@@ -942,11 +1136,11 @@ The pillars:
 ## 22. What specifically changes from current 5H
 
 - **Character art:** vector chibi becomes pixel sprites at about 3 heads, with small eyes and no blush.
-  - ChatGPT becomes the King in both themes.
-  - Claude becomes the dwarf.
-  - Codex becomes the cyborg.
-  - [Kyle C4] Identities persist in Real: the King, dwarf and cyborg in modern dress, not generic humans.
-  - Claude's hard hat appears only during active construction work [Kyle C3], and Codex has one red eye [Kyle C2].
+  - **Real (6B):** ChatGPT is the boss in a black suit, Claude is a hard-hat construction worker, and Codex is an
+    engineer.
+  - **Fantasy (6D):** ChatGPT is the King, Claude is the dwarf artificer, and Codex is the cyborg or arcane inspector
+    with one red eye.
+  - Each alias is its own design; continuity comes from role (§0, §4).
 - **Rendering:** smooth canvas vectors become a low-resolution pixel buffer, integer-upscaled.
 - **Outline:** one ink outline becomes selective outlines.
 - **Colour:** flat fills become hue-shifted ramps with texture.
@@ -977,21 +1171,27 @@ The pillars:
 
 ## 24. Remaining visual questions requiring reference material [open]
 
-Resolved by refs 5–6: Real agents, Real T0 interior and materials, pixel density (24 px), Real workstations and lighting
-behaviour.
+Resolved by refs 5–6D:
+- pixel density (24 pixels)
+- Real T0 environment and materials (6A)
+- Real aliases (6B)
+- Fantasy T0 environment (6C)
+- Fantasy aliases (6D)
+- the alias model (§0)
+- lighting behaviour
 
 Still open:
-1. **Fantasy T0 at gameplay scale:** the Fantasy counterpart of ref 6, in the same camera and pixel density.
-2. **Fantasy aliases at 24 pixels:** the King, dwarf and cyborg in Fantasy dress, matching their Real faces (C21).
-3. **Function translation in Fantasy (C17):** what Codex's arcane-analysis station, ChatGPT's war table and the
-   server-equivalent look like.
-4. **Real T0 exterior** that matches ref 6's single-storey interior volume (C16).
-5. **Construction at gameplay scale:** the 10 truthful stages (§17), especially in Real steel.
-6. **Ambient workers:** their own look, distinct from Claude (C15).
-7. **Kyle's avatar** (C14).
-8. **UI/HUD** in the pixel language.
-9. **Terrain edges** at T0 and as the World grows.
-10. **The T0 → T1 growth step:** what the first expansion adds in each theme.
+1. **Fantasy workstations done properly:** Claude's forge as a forge (not a desk), Codex's arcane-analysis station,
+   ChatGPT's war table, and the Fantasy equivalent of servers. None of them use monitors (C17, C25).
+2. **Fantasy Codex's arcane/mechanical balance** (C23).
+3. **Construction at gameplay scale** for the 10 truthful stages (§17), in Real steel and Fantasy timber and stone,
+   with each theme's Claude performing it.
+4. **Ambient workers**, especially Real construction helpers versus construction-worker Claude (C24).
+5. **Kyle's avatar** (C14).
+6. **UI/HUD** in the pixel language.
+7. **Terrain edges** at T0 and as the World grows.
+8. **The T0 → T1 growth step** in each theme.
+9. **Fantasy environment banner colour** (C26).
 
 ---
 
@@ -1001,10 +1201,10 @@ Resolved by Kyle on 2026-10-01 at 00:12Z:
 
 | # | Conflict | Decision [Kyle] |
 |---|---|---|
-| C1 | ChatGPT's palette | **Green and gold** is the identity palette. Royal cream, gold and richer garment detail may be added; green stays recognizable. Neither reference is copied literally. |
-| C2 | Codex's design | **Half-human cyborg with ONE RED EYE.** A human or cybernetic body, not a full robot. The red eye is a permanent identity and silhouette feature. |
-| C3 | Claude's headgear | **Red or orange hair and a full beard.** A hard hat or helmet appears only while actively doing construction work. |
-| C4 | Real HQ character identity | **Identities persist across themes.** Never generic humans in Real. Real changes wardrobe, equipment and presentation for a technology company; Fantasy uses the stronger archetypes. The same individual is recognizable in both. |
+| C1 | ChatGPT's palette | **Green and gold** is the identity palette. Royal cream, gold and richer garment detail may be added; green stays recognizable. Neither reference is copied literally. *Scope narrowed 00:40Z: this applies to **Fantasy** ChatGPT. Real ChatGPT's identity is the all-black suit (6B).* |
+| C2 | Codex's design | **Half-human cyborg with ONE RED EYE.** A human or cybernetic body, not a full robot. The red eye is a permanent identity and silhouette feature. *Scope narrowed 00:40Z: this applies to **Fantasy** Codex. Real Codex is an engineer with no cybernetics (6B).* |
+| C3 | Claude's headgear | **Red or orange hair and a full beard.** A hard hat or helmet appears only while actively doing construction work. *Scope narrowed 00:40Z: contextual headgear applies to **Fantasy** Claude. Real Claude's hard hat is part of his identity (6B).* |
+| C4 | Real HQ character identity | ~~Identities persist across themes… the same individual is recognizable in both.~~ **Superseded 00:40Z** by the alias model (§0): Real aliases are human role translations (boss, construction worker, engineer). They need not share anatomy, face, age, clothing or species with the Fantasy aliases. They are never generic: each reads as its role. |
 | C5 | Starting size | **Start small supersedes** the two-floor baseline as the starting state. The larger HQ is kept as an **earned growth stage**. Small is not primitive: Real T0 is a compact, finished small HQ; Fantasy T0 is a compact established outpost, small keep or workshop. Exact looks wait on references. |
 | C6 | Time of day | **Not locked to dusk.** The system must allow a future day/night cycle. Dusk is the showcase condition for now. No day/night system in this pass. |
 | C7 | Non-agent inhabitants | **Allowed, as ambient inhabitants strictly separate from agents.** They never masquerade as agents, receive fake work, imply nonexistent capabilities or distort the agent population. The agents are ChatGPT, Claude and Codex. |
@@ -1016,7 +1216,9 @@ Resolved by Kyle on 2026-10-01 at 00:12Z:
 | C15 | Ambient workers vs Claude (resolved 00:32Z) | **Ambient workers must not duplicate Claude.** They have their own silhouettes, clothing, palettes and headgear. They may wear construction gear, but they are never Claude clones, and they remain non-agent inhabitants. |
 | C16 | Real T0 storeys (resolved 00:32Z) | **Exterior and interior are the same physical volume.** A cutaway may expose spaces but never invent an impossible interior. Ref 6's T0 is a single storey. |
 | C17 | Monitors in Fantasy (resolved 00:32Z) | **No literal modern monitors in Fantasy.** Themes translate *function*, not *object*: a diagnostic workstation becomes an arcane-analysis station, a planning display becomes a map, war table or magical planning apparatus, and server equipment becomes the established world's equivalent. A deliberate hybrid technology needs a future reference that explicitly establishes it. |
-| C18 | Real wardrobe (resolved 00:32Z) | **Theme-translated identity.** ChatGPT is a modern green and gold orchestrator with King DNA. Claude is a modern builder or engineer with dwarf/artificer DNA. Codex is a modern technical inspector with half-human cyborg DNA. Fantasy costumes are never copied whole into Real; strong signature elements (the crown) may survive where they help recognition. |
+| C18 | Real wardrobe (resolved 00:32Z, **superseded 00:40Z**) | ~~Modern King DNA, dwarf DNA, cyborg DNA.~~ **Now:** Real wardrobe is the 6B role aliases. ChatGPT wears an all-black suit with no crown. Claude is a hard-hat construction worker, not a dwarf. Codex is an engineer with no cybernetics. Fantasy costumes are never carried into Real. |
+| C21 | ChatGPT's face across aliases (resolved 00:40Z) | **Aliases need not share a face or apparent age.** Real and Fantasy ChatGPT are two thematic aliases of one canonical agent. The same applies to Claude and Codex. Recognition comes from semantic identity and chosen motifs, not anatomy. |
+| C22 | King banners in Real (resolved 00:40Z) | **No green and gold banners in Real** just to echo the King. Real ChatGPT's identity is the black-suit boss. Subtle Hillink branding is allowed, but his Real workspace is not royal-themed. |
 | C19 | Real materials (resolved 00:32Z) | **Real uses modern materials** (§11). Ref 5's lodge identity is rejected; its warmth, density, intimacy, storytelling, lighting and layout ideas are kept. Ref 6 is authoritative. |
 | C20 | T0 shared space (resolved 00:32Z) | **One modest shared multipurpose space** in T0, for planning, breaks and informal meetings. It is not a capability or department. No large lounge, cafeteria or recreation area for decoration. |
 | C13 | Room labels (resolved 2026-10-01 00:25Z) | **Environment first, text second.** Rooms are recognized by their physical design. Labels may appear on hover, on selection, in the inspector, in a map view, or as subtle architectural signage. No large permanent floating labels. |
@@ -1025,13 +1227,15 @@ Still open:
 
 | # | Question | Agent leaning (not a decision) |
 |---|---|---|
-| C14 | **Kyle avatar appearance:** how Kyle looks, and how his avatar stays clearly separate from agents | A distinct human owner silhouette, visible only during owner interactions (C12). |
-| C21 | **ChatGPT's face across aliases:** Real ChatGPT (ref 6) is young, brown-haired and beardless; Fantasy ChatGPT in ref 3c (and 5H iteration 1) is an elderly King with a white beard. Kyle requires "the same individual" in both themes (C4). | Pick one face for both aliases, and translate only the wardrobe. Needs the Fantasy counterpart reference to settle. |
-| C22 | **King banners in Real:** ref 6 hangs green and gold emblem banners in ChatGPT's Real corner | Allowed as a subtle shared motif (C11), as branded wall hangings with the Hillink mark. Never medieval heraldry. |
+| C14 | **Kyle avatar appearance:** how Kyle looks, and how his avatar stays clearly separate from agents | A distinct human owner silhouette, visible only during owner interactions (C12). Never in a black suit, hard hat or glasses, so he can't be mistaken for a Real alias. |
+| C23 | **Fantasy Codex, arcane vs mechanical:** 6D mixes a red cybernetic eye and brass mechanisms with a hooded coat, staff and arcane book. Kyle says the balance is still subject to refinement. | Keep the cybernetic eye as the lock. Mechanical details in brass; arcane in the tools he uses (lens, staff, runes). |
+| C24 | **Real construction helpers vs Real Claude:** Real Claude is now a hard-hat construction worker, so ambient construction workers risk looking like him (C15) | Helpers get white or blue hard hats, no beard, a non-orange vest and a different build (§20). |
+| C25 | **6C's Fantasy desks:** they have monitors and office chairs, and Claude's corner reads as a desk rather than a forge | Treated as generation artifacts and rejected under C17. Needs a Fantasy workstation reference. |
+| C26 | **Fantasy banner colour:** 6C hangs blue and gold banners in the outpost, while Fantasy ChatGPT is green and gold | Blue and gold as Hillink's Fantasy heraldry (the organization), and green and gold for the King personally. Needs confirmation. |
 
 ---
 
 ## Next steps (only after approval)
-REFERENCES → spec → review → **Reference Batch 2 (next)** → more references or corrections → approved visual language → small
+REFERENCES → spec → review → **Reference Batch 2C (next)** → more references or corrections → approved visual language → small
 vertical-slice prototype (one room, three agents, both themes) → visual review → refinement → propagation. [Kyle]
 No implementation, no Pass 5I and no World-wide redesign until Kyle approves.
