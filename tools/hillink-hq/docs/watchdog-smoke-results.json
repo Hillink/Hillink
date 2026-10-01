@@ -1,0 +1,378 @@
+{
+  "startedAt": "2026-10-01T21:26:03.445Z",
+  "machine": {
+    "platform": "linux",
+    "node": "v24.21.0",
+    "claude": "2.1.287 (Claude Code)"
+  },
+  "base": "origin/claude/dev-baseline",
+  "smokes": {
+    "investigate": {
+      "objectiveId": "773e5eea-6cca-4b57-934c-a261f919b575",
+      "status": "COMPLETE",
+      "reason": "Accepted handoff answers the objective.",
+      "seconds": 191,
+      "feedServed": 20,
+      "claudeStatusAfter": "IDLE",
+      "quarantined": false,
+      "tasks": [
+        {
+          "taskId": "d93d53eb-a46f-4359-9920-3875f6e7da41",
+          "operation": "review-repo",
+          "stage": "DONE",
+          "terminal": "COMPLETED",
+          "computeClass": "SUBSCRIPTION",
+          "variant": "default",
+          "longestQuietSeconds": 160,
+          "longestQuietBetween": "PROGRESS -> PROGRESS: 1 tool result returned to Claude.",
+          "heartbeats": 37,
+          "phases": [
+            "begin model (waiting for the model's first token, 300 s)",
+            "end model",
+            "begin tool:toolu_011xnm1EzdvoHynePfEPkdrg (Claude Code running the Read tool, 300 s)",
+            "end tool:toolu_011xnm1EzdvoHynePfEPkdrg",
+            "begin tool:toolu_01Ao1XPFKSNGHsbXhD23KTzU (Claude Code running the Grep tool, 300 s)",
+            "end tool:toolu_01Ao1XPFKSNGHsbXhD23KTzU",
+            "begin model (waiting for the model's next response, 300 s)",
+            "end model",
+            "begin tool:toolu_01ACEmfZs7CPmA1cRfMYGF5b (Claude Code running the Read tool, 300 s)",
+            "end tool:toolu_01ACEmfZs7CPmA1cRfMYGF5b",
+            "begin model (waiting for the model's next response, 300 s)",
+            "end model",
+            "begin tool:toolu_01Kk8z46nV4sHSUYFY4hojxv (Claude Code running the Grep tool, 300 s)",
+            "end tool:toolu_01Kk8z46nV4sHSUYFY4hojxv",
+            "begin model (waiting for the model's next response, 300 s)",
+            "end model",
+            "begin thinking (the model thinking (extended thinking is not streamed), 600 s)",
+            "end thinking"
+          ],
+          "recovery": []
+        }
+      ],
+      "commit": null
+    },
+    "review": {
+      "objectiveId": "095cfc12-0e5e-47a1-b848-9b123e477cf8",
+      "status": "COMPLETE",
+      "reason": "Accepted handoff answers the objective.",
+      "seconds": 195,
+      "feedServed": 20,
+      "claudeStatusAfter": "IDLE",
+      "quarantined": false,
+      "tasks": [
+        {
+          "taskId": "4406a00f-f5c2-4678-9932-74568c62bcb2",
+          "operation": "review-repo",
+          "stage": "DONE",
+          "terminal": "COMPLETED",
+          "computeClass": "SUBSCRIPTION",
+          "variant": "default",
+          "longestQuietSeconds": 160,
+          "longestQuietBetween": "PROGRESS -> PROGRESS: 1 tool result returned to Claude.",
+          "heartbeats": 38,
+          "phases": [
+            "begin model (waiting for the model's first token, 300 s)",
+            "end model",
+            "begin tool:toolu_0145DaKnnsJx48D72d7PFFAg (Claude Code running the Read tool, 300 s)",
+            "end tool:toolu_0145DaKnnsJx48D72d7PFFAg",
+            "begin tool:toolu_014ifVsEmVidLSz4pDRDMpj3 (Claude Code running the Read tool, 300 s)",
+            "end tool:toolu_014ifVsEmVidLSz4pDRDMpj3",
+            "begin model (waiting for the model's next response, 300 s)",
+            "end model",
+            "begin thinking (the model thinking (extended thinking is not streamed), 600 s)",
+            "end thinking",
+            "begin tool:toolu_0169CBuVftNUKueAodnT25aa (Claude Code running the Grep tool, 300 s)",
+            "end tool:toolu_0169CBuVftNUKueAodnT25aa",
+            "begin model (waiting for the model's next response, 300 s)",
+            "end model",
+            "begin tool:toolu_01Qjk2ZSMkyrjutmYhPb3p3d (Claude Code running the Read tool, 300 s)",
+            "end tool:toolu_01Qjk2ZSMkyrjutmYhPb3p3d",
+            "begin model (waiting for the model's next response, 300 s)",
+            "end model",
+            "begin thinking (the model thinking (extended thinking is not streamed), 600 s)",
+            "end thinking",
+            "begin tool:toolu_01Q3mXVWYQP8ps4T2x9KiFyu (Claude Code running the Grep tool, 300 s)",
+            "end tool:toolu_01Q3mXVWYQP8ps4T2x9KiFyu",
+            "begin model (waiting for the model's next response, 300 s)",
+            "end model",
+            "begin thinking (the model thinking (extended thinking is not streamed), 600 s)",
+            "end thinking"
+          ],
+          "recovery": []
+        }
+      ],
+      "commit": null
+    },
+    "implement": {
+      "objectiveId": "ad351a3c-47b9-4f49-ac67-8e9438191ca5",
+      "status": "COMPLETE",
+      "reason": "Verified, reviewed, committed locally. Not merged: Kyle decides.",
+      "seconds": 202,
+      "feedServed": null,
+      "claudeStatusAfter": "IDLE",
+      "quarantined": false,
+      "tasks": [
+        {
+          "taskId": "3959fe84-14c2-49aa-bd31-49318e52be88",
+          "operation": "implement-repo",
+          "stage": "DONE",
+          "terminal": "COMPLETED",
+          "computeClass": "SUBSCRIPTION",
+          "variant": "split-broker",
+          "longestQuietSeconds": 155,
+          "longestQuietBetween": "PROGRESS -> PROGRESS: HQ acceptance tests in the sandbox finished.",
+          "heartbeats": 35,
+          "phases": [
+            "begin hq-op:1 (Creating the task worktree, 150 s)",
+            "end hq-op:1",
+            "begin hq-op:2 (Sandbox base image check, 330 s)",
+            "end hq-op:2",
+            "begin hq-op:3 (Sandbox hq-sbx-3959fe84-054253 creation, 330 s)",
+            "end hq-op:3",
+            "begin hq-op:4 (Sandbox hq-sbx-3959fe84-054253 staging, 330 s)",
+            "end hq-op:4",
+            "begin model (waiting for the model's first token, 300 s)",
+            "end model",
+            "begin tool:toolu_01QypDNkre86qsdBxZzACeGW (Claude Code running the mcp__hq__repo_write tool, 300 s)",
+            "end tool:toolu_01QypDNkre86qsdBxZzACeGW",
+            "begin model (waiting for the model's next response, 300 s)",
+            "end model",
+            "begin tool:toolu_01DamaMrV66xXSPtMcf1tDL4 (Claude Code running the mcp__hq__repo_write tool, 300 s)",
+            "end tool:toolu_01DamaMrV66xXSPtMcf1tDL4",
+            "begin model (waiting for the model's next response, 300 s)",
+            "end model",
+            "begin hq-op:5 (HQ diff of the sandbox, 330 s)",
+            "end hq-op:5",
+            "begin hq-op:6 (HQ acceptance tests in the sandbox, 360 s)",
+            "end hq-op:6",
+            "begin hq-op:7 (Sandbox hq-sbx-3959fe84-054253 teardown, 210 s)",
+            "end hq-op:7"
+          ],
+          "recovery": []
+        },
+        {
+          "taskId": "dcfc1cb8-5e08-4041-b9d7-8252cd91db10",
+          "operation": "review-repo",
+          "stage": "DONE",
+          "terminal": "COMPLETED",
+          "computeClass": "SUBSCRIPTION",
+          "variant": "default",
+          "longestQuietSeconds": 7,
+          "longestQuietBetween": "PROGRESS -> MODEL_OUTPUT: Claude step 6: wrote a response.",
+          "heartbeats": 3,
+          "phases": [
+            "begin model (waiting for the model's first token, 300 s)",
+            "end model",
+            "begin thinking (the model thinking (extended thinking is not streamed), 600 s)",
+            "end thinking",
+            "begin tool:toolu_01EjZWjofNgumD2d44AXgyfv (Claude Code running the Glob tool, 300 s)",
+            "end tool:toolu_01EjZWjofNgumD2d44AXgyfv",
+            "begin tool:toolu_01JQua4iMf7n6aF7iBz9poug (Claude Code running the Grep tool, 300 s)",
+            "end tool:toolu_01JQua4iMf7n6aF7iBz9poug",
+            "begin model (waiting for the model's next response, 300 s)",
+            "end model",
+            "begin thinking (the model thinking (extended thinking is not streamed), 600 s)",
+            "end thinking",
+            "begin tool:toolu_012Wr5sDLt1AStK9m81GbFth (Claude Code running the Grep tool, 300 s)",
+            "end tool:toolu_012Wr5sDLt1AStK9m81GbFth",
+            "begin model (waiting for the model's next response, 300 s)",
+            "end model",
+            "begin thinking (the model thinking (extended thinking is not streamed), 600 s)",
+            "end thinking"
+          ],
+          "recovery": []
+        }
+      ],
+      "commit": "e6f8aeb67f8b7701a1f5559fd4fb2d7db4daa8af"
+    },
+    "stall": {
+      "objectiveId": "45a51bc0-6563-421c-9563-ddde0d9c0b13",
+      "frozenPid": 31272,
+      "phasesOpenAtFreeze": [],
+      "secondsFrozenUntilStopped": 122,
+      "terminal": "CANCELLED",
+      "taskStage": "BLOCKED",
+      "recovery": [
+        "STALLED: no progress evidence for 120 s and no declared quiet phase (process alive but silent)"
+      ],
+      "parked": "Watchdog: the worker was STALLED (no progress evidence for 120 s and no declared quiet phase (process alive but silent)) and was stopped.",
+      "processLeftAlive": false,
+      "quarantinedAfter": true,
+      "seconds": 128,
+      "claudeStatusAfterCooldown": "IDLE"
+    }
+  },
+  "watchdog": {
+    "heartbeatMs": 15000,
+    "progressMs": 120000,
+    "computeMode": "ZERO_CREDIT"
+  },
+  "health": {
+    "controller": "ONLINE",
+    "lastError": null,
+    "externalNotifications": "UNCONFIGURED",
+    "ollama": "DISABLED",
+    "cliAgents": "CONFIGURED",
+    "orchestrator": "DISABLED",
+    "implementation": "CONFIGURED",
+    "implementationRoutes": {
+      "base": {
+        "ref": "origin/claude/dev-baseline",
+        "commit": "44400b7630667e49727ca10e52e4640f331293ff",
+        "source": "HQ_IMPL_BASE"
+      },
+      "subscriptionSplitBroker": "READY",
+      "apiKeySandbox": "AVAILABLE (METERED: BUDGETED mode + Kyle authorization only)"
+    },
+    "ingress": "DISABLED",
+    "localOnly": true,
+    "computeMode": "ZERO_CREDIT",
+    "meteredCredentialsPresent": {
+      "OPENAI_API_KEY": true,
+      "ANTHROPIC_API_KEY": true,
+      "HQ_SANDBOX_ANTHROPIC_API_KEY": true,
+      "CODEX_API_KEY": true,
+      "ANTHROPIC_AUTH_TOKEN": false
+    }
+  },
+  "claudeSessions": [
+    {
+      "apiKeySource": "none",
+      "model": "claude-opus-5-5",
+      "tools": 3
+    },
+    {
+      "apiKeySource": "none",
+      "model": "claude-opus-5-5",
+      "tools": 3
+    },
+    {
+      "apiKeySource": "none",
+      "model": "claude-opus-5-5",
+      "tools": 7
+    },
+    {
+      "apiKeySource": "none",
+      "model": "claude-opus-5-5",
+      "tools": 3
+    },
+    {
+      "apiKeySource": "none",
+      "model": "claude-opus-5-5",
+      "tools": 3
+    }
+  ],
+  "leaks": {
+    "journal": [],
+    "claudeStream": []
+  },
+  "ledger": {
+    "mode": "ZERO_CREDIT",
+    "meteredSpendToday": 0,
+    "meteredSpendThisMonth": 0,
+    "meteredSpendThisTask": null,
+    "unknownCostRunsToday": 0,
+    "meteredSpendUpperBoundToday": 0,
+    "meteredSpendUpperBoundThisMonth": 0,
+    "runsByClass": {
+      "LOCAL": 0,
+      "SUBSCRIPTION": 5,
+      "METERED_API": 0
+    },
+    "rows": [
+      {
+        "task": "d93d53eb-a46f-4359-9920-3875f6e7da41",
+        "run": "7379478a-afeb-4aac-bedf-9542f971dddc",
+        "agent": "claude",
+        "model": null,
+        "backend": "Claude Code CLI on the host, read-only tools",
+        "computeClass": "SUBSCRIPTION",
+        "provider": "anthropic",
+        "start": 1790889965244,
+        "end": 1790890154317,
+        "outcome": "COMPLETED",
+        "meteredCostUsd": 0,
+        "costKnown": true,
+        "spendAuthorized": false,
+        "authorizationId": null,
+        "reservedUsd": 0
+      },
+      {
+        "task": "4406a00f-f5c2-4678-9932-74568c62bcb2",
+        "run": "6effb0dd-e25c-4752-893d-aeee787a2927",
+        "agent": "claude",
+        "model": null,
+        "backend": "Claude Code CLI on the host, read-only tools",
+        "computeClass": "SUBSCRIPTION",
+        "provider": "anthropic",
+        "start": 1790890156525,
+        "end": 1790890349265,
+        "outcome": "COMPLETED",
+        "meteredCostUsd": 0,
+        "costKnown": true,
+        "spendAuthorized": false,
+        "authorizationId": null,
+        "reservedUsd": 0
+      },
+      {
+        "task": "3959fe84-14c2-49aa-bd31-49318e52be88",
+        "run": "0542536e-d390-453f-be30-d4cf22e25009",
+        "agent": "claude",
+        "model": null,
+        "backend": "Claude Code on the host (subscription, HQ broker tools only); files and tests inside a disposable sandbox",
+        "computeClass": "SUBSCRIPTION",
+        "provider": "anthropic",
+        "start": 1790890351263,
+        "end": 1790890530991,
+        "outcome": "COMPLETED",
+        "meteredCostUsd": 0,
+        "costKnown": true,
+        "spendAuthorized": false,
+        "authorizationId": null,
+        "reservedUsd": 0
+      },
+      {
+        "task": "dcfc1cb8-5e08-4041-b9d7-8252cd91db10",
+        "run": "8cc8e66b-c109-4f57-bd74-51776d1d8a2f",
+        "agent": "claude",
+        "model": null,
+        "backend": "Claude Code CLI on the host, read-only tools",
+        "computeClass": "SUBSCRIPTION",
+        "provider": "anthropic",
+        "start": 1790890532277,
+        "end": 1790890551763,
+        "outcome": "COMPLETED",
+        "meteredCostUsd": 0,
+        "costKnown": true,
+        "spendAuthorized": false,
+        "authorizationId": null,
+        "reservedUsd": 0
+      },
+      {
+        "task": "dfa43962-70fe-40a5-9bce-bc3da346c125",
+        "run": "aa3098c4-e107-4d68-bac0-fb57d81164f6",
+        "agent": "claude",
+        "model": null,
+        "backend": "Claude Code CLI on the host, read-only tools",
+        "computeClass": "SUBSCRIPTION",
+        "provider": "anthropic",
+        "start": 1790890553422,
+        "end": 1790890679251,
+        "outcome": "CANCELLED",
+        "meteredCostUsd": 0,
+        "costKnown": true,
+        "spendAuthorized": false,
+        "authorizationId": null,
+        "reservedUsd": 0
+      }
+    ],
+    "authorizations": []
+  },
+  "alerts": [
+    "HANDOFF_READY: READY=0, WORKING=0, REVIEW=0; remaining tasks have explicit blockers.",
+    "TASK_BLOCKED: Watchdog: the worker was STALLED (no progress evidence for 120 s and no declared quiet phase (process alive but silent)) and was stopped.",
+    "OBJECTIVE_NEEDS_FOLLOW_UP: Objective \"Watchdog smoke: genuine stall\" ended CANCELLED: investigate step cancelled: Worker termination confirmed by process close. Watchdog: the worker was S"
+  ],
+  "openAiRequests": 0,
+  "finishedAt": "2026-10-01T21:38:59.864Z"
+}
