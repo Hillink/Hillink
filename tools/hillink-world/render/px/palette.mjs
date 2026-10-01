@@ -35,26 +35,27 @@ export function ramp(base) {
 // and gold, crystal blue as a local secondary (C26).
 export const PALETTES = {
   real: {
-    grass: '#6f9f4a', grassDry: '#8aa856', grassDark: '#4f7d3c', soil: '#7a6248', rock: '#8c8f93', water: '#4f8fbf',
+    grass: '#6f9f4a', grassDry: '#8aa856', grassDark: '#4f7d3c', soil: '#7a6248', rock: '#8d8b84', water: '#4f8fbf',
     path: '#c9c4ba', road: '#55595f', roadLine: '#e8e3d0', curb: '#b9b6ae',
     trunk: '#6b4a32', leaf: '#4f8a3c', leafLight: '#7fb54e', pine: '#3e6e4a', bush: '#5c9444', flower: '#e9d36a', flower2: '#e48aa0',
     floorWood: '#c79a68', floorCarpet: '#5f7590', floorCarpet2: '#7b6a8f', floorTile: '#d9dcdf', floorConcrete: '#b8b4ad', floorRug: '#4f78a8',
-    wall: '#e9e6df', wallSide: '#d6d2ca', wallTrim: '#9aa0a8', wallTop: '#7d828a', exterior: '#f0eee9', exteriorSide: '#cfcbc3', base: '#8a8f96',
+    wall: '#e6e2da', wallSide: '#d2cdc4', wallTrim: '#9aa0a8', wallTop: '#3a3f47', exterior: '#7d838b', exteriorSide: '#676d75', base: '#4e535a', cap: '#30353c', column: '#33383f',
     glass: '#9cc6e0', frame: '#3b4350', door: '#7a5a3e', doorFrame: '#3b4350',
     metal: '#a7b0ba', metalDark: '#5c6570', wood: '#9b6f45', woodDark: '#6e4c30', fabric: '#3f6fa6', fabric2: '#6b7d8f', leather: '#7a4b2e', white: '#f4f4f1',
     screen: '#59b8ff', screenOff: '#28323f', led: '#4dff88', ledRed: '#ff5a4d', lamp: '#ffe9a8', brand: '#2f7df6', paper: '#f3efe2', sticky: '#ffe36e',
-    hivis: '#ff8a1f', hardhat: '#ffcc1f',
+    hivis: '#ff8a1f', hardhat: '#ffcc1f', leafAlt: '#6f8f3a', leafAutumn: '#9a9a3a', gravel: '#8f8b84', soilDry: '#9a8466', asphalt: '#4d5157', glassNight: '#33465c',
   },
   fantasy: {
     grass: '#5f8f3f', grassDry: '#7f9a48', grassDark: '#40692f', soil: '#6e553c', rock: '#7e7c78', water: '#3f6f8f',
     path: '#a08a68', road: '#8a7254', roadLine: '#a08a68', curb: '#6f6a62',
     trunk: '#5a3e2a', leaf: '#3f7838', leafLight: '#6aa04a', pine: '#2f5a3e', bush: '#4a7d3a', flower: '#e8c75a', flower2: '#b48ad8',
     floorWood: '#9c6e44', floorCarpet: '#2f6a46', floorCarpet2: '#7a3b3b', floorTile: '#8f8a80', floorConcrete: '#857c70', floorRug: '#2f6a46',
-    wall: '#a39a8c', wallSide: '#8b8274', wallTrim: '#5e4a36', wallTop: '#6f675c', exterior: '#a8a092', exteriorSide: '#8a8276', base: '#6b645a',
+    wall: '#9d9486', wallSide: '#857c6f', wallTrim: '#5e4a36', wallTop: '#b3aa9a', exterior: '#8f877b', exteriorSide: '#776f64', base: '#5f584e', cap: '#b3aa9a', column: '#7d7569', slate: '#4b5568', moss: '#5b7a3a',
     glass: '#d8b860', frame: '#4a3626', door: '#6b4a2e', doorFrame: '#4a3626',
     metal: '#9aa0a6', metalDark: '#4f555c', wood: '#8a5e3a', woodDark: '#5c3e26', fabric: '#2f6a46', fabric2: '#7a3b3b', leather: '#6a4228', white: '#ece4cf',
     screen: '#7fe0ff', screenOff: '#2a3a4a', led: '#7fe0ff', ledRed: '#ff4a3a', lamp: '#ffc46a', brand: '#2f8a4a', paper: '#e9dcb8', sticky: '#d9b44a',
     gold: '#d9b44a', banner: '#1f6b3a', fire: '#ff8a2a', fireCore: '#ffe27a', crystal: '#6fd8ff', crystalDeep: '#2f7fc8', ember: '#ff5a1f',
+    leafAlt: '#6b7a34', leafAutumn: '#b0642c', gravel: '#857d70', soilDry: '#8a7052', asphalt: '#7d6a50', glassNight: '#2c3a4e', leaded: '#4a5a6a', bannerRed: '#8a2a2a',
   },
 };
 // Colours that emit light: the lightmap never darkens them (screens, LEDs, fire, crystals, lamps, lit windows).

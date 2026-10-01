@@ -239,3 +239,41 @@ shared room joins its names ("Break & Meeting"). The older HUD/roster still show
 - Evidence: `docs/world/evidence/pass5h-slice/`.
 - To see T0 locally without touching an existing world: `WORLD_STATE_DIR=<new folder> node serve.mjs`, then open
   `/?art=px`. A World saved before 5H keeps its two-storey layout by design.
+
+## Visual refinement 1 (2026-10-01)
+
+Refinement of the vertical slice. Every change is a rule or kit entry in `render/px/`; nothing is placed by hand, and
+there is no T0 special case. Geometry, canonical state, the planner and saved Worlds are unchanged.
+
+- **Architecture:** outer walls are now thick (0.38 m back/left, 0.30 m front/right) and stand outside the room rects.
+  Interior walls are 0.14 m. Real full-height walls get a coping; their exteriors are concrete panels on a base course.
+  Real interiors are divided by clear glass partitions (1.6 m, 1.2 m low). Fantasy walls are coursed ashlar with moss and
+  a plinth. Fantasy has crenellations on every outer wall and towers at the back corners (one with a slate roof and
+  finial, one crenellated with a banner). It also has torch turrets at the front corners, buttresses along the visible
+  faces, and round-arch headers over doors in full-height walls.
+- **Corners and junctions:** Real has steel columns at the back corners and flush concrete corners at the front;
+  Fantasy has towers. Pilasters or columns stand where interior walls meet outer walls. Interior doors have jambs.
+- **Windows** are bays chosen by rule, clear of doors, junctions, decor and tall pieces. Real windows are framed glass
+  with reveal, glint and sill. Fantasy windows are leaded lancet arches.
+- **Entrance:** Real has slim concrete door reveals and a thin cantilevered canopy with a brand line and one downlight.
+  This replaces the heavy posts. Fantasy has a stone gate arch with a gold keystone and torch piers. Every entrance is
+  derived from the canonical entrance door, and each has a paved forecourt pad.
+- **Ground and ways:**
+  - Roads are drawn along the canonical polyline with Chaikin-rounded bends. Real roads have a curb, a dashed centre
+    line and an edge band. Fantasy roads have dirt ruts, a grass crown and frayed edges.
+  - Paths: Real uses pavers with edging; Fantasy uses irregular flagstones with grass joints.
+  - Land: a gravel or rubble strip at the building edge, verge wear, a forest floor, dry meadow patches and sparse tufts.
+  - Fixed a sign bug in the paving patterns (negative coordinates made every paver a joint line).
+- **Environment:** stands of pine or broadleaf follow a deterministic field, with big trees at the heart and understorey
+  at the edges. Rock outcrops are rarer, and clearings have flowers. A lone landmark tree appears occasionally, and there
+  are shrubs at the forecourt. Plants come in three sizes with an alternative leaf; a rare Fantasy autumn tree appears.
+- **Interiors:** screens are state-driven. Every screen piece has an off state; it lights, with its glow, only while
+  an agent's clip is a work clip inside that room. No state is invented. Prop outlines are darker. The Real vending
+  machine is desaturated (metal, dark glass, brand band, no light). The Real testing desk has a test rig.
+- **Real exterior lights** are low bollards (0.86 m) every 4 m, not street lamps.
+- **Characters** stay 24 px.
+  - Outlines are darker, poses are exaggerated (hammer raise and strike, walk swing, scan, orchestrate), and the
+    single red eye is bigger.
+  - The Fantasy Codex is a dark cyborg with gold and steel; half of the face is mechanical.
+
+Evidence is in `docs/world/evidence/pass5h-refine1/` (the live video is in `/mnt/project-files/pass5h-refine1/`).

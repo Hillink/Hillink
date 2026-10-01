@@ -50,7 +50,7 @@ test('slice: deterministic pixels, no canonical writes, and every piece traced t
   const items = new Set(Object.values(L.furnishing).flatMap(F => F.items.map(i => i.id))), decor = new Set(Object.values(L.furnishing).flatMap(F => F.decor.map(d => d.id)));
   for (const o of S.objects) {
     const [k, rest] = [o.id.split(':')[0], o.id.split(':').slice(1).join(':')];
-    const ok = { wall: true, merlons: true, tower: true, portal: true, 'entrance-light': true, post: true, veg: true, sconce: true, decor: decor.has(rest) }[k] ?? items.has(o.id.replace(/:back$/, ''));
+    const ok = { wall: true, merlons: true, tower: true, coping: true, jamb: true, column: true, plinth: true, corner: true, buttress: true, pier: true, arch: true, canopy: true, post: true, veg: true, sconce: true, decor: decor.has(rest) }[k] ?? items.has(o.id.replace(/:back$/, ''));
     assert.ok(ok, `untraceable piece ${o.id}`);
   }
 });
@@ -89,4 +89,20 @@ test('slice: P3 in the slice, canonical room names, lighting settings, and the p
   assert.equal(th.art, 'px'); assert.equal(th.layout.id, 'generated');
   assert.equal(Math.round(th.skin.defaultZoom(1) * 1 * S.A), 2, '2x by default');
   assert.equal(typeof createPxSkin, 'function'); assert.ok(worldFingerprint(w));
+});
+
+test('refinement 1: screens follow canonical activity (off unless an agent works in the room), walls have mass', () => {
+  const w = createWorld({ seed: 'hillink' }), L = createGeneratedLayout(w, { theme: 'real' }), S = createStage(L, 'real', { lighting: 'night' });
+  const screens = S.scene.objects.filter(o => o.screens);
+  assert.ok(screens.length > 0 && screens.every(o => o.altFrames && o.room), 'every screen piece has an off state and a room');
+  const A = S.A, H = L.home, view = { x0: Math.floor(H.x / A), y0: Math.floor(H.y / A), w: Math.ceil(H.w / A), h: Math.ceil(H.h / A) };
+  const working = ruleActors(L, 'real').map(a => ({ ...a, foot: [a.point[0] / A, a.point[1] / A] }));
+  assert.ok(working.some(a => /^(work|sit\.work)/.test(a.clip)));
+  const idle = working.map(a => ({ ...a, clip: a.sitting ? 'sit.idle' : 'idle', frame: 0 }));
+  const on = S.render(new PixelBuffer(view.w, view.h), view, 0, working).hash(), off = S.render(new PixelBuffer(view.w, view.h), view, 0, idle).hash();
+  assert.notEqual(on, off);
+  // Outer walls are thicker than interior walls, and full-height outer walls stand outside the room rects.
+  const walls = S.scene.objects.filter(o => o.id.startsWith('wall:'));
+  const thick = o => (o.id.split(':')[2] === 'z' ? o.z1 - o.z0 : o.x1 - o.x0);
+  assert.ok(Math.max(...walls.map(thick)) > 2 * Math.min(...walls.map(thick)));
 });

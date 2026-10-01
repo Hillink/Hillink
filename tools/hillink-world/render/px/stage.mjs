@@ -62,7 +62,7 @@ export function createStage(layout, theme = 'real', { lighting = 'dusk' } = {}) 
   // Dynamic: animated non-plant pieces and everything a character can overlap, then anything static drawn in front
   // of a dynamic piece (it must be redrawn over it).
   const zone = walkZone(layout, A), zgrid = gridOf(zone), dyn = new Uint8Array(objects.length), idx = new Map(objects.map((o, i) => [o, i]));
-  objects.forEach((o, i) => { if ((o.frames.length > 1 && o.kind !== 'veg') || [...zgrid.near(o.sb)].some(k => overlaps(o.sb, zone[k]))) dyn[i] = 1; });
+  objects.forEach((o, i) => { if ((o.frames.length > 1 && o.kind !== 'veg') || o.altFrames || [...zgrid.near(o.sb)].some(k => overlaps(o.sb, zone[k]))) dyn[i] = 1; });
   const ogrid = gridOf(objects);
   for (const o of ordered) { const i = idx.get(o); if (!dyn[i]) continue; for (const j of ogrid.near(o.sb)) if (!dyn[j] && overlaps(o.sb, objects[j].sb) && before(objects[j], o) > 0) dyn[j] = 1; }
   // Second sweep in order: a static piece in front of a piece that became dynamic in the first sweep.
@@ -121,6 +121,9 @@ export function createStage(layout, theme = 'real', { lighting = 'dusk' } = {}) 
       const sx = fx - sp.foot[0], sy = fy - sp.foot[1], half = 8;
       return { actor: a, sp, sx, sy, fx, fy, id: `actor:${a.id}`, floor: a.plan.floor, x0: a.plan.x - half, x1: a.plan.x + half, z0: a.plan.z - half * 0.6, z1: a.plan.z + half * 0.6, bias: a.sitting ? 1 : 0, sb: { l: sx, r: sx + sp.buf.w, t: sy, b: sy + sp.buf.h } };
     });
+    // Screens follow canonical activity: on in a room where an agent is working (its clip says so), off elsewhere.
+    const live = new Set();
+    for (const a of actors) if (/^(work|sit\.work)/.test(a.clip ?? '')) { const r = scene.rooms.find(q => q.f === (a.plan.floor ?? 0) && a.plan.x >= q.x0 && a.plan.x <= q.x1 && a.plan.z >= q.z0 && a.plan.z <= q.z1); if (r) live.add(r.id); }
     const all = [...items, ...chars], order = paintOrder(all);
     for (const i of order) {
       const o = all[i];
@@ -132,13 +135,14 @@ export function createStage(layout, theme = 'real', { lighting = 'dusk' } = {}) 
         for (const [lx, ly, lc] of o.sp.light) { const X = o.sx + lx - view.x0, Y = o.sy + ly - view.y0; if (X >= 0 && Y >= 0 && X < out.w && Y < out.h) out.data[Y * out.w + X] = lc; }
         continue;
       }
+      if (o.altFrames && !live.has(o.room)) { litBlit(out, view, o.altFrames[0], o.altMasks[0], o.ox, o.oy); continue; }
       const fi = o.fps && o.frames.length > 1 ? (Math.floor(t * o.fps) + (o.phase ?? 0)) % o.frames.length : 0;
       litBlit(out, view, o.frames[fi], o.masks[fi], o.ox, o.oy);
     }
     // Glows (additive) for visible light sources.
     const gk = LIGHTING[L.lighting]?.glow ?? 0.7;
     for (const e of scene.emitters) {
-      const g = GLOWS[e.kind]; if (!g) continue;
+      const g = GLOWS[e.kind]; if (!g || (e.room && !live.has(e.room))) continue;
       if (e.x < vb.l - 30 || e.x > vb.r + 30 || e.y < vb.t - 30 || e.y > vb.b + 30) continue;
       const s = stepOf(g.loop, t, e.phase ?? 0), sp = glowSprite(e.kind, s);
       out.addGlow(sp.buf, e.x - sp.r - view.x0, e.y - sp.r - view.y0, gk);

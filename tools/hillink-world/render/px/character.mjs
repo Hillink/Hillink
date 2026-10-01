@@ -35,7 +35,7 @@ export const PARTS = {
   // The Fantasy Codex: the right half of his face is machine, with ONE red eye (anatomical right = the far side in a
   // right-facing view). L is the same face for a mirrored (left-facing) view, where his right is the near side.
   'face.cyborg': { layer: 'face', side: true,
-    fr: { R: { at: 'head', ox: 0, oy: 0, rows: ['.mmmm....', 'mNmmM....', 'mmmmM....', 'MmmmMm...', 'mmmmmR.e.', 'MmmmM...S', '.MmmM.S..', '.MMM.....'] }, L: { at: 'head', ox: 0, oy: 0, rows: ['....mmmm.', '....MmmNm', '....MmmmM', '...mMmmmM', '.e..rRmmM', '....MmmmS', '....MmmM.', '.....MMM.'] } },
+    fr: { R: { at: 'head', ox: 0, oy: 0, rows: ['.mmmm....', 'mNmmM....', 'mmmmM....', 'MmmmMm...', 'mmmmRR.e.', 'MmmmrM..S', '.MmmM.S..', '.MMM.....'] }, L: { at: 'head', ox: 0, oy: 0, rows: ['....mmmm.', '....MmmNm', '....MmmmM', '...mMmmmM', '.e.RRmmmM', '...MrmmmS', '....MmmM.', '.....MMM.'] } },
     br: { R: { at: 'head', ox: 0, oy: 0, rows: ['.mmmm....', 'mNmmM....', 'mmmmM....', 'MmmmM....', 'mmrmM....', 'MmmmM....'] }, L: { at: 'head', ox: 0, oy: 0, rows: ['....mmmm.', '....MmmNm', '....Mmmmm', '....MmmmM', '....MmrmM', '....MmmmM'] } } },
   // Beards (slot hair).
   'beard.long': { slot: 'hair', layer: 'beard', fr: { at: 'head', ox: 0, oy: 5, rows: ['...######', '..#######', '..###+###', '...#####.', '...####..', '....##...'] }, br: { at: 'head', ox: 0, oy: 6, rows: ['#.......#', '##.....##'] } },
@@ -67,7 +67,7 @@ export const TOOLS = {
 };
 
 // ---- Poses. Hand positions are offsets from the shoulder (px); legs name a leg pose. -----------------------------
-const HAND = { down: [1, 6], swingF: [2, 5], swingB: [0, 6], up: [2, -3], strike: [3, 3], hold: [2, 3], point: [5, 1], raise: [2, -4], type1: [3, 3], type2: [3, 4], rest: [2, 4], holdFar: [1, 3] };
+const HAND = { down: [1, 6], swingF: [3, 5], swingB: [-1, 6], up: [2, -5], strike: [4, 4], hold: [2, 3], point: [6, 0], raise: [2, -6], type1: [3, 3], type2: [3, 4], rest: [2, 4], holdFar: [1, 3] };
 export const CLIPS = {
   idle: { fps: 1.4, frames: [{}, { breath: 1 }] },
   walk: { fps: 7, frames: [{ legs: 'stepA', near: 'swingB', far: 'swingF' }, { legs: 'pass', bob: -1 }, { legs: 'stepB', near: 'swingF', far: 'swingB' }, { legs: 'pass', bob: -1 }] },
@@ -92,7 +92,7 @@ export const ALIASES = {
   'claude:fantasy': { name: 'Claude (Fantasy: the dwarf artificer)', plan: 'dwarf', parts: ['hair.wild', 'face.plain', 'beard.long', 'top.apron'], work: 'hammer', tools: { hammer: 'hammer' },
     palette: { skin: '#eab28a', hair: '#c4521f', top: '#6a4228', shirt: '#b5552b', white: '#6a4228', accent: '#d9b44a', accent2: '#d9b44a', legs: '#5a3b24', boots: '#3c2a1a', eye: '#1a1a22', hat: '#9aa6b4', metal: '#9aa6b4', glow: '#ffb35a', cape: '#b5552b', tool: '#6a4228' } },
   'codex:fantasy': { name: 'Codex (Fantasy: the cyborg inspector)', plan: 'human', parts: ['hair.crop', 'face.cyborg', 'top.armor'], arm: { R: 'metal' }, work: 'scan', tools: { scan: 'lens' }, asymmetric: true,
-    palette: { skin: '#e0b894', hair: '#2b2f38', top: '#2a5aa8', shirt: '#2a5aa8', white: '#c8d4e2', accent: '#9fb3cc', accent2: '#9fb3cc', legs: '#1d3561', boots: '#141c2c', eye: '#1a1a22', hat: '#2a5aa8', metal: '#9fb3cc', glow: '#ff3a2a', cape: '#2a5aa8', tool: '#6fd8ff' } },
+    palette: { skin: '#e0b894', hair: '#2b2f38', top: '#2e3138', shirt: '#2e3138', white: '#c8d4e2', accent: '#c9a24a', accent2: '#c9a24a', legs: '#1e2026', boots: '#121418', eye: '#1a1a22', hat: '#2e3138', metal: '#9aa2ab', glow: '#ff2a1a', cape: '#2e3138', tool: '#6fd8ff' } },
 };
 // The lineup-only generic character (not canonical, never placed in the World): assembled from the same parts to
 // prove a character the art has never seen is built by the same system.
@@ -246,7 +246,7 @@ export function buildSprite(lookIn, facing = 'fr', clip = 'idle', frame = 0) {
   if (!back) tool();
   const light = [];
   if (pose.spark && hands.near) light.push([hands.near[0] + 2, hands.near[1] + 1, '#ffd66b']);
-  let out = buf.outlined({ dark: 0.34, bottom: 0.22 });
+  let out = buf.outlined({ dark: 0.22, bottom: 0.16 });
   if (mirrored) { const m = new PixelBuffer(out.w, out.h); m.blit(out, 0, 0, { flip: true }); out = m; }
   const footX = mirrored ? out.w - 1 - (fx + 1) : fx + 1;
   return { buf: out, foot: [footX, fy + 1], top: fy + 1 + Hd.top - 4, light: light.map(([x, y, col]) => [mirrored ? out.w - 1 - (x + 1) : x + 1, y + 1, hex(col)]) };

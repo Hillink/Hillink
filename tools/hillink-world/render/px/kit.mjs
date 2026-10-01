@@ -23,12 +23,14 @@ export const MATERIALS = {
     screen: M('screen', 2, { emissive: true, screen: true }), screenOff: M('screenOff'), led: M('led', 3, { emissive: true, anim: 'blink' }), ledRed: M('ledRed', 3, { emissive: true, anim: 'blink' }), lamp: M('lamp', 3, { emissive: true, anim: 'flicker' }),
     paper: M('paper'), sticky: M('sticky'), glass: M('glass', 3), frame: M('frame'), brand: M('brand'), leaf: M('leaf', 2, { anim: 'sway' }), leafLight: M('leafLight', 3, { anim: 'sway' }), pot: M('white', 1), soil: M('soil', 1), books: M('fabric', 2, { books: true }), stone: M('rock'), water: M('water', 3), hivis: M('hivis'), yellow: M('hardhat'),
     fire: M('lamp', 3, { emissive: true, anim: 'fire' }), crystal: M('screen', 3, { emissive: true, anim: 'pulse' }), gold: M('sticky', 2), banner: M('brand'), parchment: M('paper'), rug: M('floorRug'),
+    cap: M('cap'), column: M('column'), concrete: M('exterior'), base: M('base'), slate: M('metalDark', 1), moss: M('leaf', 1), glassNight: M('glassNight'),
   },
   fantasy: {
     wood: M('wood'), woodDark: M('woodDark'), woodLight: M('wood', 3), metal: M('metal'), metalDark: M('metalDark'), steel: M('metalDark', 1), white: M('white'), plastic: M('white', 1), fabric: M('fabric'), fabric2: M('fabric2'), leather: M('leather'),
     screen: M('crystal', 3, { emissive: true, anim: 'pulse' }), screenOff: M('crystalDeep', 1), led: M('crystal', 3, { emissive: true, anim: 'pulse' }), ledRed: M('ember', 3, { emissive: true, anim: 'flicker' }), lamp: M('fire', 3, { emissive: true, anim: 'flicker' }),
     paper: M('paper'), sticky: M('paper', 3), glass: M('lamp', 2), frame: M('woodDark'), brand: M('banner'), leaf: M('leaf', 2, { anim: 'sway' }), leafLight: M('leafLight', 3, { anim: 'sway' }), pot: M('soil', 2), soil: M('soil', 1), books: M('fabric2', 2, { books: true }), stone: M('rock'), water: M('water', 3), hivis: M('fabric2'), yellow: M('gold'),
     fire: M('fire', 3, { emissive: true, anim: 'fire' }), crystal: M('crystal', 3, { emissive: true, anim: 'pulse' }), gold: M('gold'), banner: M('banner'), parchment: M('paper'), rug: M('floorRug'),
+    cap: M('cap', 2), column: M('column'), concrete: M('exterior'), base: M('base'), slate: M('slate'), moss: M('moss'), glassNight: M('leaded'), bannerRed: M('bannerRed'), window: M('lamp', 3, { emissive: true, anim: 'flicker' }),
   },
 };
 
@@ -38,20 +40,22 @@ export const FLOORS = {
   fantasy: { lobby: 'flagstone', passage: 'flagstone', lounge: 'planks', comms: 'planks', development: 'flagstoneDark', workshop: 'flagstoneDark', office: 'planks', command: 'planks', testing: 'flagstone', servers: 'runeStone', archive: 'planks', storage: 'flagstone', spare: 'flagstone', site: 'flagstone' },
 };
 // A pattern returns [palette name, ramp step] for a plan point (metres) and its integer pixel (for dithering).
+const fr1 = v => v - Math.floor(v); // fractional part, also for negative coordinates
 export const PATTERNS = {
-  wood: (x, z) => { const row = Math.floor(z / 0.2), off = noise(row, 7) * 1.2, seam = (z / 0.2) % 1 < 0.12 || ((x + off) / 1.2) % 1 < 0.025; return ['floorWood', seam ? 1 : noise(row, Math.floor((x + off) / 1.2)) > 0.5 ? 2 : 3]; },
-  planks: (x, z) => { const row = Math.floor(z / 0.26), off = noise(row, 3) * 1.6, seam = (z / 0.26) % 1 < 0.1 || ((x + off) / 1.6) % 1 < 0.02, nail = ((x + off) / 1.6) % 1 > 0.04 && ((x + off) / 1.6) % 1 < 0.06 && (z / 0.26) % 1 > 0.4 && (z / 0.26) % 1 < 0.6; return ['floorWood', seam ? 0 : nail ? 1 : noise(row, Math.floor((x + off) / 1.6)) > 0.45 ? 2 : 1]; },
+  wood: (x, z) => { const row = Math.floor(z / 0.2), off = noise(row, 7) * 1.2, seam = fr1(z / 0.2) < 0.12 || fr1((x + off) / 1.2) < 0.025; return ['floorWood', seam ? 1 : noise(row, Math.floor((x + off) / 1.2)) > 0.5 ? 2 : 3]; },
+  planks: (x, z) => { const row = Math.floor(z / 0.26), off = noise(row, 3) * 1.6, seam = fr1(z / 0.26) < 0.1 || fr1((x + off) / 1.6) < 0.02, nail = fr1((x + off) / 1.6) > 0.04 && fr1((x + off) / 1.6) < 0.06 && fr1(z / 0.26) > 0.4 && fr1(z / 0.26) < 0.6; return ['floorWood', seam ? 0 : nail ? 1 : noise(row, Math.floor((x + off) / 1.6)) > 0.45 ? 2 : 1]; },
   carpet: (x, z, X, Y) => ['floorCarpet', noise(X, Y, 3) > 0.82 ? 3 : noise(X >> 1, Y >> 1, 4) > 0.9 ? 1 : 2],
-  tile: (x, z) => ['floorTile', (x / 0.6) % 1 < 0.06 || (z / 0.6) % 1 < 0.08 ? 1 : 3],
-  concrete: (x, z, X, Y) => ['floorConcrete', (x / 1.5) % 1 < 0.02 || (z / 1.5) % 1 < 0.03 ? 1 : noise(X, Y, 5) > 0.93 ? 1 : 2],
-  concreteWork: (x, z, X, Y) => ['floorConcrete', (x / 1.5) % 1 < 0.02 || (z / 1.5) % 1 < 0.03 ? 1 : noise(X, Y, 6) > 0.9 ? 1 : noise(X >> 2, Y >> 2, 9) > 0.85 ? 3 : 2],
-  flagstone: (x, z, X, Y) => { const r = Math.floor(z / 0.45), c = Math.floor((x + (r % 2) * 0.3) / 0.6), gx = ((x + (r % 2) * 0.3) / 0.6) % 1, gz = (z / 0.45) % 1; return ['floorTile', gx < 0.07 || gz < 0.1 ? 0 : noise(r, c, 2) > 0.6 ? 3 : noise(r, c, 2) > 0.25 ? 2 : 1]; },
-  flagstoneDark: (x, z, X, Y) => { const r = Math.floor(z / 0.45), c = Math.floor((x + (r % 2) * 0.3) / 0.6), gx = ((x + (r % 2) * 0.3) / 0.6) % 1, gz = (z / 0.45) % 1; return ['floorConcrete', gx < 0.07 || gz < 0.1 ? 0 : noise(r, c, 8) > 0.5 ? 2 : 1]; },
-  runeStone: (x, z, X, Y) => { const r = Math.floor(z / 0.5), c = Math.floor(x / 0.5), g = (x / 0.5) % 1 < 0.08 || (z / 0.5) % 1 < 0.1; return ['floorConcrete', g ? 0 : (r + c) % 5 === 0 && noise(r, c, 1) > 0.5 ? 3 : 1]; },
+  tile: (x, z) => ['floorTile', fr1(x / 0.6) < 0.06 || fr1(z / 0.6) < 0.08 ? 1 : 3],
+  concrete: (x, z, X, Y) => ['floorConcrete', fr1(x / 1.5) < 0.02 || fr1(z / 1.5) < 0.03 ? 1 : noise(X, Y, 5) > 0.93 ? 1 : 2],
+  concreteWork: (x, z, X, Y) => ['floorConcrete', fr1(x / 1.5) < 0.02 || fr1(z / 1.5) < 0.03 ? 1 : noise(X, Y, 6) > 0.9 ? 1 : noise(X >> 2, Y >> 2, 9) > 0.85 ? 3 : 2],
+  flagstone: (x, z, X, Y) => { const r = Math.floor(z / 0.45), c = Math.floor((x + (r & 1) * 0.3) / 0.6), gx = ((x + (r & 1) * 0.3) / 0.6) % 1, gz = fr1(z / 0.45); return ['floorTile', gx < 0.07 || gz < 0.1 ? 0 : noise(r, c, 2) > 0.6 ? 3 : noise(r, c, 2) > 0.25 ? 2 : 1]; },
+  flagstoneDark: (x, z, X, Y) => { const r = Math.floor(z / 0.45), c = Math.floor((x + (r & 1) * 0.3) / 0.6), gx = ((x + (r & 1) * 0.3) / 0.6) % 1, gz = fr1(z / 0.45); return ['floorConcrete', gx < 0.07 || gz < 0.1 ? 0 : noise(r, c, 8) > 0.5 ? 2 : 1]; },
+  runeStone: (x, z, X, Y) => { const r = Math.floor(z / 0.5), c = Math.floor(x / 0.5), g = fr1(x / 0.5) < 0.08 || fr1(z / 0.5) < 0.1; return ['floorConcrete', g ? 0 : (r + c) % 5 === 0 && noise(r, c, 1) > 0.5 ? 3 : 1]; },
   // Land.
   grass: (x, z, X, Y) => { const n = noise(X, Y, 11), m = noise(X >> 3, Y >> 3, 12); return [m > 0.72 ? 'grassDry' : 'grass', n > 0.9 ? 3 : n < 0.1 ? 1 : 2]; },
-  pathReal: (x, z) => ['path', (x / 0.6) % 1 < 0.06 || (z / 0.6) % 1 < 0.08 ? 1 : 2],
-  pathFantasy: (x, z, X, Y) => { const r = Math.floor(z / 0.28), c = Math.floor((x + (r % 2) * 0.15) / 0.3), g = ((x + (r % 2) * 0.15) / 0.3) % 1 < 0.12 || (z / 0.28) % 1 < 0.14; return ['path', g ? 1 : noise(r, c, 4) > 0.55 ? 3 : 2]; },
+  pathReal: (x, z) => ['path', fr1(x / 0.6) < 0.06 || fr1(z / 0.6) < 0.08 ? 1 : 2],
+  // Fantasy path: irregular flagstones (staggered, some missing) with grass in the joints.
+  pathFantasy: (x, z, X, Y) => { const r = Math.floor(z / 0.42), o = (r & 1) * 0.27 + noise(r, 0, 4) * 0.2, c = Math.floor((x + o) / 0.55), gx = fr1((x + o) / 0.55), gz = fr1(z / 0.42), n = noise(r, c, 4); if (n > 0.88) return ['grassDry', 1]; if (gx < 0.1 || gz < 0.16) return [noise(X, Y, 3) > 0.5 ? 'grassDark' : 'soil', 2]; return ['path', gz > 0.8 ? 3 : n > 0.55 ? 3 : n < 0.15 ? 1 : 2]; },
   roadReal: (x, z, X, Y) => ['road', noise(X, Y, 13) > 0.95 ? 3 : 2],
   roadFantasy: (x, z, X, Y) => ['road', noise(X, Y, 14) > 0.88 ? 1 : noise(X, Y, 15) > 0.93 ? 3 : 2],
 };
@@ -66,7 +70,10 @@ const REAL = {
   'desk@command': [box(-0.5, 0.5, -0.5, 0.5, 0.72, 0.8, 'woodDark'), box(-0.5, 0.5, 0.2, 0.5, 0, 0.72, 'woodDark'), box(-0.46, -0.05, 0.05, 0.25, 0.8, 1.22, 'frame'), face('front', 0.06, 0.94, 0.1, 0.9, 'screen'), box(0.05, 0.46, 0.05, 0.25, 0.8, 1.22, 'frame'), face('front', 0.06, 0.94, 0.1, 0.9, 'screen'), ['light', 0, 0, 1.0, 'screen']],
   'desk@development': [box(-0.5, 0.5, -0.5, 0.5, 0.74, 0.84, 'wood'), box(-0.48, -0.4, -0.45, 0.45, 0, 0.74, 'wood'), box(0.4, 0.48, -0.45, 0.45, 0, 0.74, 'wood'), box(-0.46, 0.46, -0.4, 0.4, 0.18, 0.24, 'wood'),
     box(-0.35, -0.1, 0.0, 0.3, 0.84, 0.92, 'metal'), box(0.15, 0.3, -0.2, 0.2, 0.84, 1.0, 'hivis'), box(-0.45, 0.45, 0.42, 0.5, 0.84, 1.5, 'woodDark'), face('front', 0.05, 0.25, 0.3, 0.7, 'metal'), face('front', 0.35, 0.45, 0.2, 0.8, 'yellow'), face('front', 0.6, 0.9, 0.4, 0.6, 'metal')],
-  'desk@testing': [box(-0.5, 0.5, -0.5, 0.5, 0.72, 0.78, 'white'), box(-0.48, -0.42, -0.4, 0.4, 0, 0.72, 'metal'), box(0.42, 0.48, -0.4, 0.4, 0, 0.72, 'metal'), box(-0.3, 0.3, 0.05, 0.25, 0.78, 1.2, 'frame'), face('front', 0.06, 0.94, 0.1, 0.9, 'screen'), ['light', 0, 0, 1.0, 'screen']],
+  // Codex's engineering station: two monitors (primary) + a test rig (supporting) + a status LED (accent).
+  'desk@testing': [box(-0.5, 0.5, -0.5, 0.5, 0.72, 0.78, 'white'), box(-0.48, -0.42, -0.4, 0.4, 0, 0.72, 'metal'), box(0.42, 0.48, -0.4, 0.4, 0, 0.72, 'metal'),
+    box(-0.46, -0.02, 0.12, 0.3, 0.78, 1.28, 'frame'), face('front', 0.06, 0.94, 0.1, 0.9, 'screen'), box(0.02, 0.4, 0.12, 0.3, 0.78, 1.24, 'frame'), face('front', 0.06, 0.94, 0.1, 0.9, 'screen'),
+    box(0.18, 0.46, -0.42, -0.12, 0.78, 0.9, 'metalDark'), face('front', 0.15, 0.35, 0.3, 0.7, 'led'), ['light', 0, 0, 1.0, 'screen']],
   officeChair: [box(-0.4, 0.4, -0.4, 0.4, 0.4, 0.5, 'fabric'), box(-0.4, 0.4, 0.3, 0.5, 0.5, 1.0, 'fabric'), box(-0.06, 0.06, -0.06, 0.06, 0.05, 0.4, 'metalDark'), box(-0.4, 0.4, -0.4, 0.4, 0, 0.06, 'metalDark')],
   chair: [box(-0.4, 0.4, -0.4, 0.4, 0.42, 0.5, 'wood'), box(-0.4, 0.4, 0.3, 0.5, 0.5, 0.95, 'wood'), box(-0.4, -0.3, -0.4, -0.3, 0, 0.42, 'woodDark'), box(0.3, 0.4, -0.4, -0.3, 0, 0.42, 'woodDark')],
   roundTable: [box(-0.5, 0.5, -0.5, 0.5, 0.7, 0.76, 'woodLight'), box(-0.08, 0.08, -0.08, 0.08, 0.05, 0.7, 'metalDark'), box(-0.3, 0.3, -0.3, 0.3, 0, 0.05, 'metalDark'), box(-0.1, 0.1, 0.0, 0.2, 0.76, 0.84, 'white')],
@@ -74,7 +81,8 @@ const REAL = {
   armchair: [box(-0.5, 0.5, -0.5, 0.5, 0.12, 0.42, 'leather'), box(-0.5, 0.5, 0.25, 0.5, 0.42, 0.85, 'leather'), box(-0.5, -0.35, -0.5, 0.25, 0.42, 0.62, 'leather'), box(0.35, 0.5, -0.5, 0.25, 0.42, 0.62, 'leather')],
   counter: [box(-0.5, 0.5, -0.5, 0.5, 0, 0.84, 'white'), face('front', 0.02, 0.98, 0.05, 0.92, 'wood'), box(-0.5, 0.5, -0.5, 0.5, 0.84, 0.9, 'metalDark')],
   coffeeMachine: [box(-0.4, 0.4, -0.3, 0.4, 0, 0.45, 'metalDark'), face('front', 0.3, 0.7, 0.55, 0.8, 'ledRed'), box(-0.15, 0.15, -0.5, -0.2, 0, 0.12, 'white')],
-  vending: [box(-0.5, 0.5, -0.5, 0.5, 0, 1.9, 'brand'), face('front', 0.08, 0.7, 0.3, 0.92, 'screen'), face('front', 0.76, 0.92, 0.5, 0.7, 'led'), ['light', 0, -0.5, 1.2, 'screen']],
+  // A quiet vending machine: brushed metal, glass front, a thin brand band (no permanently lit screen).
+  vending: [box(-0.5, 0.5, -0.5, 0.5, 0, 1.9, 'metal'), face('front', 0.08, 0.66, 0.14, 0.86, 'glassNight'), face('front', 0.12, 0.62, 0.3, 0.34, 'sticky'), face('front', 0.12, 0.62, 0.55, 0.59, 'fabric'), face('front', 0.72, 0.92, 0.45, 0.62, 'metalDark'), face('front', 0, 1, 0.9, 0.97, 'brand')],
   bookshelf: [box(-0.5, 0.5, -0.5, 0.5, 0, 1.9, 'wood'), face('front', 0.06, 0.94, 0.06, 0.3, 'books'), face('front', 0.06, 0.94, 0.36, 0.62, 'books'), face('front', 0.06, 0.94, 0.68, 0.94, 'books')],
   printer: [box(-0.5, 0.5, -0.5, 0.5, 0, 0.75, 'plastic'), box(-0.4, 0.4, -0.4, 0.3, 0.75, 1.0, 'white'), face('front', 0.6, 0.8, 0.3, 0.5, 'led'), box(-0.3, 0.3, -0.5, -0.1, 0.75, 0.8, 'paper')],
   plant: [box(-0.4, 0.4, -0.4, 0.4, 0, 0.35, 'pot'), ['blob', 0, 0, 0.75, 6, 6, 'leaf'], ['blob', -0.15, 0, 1.0, 4, 4, 'leafLight'], ['blob', 0.2, 0, 0.6, 4, 3, 'leaf']],
@@ -147,24 +155,33 @@ export const VEGETATION = {
     tree: { trunk: [2, 9], blobs: [[0, -16, 8, 7, 'leaf', 1], [-3, -18, 6, 5, 'leaf', 2], [3, -20, 5, 5, 'leafLight', 2], [-1, -22, 4, 3, 'leafLight', 3]] },
     treeBig: { trunk: [3, 12], blobs: [[0, -20, 11, 9, 'leaf', 1], [-4, -23, 8, 7, 'leaf', 2], [4, -25, 7, 6, 'leafLight', 2], [0, -28, 5, 4, 'leafLight', 3]] },
     pine: { trunk: [2, 4], cone: [[0, -26, 7, 22, 'pine', 1], [0, -26, 5, 18, 'pine', 2]] },
+    treeSmall: { trunk: [2, 6], blobs: [[0, -11, 6, 5, 'leaf', 1], [-2, -13, 4, 4, 'leaf', 2], [2, -14, 3, 3, 'leafLight', 3]] },
+    pineSmall: { trunk: [2, 3], cone: [[0, -18, 5, 15, 'pine', 1], [0, -18, 3, 12, 'pine', 2]] },
+    rockBig: { blobs: [[0, -4, 9, 5, 'rock', 2], [-2, -6, 6, 4, 'rock', 3], [-3, -8, 3, 2, 'rock', 4], [5, -2, 3, 2, 'rock', 2], [-6, -1, 2, 1, 'grassDark', 2]] },
+    tuft: { dots: [[0, 0, 'grassDark'], [1, -1, 'grassDark'], [-1, 0, 'grassDark']] },
     bush: { blobs: [[0, -3, 5, 3, 'bush', 1], [-1, -4, 3, 2, 'bush', 2], [2, -5, 2, 2, 'leafLight', 3]] },
-    rock: { blobs: [[0, -2, 4, 3, 'rock', 1], [-1, -3, 3, 2, 'rock', 2], [-1, -4, 1, 1, 'rock', 3]] },
+    rock: { blobs: [[0, -2, 4, 3, 'rock', 2], [-1, -3, 3, 2, 'rock', 3], [-1, -4, 1, 1, 'rock', 4]] },
     flowers: { dots: [[0, 0, 'flower'], [2, -1, 'flower2'], [-2, 1, 'flower'], [3, 1, 'flower']] },
   },
   fantasy: {
     tree: { trunk: [2, 8], blobs: [[0, -15, 8, 7, 'leaf', 1], [-3, -17, 6, 5, 'leaf', 2], [3, -19, 5, 4, 'leafLight', 2]] },
     treeBig: { trunk: [3, 12], blobs: [[0, -20, 11, 9, 'leaf', 0], [-4, -23, 8, 7, 'leaf', 1], [4, -25, 7, 6, 'leaf', 2], [0, -28, 5, 4, 'leafLight', 2]] },
     pine: { trunk: [2, 4], cone: [[0, -30, 8, 26, 'pine', 1], [0, -30, 5, 21, 'pine', 2]] },
+    treeSmall: { trunk: [2, 6], blobs: [[0, -11, 6, 5, 'leaf', 1], [-2, -13, 4, 4, 'leaf', 2], [2, -14, 3, 3, 'leafLight', 2]] },
+    pineSmall: { trunk: [2, 3], cone: [[0, -19, 5, 16, 'pine', 1], [0, -19, 3, 13, 'pine', 2]] },
+    rockBig: { blobs: [[0, -5, 10, 6, 'rock', 2], [-2, -7, 7, 4, 'rock', 3], [-3, -9, 3, 2, 'rock', 4], [6, -2, 3, 2, 'rock', 2], [-7, -1, 2, 1, 'moss', 2], [2, -10, 2, 1, 'moss', 2]] },
+    tuft: { dots: [[0, 0, 'grassDark'], [1, -1, 'grassDark'], [-1, 0, 'grassDark']] },
     bush: { blobs: [[0, -3, 5, 3, 'bush', 1], [-1, -4, 3, 2, 'bush', 2]] },
-    rock: { blobs: [[0, -3, 6, 4, 'rock', 1], [-1, -4, 4, 3, 'rock', 2], [-2, -6, 2, 1, 'rock', 3], [3, -1, 1, 1, 'grassDark', 2]] },
+    rock: { blobs: [[0, -3, 6, 4, 'rock', 2], [-1, -4, 4, 3, 'rock', 3], [-2, -6, 2, 1, 'rock', 4], [3, -1, 1, 1, 'grassDark', 2]] },
     flowers: { dots: [[0, 0, 'flower'], [2, -1, 'flower2'], [-2, 1, 'flower']] },
   },
 };
 // Which plants the edge grows, by theme (weights): Fantasy leans to pine and rock, Real to broadleaf and shrubs.
-export const EDGE_MIX = { real: [['tree', 4], ['treeBig', 2], ['pine', 1], ['bush', 3], ['rock', 1], ['flowers', 2]], fantasy: [['pine', 5], ['tree', 2], ['treeBig', 1], ['bush', 2], ['rock', 3], ['flowers', 1]] };
+export const EDGE_MIX = { real: [['tree', 4], ['treeBig', 2], ['pine', 1], ['bush', 3], ['rock', 2], ['flowers', 2]], fantasy: [['pine', 5], ['tree', 2], ['treeBig', 1], ['bush', 2], ['rock', 4], ['flowers', 1]] };
 // Exterior lights along paths: Real lamp posts, Fantasy torch posts.
 export const POSTS = {
-  real: { recipe: [box(-0.5, 0.5, -0.5, 0.5, 0, 0.1, 'metalDark'), box(-0.2, 0.2, -0.2, 0.2, 0.1, 2.6, 'metalDark'), box(-0.6, 0.6, -0.6, 0.6, 2.6, 2.75, 'lamp')], light: [0, 0, 2.6, 'lamp'], w: 0.25, spacing: 6 },
+  // Real: restrained low bollards with a light band (no tall street lamps at a compact HQ).
+  real: { recipe: [box(-0.5, 0.5, -0.5, 0.5, 0, 0.62, 'metalDark'), box(-0.5, 0.5, -0.5, 0.5, 0.62, 0.74, 'lamp'), box(-0.5, 0.5, -0.5, 0.5, 0.74, 0.86, 'metalDark')], light: [0, 0, 0.68, 'lamp'], w: 0.22, spacing: 4 },
   fantasy: { recipe: [box(-0.5, 0.5, -0.5, 0.5, 0, 1.6, 'woodDark'), box(-0.6, 0.6, -0.6, 0.6, 1.6, 1.7, 'metal'), ['blob', 0, 0, 1.85, 2, 3, 'fire']], light: [0, 0, 1.8, 'torch'], w: 0.22, spacing: 5 },
 };
 // Torches / wall lamps on interior back walls, every `spacing` metres, clear of decor.
