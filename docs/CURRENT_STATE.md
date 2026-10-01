@@ -57,3 +57,15 @@ This pass adds three things:
 **Superseded by this branch:** draft PRs #31, #33, #37, #38 (stacked HQ) and #35 (world-engine). #34 is obsolete. None of them were closed by Claude.
 
 **WSL users:** the guest scripts changed, so rebuild the WSL base image with `node tools/hillink-hq/sandbox/build-base.mjs`.
+
+## 2026-10-01: Art Factory Step 1 (Claude)
+
+Branch `claude/art-factory-step1`, based on `claude/dev-baseline`. Kyle approved Step 1 only.
+
+- **Factory** (`tools/hillink-art-factory/`): rigged/animated glTF → headless Blender (bpy 5.0.1) → fixed camera with four facings → deterministic pixel pass → `sheet.png` + `sheet.json`. Scale is configurable (`--scale 1–4`). It uses a CC0 stand-in robot only, as a test fixture that is never shipping art.
+- **HQ:** objective type `asset` (`{recipe, scale}`) → `produce` (LOCAL, `hq-verifier`) → HQ verify. It is opt-in with `HQ_ART_FACTORY=1` and `HQ_ART_PYTHON=<python with bpy>`. The base follows the `HQ_IMPL_BASE` rules. The output is a local `hq/asset/*` commit holding only the sheet, and it is never pushed.
+- **World:** `render/px/authored.mjs` loads validated sheets.
+  - Approved art is the default. Candidate/stand-in sheets are shown only with `?assets=standin`.
+  - `?charscale=N` selects the scale, and `?assets=off` gives procedural only.
+  - The procedural renderer stays the fallback.
+- **Proof:** one objective went to COMPLETE unattended (`tools/hillink-hq/docs/art-factory-proof-results.json`). Evidence is in `/mnt/project-files/art-factory/step1/`.

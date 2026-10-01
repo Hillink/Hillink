@@ -36,3 +36,7 @@ The evidence screenshots in `docs/world/evidence/` document what was built. They
 Claude is the integrator and tooling engineer, not the pixel artist. Claude does not author character art.
 
 The proposed technical conventions are in the Pass 5H art-pipeline report (`/mnt/project-files/pass5h-art-pipeline/REPORT-character-grammar.md`): an 80×80 cell, anchor (40,72), binary alpha and ≤32 colours. They are **proposed, not locked**.
+
+## Art Factory (Step 1, 2026-10-01)
+
+The automated downstream pipeline exists: `tools/hillink-art-factory/` → HQ `asset` objective → `render/px/authored.mjs`. Today it renders only a CC0 **stand-in** robot (`status: candidate`, `standIn: true`). That stand-in is never shipping art and is shown only with `?assets=standin`. Producing Fantasy Claude from a generated 3D model (for example with Tripo) is Step 2 and needs Kyle's approval.
