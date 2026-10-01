@@ -50,7 +50,7 @@ test('slice: deterministic pixels, no canonical writes, and every piece traced t
   const items = new Set(Object.values(L.furnishing).flatMap(F => F.items.map(i => i.id))), decor = new Set(Object.values(L.furnishing).flatMap(F => F.decor.map(d => d.id)));
   for (const o of S.objects) {
     const [k, rest] = [o.id.split(':')[0], o.id.split(':').slice(1).join(':')];
-    const ok = { wall: true, merlons: true, tower: true, coping: true, jamb: true, column: true, plinth: true, corner: true, buttress: true, pier: true, arch: true, canopy: true, post: true, veg: true, sconce: true, decor: decor.has(rest) }[k] ?? items.has(o.id.replace(/:back$/, ''));
+    const ok = { wall: true, merlons: true, tower: true, coping: true, sign: true, jamb: true, column: true, plinth: true, corner: true, buttress: true, pier: true, arch: true, canopy: true, post: true, veg: true, sconce: true, decor: decor.has(rest) }[k] ?? items.has(o.id.replace(/:back$/, ''));
     assert.ok(ok, `untraceable piece ${o.id}`);
   }
 });

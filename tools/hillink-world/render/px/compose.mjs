@@ -324,8 +324,12 @@ export function composeScene(layout, theme = 'real') {
       if (side === 'end') return FANT ? ashlar(u, h, 7, 0.36, 0.62, 'exterior', -1) : C(w.type === 'back' || w.type === 'left' ? 'wallSide' : 'exteriorSide', 1);
       if (side === 'exterior') {
         if (FANT) { if (h < 0.18) return C('base', noise(X, Y, 91) > 0.75 ? 1 : 2); const m = h < 0.4 && noise(X, Y, 92) > 0.86; return m ? C('moss', 2) : ashlar(u, h, 7); }
-        if (h < 0.14) return C('base', 1);
-        return C('exterior', fr1(u / 1.5) < 0.025 || Math.abs(h - 0.45) < 0.025 ? 1 : noise(Math.floor(u / 1.5), Math.floor(h / 0.45), 93) > 0.6 ? 3 : 2);
+        // Real: a cut curtain wall. Concrete spandrel, then tinted glass between dark steel mullions and a transom.
+        if (h < 0.06) return C('base', 1);
+        if (h < 0.3) return C('exterior', fr1(u / 3) < 0.012 ? 1 : h > 0.26 ? 3 : 2);
+        if (fr1(u / 1.5) < 0.05 || Math.abs(h - 0.31) < 0.025) return C('column', fr1(u / 1.5) < 0.02 ? 2 : 1);
+        const refl = fr1(u / 1.5 + (h - 0.3) * 0.9) , streak = refl > 0.62 && refl < 0.7;
+        return C('glassNight', streak ? 4 : h > topH - 0.16 ? 3 : 2);
       }
       if (side === 'partition') {
         if (FANT) { // stone footing, then a timber rail on posts (open between)
@@ -350,7 +354,9 @@ export function composeScene(layout, theme = 'real') {
         return ashlar(u, h, 9, 0.3, 0.5, 'wall');
       }
       if (h < 0.1) return C('wallTrim', 1);
-      if (h > topH - 0.12) return C('wall', 1);
+      // The roof slab in section at the top of the cutaway, with a light cove line under it.
+      if (h > topH - 0.26) return C('cap', h > topH - 0.08 ? 1 : 2);
+      if (h > topH - 0.31) return C('wall', 4);
       if ((kind === 'development' || kind === 'command') && h > 0.95 && h < 1.05) return C(kind === 'development' ? 'hivis' : 'brand', 2);
       if ((kind === 'lounge' || kind === 'comms') && h < 1.0) return C('wood', fr1(u / 0.12) < 0.25 ? 1 : 3);
       if (kind === 'servers') return C('metalDark', fr1(u / 0.4) < 0.08 ? 0 : 1);
@@ -360,7 +366,11 @@ export function composeScene(layout, theme = 'real') {
   function capColour(w, q, X, Y) {
     const b = w.box, edge = q.z !== undefined && (q.z * U - b.z0 < 1.4);
     if (FANT) return C('wallTop', edge ? 3 : (fr1(q.u / 0.5) < 0.08 ? 1 : 2));
-    return C('cap', edge ? 3 : 1);
+    // Real: the wall in section. Steel cladding outside, a concrete core, the lining inside (interior walls: dark).
+    if (w.type === 'low' || w.type === 'partition') return C('frame', 2);
+    const across = w.axis === 'z' ? (q.z * U - b.z0) / (b.z1 - b.z0 || 1) : (q.u * U - b.x0) / (b.x1 - b.x0 || 1);
+    const out = w.type === 'back' || w.type === 'right' ? across : 1 - across;
+    return out > 0.62 ? C('cap', 1) : out > 0.18 ? C('exterior', 3) : C('wall', 3);
   }
   // Openings blocked for windows: decor, tall pieces against the wall, doors, corners and junctions.
   const tallNear = [];
@@ -407,7 +417,8 @@ export function composeScene(layout, theme = 'real') {
     }
     // Real: a coping on the full-height outer walls (the roof line, read in section).
     if (!FANT && outer && !w.h0 && (w.type === 'back' || w.type === 'left')) {
-      const o = 0.05 * U, cop = { box: w.axis === 'z' ? { x0: b.x0, x1: b.x1, z0: b.z0 - o, z1: b.z1 + o, h0: w.h1, h1: w.h1 + 0.1 * U } : { x0: b.x0 - o, x1: b.x1 + o, z0: b.z0, z1: b.z1, h0: w.h1, h1: w.h1 + 0.1 * U }, mat: 'cap' };
+      // The roof slab edge: a dark steel fascia overhanging outward, its top showing the slab's light membrane.
+      const o = 0.3 * U, th = 0.16 * U, cop = { box: w.axis === 'z' ? { x0: b.x0 - (w.s === b.x0 ? 0 : 0), x1: b.x1, z0: b.z0, z1: b.z1 + o, h0: w.h1, h1: w.h1 + th } : { x0: b.x0 - o, x1: b.x1, z0: b.z0, z1: b.z1, h0: w.h1, h1: w.h1 + th }, mat: 'cap', faces: [['top', 0, 1, 0, 1, 'concrete']] };
       const cs = spriteOf([cop], f, { outline: false }); if (cs) addObject({ id: `coping:${f}:${w.axis}:${w.at}:${w.s}`, kind: 'wall', floor: f, x0: b.x0, x1: b.x1, z0: b.z0, z1: b.z1, bias: -1, sb: sbOf(cs), ...cs, fps: 0 });
     }
   }
@@ -466,6 +477,33 @@ export function composeScene(layout, theme = 'real') {
     const sp = spriteOf([{ box, shader: sh, topAlways: true }], j.f, { outline: false });
     addObject({ id: `column:${j.f}:${j.axis}:${Math.round(j.at)}:${Math.round(j.pos)}`, kind: 'wall', floor: j.f, ...box, bias: 1, sb: sbOf(sp), ...sp, fps: 0 });
   }
+  // Real structure: a steel column grid on the inside of the full-height outer walls (every 3.2 m, clear of windows,
+  // doors, decor and junction columns), and soft wash lights at the base of the curtain walls (every 3 m).
+  const gridAt = [];
+  if (!FANT) for (const w of walls) {
+    if (!outerLine(w) || w.h0) continue;
+    if (w.type === 'back' || w.type === 'left') {
+      const bays = windowsOn.get(w) ?? [], L = (w.e - w.s) / U;
+      for (let c0 = 1.6; c0 < L - 0.8; c0 += 3.2) {
+        const c = w.s + c0 * U;
+        if (bays.some(bc => Math.abs(bc * U - c) < 0.85 * U) || (w.doors ?? []).some(d => c > d.s - 0.4 * U && c < d.e + 0.4 * U)) continue;
+        if (uniqJ.some(j => j.f === w.f && j.axis === w.axis && Math.abs(j.at - w.at) < 1 && Math.abs(j.pos - c) < 0.9 * U)) continue;
+        if (w.axis === 'z' && decorAt.some(d => d.f === w.f && Math.abs(d.z - w.at) < 1 && c > d.x0 * U - 0.3 * U && c < d.x1 * U + 0.3 * U)) continue;
+        const s2 = 0.1 * U, dp = 0.12 * U, box = w.axis === 'z' ? { x0: c - s2, x1: c + s2, z0: w.at - dp, z1: w.at, h0: 0, h1: HT } : { x0: w.at, x1: w.at + dp, z0: c - s2, z1: c + s2, h0: 0, h1: HT };
+        const sp = spriteOf([{ box, mat: 'column', faces: [['front', 0, 1, 0, 0.03, 'base']] }], w.f, { outline: false });
+        addObject({ id: `column:grid:${w.f}:${w.axis}:${Math.round(w.at)}:${Math.round(c)}`, kind: 'wall', floor: w.f, ...box, bias: 1, sb: sbOf(sp), ...sp, fps: 0 });
+        gridAt.push({ f: w.f, axis: w.axis, at: w.at, c });
+      }
+    }
+    if (w.type === 'front' || w.type === 'right') {
+      const L = (w.e - w.s) / U;
+      for (let c0 = 1.5; c0 < L - 0.7; c0 += 3) {
+        const c = w.s + c0 * U;
+        if ((w.doors ?? []).some(d => c > d.s - 1.2 * U && c < d.e + 1.2 * U)) continue;
+        if (w.axis === 'z') emit(c, w.box.z0 - 3, w.f, 0.1 * U, 'wash', { phase: 0 }); else emit(w.box.x1 + 3, c, w.f, 0.1 * U, 'wash', { phase: 0 });
+      }
+    }
+  }
   const tw0 = 0.38 * U, tf0 = 0.3 * U; // outer wall thicknesses (back/left, front/right)
   for (const { b: bd, r } of footprints) {
     // Plinth: the building's base course along its visible front and right sides.
@@ -481,10 +519,23 @@ export function composeScene(layout, theme = 'real') {
       if (!FANT) {
         // Real: a dark steel column at the back corners (full height, the frame of the cutaway); at the front a
         // concrete corner flush with the low wall (no lamp: exterior lighting stays restrained).
-        const s = (back ? 0.22 : 0.2) * U, box = { x0: cx0 - s, x1: cx0 + s, z0: cz0 - s, z1: cz0 + s, h0: 0, h1: back ? HT + 0.12 * U : LOW + 0.08 * U };
-        const parts = [{ box, mat: back ? 'column' : 'concrete' }];
-        const sp = spriteOf(parts, 0, { outline: back });
+        // Front corners are steel columns cut at partition height (the cutaway convention), their cut face light.
+        const s = (back ? 0.22 : 0.15) * U, box = { x0: cx0 - s, x1: cx0 + s, z0: cz0 - s, z1: cz0 + s, h0: 0, h1: back ? HT + 0.16 * U : 1.6 * U };
+        const parts = [{ box, mat: 'column', faces: back ? [] : [['top', 0, 1, 0, 1, 'concrete'], ['front', 0, 1, 0, 0.04, 'base']] }];
+        const sp = spriteOf(parts, 0, { outline: true });
         addObject({ id: `corner:${bd.id}:${id}`, kind: 'wall', floor: 0, ...box, bias: back ? -1 : 0, sb: sbOf(sp), ...sp, fps: 0, phase: 0 });
+        // The Real silhouette at the back corners (the counterpart of the Fantasy towers): a comms mast with a beacon
+        // at back-right, a slim backlit brand fin at back-left. Rule: by corner, never by world.
+        if (back && !left) {
+          const m = 0.05 * U, mast = [{ box: { x0: cx0 - m, x1: cx0 + m, z0: cz0 - m, z1: cz0 + m, h0: box.h1, h1: box.h1 + 1.9 * U }, mat: 'column' }, { box: { x0: cx0 - 0.22 * U, x1: cx0 + 0.22 * U, z0: cz0 - m, z1: cz0 + m, h0: box.h1 + 1.2 * U, h1: box.h1 + 1.26 * U }, mat: 'column' }, { box: { x0: cx0 - m, x1: cx0 + m, z0: cz0 - m, z1: cz0 + m, h0: box.h1 + 1.9 * U, h1: box.h1 + 2.0 * U }, mat: 'ledRed' }];
+          const ms = spriteOf(mast, 0, { outline: true, frames: FRAMES });
+          addObject({ id: `corner:${bd.id}:mast`, kind: 'wall', floor: 0, ...box, bias: -1, sb: sbOf(ms), ...ms, fps: 2, phase: 0 });
+        }
+        if (back && left) {
+          const fb = { x0: cx0 + 0.25 * U, x1: cx0 + 1.05 * U, z0: cz0 - 0.06 * U, z1: cz0 + 0.02 * U, h0: HT - 0.1 * U, h1: HT + 0.75 * U };
+          const fs = spriteOf([{ box: fb, mat: 'column', faces: [['front', 0.08, 0.92, 0.12, 0.88, 'brand'], ['front', 0.3, 0.4, 0.3, 0.7, 'white'], ['front', 0.6, 0.7, 0.3, 0.7, 'white'], ['front', 0.3, 0.7, 0.46, 0.54, 'white']] }], 0, { outline: true });
+          addObject({ id: `corner:${bd.id}:fin`, kind: 'wall', floor: 0, ...fb, bias: -1, sb: sbOf(fs), ...fs, fps: 0 });
+        }
         continue;
       }
       // Fantasy: towers at the back corners (one with a slate roof, one crenellated with a banner), squat turrets in
@@ -527,7 +578,7 @@ export function composeScene(layout, theme = 'real') {
     for (const k of [0, 1]) {
       const box = pierBox(k);
       // Real: slim concrete door reveals with a dark inner edge (the door frame), part of the facade.
-      const sh = (fc, X, Y) => { const q = planeOf(box, 0, fc, X, Y); if (fc === 'top') return C(FANT ? 'wallTop' : 'cap', FANT ? 3 : 2); if (FANT) return ashlar(q.u, q.h, 23, 0.36, 0.5, 'exterior', fc === 'right' ? -1 : 0); if (q.h < 0.12) return C('base', 1); const inner = fc === 'front' && (k ? q.u * U < box.x0 + 0.06 * U : q.u * U > box.x1 - 0.06 * U); return inner ? C('frame', 1) : C('exterior', fc === 'right' ? 1 : 2); };
+      const sh = (fc, X, Y) => { const q = planeOf(box, 0, fc, X, Y); if (fc === 'top') return C(FANT ? 'wallTop' : 'cap', FANT ? 3 : 2); if (FANT) return ashlar(q.u, q.h, 23, 0.36, 0.5, 'exterior', fc === 'right' ? -1 : 0); if (q.h < 0.12) return C('base', 1); const inner = fc === 'front' && (k ? q.u * U < box.x0 + 0.05 * U : q.u * U > box.x1 - 0.05 * U); return inner ? C('wallTrim', 3) : C('column', fc === 'right' ? 1 : 2); };
       const parts = [{ box, shader: sh, topAlways: true }];
       if (FANT) parts.push({ box: { x0: (box.x0 + box.x1) / 2 - 0.05 * U, x1: (box.x0 + box.x1) / 2 + 0.05 * U, z0: box.z0 - 0.15 * U, z1: box.z0, h0: H * 0.6, h1: H * 0.72 }, mat: 'metalDark' }, { blob: { x: (box.x0 + box.x1) / 2, z: box.z0 - 0.1 * U, h: H * 0.78, rx: 1, ry: 3 }, mat: 'fire' });
       const sp = spriteOf(parts, 0, { outline: FANT, frames: FANT ? FRAMES : 1 });
@@ -543,9 +594,19 @@ export function composeScene(layout, theme = 'real') {
     } else {
       // A thin cantilevered canopy over the door with the brand line on its edge and one warm downlight.
       const box = { x0: x0 - pw - 0.25 * U, x1: x1 + pw + 0.25 * U, z0: z - tf0 - 1.0 * U, z1: z - tf0 + 0.05 * U, h0: H, h1: H + 0.1 * U };
-      const sp = spriteOf([{ box, mat: 'cap', faces: [['front', 0.06, 0.94, 0.3, 0.7, 'brand']] }], 0, { outline: true });
+      const sp = spriteOf([{ box, mat: 'concrete', faces: [['front', 0, 1, 0.2, 0.75, 'brand'], ['top', 0, 1, 0.85, 1, 'cap']] }], 0, { outline: true });
       addObject({ id: `canopy:${e.d.id}`, kind: 'wall', floor: 0, ...box, bias: -1, sb: sbOf(sp), ...sp, fps: 0 });
       emit((x0 + x1) / 2, box.z0 + 4, 0, H - 2, 'lamp', { phase: 1 });
+      // The brand plate: a small backlit Hillink mark on the facade beside the door (rule: right of the entrance,
+      // where the wall is clear), the only signage.
+      const sx0 = x1 + pw + 0.35 * U, sx1 = sx0 + 0.42 * U, zf = z - tf0 - 0.4, sh0 = 0.36 * U, sh1 = 0.8 * U;
+      const wallHere = walls.find(w2 => w2.type === 'front' && !w2.h0 && w2.axis === 'z' && w2.s <= sx0 && w2.e >= sx1 && !(w2.doors ?? []).some(d => d.e > sx0 - 0.2 * U && d.s < sx1 + 0.2 * U));
+      if (wallHere) {
+        const quad = [Q(sx0, zf, 0, sh0), Q(sx1, zf, 0, sh0), Q(sx1, zf, 0, sh1), Q(sx0, zf, 0, sh1)], qx = quad.map(p => p[0]), qy = quad.map(p => p[1]);
+        const shader = (X, Y) => { const a = (X + 0.5 - Math.min(...qx)) / (Math.max(...qx) - Math.min(...qx)), t = (Y + 0.5 - Math.min(...qy)) / (Math.max(...qy) - Math.min(...qy)); if (a < 0.08 || a > 0.92 || t < 0.1 || t > 0.9) return C('column', 1); const H2 = (a > 0.28 && a < 0.4) || (a > 0.6 && a < 0.72) || (t > 0.44 && t < 0.58 && a > 0.28 && a < 0.72); return H2 ? C('white', 2, true) : C('brand', 2, true); };
+        const ss = spriteOf([{ quad, shader }], 0, { outline: false });
+        addObject({ id: `sign:${e.d.id}`, kind: 'wall', floor: 0, x0: sx0, x1: sx1, z0: zf - 1, z1: zf, bias: 1, sb: sbOf(ss), ...ss, fps: 0 });
+      }
     }
   }
   // Wall decor and sconces on full-height back walls (sconces between windows, clear of decor).
@@ -595,16 +656,17 @@ export function composeScene(layout, theme = 'real') {
   const plant = (kind, x, z, gx, gz, salt) => {
     const [sx, sy] = Q(x * U, z * U, 0, 0);
     if (sx < region.x0 - 20 || sx > region.x0 + region.w + 20 || sy < region.y0 - 10 || sy > region.y0 + region.h + 40) return;
-    const sp = plantSprite(theme, kind, noise(gx, gz, 45 + salt));
+    const sp = plantSprite(theme, kind, noise(gx, gz, 45 + salt), noise(gx, gz, 64 + salt) > 0.5);
     addObject({ id: `veg:${gx}:${gz}${salt ? `:${salt}` : ''}`, kind: 'veg', floor: 0, x0: x * U - 4, x1: x * U + 4, z0: z * U - 4, z1: z * U + 4, sb: { l: Math.round(sx) + sp.ox, r: Math.round(sx) + sp.ox + sp.frames[0].w, t: Math.round(sy) + sp.oy, b: Math.round(sy) + sp.oy + sp.frames[0].h }, frames: sp.frames, masks: sp.masks, ox: Math.round(sx) + sp.ox, oy: Math.round(sy) + sp.oy, fps: sp.frames.length > 1 ? 1.5 : 0, phase: Math.floor(noise(gx, gz, 46) * 4) });
   };
   for (let gz = Math.floor(pz0 / STEP); gz <= Math.ceil(pz1 / STEP); gz++) for (let gx = Math.floor(px0 / STEP); gx <= Math.ceil(px1 / STEP); gx++) {
-    const x = (gx + noise(gx, gz, 41)) * STEP, z = (gz + noise(gx, gz, 42)) * STEP;
+    // Jitter wider than a cell (neighbours may pair up or leave a gap): no grid rhythm.
+    const x = (gx + 0.5 + (noise(gx, gz, 41) - 0.5) * 1.4) * STEP, z = (gz + 0.5 + (noise(gx, gz, 42) - 0.5) * 1.4) * STEP;
     if (wayAt(x, z, 0.3) || waterAt(x, z) || pads.some(q => inRect(q, x, z))) continue;
     const d = devDist(x, z); if (d < 1.3) continue;
     const cl = cluster(x, z), ramp = smooth(3.5, 11, d), dens = ramp * smooth(0.46, 0.64, cl), n = noise(gx, gz, 43);
     const stand = vn(x / 14, z / 14, 54 + seedSalt) > pineStand ? 'pine' : 'broad';
-    if (n < dens * 0.82) { // a stand: big trees in its heart, smaller toward its edge
+    if (n < dens * 0.82 && noise(gx, gz, 63) > 0.1 + 0.12 * (1 - smooth(0.55, 0.7, cl))) { // a stand (thinner toward its edge, with gaps): big trees in its heart, smaller toward its edge
       const heart = cl > 0.66 && n < dens * 0.45, kind = stand === 'pine' ? (heart || noise(gx, gz, 47) > 0.3 ? 'pine' : 'pineSmall') : (heart && noise(gx, gz, 48) > 0.45 ? 'treeBig' : noise(gx, gz, 49) > 0.35 ? 'tree' : 'treeSmall');
       plant(kind, x, z, gx, gz, 0); continue;
     }
@@ -664,7 +726,7 @@ export function composeScene(layout, theme = 'real') {
     const isFant = theme === 'fantasy';
     for (const w of out) {
       const full = w.type === 'back' || w.type === 'left';
-      const h1 = full ? HT : w.type === 'partition' ? (isFant ? 1.15 : 1.6) * U : w.type === 'low' ? (isFant ? LOW : 1.2 * U) : LOW + (isFant ? 0.15 * U : 0);
+      const h1 = full ? HT : w.type === 'partition' ? (isFant ? 1.15 : 1.6) * U : w.type === 'low' ? (isFant ? LOW : 1.2 * U) : LOW + (isFant ? 0.15 * U : 0.1 * U);
       const t = full ? 0.38 * U : w.type === 'front' || w.type === 'right' ? 0.3 * U : 0.14 * U;
       let cur = w.s;
       const openings = [...(w.doors ?? [])].sort((a, b) => a.s - b.s);
@@ -695,9 +757,9 @@ function quadEdge(q, X, Y) { const xs = q.map(p => p[0]), ys = q.map(p => p[1]);
 
 // A plant sprite (two sway frames for canopies) from VEGETATION data. Origin: the plant's foot.
 const plantCache = new Map();
-export function plantSprite(theme, kind, n) {
+export function plantSprite(theme, kind, n, flip = false) {
   // Variety by rule: three sizes; the third variant takes the alternative leaf; a rare Fantasy old tree turns autumn.
-  const variant = Math.floor(n * 3), autumn = theme === 'fantasy' && kind === 'treeBig' && n > 0.95, key = `${theme}|${kind}|${variant}|${autumn}`;
+  const variant = Math.floor(n * 3), autumn = theme === 'fantasy' && kind === 'treeBig' && n > 0.95, key = `${theme}|${kind}|${variant}|${autumn}|${flip}`;
   if (plantCache.has(key)) return plantCache.get(key);
   const pal0 = paletteOf(theme), v = VEGETATION[theme][kind], k = 0.8 + variant * 0.16;
   const swap = p => (p === 'leaf' || p === 'leafLight') && autumn ? (p === 'leaf' ? 'leafAutumn' : 'flower') : p === 'leaf' && variant === 2 ? 'leafAlt' : p;
@@ -712,7 +774,10 @@ export function plantSprite(theme, kind, n) {
     const o = v.dots ? b : b.outlined({ dark: 0.4, bottom: 0.3 });
     frames.push(o); masks.push(new Uint8Array(o.w * o.h));
   }
-  const off = v.dots ? 0 : 1, sp = { frames, masks, ox: -fx - off, oy: -fy - off };
+  const off = v.dots ? 0 : 1;
+  // A mirrored variant (chosen per plant by hash) so stands never repeat one silhouette.
+  if (flip) for (let i = 0; i < frames.length; i++) { const f0 = frames[i], m = new PixelBuffer(f0.w, f0.h); for (let y = 0; y < f0.h; y++) for (let x = 0; x < f0.w; x++) m.data[y * f0.w + (f0.w - 1 - x)] = f0.data[y * f0.w + x]; frames[i] = m; }
+  const sp = { frames, masks, ox: flip ? -(frames[0].w - 1 - fx - off) : -fx - off, oy: -fy - off };
   plantCache.set(key, sp);
   return sp;
 }
@@ -725,7 +790,7 @@ export function lightmapOf(scene, lighting = 'dusk') {
   const tmp = new PixelBuffer(region.w, region.h); tmp.data = out;
   for (const poly of scene.interiors) tmp.poly(poly.map(([x, y]) => [x - region.x0, y - region.y0]), inner);
   for (const e of scene.emitters) {
-    const g = GLOWS[e.kind]; if (!g || e.kind === 'screen' || e.kind === 'led') continue;
+    const g = GLOWS[e.kind]; if (!g || e.kind === 'screen' || e.kind === 'led' || e.kind === 'wash') continue;
     const rr = g.r * 2.2, gx = e.x - region.x0, gy = e.y - region.y0 + 6;
     for (let y = Math.floor(gy - rr * 0.6); y <= gy + rr * 0.6; y++) for (let x = Math.floor(gx - rr); x <= gx + rr; x++) {
       if (x < 0 || y < 0 || x >= region.w || y >= region.h) continue;

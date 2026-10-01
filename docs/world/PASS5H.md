@@ -277,3 +277,42 @@ there is no T0 special case. Geometry, canonical state, the planner and saved Wo
   - The Fantasy Codex is a dark cyborg with gold and steel; half of the face is mechanical.
 
 Evidence is in `docs/world/evidence/pass5h-refine1/` (the live video is in `/mnt/project-files/pass5h-refine1/`).
+
+## Visual refinement 2 (2026-10-01)
+
+Convergence pass. Real's architecture has been brought up to the level of Fantasy, and the rendering architecture,
+canonical geometry and harness are unchanged. Every change is a rule or kit entry, and there is no T0 special case.
+
+- **Real architecture (modern language, through structure rather than decoration):**
+  - The front and right walls are a cut curtain wall: a concrete spandrel, then tinted glass between dark steel
+    mullions with a transom.
+  - The cut tops show the wall in section: steel cladding, a concrete core and the inner lining.
+  - Full-height walls end in a dark roof-slab band with a light cove line, under a steel fascia that overhangs
+    outward.
+  - A steel column grid runs every 3.2 m on the inside of the outer walls, clear of windows, doors, decor and junctions.
+  - The front corners are steel columns cut at partition height.
+  - The silhouette counterparts of the Fantasy towers: a comms mast with a beacon at the back-right corner, and a
+    slim brand fin at the back-left.
+  - The entrance has steel reveals and a concrete canopy with a brand fascia, plus one small Hillink plate on the
+    facade where the wall is clear.
+  - Soft wash lights sit at the base of the curtain walls.
+  - The interior wall is a darker warm grey, so primary structure (steel and concrete) outweighs glass, and glass
+    outweighs accents.
+- **Interior hierarchy:**
+  - Real task chairs are graphite and lower than the desks they serve, so they no longer merge with them.
+  - Workshop pegboards are steel with hi-vis accents (no longer brown rectangles).
+  - Fantasy is unchanged.
+- **Agent readability:**
+  - Real Codex wears a teal technical jacket over a white shirt and keeps his glasses, so he contrasts with screens,
+    with ChatGPT's black suit and with Claude's hi-vis.
+  - Occlusion, as a generic stage rule: a prop drawn over an agent is dithered (every other pixel) where it covers the
+    agent's figure. Agents stay readable behind tall furniture, still drawn behind it. Seat backs are exempt.
+- **Environment:**
+  - Plants are jittered wider than a grid cell.
+  - Stands thin out toward their edges and have small gaps.
+  - Every plant may be mirrored by hash, so no stand repeats one silhouette.
+- **Lighting:** the new wash lights add no light pools, only a faint glow. Nothing else changed.
+- **Performance:** unchanged (about 2.3–3 s first build per theme).
+
+Evidence is in `docs/world/evidence/pass5h-refine2/`, including `pass5h-refine2-evidence.pdf`. The live video is in
+`/mnt/project-files/pass5h-refine2/`.

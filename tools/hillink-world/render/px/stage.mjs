@@ -87,7 +87,7 @@ export function createStage(layout, theme = 'real', { lighting = 'dusk' } = {}) 
   bake(lighting);
 
   // Lit blit: a sprite multiplied by the lightmap at its destination, emissive pixels exempt.
-  function litBlit(out, view, fr, mask, sx, sy, { flip = false } = {}) {
+  function litBlit(out, view, fr, mask, sx, sy, { flip = false, hole = null } = {}) {
     const dx = sx - view.x0, dy = sy - view.y0;
     for (let y = 0; y < fr.h; y++) {
       const Y = y + dy; if (Y < 0 || Y >= out.h) continue;
@@ -95,6 +95,7 @@ export function createStage(layout, theme = 'real', { lighting = 'dusk' } = {}) 
       for (let x = 0; x < fr.w; x++) {
         const c = fr.data[y * fr.w + (flip ? fr.w - 1 - x : x)]; if (!c) continue;
         const X = x + dx; if (X < 0 || X >= out.w) continue;
+        if (hole && hole(sx + x, sy + y)) continue;
         const rx = sx + x - region.x0, e = mask?.[y * fr.w + x];
         out.data[Y * out.w + X] = e || L.skip ? c : rx >= 0 && ry >= 0 && rx < region.w && ry < region.h ? mul(c, L.data[ry * region.w + rx]) : mul(c, L.ambient);
       }
@@ -124,20 +125,28 @@ export function createStage(layout, theme = 'real', { lighting = 'dusk' } = {}) 
     // Screens follow canonical activity: on in a room where an agent is working (its clip says so), off elsewhere.
     const live = new Set();
     for (const a of actors) if (/^(work|sit\.work)/.test(a.clip ?? '')) { const r = scene.rooms.find(q => q.f === (a.plan.floor ?? 0) && a.plan.x >= q.x0 && a.plan.x <= q.x1 && a.plan.z >= q.z0 && a.plan.z <= q.z1); if (r) live.add(r.id); }
-    const all = [...items, ...chars], order = paintOrder(all);
+    const all = [...items, ...chars], order = paintOrder(all), drawn = [];
+    // Occlusion: a prop drawn over an agent is dithered (every other pixel) where it covers the agent's figure, so the
+    // agent stays readable behind tall furniture without floating over it. Seat backs are exempt (they hold a sitter).
+    const holeFor = o => {
+      if (o.kind !== 'prop' || o.id.endsWith(':back')) return null;
+      const hit = drawn.filter(c => overlaps(o.sb, c.sb)); if (!hit.length) return null;
+      return (X, Y) => ((X + Y) & 1) === 0 && hit.some(c => { const lx = X - c.sx, ly = Y - c.sy; return lx >= 0 && ly >= 0 && lx < c.sp.buf.w && ly < c.sp.buf.h && c.sp.buf.data[ly * c.sp.buf.w + lx] !== 0; });
+    };
     for (const i of order) {
       const o = all[i];
       if (o.actor) {
         const a = o.actor;
         shade(out, view, o.fx, o.fy, 6, 2.2, 0.62);
         if (a.selected) ring(out, view, o.fx, o.fy, 9, 3.4, GOLD); else if (a.hovered) ring(out, view, o.fx, o.fy, 8, 3, WHITE);
-        litBlit(out, view, o.sp.buf, null, o.sx, o.sy);
+        litBlit(out, view, o.sp.buf, null, o.sx, o.sy); drawn.push(o);
         for (const [lx, ly, lc] of o.sp.light) { const X = o.sx + lx - view.x0, Y = o.sy + ly - view.y0; if (X >= 0 && Y >= 0 && X < out.w && Y < out.h) out.data[Y * out.w + X] = lc; }
         continue;
       }
-      if (o.altFrames && !live.has(o.room)) { litBlit(out, view, o.altFrames[0], o.altMasks[0], o.ox, o.oy); continue; }
+      const hole = drawn.length ? holeFor(o) : null;
+      if (o.altFrames && !live.has(o.room)) { litBlit(out, view, o.altFrames[0], o.altMasks[0], o.ox, o.oy, { hole }); continue; }
       const fi = o.fps && o.frames.length > 1 ? (Math.floor(t * o.fps) + (o.phase ?? 0)) % o.frames.length : 0;
-      litBlit(out, view, o.frames[fi], o.masks[fi], o.ox, o.oy);
+      litBlit(out, view, o.frames[fi], o.masks[fi], o.ox, o.oy, { hole });
     }
     // Glows (additive) for visible light sources.
     const gk = LIGHTING[L.lighting]?.glow ?? 0.7;

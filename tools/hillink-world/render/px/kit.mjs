@@ -69,12 +69,13 @@ const REAL = {
     box(-0.15, 0.15, 0.1, 0.3, 0.78, 1.2, 'frame'), face('front', 0.08, 0.92, 0.1, 0.9, 'screen'), box(-0.05, 0.05, 0.25, 0.35, 0.78, 0.9, 'metalDark'), ['light', 0, 0, 1.0, 'screen']],
   'desk@command': [box(-0.5, 0.5, -0.5, 0.5, 0.72, 0.8, 'woodDark'), box(-0.5, 0.5, 0.2, 0.5, 0, 0.72, 'woodDark'), box(-0.46, -0.05, 0.05, 0.25, 0.8, 1.22, 'frame'), face('front', 0.06, 0.94, 0.1, 0.9, 'screen'), box(0.05, 0.46, 0.05, 0.25, 0.8, 1.22, 'frame'), face('front', 0.06, 0.94, 0.1, 0.9, 'screen'), ['light', 0, 0, 1.0, 'screen']],
   'desk@development': [box(-0.5, 0.5, -0.5, 0.5, 0.74, 0.84, 'wood'), box(-0.48, -0.4, -0.45, 0.45, 0, 0.74, 'wood'), box(0.4, 0.48, -0.45, 0.45, 0, 0.74, 'wood'), box(-0.46, 0.46, -0.4, 0.4, 0.18, 0.24, 'wood'),
-    box(-0.35, -0.1, 0.0, 0.3, 0.84, 0.92, 'metal'), box(0.15, 0.3, -0.2, 0.2, 0.84, 1.0, 'hivis'), box(-0.45, 0.45, 0.42, 0.5, 0.84, 1.5, 'woodDark'), face('front', 0.05, 0.25, 0.3, 0.7, 'metal'), face('front', 0.35, 0.45, 0.2, 0.8, 'yellow'), face('front', 0.6, 0.9, 0.4, 0.6, 'metal')],
+    box(-0.35, -0.1, 0.0, 0.3, 0.84, 0.92, 'metal'), box(0.15, 0.3, -0.2, 0.2, 0.84, 1.0, 'hivis'), box(-0.45, 0.45, 0.42, 0.5, 0.84, 1.45, 'steel'), face('front', 0.05, 0.25, 0.3, 0.7, 'metal'), face('front', 0.35, 0.45, 0.2, 0.8, 'yellow'), face('front', 0.6, 0.9, 0.45, 0.55, 'hivis')],
   // Codex's engineering station: two monitors (primary) + a test rig (supporting) + a status LED (accent).
   'desk@testing': [box(-0.5, 0.5, -0.5, 0.5, 0.72, 0.78, 'white'), box(-0.48, -0.42, -0.4, 0.4, 0, 0.72, 'metal'), box(0.42, 0.48, -0.4, 0.4, 0, 0.72, 'metal'),
     box(-0.46, -0.02, 0.12, 0.3, 0.78, 1.28, 'frame'), face('front', 0.06, 0.94, 0.1, 0.9, 'screen'), box(0.02, 0.4, 0.12, 0.3, 0.78, 1.24, 'frame'), face('front', 0.06, 0.94, 0.1, 0.9, 'screen'),
     box(0.18, 0.46, -0.42, -0.12, 0.78, 0.9, 'metalDark'), face('front', 0.15, 0.35, 0.3, 0.7, 'led'), ['light', 0, 0, 1.0, 'screen']],
-  officeChair: [box(-0.4, 0.4, -0.4, 0.4, 0.4, 0.5, 'fabric'), box(-0.4, 0.4, 0.3, 0.5, 0.5, 1.0, 'fabric'), box(-0.06, 0.06, -0.06, 0.06, 0.05, 0.4, 'metalDark'), box(-0.4, 0.4, -0.4, 0.4, 0, 0.06, 'metalDark')],
+  // Graphite task chair: a darker, lower silhouette than the desk it serves (it never merges into the desk).
+  officeChair: [box(-0.36, 0.36, -0.36, 0.36, 0.4, 0.48, 'fabric2'), box(-0.34, 0.34, 0.3, 0.46, 0.48, 0.92, 'steel'), box(-0.05, 0.05, -0.05, 0.05, 0.05, 0.4, 'metalDark'), box(-0.4, 0.4, -0.4, 0.4, 0, 0.05, 'metalDark')],
   chair: [box(-0.4, 0.4, -0.4, 0.4, 0.42, 0.5, 'wood'), box(-0.4, 0.4, 0.3, 0.5, 0.5, 0.95, 'wood'), box(-0.4, -0.3, -0.4, -0.3, 0, 0.42, 'woodDark'), box(0.3, 0.4, -0.4, -0.3, 0, 0.42, 'woodDark')],
   roundTable: [box(-0.5, 0.5, -0.5, 0.5, 0.7, 0.76, 'woodLight'), box(-0.08, 0.08, -0.08, 0.08, 0.05, 0.7, 'metalDark'), box(-0.3, 0.3, -0.3, 0.3, 0, 0.05, 'metalDark'), box(-0.1, 0.1, 0.0, 0.2, 0.76, 0.84, 'white')],
   couch: [box(-0.5, 0.5, -0.5, 0.5, 0.12, 0.42, 'fabric2'), box(-0.5, 0.5, 0.25, 0.5, 0.42, 0.85, 'fabric2'), box(-0.5, -0.4, -0.5, 0.25, 0.42, 0.62, 'fabric2'), box(0.4, 0.5, -0.5, 0.25, 0.42, 0.62, 'fabric2'), box(-0.2, 0.0, 0.05, 0.25, 0.42, 0.62, 'brand')],
@@ -192,5 +193,6 @@ export const SCONCES = {
 // Glow sprites per light kind: radius (art px), colour, loop.
 export const GLOWS = {
   lamp: { r: 16, colour: '#ffcf7a', k: 0.55, loop: 'flicker-soft' }, torch: { r: 14, colour: '#ff9a3a', k: 0.7, loop: 'flicker' }, fire: { r: 24, colour: '#ff7a2a', k: 0.85, loop: 'flicker' },
+  wash: { r: 6, colour: '#ffd9a0', k: 0.2, loop: 'steady' },
   crystal: { r: 16, colour: '#5fd0ff', k: 0.6, loop: 'pulse' }, screen: { r: 7, colour: '#5fb8ff', k: 0.4, loop: 'steady' }, led: { r: 4, colour: '#4dff88', k: 0.3, loop: 'steady' },
 };

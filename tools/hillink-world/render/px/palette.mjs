@@ -39,7 +39,7 @@ export const PALETTES = {
     path: '#c9c4ba', road: '#55595f', roadLine: '#e8e3d0', curb: '#b9b6ae',
     trunk: '#6b4a32', leaf: '#4f8a3c', leafLight: '#7fb54e', pine: '#3e6e4a', bush: '#5c9444', flower: '#e9d36a', flower2: '#e48aa0',
     floorWood: '#c79a68', floorCarpet: '#5f7590', floorCarpet2: '#7b6a8f', floorTile: '#d9dcdf', floorConcrete: '#b8b4ad', floorRug: '#4f78a8',
-    wall: '#e6e2da', wallSide: '#d2cdc4', wallTrim: '#9aa0a8', wallTop: '#3a3f47', exterior: '#7d838b', exteriorSide: '#676d75', base: '#4e535a', cap: '#30353c', column: '#33383f',
+    wall: '#dcd6cb', wallSide: '#c9c3b8', wallTrim: '#9aa0a8', wallTop: '#3a3f47', exterior: '#7d838b', exteriorSide: '#676d75', base: '#4e535a', cap: '#30353c', column: '#33383f',
     glass: '#9cc6e0', frame: '#3b4350', door: '#7a5a3e', doorFrame: '#3b4350',
     metal: '#a7b0ba', metalDark: '#5c6570', wood: '#9b6f45', woodDark: '#6e4c30', fabric: '#3f6fa6', fabric2: '#6b7d8f', leather: '#7a4b2e', white: '#f4f4f1',
     screen: '#59b8ff', screenOff: '#28323f', led: '#4dff88', ledRed: '#ff5a4d', lamp: '#ffe9a8', brand: '#2f7df6', paper: '#f3efe2', sticky: '#ffe36e',
