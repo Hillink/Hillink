@@ -797,6 +797,9 @@ DO NOT COPY:
   - 9A.3 shows several black-suit figures, so multiple Real ChatGPTs.
   - 9B.3 shows several green-robed King-like figures and several dark Codex-like figures.
   - 9B.2 shows several red-bearded dwarf-like builders, which are Claude clones (C24).
+  - 9F's Real ambient worker strip also breaks C24: the third worker wears a yellow-orange hard hat **and** an orange
+    hi-vis vest, two of Real Claude's three cues. The other four (green or blue hats, green or red-orange vests) pass.
+    The strip is not a valid worker palette as drawn.
   - The canonical agents are ChatGPT, Claude and Codex, one of each. The new wing is a capability or workspace, not a
     fourth agent.
 - **Large green and gold fabric banners on the Real exterior** (9A.1, 9A.3). Real branding stays understated and
