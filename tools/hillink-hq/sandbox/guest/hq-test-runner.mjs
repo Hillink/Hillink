@@ -17,6 +17,8 @@ import { fileURLToPath } from 'node:url';
 const writeSync = fs.writeSync, hash = crypto.hash;
 const out = s => { try { writeSync(1, s); } catch { /* stdout closed: no result, fails closed */ } };
 
+// Node 24+ only: Node 22 reports node:test events differently. Same check as node-version.mjs, inlined (standalone).
+if (!(Number(process.versions.node.split('.')[0]) >= 24)) { out(`HQ-RUNNER: Node ${process.versions.node} is not supported (Node 24+ required); refusing to run.\n`); process.exit(99); }
 let key = '';
 try { const b = Buffer.alloc(200); const n = fs.readSync(0, b, 0, 200, null); key = b.toString('utf8', 0, n).trim(); } catch { /* none */ }
 if (!/^[0-9a-f]{64}$/.test(key)) { out('HQ-RUNNER: no valid run key on stdin; refusing to run.\n'); process.exit(97); }

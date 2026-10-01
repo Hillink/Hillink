@@ -23,6 +23,9 @@ import strict from 'node:assert/strict';
 const writeSync = fs.writeSync, hash = crypto.hash, stringify = JSON.stringify, exit = process.exit.bind(process);
 const out = s => { try { writeSync(1, s); } catch { /* stdout closed: no result, fails closed */ } };
 
+// Node 24+ only: Node 22 reports node:test events differently. Same check as node-version.mjs, inlined (standalone).
+if (!(Number(process.versions.node.split('.')[0]) >= 24)) { out(`HQ-CHILD-ERROR: Node ${process.versions.node} is not supported (Node 24+ required); refusing to run.\n`); process.exit(99); }
+
 // 1. The key: exactly 64 hex characters on stdin, read before anything else.
 let key = '';
 try { const b = Buffer.alloc(200); const n = fs.readSync(0, b, 0, 200, null); key = b.toString('utf8', 0, n).trim(); } catch { /* none */ }
@@ -44,7 +47,8 @@ const rel = f => (typeof f === 'string' && f.startsWith(root + path.sep) ? f.sli
 const totals = { passed: 0, failed: 0, skipped: 0, todo: 0, cancelled: 0, outside: 0 };
 const short = v => String(v ?? '').replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, '').slice(0, 300);
 
-const results = run({ files: files.map(f => path.join(root, f)), isolation: 'none', concurrency: 1 });
+const launched = path.join(root, files[0]);
+const results = run({ files: [launched], isolation: 'none', concurrency: 1 });
 
 // 4. Lock the objects this runner's view of the run depends on, before repository code loads (run() imports the file
 //    asynchronously, after this synchronous block). These are the prototypes that carry node:test's events to the
@@ -90,13 +94,17 @@ results.on('data', e => {
   const d = e.data, f = rel(d.file);
   let kind;
   // node:test reports a file that defines no tests as one passing "test" named after the file: that proves nothing.
-  if (e.type === 'test:pass' && d.name === d.file) { out(`not ok - ${short(f ?? 'a file')} defines no tests\n`); return; }
+  // Node 22 omits data.file on that event and Node 24 sets it, so match the launched path itself, not data.file.
+  if (e.type === 'test:pass' && (d.name === launched || d.name === d.file || (d.nesting === 0 && d.file == null))) { out(`not ok - ${short(files[0])} defines no tests\n`); return; }
+  // Only a test that node:test attributes to the launched file can pass it. A pass with no file or from another file
+  // (a helper, or an event whose shape this Node version reports differently) proves nothing about this file.
+  if (e.type === 'test:pass' && f !== files[0]) { totals.outside++; out(`# ignored pass outside ${short(files[0])}: ${short(d.name)}\n`); return; }
   if (d.skip !== undefined && d.skip !== false) kind = 'skipped';
   else if (d.todo !== undefined && d.todo !== false) kind = 'todo';
   else if (e.type === 'test:fail' && d.details?.error?.failureType === 'cancelledByParent') kind = 'cancelled';
   else kind = e.type === 'test:pass' ? 'passed' : 'failed';
   totals[kind]++;
-  if (f !== files[0]) totals.outside++; // informational only
+  if (f !== files[0]) totals.outside++; // a failure from elsewhere still fails this file
   const where = f ?? 'outside the repository';
   out(`${kind === 'passed' ? 'ok' : 'not ok'} - ${short(d.name)} (${where}${kind === 'passed' || kind === 'failed' ? '' : `, ${kind}`})\n`);
   if (kind === 'failed' || kind === 'cancelled') out(`#   ${short(d.details?.error?.cause?.message ?? d.details?.error?.message)}\n`);

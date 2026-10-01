@@ -5,25 +5,29 @@
 // (hq-linux.sh). There is no credential, no Claude process and no host home directory inside.
 //
 // Claude-in-the-sandbox (the metered direct-sandbox variant) is WSL-only: hq-key.sh and claudeCommand are refused here.
-import { spawn as nodeSpawn } from 'node:child_process';
+import { spawn as nodeSpawn, execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { GUEST_DIR, INSTANCE_PREFIX } from '../sandbox.mjs';
+import { MIN_NODE_MAJOR, nodeMajor } from '../node-version.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const STEP = { 'hq-stage.sh': 'stage', 'hq-diff.sh': 'diff', 'hq-test.sh': 'test', 'hq-broker.sh': 'broker' };
 
 export class LinuxSandbox {
-  constructor({ spawn = nodeSpawn, home = '/var/lib/hq-sandbox', stepTimeoutMs = 10 * 60_000, nodeDir = path.dirname(path.dirname(process.execPath)), guestDir = GUEST_DIR } = {}) {
-    Object.assign(this, { spawn, home, stepTimeoutMs, nodeDir, guestDir, script: path.join(HERE, 'linux', 'hq-linux.sh') });
+  constructor({ spawn = nodeSpawn, home = '/var/lib/hq-sandbox', stepTimeoutMs = 10 * 60_000, nodeDir = path.dirname(path.dirname(process.execPath)), guestDir = GUEST_DIR, nodeVersionOf = dir => execFileSync(path.join(dir, 'bin', 'node'), ['--version'], { encoding: 'utf8', timeout: 10_000, env: {} }).trim() } = {}) {
+    Object.assign(this, { spawn, home, stepTimeoutMs, nodeDir, guestDir, nodeVersionOf, script: path.join(HERE, 'linux', 'hq-linux.sh') });
     this.instances = path.join(home, 'instances');
   }
   available() {
     if (process.platform !== 'linux') return { ok: false, reason: 'the Linux sandbox runs on Linux hosts only' };
     if (typeof process.getuid === 'function' && process.getuid() !== 0) return { ok: false, reason: 'the Linux sandbox needs HQ to run as root (namespaces and chroot)' };
     for (const bin of ['/usr/bin/unshare', '/usr/bin/setpriv', '/usr/sbin/chroot']) if (!fs.existsSync(bin) && !fs.existsSync(bin.replace('/usr/sbin/', '/usr/bin/'))) return { ok: false, reason: `${path.basename(bin)} not installed` };
-    return { ok: true, info: { backend: 'linux-namespaces', node: this.nodeDir } };
+    // The tests run on the Node mounted from nodeDir (the host's by default), so it must be a supported version too.
+    let version = null; try { version = this.nodeVersionOf(this.nodeDir); } catch { /* reported below */ }
+    if (!(nodeMajor(version) >= MIN_NODE_MAJOR)) return { ok: false, reason: `the sandbox Node at ${this.nodeDir} is ${version ?? 'unreadable'}; Node ${MIN_NODE_MAJOR}+ is required` };
+    return { ok: true, info: { backend: 'linux-namespaces', node: this.nodeDir, nodeVersion: version } };
   }
   brokerSupport() { return this.available(); }
   async verifyBase() { return this.available().info; }
