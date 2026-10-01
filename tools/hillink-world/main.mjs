@@ -31,6 +31,8 @@ const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
 const params = new URLSearchParams(location.search);
 // Pass 5H slice: ?art=px is the pixel renderer (both themes); ?light=day|dusk|night its lighting setting.
 const pxMode = () => theme?.art === 'px';
+// The slice keeps its own saved camera, so a zoom saved by another skin never opens it zoomed out.
+const camKey = () => `hlw:camera:${theme?.id}${siteWorld ? ':gen' : ''}${pxMode() ? ':px' : ''}`;
 if (params.get('light')) setPxLighting(params.get('light'));
 const deviceRatio = () => Math.min(2, devicePixelRatio || 1);
 // Source: live HQ when it answers (default), or the dev simulator. `?source=sim` forces the simulator.
@@ -68,7 +70,7 @@ function applyTheme(id, { keepCamera = false } = {}) {
   for (const e of scene.entities.values()) if (e.kind === 'agent') { const p = e.path?.at(-1); if (p) { e.x = p[0]; e.y = p[1]; e.path = []; e.moving = false; scene.moved(e); } }
   view.step(0, performance.now(), { instant: true }, stepPath);
   hover = null; if (!keepCamera) { select(null); cameraTouched = false; }
-  const cam = cam0 ?? (params.get('camera') ? null : storage.get(`hlw:camera:${theme.id}${siteWorld ? ':gen' : ''}`));
+  const cam = cam0 ?? (params.get('camera') ? null : storage.get(camKey()));
   if (cam && Number.isFinite(cam.zoom)) camera.animateTo(cam, 0); else overview({ duration: 0 });
   storage.set('hlw:theme', theme.id);
   document.documentElement.dataset.theme = theme.id;
@@ -88,7 +90,7 @@ function updateInsets() {
   const right = panel && host.width > 760 && !document.body.classList.contains('ui-hidden') ? Math.round(Math.min(host.width * 0.4, host.right - panel.getBoundingClientRect().left + 8)) : 0;
   if (camera.insets.bottom === bottom && camera.insets.top === top && camera.insets.right === right) return;
   camera.insets = { top, right, bottom, left: 0 };
-  if (cameraTouched || storage.get(`hlw:camera:${theme?.id}`)) camera.clamp(); else overview({ duration: 0 });
+  if (cameraTouched || storage.get(camKey())) camera.clamp(); else overview({ duration: 0 });
   invalidate();
 }
 function resize() {
@@ -344,7 +346,7 @@ $('scenarios').addEventListener('click', e => {
 let simBooted = false;
 setInterval(() => { if (mode === 'sim' && simBooted) storage.set('hlw:sim-world', { v: 2, world: store.world }); }, 2000);
 
-function savePrefs() { cameraTouched = true; clearTimeout(savePrefs.t); savePrefs.t = setTimeout(() => storage.set(`hlw:camera:${theme.id}${siteWorld ? ':gen' : ''}`, camera.toJSON()), 300); }
+function savePrefs() { cameraTouched = true; clearTimeout(savePrefs.t); savePrefs.t = setTimeout(() => storage.set(camKey(), camera.toJSON()), 300); }
 
 // Pass 5B: when the canonical world changes (construction reported by HQ, or a demo step), the building is regenerated
 // from it: layout, navigation and art. Agents keep their places; the camera stays where it is.
