@@ -146,7 +146,7 @@ test('permission isolation: R → I → R → I(fail) → R, repeatedly; reviews
     if (step === 'R') { assert.equal(tools, 'Read,Grep,Glob'); assert.deepEqual(writes, []); assert.ok(!r.args.includes('--permission-mode')); assert.equal(path.resolve(r.opts.cwd), path.resolve(s.repo)); }
     else { assert.equal(tools, 'Read,Grep,Glob,Edit,Write'); assert.ok(writes.length > 0); assert.ok(!r.args.some(a => /Bash/.test(a))); assert.notEqual(path.resolve(r.opts.cwd), path.resolve(s.repo)); }
   }
-  assert.deepEqual(cliAgents.claude.args(), ['-p', '--output-format', 'stream-json', '--verbose', '--tools', 'Read,Grep,Glob', '--setting-sources', 'user', '--strict-mcp-config', '--no-session-persistence', '--max-turns', '40'], 'the shared review spec was never mutated');
+  assert.deepEqual(cliAgents.claude.args(), ['-p', '--output-format', 'stream-json', '--verbose', '--include-partial-messages', '--tools', 'Read,Grep,Glob', '--setting-sources', 'user', '--strict-mcp-config', '--no-session-persistence', '--max-turns', '40'], 'the shared review spec was never mutated');
 });
 
 test('contract abuse: duplicates collapse, overlapping scopes stay within their union, limits hold', () => {

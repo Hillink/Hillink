@@ -29,7 +29,7 @@ export const BROKER_FRAMING = [
 
 // Claude Code's arguments for a broker session. Built by HQ from constants; the config path is HQ's own temp file.
 export function brokerArgs(mcpConfigPath, { maxTurns = 80 } = {}) {
-  return ['-p', '--output-format', 'stream-json', '--verbose',
+  return ['-p', '--output-format', 'stream-json', '--verbose', '--include-partial-messages', // token deltas are progress evidence
     '--tools', '', // no built-in tools at all: no Bash, Read, Write, Edit, WebFetch, Task/agents
     '--strict-mcp-config', '--mcp-config', mcpConfigPath, // only HQ's broker; user and project MCP servers ignored
     '--allowedTools', CLAUDE_TOOL_NAMES.join(','), '--permission-mode', 'dontAsk', // anything else is denied, never asked
