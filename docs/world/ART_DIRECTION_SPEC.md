@@ -568,33 +568,30 @@ The pillars:
   kept.
 - [code] Canonical construction (`procgen/construction.mjs` `STAGES`) has **9** stages: planning, site-preparation,
   foundation, structure, exterior, systems, furnishing, inspection and operational. 5H draws 6 looks over them.
-- [proposed] Mapping of the 11 brief stages onto the 9 canonical stages:
+- [proposed] Mapping of the 11 brief stages onto canonical facts. Each row comes from a fact the code already has:
 
-  | Brief stage | Canonical stage |
+  | Brief stage | Canonical fact |
   |---|---|
-  | 1 untouched | planning |
-  | 2 surveyed | site-preparation |
-  | 3 materials and 4 excavation/foundation | foundation |
-  | 5 frame | structure |
-  | 6 walls and 7 roof | exterior |
-  | 8 systems | systems |
-  | 9 furnishing and 10 finishing | furnishing |
-  | — | inspection (scaffold coming down, Codex inspecting) |
-  | 11 operational | operational |
+  | 1 untouched site | no construction project exists for the plot yet |
+  | 2 surveyed or staked | `planning` (the planner chose the site) |
+  | 3 materials arrive | `site-preparation` (HQ asked for it to be built: cleared, cones, materials) |
+  | 4 excavation or foundation | `foundation` |
+  | 5 structural frame | `structure` |
+  | 6 walls **and** 7 roof or exterior | `exterior` (the only shared stage) |
+  | 8 systems or equipment | `systems` |
+  | 9 interior furnishing | `furnishing` |
+  | 10 finishing or detail | `inspection`, or `completed` but not yet verified (Codex on site) |
+  | 11 operational | `operational` (verified) |
 
 - [Kyle C10] **Canonical construction authority does not change for art.** The visual stages map underneath the
   existing canonical stages. Visual sub-stages are allowed inside one canonical stage only if they can be derived
   deterministically without inventing progress.
-- [code] **Limitation:** each canonical stage advances on one piece of HQ evidence. Within a stage there is no further
-  canonical progress signal, so the paired brief stages (3/4, 6/7, 9/10) **cannot be shown truthfully as a sequence.**
-- [proposed] How the pairs are handled truthfully:
-  - Each pair is drawn as **one combined composition** for that canonical stage. For example, foundation shows
-    material piles staged beside an excavated footing; exterior shows walls going up with the roof frame started;
-    furnishing shows furniture in with finishing details partly placed.
-  - Nothing animates from the first half to the second over time.
-  - Facts that are already canonical but aren't progress may vary what is shown, deterministically. Examples: which
-    agent is assigned, whether the work is blocked, whether there is rework, the order number. They never imply
-    advancement.
+- [code] **Limitation:** walls (6) and roof (7) share the single `exterior` stage. There is no canonical progress
+  signal inside a stage, so they **cannot be shown truthfully as a sequence.**
+  - [proposed] `exterior` is drawn as **one combined composition**: walls going up with the roof frame started.
+  - Nothing animates from walls to roof over time.
+  - Facts that are already canonical but aren't progress may vary what is shown, deterministically. Examples: the
+    assigned agent, a blocked or waiting gate, rework, the order number. They never imply advancement.
 
 ## 18. Procedural expansion rules (World growth)
 
@@ -706,7 +703,7 @@ The pillars:
 - **Colour:** flat fills become hue-shifted ramps with texture.
 - **Density:** isolated props in open floors become clustered, wall-heavy dressing with story props bound to state.
 - **Lighting:** even lighting becomes warm local pools against a dusk ambient, with light meaning activity.
-- **Construction:** 6 visual stages become 11 visual stages, with scaffolds, materials and builder interaction.
+- **Construction:** 6 visual looks become 11 visual stages over the 9 canonical stages, with scaffolds, materials and builder interaction.
 - **Starting World:** [Kyle C5] a compact, finished T0 that grows. The current two-floor HQ becomes an earned later
   stage.
 - **Ambient life:** [Kyle C7] ambient inhabitants are strictly separate from agents.
@@ -765,7 +762,7 @@ Resolved by Kyle on 2026-10-01 at 00:12Z:
 | C7 | Non-agent inhabitants | **Allowed, as ambient inhabitants strictly separate from agents.** They never masquerade as agents, receive fake work, imply nonexistent capabilities or distort the agent population. The agents are ChatGPT, Claude and Codex. |
 | C8 | Flavour spaces | **Environment is allowed and encouraged**, but it is not an operational facility. No department, specialized room or capability exists only because it looks cool. |
 | C9 | Sprite authoring | **Hybrid.** Bespoke authored identities for the core agents; a modular system (body plans, equipment, palettes, materials, props, animation, attachments) for everything reusable and for future agents, who can be refined later. All production art is original; references are never shipped or traced. |
-| C10 | Construction stages | **Canonical authority does not change.** Visual stages map underneath the canonical stages. Sub-stages are allowed only if they can be derived deterministically without false progress; otherwise the limitation is documented. Limitation and handling are in §17. |
+| C10 | Construction stages | **Canonical authority does not change.** Visual stages map underneath the canonical stages. Sub-stages are allowed only if they can be derived deterministically without false progress; otherwise the limitation is documented. Only walls and roof share a stage; §17 has the mapping and how that pair is drawn. |
 | C11 | Cross-theme backdrop | **No fantasy castle behind Real.** Each theme stays physically coherent. Subtle shared motifs are fine, but the settings never blend. |
 
 Still open:
