@@ -1,4 +1,4 @@
-# HILLINK ART DIRECTION SPEC — DRAFT 1 (revision 8)
+# HILLINK ART DIRECTION SPEC — DRAFT 1 (revision 9)
 
 Status: **the overall direction is approved by Kyle as a working foundation (2026-10-01 00:12Z). That is not approval to
 implement.** No artwork, no vertical slice and no Pass 5I until Kyle approves. Kyle's decisions are in §25. Questions
@@ -966,7 +966,7 @@ visibly builds itself as the company grows.**
 
 The pillars:
 - **Handcrafted density.** Every space shows what happens there, who works there and what was built there. [Kyle]
-- **Warm light in a cool world.** Interiors glow amber; exteriors are dusk-cool. Light marks where work happens.
+- **Warm light in a cool world.** Interiors glow amber; exteriors are dusk-cool in the showcase condition (not dusk-locked, C6). Light marks where work happens.
   [ref 1–3]
 - **Built, not generated.** Everything looks placed by someone: footings, beams, scaffolds and repairs. [Kyle, ref 3d]
 - **One world, two readings.** Real and Fantasy are the same organization in two material languages. [Kyle]
@@ -979,7 +979,8 @@ The pillars:
 - [proposed] **A real pixel grid, not a "pixel-ish" vector look.**
   - The World renders to a low-resolution buffer at a fixed art scale, then upscales by an integer factor with
     nearest-neighbour sampling.
-  - The default zoom is 3× (1 art pixel = 3 screen pixels). Zoom steps are 2×, 3×, 4× and 6×.
+  - The default zoom is **2×** (1 art pixel = 2 screen pixels), matching the ref 10 normal gameplay view (§21.1). Zoom
+    steps are 1×, 2×, 3× and 4×; at 1× core agents use the §10 level-of-detail treatment. *(Was 3×; changed in rev 9.)*
   - Text and UI render at native resolution on top and are never pixelated.
 - [proposed] **Selective outlines.**
   - Use a darker shade of the adjacent colour, not uniform black.
@@ -1241,7 +1242,8 @@ The pillars:
 
 ## 11. Real HQ rules
 
-- [Kyle] Keep the existing Real HQ architecture and camera. Translate the art language into it. It should feel like *a
+- [Kyle] Keep the existing Real HQ architecture *system* and camera, and translate the art language into it. The starting
+  state is T0 (6A, C5); the two-floor HQ is an earned later stage. It should feel like *a
   miniature living technology company*.
 - [proposed] Workspaces say who works there:
 
@@ -1577,8 +1579,9 @@ sledges, a windlass and the crew do the work instead.
 **Claude's role** [Kyle]. Claude is the primary visual builder in both themes. Real Claude is the construction
 worker; Fantasy Claude is the dwarf builder and artificer.
 - He inspects plans, measures, hammers, builds, carries, directs work, handles materials and uses tools.
-- [proposed] He appears on site while the canonical project names him in `builders`, or by default during the build
-  stages (`site-preparation` to `furnishing`).
+- [proposed] He appears on site only while canonical state puts him there: the project names him in `builders`, or
+  his canonical activity is building that project. When no agent is canonically on site, none is drawn there; the
+  renderer never invents an agent's location. *(Rev 9 removed an earlier "by default" rule.)*
 - His clip follows the scene:
 
   | Scene | Claude's clip |
@@ -1783,6 +1786,8 @@ That needs a modular visual kit, per theme:
   never introduce fantasy ones.
 - **Composition.** Additions avoid both mirror symmetry and random jitter. They align to T0's grid and eave or parapet
   lines, they step down rather than tower over T0 at T1, and they keep T0's front and entrance as the main face.
+  This applies to new structures *beside* T0. A storey the planner adds to T0 itself (`add-floor`) is allowed and
+  keeps T0's facade language.
 - **Deterministic.** The same canonical World always produces the same growth. There is no randomness outside the
   seeded RNG, and nothing depends on time of day.
 
@@ -1944,8 +1949,12 @@ The World dominates the screen. Hillink never regresses into a dashboard with a 
 status language, controls, typography hierarchy and panel placement are structurally identical.
 - Only the World and the agent portraits change alias.
 - Subtle contextual treatment may come later. A separate parchment or medieval HUD never does.
-- [proposed, C30] UI text shows **canonical** names and states identically in both themes, for example the
-  capability's canonical name. Themed nouns live in the World, not in UI data.
+- [Kyle C30, 01:37Z] **One canonical name in the UI.** The product UI uses the canonical name of every canonical object,
+  task, project, capability, workspace and construction project, identically in both themes. Real and Fantasy may
+  translate what it *looks like* in the World, but never rename canonical truth in the UI.
+  - Example: the canonical "Engineering Workspace Expansion" may look like a modern engineering and testing workspace
+    in Real, or an arcane-mechanical workshop in Fantasy. The UI says "Engineering Workspace Expansion" in both.
+  - Theme aliases belong to the World representation, not to product identity.
 
 **Agent identification** [Kyle]. A compact chip may sit near an agent at normal zoom: name, a small status icon, and
 at most a one-word high-level state.
@@ -2061,9 +2070,11 @@ Resolved by refs 5–8:
 - Fantasy T0 architecture (C27), interior-only growth (C28) and planner-only connection types (C29)
 - gameplay presentation, the UI/HUD philosophy and hierarchy, and the World-edge philosophy (ref 10, §21.1, §14)
 - Fantasy Codex's exact cyborg appearance (C23, corrected 01:34Z)
+- canonical names in the product UI (C30)
 
 Still open:
-1. **Kyle's avatar** (C14). Not inferred from any reference.
+1. **Kyle's avatar** (C14). Not inferred from any reference. Deferred by Kyle (01:37Z): it does not block the vertical
+   slice, and is defined before the first owner interaction that needs it.
 2. **UI component detail.** The philosophy and hierarchy are locked by ref 10 (§21.1). Still to decide, in the
    vertical slice or with a UI reference:
    - the exact persistent-HUD contents
@@ -2075,7 +2086,6 @@ Still open:
    derived from the terrain seed, are still undecided. They can be settled in the vertical slice without another
    reference.
 4. **The shared central zone in Fantasy:** ref 10B doesn't show one clearly. Low priority.
-5. **Canonical vs themed names in UI text** (C30).
 
 ---
 
@@ -2112,18 +2122,137 @@ Resolved by Kyle on 2026-10-01 at 00:12Z:
 | C27 | Fantasy T0 architecture (resolved 01:15Z) | **Fantasy T0 is 6C's towered stone outpost.** It is not redesigned into the slate-roofed hall drawn incidentally in refs 8 and 9, which are authoritative for construction, growth, materials and stages, not T0 architecture. Slate halls, workshops, towers, chambers and other planner-supported structures are allowed as later additions, and T0 is always preserved (§18). |
 | C28 | Interior growth (resolved 01:15Z) | **Growth does not require a visible exterior expansion.** Legitimate interior expansion or reorganization by the planner counts as growth. No wing, exterior construction, new building or scaffolding is fabricated for drama. The exterior may stay unchanged, and the interior shows the change (§18.1). |
 | C29 | Connection types (resolved 01:15Z, for now) | **The art only draws connection types the planner truthfully produces:** doors, corridors, paths and existing stair and road links. No courtyards, bridges, covered walkways, gates or special connectors until the planner supports that topology. The planner decides the relationship, the art translates it, and the renderer never invents topology (§15). |
+| C30 | Canonical vs themed names in UI (resolved 01:37Z) | **The product UI uses the ONE canonical name** for every canonical object, task, project, capability, workspace or construction project, in both themes. The World may translate what it looks like; the UI never renames canonical truth (§21.1). |
 | C13 | Room labels (resolved 2026-10-01 00:25Z) | **Environment first, text second.** Rooms are recognized by their physical design. Labels may appear on hover, on selection, in the inspector, in a map view, or as subtle architectural signage. No large permanent floating labels. |
 
 Still open:
 
 | # | Question | Agent leaning (not a decision) |
 |---|---|---|
-| C30 | **Canonical vs themed names in UI (ref 10):** 10A's card says "Office Expansion" and 10B's says "Workshop Expansion" for the same event. | Product UI shows the **canonical** name and state, identical in both themes (one product UI). Themed nouns appear only in the World art. Proposed; needs Kyle's confirmation because users will see it. |
 | C14 | **Kyle avatar appearance:** how Kyle looks, and how his avatar stays clearly separate from agents. Not to be inferred from any reference [Kyle 00:51Z]. | A distinct human owner silhouette, visible only during owner interactions (C12). Never in a black suit, hard hat or glasses, so he can't be mistaken for a Real alias. |
 
 ---
 
 ## Next steps (only after approval)
-REFERENCES → spec → review → Reference Batch 2C (7A/7B, done) → Reference 8 (construction, done) → Reference 9 (T0 → T1 growth, done) → Reference 10A/10B (gameplay presentation, done) → **Kyle avatar reference, C14 (next)** → more references or corrections → approved visual language → small
+REFERENCES → spec → review → Reference Batch 2C (7A/7B, done) → Reference 8 (construction, done) → Reference 9 (T0 → T1 growth, done) → Reference 10A/10B (gameplay presentation, done) → readiness review (§26, done) → **Kyle approves the slice scope and prerequisites P1/P2 (next)** → more references or corrections → approved visual language → small
 vertical-slice prototype (one room, three agents, both themes) → visual review → refinement → propagation. [Kyle]
 No implementation, no Pass 5I and no World-wide redesign until Kyle approves.
+
+---
+
+## 26. Vertical-slice readiness review [2026-10-01 01:37Z; proposal, not approved]
+
+**Verdict.** The art direction is coherent enough to implement. The review below found no remaining contradiction
+between references. It fixed the obsolete rules listed here (rev 9), and no further visual reference is needed.
+Two **engineering prerequisites** in the current code must be decided first, because the spec's own rules require
+them.
+
+**Fixed in rev 9:**
+- §2's 3× default zoom contradicted §21.1's ~2×. The default is now 2×.
+- §11 kept "the existing Real HQ architecture". That is now "architecture system and camera; the starting state is
+  T0" (C5).
+- §1 "exteriors are dusk-cool" is now qualified by C6.
+- §18.1's "step down" composition rule conflicted with the planner's `add-floor`. It now applies only to new
+  structures beside T0.
+- §17.1 had Claude appear on a site "by default". He now appears only where canonical activity puts him; otherwise
+  the renderer would invent his location.
+- C30 is resolved.
+
+**Prerequisites (code vs spec), which need Kyle's word before the slice:**
+- **P1. Fantasy must use the same canonical geometry as Real.**
+  - Today Fantasy runs its own Pass 5G layout (`world/kingdom-layout.mjs`). That is a 12-district kingdom with every
+    project in a Builders' Yard, while Real runs the planner's generated layout.
+  - That contradicts §13 parity, C25, C27 and §18.1 ("same canonical footprint and connection"), and checklist
+    item 14 (Real and Fantasy must not become separate Worlds).
+  - Recommendation: the slice skins the **same generated geometry** in both themes. The 5G kingdom layout stays in
+    the code but off the slice path. This reverses part of an accepted pass, so it is Kyle's call.
+- **P2. The canonical T0 seed must produce the 6A/6C T0.**
+  - The seed is `procgen/capabilities.mjs` `SEED_CAPABILITIES`: command, engineering, review, meeting-space,
+    compute-infrastructure and break-space.
+  - The planner may lay these out as separate rooms. T0 needs one compact building with three stations, a server bay
+    and **one** shared zone (C20).
+  - Recommendation: a small, deterministic, tested procgen seed and config change, so that meeting and break share one
+    space and the result is one compact storey. The renderer must not merge rooms itself (C29).
+  - Also: `SIM_ROSTER` must register all three agents (§18).
+
+**Not blocking:**
+- C14 (Kyle's avatar), deferred by Kyle.
+- UI component detail.
+- The World-edge kit.
+- The Fantasy shared zone.
+- Exact palette values.
+
+**Risk (not a blocker).** Original pixel art authored as data, not drawn by an artist, has a quality ceiling. The slice
+is where that is judged.
+
+### 26.1 Proposed first vertical slice
+
+**Goal:** answer "does the new visual system work?" with the smallest build.
+
+**In scope:**
+1. **The pixel pipeline.**
+   - A low-resolution art buffer, upscaled by an integer factor (2× default, 1×/3× steps) with nearest-neighbour
+     sampling.
+   - Palette-indexed sprite data, selective outlines and hue-shifted ramps.
+   - UI drawn at native resolution.
+2. **One canonical T0 World** (after P1 and P2) with ChatGPT, Claude and Codex, driven by the existing simulation.
+3. **Both themes over the same state**, with a live theme switch. Each theme draws its own aliases, materials and
+   station families: the command office ↔ war table, workshop ↔ forge, engineering station ↔ analysis station, and
+   server bay ↔ Arcane Core.
+4. **Characters:**
+   - Six aliases on two body plans (standard human and dwarf), built from the parts and palette system, with the core
+     agents authored as bespoke parts.
+   - Four diagonal facings: two authored plus mirroring. Fantasy Codex gets authored facings (§6 asymmetry).
+   - Clips: idle, walk, and each role's work clip.
+5. **The modular environment kit per theme:**
+   - floor tiles and wall segments (straight, corner, door opening, window)
+   - the cutaway edge and roof edge
+   - one prop family per station plus a small general-clutter set, all as prop records
+   - placement by the 5H dressing rules and the §7 density rules, never by hand
+6. **Lighting as a parameter:**
+   - warm local light pools and light-means-activity
+   - a dusk default, with a day/night parameter toggle to prove nothing is baked in
+7. **Ambient loops:** lamp or torch flicker, rack LEDs or crystal pulse, forge fire and foliage sway, with reduced
+   motion respected.
+8. **Terrain and edge:**
+   - ground tiles and paths
+   - a seeded natural edge (density rising into forest and rock) beyond the navigable extent
+   - nothing interactable outside it
+9. **UI:**
+   - a hover chip
+   - a small selection ring
+   - a select card with canonical fields
+   - the theme switch
+   - the existing canonical surfaces kept as they are (simulation banner, Attention)
+
+**What proves modular composition rather than a hand-built scene:**
+- **A composition harness.** It renders the same kit, untouched, over:
+  - T0 from several seeds
+  - one planner `add-wing` result
+  - one `subdivide` result
+
+  Each is shown in both themes at operational state. If any of them needs a hand-placed tile or prop, the slice fails.
+- **Parts-built characters.** All six aliases come from body plans, parts and palettes. A lineup-sheet-only test also
+  composes a generic fallback archetype from the same parts. It is not placed in the World, so no Agent #4 is
+  implied.
+- **Data, not code.** Props, materials and appearances are data records validated by the existing hostile-metadata
+  clamps.
+- **The existing boundary tests stay green:** read-only renderer, determinism, and no canonical writes from the
+  renderer.
+
+**Not in the first slice:**
+- construction visuals and the ambient crew
+- T1 growth animation
+- multi-storey cutaways
+- Kyle's avatar
+- critters and pedestrians
+- the minimap, the full roster and other HUD polish
+- a day/night *cycle* system
+- celebrate and other secondary clips
+- authored left facings for symmetric agents
+- future agents in the World
+- the Fantasy shared-zone design question
+- any merge or deploy
+
+**Another visual reference:** not needed before implementation. A UI component sheet would help later polish, but the
+slice can use minimal versions of the locked behaviours.
