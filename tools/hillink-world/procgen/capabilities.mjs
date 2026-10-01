@@ -56,11 +56,40 @@ export function normalizeCapability(input) {
 // The organisation HQ runs today (tools/hillink-hq): an orchestrator (command), Claude building (engineering),
 // Codex and the local verifier checking work (review), meetings, the local models (compute) and a break room
 // where idle agents wait for work. This is the seed program; nothing else is pre-built.
+// Pass 5H (P2, Kyle 2026-10-01): T0 is one compact building, so meetings and breaks share one common room. Both
+// capabilities still exist and stay separately addressable; only their room is shared (createWorld groups shareable
+// founding capabilities of the same access into one room).
 export const SEED_CAPABILITIES = [
   { id: 'command', kind: 'command' },
   { id: 'engineering', kind: 'engineering' },
   { id: 'review', kind: 'review' },
-  { id: 'meeting-space', kind: 'meeting-space' },
+  { id: 'meeting-space', kind: 'meeting-space', shareable: true },
   { id: 'compute-infrastructure', kind: 'compute-infrastructure' },
-  { id: 'break-space', kind: 'break-space' },
+  { id: 'break-space', kind: 'break-space', shareable: true },
 ];
+
+// Pass 5H (P4): the one canonical display name of each known capability kind. The product UI shows these in both
+// themes (C30); themed nouns live only in the World's drawing. A room shared by several capabilities is named by
+// joining them. Unknown kinds fall back to their id in title case.
+export const CAPABILITY_NAMES = {
+  command: 'Command Office', engineering: 'Build Workshop', review: 'Engineering & Testing', 'meeting-space': 'Meeting',
+  'compute-infrastructure': 'Server Bay', reception: 'Reception', 'break-space': 'Break', archive: 'Archive', storage: 'Storage',
+};
+export const capabilityName = spec => CAPABILITY_NAMES[spec?.kind] ?? String(spec?.id ?? '').split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+
+// Groups shareable capabilities of the same access class into one room spec (area summed, adjacency merged,
+// ground-level if any member must be). Non-shareable ones stay one room each. Deterministic: input order kept.
+export function shareRooms(specs) {
+  const out = [], groups = new Map();
+  for (const s of specs) {
+    if (!s.shareable) { out.push(s); continue; }
+    const g = groups.get(s.access);
+    if (!g) { const room = { ...s, members: [s.id] }; groups.set(s.access, room); out.push(room); continue; }
+    g.members.push(s.id); g.id = g.members.join('+'); g.area += s.area;
+    g.adjacent = [...new Set([...g.adjacent, ...s.adjacent])].sort();
+    g.traits = [...new Set([...g.traits, ...s.traits])].sort();
+    if (s.level === 'ground') g.level = 'ground';
+  }
+  for (const g of groups.values()) { const kinds = new Set(specs.filter(s => g.members.includes(s.id)).map(s => s.kind)); g.adjacent = g.adjacent.filter(k => !kinds.has(k)); }
+  return out;
+}

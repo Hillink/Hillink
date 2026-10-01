@@ -38,6 +38,15 @@ export function placeKind(world, space) {
   if (cap) return PLACE_OF_KIND[cap.spec.kind] ?? byTraits(cap.spec);
   return space.vacant ? 'spare' : 'spare';
 }
+// Pass 5H (P2): a room shared by several usable capabilities is furnished for each of them, the centre-piece recipes
+// first (a meeting table takes the middle before the lounge's small table can), then the rest in capability order.
+const CENTRE_FIRST = ['comms', 'comms-like'];
+export function placeKinds(world, space) {
+  const first = placeKind(world, space);
+  if (space.primitive !== 'room') return [first];
+  const kinds = [...new Set([first, ...space.capabilities.map(id => world.capabilities[id]).filter(usableCapability).map(c => PLACE_OF_KIND[c.spec.kind] ?? byTraits(c.spec))])];
+  return [...kinds.filter(k => CENTRE_FIRST.includes(k)), ...kinds.filter(k => !CENTRE_FIRST.includes(k))];
+}
 const byTraits = spec => (spec.traits.some(t => ['machines', 'making', 'inspection', 'flight'].includes(t)) ? 'workshop' : spec.traits.includes('gathering') ? 'comms-like' : spec.access === 'secure' ? 'servers-like' : spec.traits.includes('rest') ? 'lounge-like' : 'office');
 
 function doorsOf(world, view, space) {
@@ -162,14 +171,14 @@ export function furnishSpace(world, space, view = viewOf(world)) {
     storage() { recipe.archive(); },
     spare() { for (let k = 0; k < 2; k++) if (!alongBack('bookshelf', { step: 0.1 })) break; },
   };
-  if (space.primitive === 'room' || space.primitive === 'hallway' || space.primitive === 'outdoor-facility') (recipe[kind] ?? recipe.office)();
+  if (space.primitive === 'room' || space.primitive === 'hallway' || space.primitive === 'outdoor-facility') for (const k of placeKinds(world, space)) (recipe[k] ?? recipe.office)();
   // Reachability: drop anything whose anchors cannot be reached from a door, until everything left can be.
   let grid = walkGrid(R, items, doors, obstacles);
   for (let guard = 0; guard < 12; guard++) {
     const lost = anchors.filter(a => !reachable(grid, a));
     if (!lost.length) break;
     const drop = new Set(lost.map(a => a.of));
-    for (const it of items) if (drop.has(it.id)) { drop.add(it.chair); for (const o of items) if (o.on === it.id) drop.add(o.id); }
+    for (const it of items) if (drop.has(it.id)) { if (it.chair) drop.add(it.chair); for (const o of items) if (o.on === it.id) drop.add(o.id); }
     for (const d of [...drop]) { const desk = items.find(o => o.chair === d); if (desk) drop.add(desk.id); }
     for (let i = items.length - 1; i >= 0; i--) if (drop.has(items[i].id)) items.splice(i, 1);
     for (let i = anchors.length - 1; i >= 0; i--) if (drop.has(anchors[i].of)) anchors.splice(i, 1);
@@ -207,7 +216,9 @@ export function walkGrid(R, items, doors, obstacles = []) {
       seen[nk] = k; queue.push(nk);
     }
   }
-  return { R, nx, nz, free, seen, starts, startDoor, cellOf, centreOf: k => ({ x: r3(R.x0 + ((k % nx) + 0.5) * CELL), z: r3(R.z0 + (Math.floor(k / nx) + 0.5) * CELL) }) };
+  // The solid pieces themselves (not inflated): the last step from a cell to an anchor may not pass through one.
+  const bodies = items.filter(it => it.solid && !it.on).map(it => ({ id: it.id, x0: it.x - it.w / 2, x1: it.x + it.w / 2, z0: it.z - it.d / 2, z1: it.z + it.d / 2 }));
+  return { R, nx, nz, free, seen, starts, startDoor, bodies, cellOf, centreOf: k => ({ x: r3(R.x0 + ((k % nx) + 0.5) * CELL), z: r3(R.z0 + (Math.floor(k / nx) + 0.5) * CELL) }) };
 }
 
 // An anchor is reachable when a reachable free cell lies within a step of it (a seat is inside its chair).
@@ -218,9 +229,20 @@ export function approachCell(grid, a) {
     const i = ci + di, j = cj + dj; if (i < 0 || j < 0 || i >= grid.nx || j >= grid.nz) continue;
     const k = j * grid.nx + i; if (grid.seen[k] === -1) continue;
     const c = grid.centreOf(k), d = Math.hypot(c.x - a.x, c.z - a.z);
-    if (d < bestD) { bestD = d; best = k; }
+    if (d < bestD && !(grid.bodies ?? []).some(b => b.id !== a.of && stepHits(c, a, b))) { bestD = d; best = k; }
   }
   return bestD <= APPROACH + 1e-9 ? best : -1;
+}
+// Does the straight step from c to a pass through box b (shrunk by 2 cm, as the route checks allow)?
+function stepHits(c, a, b) {
+  const x0 = b.x0 + 0.02, x1 = b.x1 - 0.02, z0 = b.z0 + 0.02, z1 = b.z1 - 0.02;
+  let t0 = 0, t1 = 1;
+  for (const [p, d, lo, hi] of [[c.x, a.x - c.x, x0, x1], [c.z, a.z - c.z, z0, z1]]) {
+    if (Math.abs(d) < 1e-12) { if (p <= lo || p >= hi) return false; continue; }
+    let u = (lo - p) / d, v = (hi - p) / d; if (u > v) [u, v] = [v, u];
+    t0 = Math.max(t0, u); t1 = Math.min(t1, v); if (t0 >= t1) return false;
+  }
+  return true;
 }
 export const reachable = (grid, a) => approachCell(grid, a) !== -1;
 

@@ -238,7 +238,8 @@ test('3. a transition that throws half-way (completion before a prerequisite) ro
 // Finding 4: a planned capability in an existing room is not usable.
 test('4. Codex reproduction: requesting small-meeting in existing room-2 changes nothing usable until it is built', () => {
   const small = { id: 'small-meeting', kind: 'meeting-space', area: 12, traits: ['gathering'] };
-  const w = createWorld({ seed: 'hillink' }), before = createGeneratedLayout(w);
+  // Needs a spare built room to reuse: the pre-5H two-storey founding has one (the compact T0 has none).
+  const w = createWorld({ seed: 'hillink', storeys: 2, share: false }), before = createGeneratedLayout(w);
   ok(w, 'OBJECTIVE_CREATED', { objectiveId: 'o-s' });
   ok(w, 'CAPABILITY_REQUESTED', { capability: small, objectiveId: 'o-s', taskId: 't-s' });
   const room = w.capabilities[small.id].placement.spaceId;
@@ -251,7 +252,7 @@ test('4. Codex reproduction: requesting small-meeting in existing room-2 changes
   assert.match(now.represents, /Planned: small-meeting \(planned, not usable yet\)/);
   // Under construction: still not usable.
   ok(w, 'CONSTRUCTION_REQUESTED', { capabilityId: small.id }); ok(w, 'TASK_ASSIGNED', { taskId: 't-s', agentId: 'claude', objectiveId: 'o-s' });
-  assert.equal(placeKind(w, w.spaces[room]), placeKind(createWorld({ seed: 'hillink' }), createWorld({ seed: 'hillink' }).spaces[room]));
+  assert.equal(placeKind(w, w.spaces[room]), placeKind(createWorld({ seed: 'hillink', storeys: 2, share: false }), createWorld({ seed: 'hillink', storeys: 2, share: false }).spaces[room]));
   // Built and verified: now it is the meeting room it was asked for.
   ok(w, 'IMPLEMENTATION_DONE', { taskId: 't-s' }); ok(w, 'INSPECTION_STARTED', { objectiveId: 'o-s' }); ok(w, 'REVIEW_VERDICT', { taskId: 't-s', verdict: 'approved' }); ok(w, 'OBJECTIVE_FINISHED', { objectiveId: 'o-s', outcome: 'COMPLETE' });
   assert.equal(w.capabilities[small.id].status, 'operational');

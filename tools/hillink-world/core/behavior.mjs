@@ -1,6 +1,7 @@
 // Visual policy: interprets semantic World state into "where should this be and what clip plays".
 // Agent logic says status = testing; this layer says go to a lab bench and play `test`.
 // Pure functions; the renderer only draws the result.
+import { definitionOf } from './agents.mjs';
 export const ACTIVITY_PLACE = {
   coding: { location: 'development', stations: ['desk1', 'desk2', 'desk3', 'desk4', 'desk5', 'desk6'], clip: 'work' },
   thinking: { location: 'development', stations: ['desk1', 'desk2', 'desk3', 'desk4', 'desk5', 'desk6'], clip: 'think' },
@@ -23,7 +24,17 @@ const ruleFor = (activity, layout) => ({ ...(ACTIVITY_PLACE[activity] ?? ACTIVIT
 // Only a meeting sends agents to the meeting room; a one-off message (a handoff) keeps the sender where it is.
 // Pass 5B: a generated layout may send an agent to a construction site (its task is a project HQ is building).
 // Pass 5E: `rules` (agent id -> rule) is the theme's staging for agents that are not working members (candidates).
-const ruleForAgent = (a, layout, rules) => rules?.[a.id] ?? layout.placeFor?.(a) ?? (a.activity === 'communicating' && !a.meetingId ? { stay: true, clip: 'talk' } : ruleFor(a.activity, layout));
+// Pass 5H (P3): an agent whose canonical definition names a workstation location (ChatGPT: the command office) keeps
+// that post while idle or coordinating, at the stations there with the uses it names; everyone else rests in the lounge.
+const POSTED = { idle: 'idle', coordinating: 'inspect' };
+function postOf(a, layout) {
+  const w = definitionOf(a)?.workstation, loc = w?.location && POSTED[a.activity] ? layout.locationById?.[w.location] : null;
+  if (!loc || loc.site || loc.exterior) return null;
+  const all = Object.keys(loc.stations ?? {}), uses = w.uses ?? [];
+  const stations = uses.length && layout.stationInfo ? all.filter(k => uses.includes(layout.stationInfo[`${loc.id}:${k}`]?.use)) : all;
+  return stations.length ? { location: loc.id, stations, clip: POSTED[a.activity] } : null;
+}
+const ruleForAgent = (a, layout, rules) => rules?.[a.id] ?? layout.placeFor?.(a) ?? postOf(a, layout) ?? (a.activity === 'communicating' && !a.meetingId ? { stay: true, clip: 'talk' } : ruleFor(a.activity, layout));
 
 // Assign stations deterministically so agents don't pile onto one spot.
 // `current` is agentId -> {location, station}; agents keep their station while their activity keeps the same room.

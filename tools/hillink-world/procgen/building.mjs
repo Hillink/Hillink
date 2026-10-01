@@ -140,7 +140,7 @@ export function placeBandRooms(world, b, level, bands, corridor, F, status, wing
     const room = addSpace(world, nextId(world, 'room'), {
       primitive: 'room', roles: [roleFor(slot.spec)], buildingId: b.id, level, wingId, band: side,
       rect: F.toWorld(u, slot.v, w, slot.len), local: { u, v: slot.v, w, d: slot.len },
-      access: slot.spec?.access ?? 'staff', capabilities: slot.spec ? [slot.spec.id] : [], vacant: !slot.spec, status,
+      access: slot.spec?.access ?? 'staff', capabilities: slot.spec ? [...(slot.spec.members ?? [slot.spec.id])] : [], vacant: !slot.spec, status,
     });
     roomDoor(world, b, room, corridor, F, status);
     made.push(room);

@@ -82,7 +82,8 @@ test('C. one canonical capability appears as a Real room and a Fantasy room, wit
   assert.ok(sameCanonicalSet(w), 'both themes describe exactly the same canonical things');
   const labelOf = (rep, cap) => rep.items.find(i => i.canonicalId === w.capabilities[cap].placement.spaceId).label;
   assert.equal(labelOf(real, 'engineering'), 'engineering workshop'); assert.equal(labelOf(fantasy, 'engineering'), 'forge workshop');
-  assert.equal(labelOf(real, 'meeting-space'), 'meeting room'); assert.equal(labelOf(fantasy, 'meeting-space'), 'council chamber');
+  assert.equal(labelOf(real, 'meeting-space'), 'break room + meeting room'); assert.equal(labelOf(fantasy, 'meeting-space'), 'mead hall + council chamber'); // P2: one shared common room
+  assert.equal(w.capabilities['meeting-space'].placement.spaceId, w.capabilities['break-space'].placement.spaceId);
   assert.equal(labelOf(real, 'compute-infrastructure'), 'server room'); assert.equal(labelOf(fantasy, 'compute-infrastructure'), 'arcane engine chamber');
   assert.equal(real.items.find(i => i.primitive === 'building').label, 'startup office and workshop');
   assert.equal(fantasy.items.find(i => i.primitive === 'building').label, 'outpost keep');
@@ -314,8 +315,10 @@ test('the seed world is tiny: one small building on mostly undeveloped land, no 
     assert.equal(s.buildings.length, 1); assert.equal(s.parcels.developed, 1);
     assert.ok(s.parcels.total >= 9, 'land is reserved for growth, not built on');
     assert.ok(s.developedShare < 2, `${seed}: ${s.developedShare}% developed`);
-    assert.equal(s.rooms - s.vacantRooms, SEED_CAPABILITIES.length, 'one room per founding capability; the rest is spare space');
-    assert.ok(s.rooms <= 10 && s.buildings[0].levels.length <= 2, `${seed}: ${s.rooms} rooms on ${s.buildings[0].levels.length} storeys`);
+    // P2 (5H): one room per founding capability except meeting and break, which share one common room; one storey.
+    assert.equal(s.rooms - s.vacantRooms, SEED_CAPABILITIES.length - 1, 'one room per founding capability, meeting and break shared; the rest is spare space');
+    for (const c of SEED_CAPABILITIES) assert.equal(w.capabilities[c.id].status, 'operational', `${seed}: ${c.id} is operational`);
+    assert.ok(s.rooms <= 10 && s.buildings[0].levels.length === 1, `${seed}: ${s.rooms} rooms on ${s.buildings[0].levels.length} storeys`);
     assert.ok(s.environmentAnchors > 300, 'mostly wilderness');
   }
 });

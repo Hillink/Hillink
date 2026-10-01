@@ -5,8 +5,9 @@ import { DEFAULT_DEFINITIONS, canWork } from '../core/agents.mjs';
 import { DEV_AGENTS, DEV_ONBOARDING } from './dev-agents.mjs';
 
 // Pass 5E: the simulated team comes from the registry's default definitions (core/agents.mjs), like any agent.
-export const SIM_ROSTER = ['claude', 'codex'];
-export const SIM_AGENTS = SIM_ROSTER.map(id => DEFAULT_DEFINITIONS[id]).map(d => ({ agentId: d.id, name: d.name, role: d.role, appearance: { color: d.appearance.palette.primary } }));
+// Pass 5H (P2): T0 is ChatGPT, Claude and Codex, so the simulated team registers all three.
+export const SIM_ROSTER = ['chatgpt', 'claude', 'codex'];
+export const SIM_AGENTS = SIM_ROSTER.map(id => DEFAULT_DEFINITIONS[id]).map(d => ({ agentId: d.id, name: d.name, role: d.role ?? d.roleTitle, appearance: { color: d.appearance.palette.primary } }));
 export const EXTRA_AGENTS = [
   { agentId: 'sales', name: 'Sales agent', role: 'Sales', appearance: { color: '#06d6a0' } },
   { agentId: 'support', name: 'Support agent', role: 'Support', appearance: { color: '#8338ec' } },

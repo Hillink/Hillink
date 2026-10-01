@@ -30,17 +30,24 @@ function scenery(L) {
 // render/site-skin.mjs); without one it falls back to the hand-authored building (kept for comparison: ?world=legacy).
 // Pass 5D-A: art '5d' is the visual prototype for the Real World (render/art5d/), opt-in with ?art=5d. It draws the same
 // generated layout; only the presentation differs.
-export function loadTheme(id, { world = null, art = null } = {}) {
+// Pass 5H (P1, Kyle 2026-10-01): Real and Fantasy share ONE canonical spatial layout, the planner's generated layout.
+// A theme translates materials, architecture, props and environment only; it never creates spatial truth of its own.
+// Art 'px' is the 5H vertical slice (render/px/): the pixel renderer, both themes, over that same layout.
+// The Pass 5G kingdom (world/kingdom-layout.mjs) is SUPERSEDED and inactive: it stays in the code, reachable only with
+// the explicit debug option layout: 'kingdom-5g' (?layout=kingdom-5g), and never drives the slice or Fantasy.
+export const SUPERSEDED_LAYOUTS = { 'kingdom-5g': 'Pass 5G 12-district kingdom: superseded by P1 (one shared planner layout); debug only' };
+export function loadTheme(id, { world = null, art = null, layout: layoutId = null, pxSkin = null } = {}) {
   const key = THEME_ORDER.includes(id) ? id : 'real';
-  // Pass 5G: Fantasy has its own spatial system, the kingdom (world/kingdom-layout.mjs), built from the same canonical world;
-  // it is not the Real building reskinned. Real and Blueprint keep the generated building.
-  if (world && key === 'fantasy') {
+  if (world && key === 'fantasy' && layoutId === 'kingdom-5g') {
     const K = createKingdomLayout(world);
-    return { id: key, name: THEME_NAMES[key], interpreter: createInterpreter(key), layout: K, art: null, skin: createKingdomSkin(K), scenery: { characterHeight: K.characterHeight, walkSpeed: K.walkSpeed, liftSpeed: ARCH.elevator.speed, npcHeight: AGENT.height, npcs: [] }, camera: { minZoom: 0.2, maxZoom: 4 }, generated: true, kingdom: true };
+    return { id: key, name: THEME_NAMES[key], interpreter: createInterpreter(key), layout: K, art: null, skin: createKingdomSkin(K), scenery: { characterHeight: K.characterHeight, walkSpeed: K.walkSpeed, liftSpeed: ARCH.elevator.speed, npcHeight: AGENT.height, npcs: [] }, camera: { minZoom: 0.2, maxZoom: 4 }, generated: true, kingdom: true, superseded: SUPERSEDED_LAYOUTS['kingdom-5g'] };
   }
   if (world) {
     const G = createGeneratedLayout(world, { theme: key });
-    return { id: key, name: THEME_NAMES[key], interpreter: createInterpreter(key), layout: G, art: art === '5d' && key === 'real' ? '5d' : null, skin: art === '5d' && key === 'real' ? createArtSkin(G) : createSiteSkin(G, key), scenery: { characterHeight: G.characterHeight, walkSpeed: G.walkSpeed, liftSpeed: ARCH.elevator.speed, npcHeight: AGENT.height, npcs: [] }, camera: { minZoom: 0.2, maxZoom: 4 }, generated: true };
+    const px = art === 'px' && key !== 'blueprint' && pxSkin;
+    const artId = px ? 'px' : art === '5d' && key === 'real' ? '5d' : null;
+    const skin = px ? pxSkin(G, key) : artId === '5d' ? createArtSkin(G) : createSiteSkin(G, key);
+    return { id: key, name: THEME_NAMES[key], interpreter: createInterpreter(key), layout: G, art: artId, skin, scenery: { characterHeight: G.characterHeight, walkSpeed: G.walkSpeed, liftSpeed: ARCH.elevator.speed, npcHeight: AGENT.height, npcs: [] }, camera: { minZoom: 0.2, maxZoom: 4 }, generated: true };
   }
   const L = hqLayout();
   return { id: key, name: THEME_NAMES[key], interpreter: createInterpreter(key), layout: L, skin: createIsoSkin(L, key), scenery: scenery(L), camera: { minZoom: 0.45, maxZoom: 4 } };

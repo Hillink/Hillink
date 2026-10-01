@@ -190,7 +190,7 @@ test('G. status language: canonical fields only; celebration only on canonical c
 test('H. construction art follows the canonical stage only (never time, never animation)', () => {
   // The site's drawing, isolated (the skin tags each plot item with its project), with motion frozen.
   const siteCalls = (stage, T) => {
-    const w = buildTo(createWorld({ seed: 'hillink' }), stage), th = loadTheme('fantasy', { world: w }), it = th.skin.items.find(x => x.site === DEMO_CAPABILITY.id);
+    const w = buildTo(createWorld({ seed: 'hillink' }), stage), th = loadTheme('fantasy', { world: w, layout: 'kingdom-5g' }), it = th.skin.items.find(x => x.site === DEMO_CAPABILITY.id);
     assert.ok(it, `${stage}: the plot is drawn`);
     const { ctx, calls } = recorder();
     it.draw({ ctx, P: th.layout.P, T, now: T * 1000, env: { zoom: 1, world: team().world, scene: null }, late: [], reduced: true, lw: 1, room: () => 0 });
@@ -203,7 +203,7 @@ test('H. construction art follows the canonical stage only (never time, never an
 
 test('I. set dressing never stands on a walk, a station, furniture or a construction plot (both themes)', () => {
   const w = buildTo(createWorld({ seed: 'hillink' }), 'structure');
-  const F = loadTheme('fantasy', { world: w }).layout, nodes = Object.values(F.nodePlan), walks = F.navEdges.map(([a, b]) => [F.nodePlan[a], F.nodePlan[b]]);
+  const F = loadTheme('fantasy', { world: w, layout: 'kingdom-5g' }).layout, nodes = Object.values(F.nodePlan), walks = F.navEdges.map(([a, b]) => [F.nodePlan[a], F.nodePlan[b]]);
   const on = (r, p, m = 0) => p.x > r.x0 - m && p.x < r.x1 + m && p.z > r.z0 - m && p.z < r.z1 + m;
   const hitsWalk = (r, [a, b]) => { for (let k = 0; k <= 40; k++) if (on(r, { x: a.x + (b.x - a.x) * k / 40, z: a.z + (b.z - a.z) * k / 40 }, 2)) return true; return false; };
   let total = 0;
@@ -245,11 +245,11 @@ test('I. set dressing never stands on a walk, a station, furniture or a construc
 });
 
 test('J. depth order is deterministic (same state, same order), dressing included', () => {
-  const order = () => { const K = loadTheme('fantasy', { world: createWorld({ seed: 'hillink' }) }).skin; return depthOrder(K.items.filter(it => it.layer !== 'overlay')).map(it => `${it.layer}:${it.dressing ?? ''}:${it.x0},${it.z0}`); };
+  const order = () => { const K = loadTheme('fantasy', { world: createWorld({ seed: 'hillink' }), layout: 'kingdom-5g' }).skin; return depthOrder(K.items.filter(it => it.layer !== 'overlay')).map(it => `${it.layer}:${it.dressing ?? ''}:${it.x0},${it.z0}`); };
   const a = order(), b = order();
   assert.deepEqual(a, b);
   assert.ok(a.some(k => k.startsWith('building:') && k.split(':')[1]), 'dressing is depth-sorted with the building plane');
-  const K = loadTheme('fantasy', { world: createWorld({ seed: 'hillink' }) }).skin;
+  const K = loadTheme('fantasy', { world: createWorld({ seed: 'hillink' }), layout: 'kingdom-5g' }).skin;
   assert.ok(K.items.filter(it => it.dressing).every(it => it.layer === 'building'));
   // A character in front of a barrel is drawn after it, and behind it before it.
   const barrel = K.items.find(it => it.dressing === 'barrel');

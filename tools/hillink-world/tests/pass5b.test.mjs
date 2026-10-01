@@ -8,7 +8,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { createWorld, worldFingerprint, replayWorld } from '../procgen/world.mjs';
-import { furnishSpace, walkGrid, reachable } from '../procgen/furnish.mjs';
+import { furnishSpace, walkGrid, reachable, placeKinds } from '../procgen/furnish.mjs';
 import { viewOf } from '../procgen/view.mjs';
 import { applyHqEvent } from '../procgen/contract.mjs';
 import { STAGES, statusForStage } from '../procgen/construction.mjs';
@@ -56,7 +56,7 @@ test('furnishing: every generated room is furnished for its purpose, inside its 
   for (const seed of SEEDS) {
     const w = createWorld({ seed }), view = viewOf(w), kinds = new Set();
     for (const s of Object.values(w.spaces).filter(s => s.primitive === 'room' || s.primitive === 'hallway')) {
-      const F = furnishSpace(w, s, view); kinds.add(F.kind);
+      const F = furnishSpace(w, s, view), has = k => placeKinds(w, s).includes(k); for (const k of placeKinds(w, s)) kinds.add(k); // P2: a shared room is furnished for each purpose
       const R = F.rect;
       for (const it of F.items) {
         const b = box(it);
@@ -68,20 +68,21 @@ test('furnishing: every generated room is furnished for its purpose, inside its 
       for (const a of F.anchors) assert.ok(reachable(grid, a), `${seed} ${a.id} (${a.use}) is reachable from a door`);
       // Purpose: the rooms say what they are for.
       const uses = new Set(F.anchors.map(a => a.use)), types = new Set(F.items.map(i => i.type));
-      if (F.kind === 'development') { assert.ok(uses.has('work') && types.has('desk') && types.has('officeChair'), `${seed} engineering has desks and chairs`); assert.ok(uses.has('print'), `${seed} engineering has a printer`); }
-      if (F.kind === 'comms') assert.ok(types.has('roundTable') && uses.has('meeting'), `${seed} meeting room has a table and seats`);
-      if (F.kind === 'lounge') assert.ok(uses.has('relax') || uses.has('table'), `${seed} break room has seating`);
-      if (F.kind === 'servers') assert.ok(types.has('serverRack'), `${seed} compute has racks`);
-      if (F.kind === 'lobby') assert.ok(uses.has('wait'), `${seed} lobby has somewhere to wait`);
-      if (F.kind === 'testing') assert.ok(types.has('reviewConsole') && uses.has('inspect'), `${seed} review has its console`);
+      if (has('development')) { assert.ok(uses.has('work') && types.has('desk') && types.has('officeChair'), `${seed} engineering has desks and chairs`); assert.ok(uses.has('print'), `${seed} engineering has a printer`); }
+      if (has('comms')) assert.ok(types.has('roundTable') && uses.has('meeting'), `${seed} meeting room has a table and seats`);
+      if (has('lounge')) assert.ok(uses.has('relax') || uses.has('table'), `${seed} break room has seating`);
+      if (has('servers')) assert.ok(types.has('serverRack'), `${seed} compute has racks`);
+      if (has('lobby')) assert.ok(uses.has('wait'), `${seed} lobby has somewhere to wait`);
+      if (has('testing')) assert.ok(types.has('reviewConsole') && uses.has('inspect'), `${seed} review has its console`);
     }
     for (const k of ['development', 'comms', 'lounge', 'servers', 'lobby', 'testing', 'command']) assert.ok(kinds.has(k), `${seed} has a ${k} room`);
   }
 });
 
 test('navigation: generated routes never cross furniture or walls, enter through doors and reach every station, upstairs by elevator', () => {
-  for (const seed of SEEDS) {
-    const w = createWorld({ seed }), L = createGeneratedLayout(w), U = L.U;
+  // The compact one-storey T0 (P2) and the two-storey founding (which has the elevator) both.
+  for (const [seed, storeys] of SEEDS.flatMap(s => [[s, 1], [s, 2]])) {
+    const w = createWorld({ seed, storeys, share: storeys === 1 }), L = createGeneratedLayout(w), U = L.U;
     // Every edge inside a space keeps a person's half-width clear of that space's solid furniture.
     for (const [k, [a, b]] of L.navEdges.entries()) {
       const space = w.spaces[L.edgeSpace[k]], F = space && L.furnishing[space.id]; if (!F) continue;
@@ -101,6 +102,7 @@ test('navigation: generated routes never cross furniture or walls, enter through
     }
     assert.ok(L.navEdges.some(([a, b]) => a === entrance || b === entrance), `${seed}: the front door is on the graph`);
     const lift = Object.values(L.lifts)[0];
+    if (storeys === 1) { assert.equal(lift, undefined, `${seed}: T0 has one storey and no working elevator`); continue; }
     assert.deepEqual(lift.floors, [0, 1], `${seed}: one elevator serving both storeys`);
     assert.ok(lift.stops[0] > lift.stops[1], 'the upper stop is higher on screen');
   }
@@ -348,7 +350,7 @@ function runWorld(w, seedEvents, { seconds = 90 } = {}) {
 }
 
 test('baseline on generated geometry: agents enter, walk the halls, ride the lift upstairs, sit and type at desks, print, and rest in the break room', () => {
-  const w = createWorld({ seed: 'hillink' });
+  const w = createWorld({ seed: 'hillink', storeys: 2, share: false }); // the two-storey founding: the lift is exercised
   const { log, scene } = runWorld(w, [
     ev => {},
     ev => { ev('TASK_CREATED', { taskId: 't1', title: 'Code' }); ev('TASK_STARTED', { taskId: 't1', agentId: 'claude', activity: 'coding', progress: { kind: 'stage', stage: 'Implementing' } }); ev('TASK_CREATED', { taskId: 't2', title: 'Research' }); ev('TASK_STARTED', { taskId: 't2', agentId: 'codex', activity: 'researching', progress: { kind: 'stage', stage: 'Reading' } }); },

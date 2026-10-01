@@ -112,7 +112,7 @@ test('routes are shaped for walking (few sharp turns) and still never cross a wa
 });
 
 test('interaction alignment: an agent walks to its desk, turns to face it, then sits, then types', () => {
-  const { frames, L } = run(createWorld({ seed: 'hillink' }), [() => {}, coding], { seconds: 120 });
+  const { frames, L } = run(createWorld({ seed: 'hillink', storeys: 2, share: false }), [() => {}, coding], { seconds: 120 }); // two storeys: the lift too
   const c = of(frames, 'agent:claude'), arrive = c.findIndex((f, i) => i > 0 && c[i - 1].moving && !f.moving && f.placeKey?.startsWith('development:') && f.spot === f.placeKey);
   assert.ok(arrive > 0, 'claude arrives at the desk');
   const station = L.stationInfo[c[arrive].placeKey];

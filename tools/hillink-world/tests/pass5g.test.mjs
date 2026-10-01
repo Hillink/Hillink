@@ -44,7 +44,7 @@ const truth = w => JSON.stringify({ ...w, log: (w.log ?? []).map(({ id, ...e }) 
 
 // Two themes on one store: the same canonical World, interpreted twice.
 function rig(themeId, store, siteWorld = createWorld({ seed: 'hillink' })) {
-  const theme = loadTheme(themeId, { world: siteWorld }), scene = new Scene();
+  const theme = loadTheme(themeId, { world: siteWorld, layout: 'kingdom-5g' }), scene = new Scene(); // P1: the 5G kingdom is debug-only now; these tests keep it working
   const view = new IsoWorldView(scene, new Effects(), theme.layout, theme.scenery, theme.interpreter);
   view.sync(store.world, new Set(['*']), 0);
   let now = 0;
@@ -124,7 +124,10 @@ function live() {
 const UNKNOWN = { id: 'agent-5g-unknown-318', name: 'Warden 318', backend: 'local-checks', role: 'Repository inspector', team: 'Engineering', capabilities: ['inspect-repo'], appearance: { palette: { primary: '#2a9d8f' }, accessories: ['cap'], themes: { fantasy: { archetype: 'elf', palette: { primary: '#2a9d8f' }, accessories: ['hood'] } } } };
 
 test('the kingdom is its own spatial system, not the Real building renamed', () => {
-  const w = createWorld({ seed: 'hillink' }), real = loadTheme('real', { world: w }).layout, K = loadTheme('fantasy', { world: w }).layout;
+  // P1 (5H): superseded. Fantasy now runs on the shared planner layout; the kingdom loads only on explicit request.
+  const w = createWorld({ seed: 'hillink', storeys: 2, share: false }), real = loadTheme('real', { world: w }).layout, K = loadTheme('fantasy', { world: w, layout: 'kingdom-5g' }).layout;
+  assert.equal(loadTheme('fantasy', { world: w }).layout.id, 'generated', 'Fantasy defaults to the shared planner layout');
+  assert.match(loadTheme('fantasy', { world: w, layout: 'kingdom-5g' }).superseded, /superseded/);
   assert.equal(K.id, 'kingdom'); assert.equal(real.id, 'generated');
   for (const id of ['throne', 'forge', 'vault', 'oracle', 'observatory', 'academy', 'library', 'arcane', 'gate', 'summoning', 'yard', 'hearth', 'plaza']) assert.ok(K.locationById[id], id);
   // Different geometry: one ground level in two rows around a road, against the Real building's storeys.

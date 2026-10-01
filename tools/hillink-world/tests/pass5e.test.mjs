@@ -61,7 +61,7 @@ test('1. Hillink\'s current agents load through the registry, with the same role
     assert.deepEqual(lookFor('real', store.world.agents[id]), PRE.real[id], `${id} looks the same (real)`);
   }
   assert.deepEqual(lookFor('fantasy', store.world.agents.claude), PRE.fantasy.claude, 'claude looks the same (fantasy)');
-  assert.deepEqual(SIM_AGENTS.map(a => [a.agentId, a.name, a.role, a.appearance.color]), [['claude', 'Claude', 'Engineering: builder', '#e2711d'], ['codex', 'Codex', 'Engineering: QA and security', '#3a86ff']], 'the simulated roster is unchanged');
+  assert.deepEqual(SIM_AGENTS.map(a => [a.agentId, a.name, a.role, a.appearance.color]), [['chatgpt', 'ChatGPT', 'Orchestration', '#10a37f'], ['claude', 'Claude', 'Engineering: builder', '#e2711d'], ['codex', 'Codex', 'Engineering: QA and security', '#3a86ff']], 'the simulated roster is the T0 team (P2: ChatGPT added)');
   assert.equal(roleOf('codex').title, 'Investigation and review'); assert.equal(roleOf(store.world.agents.claude).title, 'Implementation');
   for (const d of Object.values(DEFAULT_DEFINITIONS)) assert.deepEqual(normalizeDefinition(d), d, `${d.id} is a valid definition in the shared schema`);
   // No source file outside the fixtures and these tests names the fixture agents.
@@ -113,7 +113,7 @@ test('3. two dynamic agents with different roles, looks and rigs coexist without
   assert.ok(eb.h > ea.h * 1.1, 'and keeps its declared height');
   assert.notEqual(`${W.view.places[A.id].location}:${W.view.places[A.id].station}`, `${W.view.places[B.id].location}:${W.view.places[B.id].station}`, 'they never share a station');
   const reg = registryOf(W.store.world);
-  assert.deepEqual(Object.keys(reg).sort(), ['agent-test-second', 'agent-test-unknown', 'claude', 'codex'].sort());
+  assert.deepEqual(Object.keys(reg).sort(), ['agent-test-second', 'agent-test-unknown', 'chatgpt', 'claude', 'codex'].sort());
   assert.deepEqual(reg[B.id].extra, { unknownFutureField: { from: 'a newer HQ', kept: true } }, 'an unknown field is kept aside, not lost and not trusted');
 });
 
@@ -230,7 +230,7 @@ test('12. disabling or retiring an agent frees its station and task, keeps navig
   assert.ok(W.scene.get(`agent:${A.id}`), 're-enabled agents return');
   W.send(ev('AGENT_RETIRED', { agentId: A.id }, { at: 70 })); W.run(2);
   assert.equal(W.scene.get(`agent:${A.id}`), undefined);
-  assert.equal(Object.keys(W.view.places).length, 2, 'only claude and codex hold places');
+  assert.deepEqual(Object.keys(W.view.places).sort(), ['chatgpt', 'claude', 'codex'], 'only the T0 team holds places');
 });
 
 test('13. unknown or hostile optional metadata never breaks a render path; new entity kinds need no view change', () => {

@@ -9,7 +9,7 @@
 import { rng, fingerprint } from './rng.mjs';
 import { DIMS } from './units.mjs';
 import { rect, centre, union, area, inset } from './geom.mjs';
-import { normalizeCapability, SEED_CAPABILITIES } from './capabilities.mjs';
+import { normalizeCapability, SEED_CAPABILITIES, shareRooms } from './capabilities.mjs';
 import { generateTerrain, TERRAIN_DEFAULTS, buildableShare } from './terrain.mjs';
 import { designBuilding, footprintFor, placeBuilding, frame, refreshStairs } from './building.mjs';
 import { chooseOrigin, addDistrict, accessRoad, entrancePath, scatterEnvironment } from './site.mjs';
@@ -42,7 +42,11 @@ function emptyWorld(seed, options) {
 
 // Founds a world: a district on the flattest dry land near the middle, one access road from the map edge, and one
 // small building holding exactly the founding capabilities. Everything else stays undeveloped.
-export function createWorld({ seed, capabilities = SEED_CAPABILITIES, terrain: options = {} } = {}) {
+// Pass 5H (P2): a new world is founded as T0, one storey with shareable capabilities in one common room. `storeys: 2`
+// keeps the earlier two-storey split; a history without these fields (founded before 5H) replays with the old rule
+// (storeys 2, no shared rooms), so persisted worlds rebuild identically.
+export function createWorld({ seed, capabilities = SEED_CAPABILITIES, terrain: options = {}, storeys = 1, share = true } = {}) {
+  if (storeys !== 1 && storeys !== 2) throw Error('a founding building has 1 or 2 storeys');
   if (seed === undefined || seed === null || String(seed) === '') throw Error('a world needs a seed');
   const world = emptyWorld(seed, options), t = terrainOf(world);
   world.terrain.fingerprint = t.fingerprint;
@@ -51,11 +55,13 @@ export function createWorld({ seed, capabilities = SEED_CAPABILITIES, terrain: o
   if (specs.some(s => s.outdoor)) throw Error('founding capabilities are indoor; add outdoor ones with placeCapability');
   const origin = world.origin = chooseOrigin(t, world.seed);
   const d = addDistrict(world, t, origin, { seed: world.seed, key: 'founding' });
-  // A small two-storey startup building: the public and shared rooms (the lobby, break room and meeting room) on the
-  // ground floor, the working rooms upstairs; one storey when the program is too small to split.
+  // Rooms: one per capability, except shareable ones, which share a room (P2).
+  const rooms = share ? shareRooms(specs) : specs;
+  // storeys 2: a small two-storey startup building, the public and shared rooms (the lobby, break room and meeting
+  // room) on the ground floor, the working rooms upstairs; one storey when the program is too small to split.
   const downstairs = s => s.level === 'ground' || s.access === 'public' || s.kind === 'meeting-space';
-  const levels = specs.some(downstairs) && specs.some(s => !downstairs(s)) ? [specs.filter(downstairs), specs.filter(s => !downstairs(s))] : null;
-  const design = designBuilding(specs, rng(world.seed, 'building', 'founding'), { levels });
+  const levels = storeys === 2 && rooms.some(downstairs) && rooms.some(s => !downstairs(s)) ? [rooms.filter(downstairs), rooms.filter(s => !downstairs(s))] : null;
+  const design = designBuilding(rooms, rng(world.seed, 'building', 'founding'), { levels });
   const parcels = d.parcels.map(id => world.parcels[id]).filter(p => p.buildable >= 0.85).sort((a, b) => Math.hypot(centre(a.rect).x - origin.x, centre(a.rect).y - origin.y) - Math.hypot(centre(b.rect).x - origin.x, centre(b.rect).y - origin.y) || (a.id < b.id ? -1 : 1));
   let founded = false;
   for (const p of parcels) {
@@ -77,7 +83,7 @@ export function createWorld({ seed, capabilities = SEED_CAPABILITIES, terrain: o
   if (!founded) throw Error(`seed ${world.seed}: no parcel near the origin can hold the founding building`);
   scatterEnvironment(world, t, world.seed);
   refreshAnchors(world);
-  world.history.push({ seq: 1, type: 'WORLD_FOUNDED', seed: world.seed, terrain: world.terrain.options, capabilities: specs.map(s => ({ ...s })) });
+  world.history.push({ seq: 1, type: 'WORLD_FOUNDED', seed: world.seed, terrain: world.terrain.options, capabilities: specs.map(s => ({ ...s })), storeys, share });
   return world;
 }
 
@@ -129,7 +135,7 @@ export function addPrimitive(world, id, spec, { record = true } = {}) {
 export function replayWorld(history, { applyOps = null } = {}) {
   const [founding, ...rest] = history;
   if (founding?.type !== 'WORLD_FOUNDED') throw Error('a history starts with WORLD_FOUNDED');
-  const world = createWorld({ seed: founding.seed, capabilities: founding.capabilities, terrain: founding.terrain });
+  const world = createWorld({ seed: founding.seed, capabilities: founding.capabilities, terrain: founding.terrain, storeys: founding.storeys ?? 2, share: founding.share ?? false });
   for (const h of rest) {
     if (h.type === 'CAPABILITY_PLACED') {
       const r = placeCapability(world, h.capability, { status: h.status, record: false });

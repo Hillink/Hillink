@@ -139,7 +139,8 @@ test('readability: the ring and pip follow canonical state; labels shrink to a p
 });
 
 test('refit: a capability placed into an existing room is built there, stage by stage, with clean routes', () => {
-  const sim = createWorld({ seed: 'hillink' }); sim.simulated = true;
+  // A refit needs a spare built room: the pre-5H two-storey founding has one (the compact T0 has none).
+  const sim = createWorld({ seed: 'hillink', storeys: 2, share: false }); sim.simulated = true;
   const demo = createConstructionDemo({ siteWorld: sim, store: new WorldStore(emptyWorld()), now: () => 1, capability: REFIT_CAPABILITY });
   const before = createGeneratedLayout(sim), prior = Object.fromEntries(before.locations.filter(l => l.spaceId).map(l => [l.spaceId, l.id]));
   let refitSteps = 0, routes = 0, sentWhileStopped = 0;
