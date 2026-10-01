@@ -19,7 +19,8 @@ import { createConstructionDemo, DEMO_STEPS, REFIT_CAPABILITY } from './sim/cons
 import { STAGE_LABEL as PROJECT_STAGE } from './procgen/construction.mjs';
 import { loadSite, createSiteSync, sourceLabel } from './ui/site-sync.mjs';
 import { worldFingerprint } from './procgen/world.mjs';
-import { setPxLighting, pxLighting } from './render/px/skin.mjs';
+import { setPxLighting, pxLighting, setAuthoredSprites } from './render/px/skin.mjs';
+import { createAuthoredSprites, loadAuthoredSprites } from './render/px/authored.mjs';
 import { LIGHTING_IDS } from './render/px/palette.mjs';
 
 const $ = id => document.getElementById(id);
@@ -480,4 +481,16 @@ if (params.get('shot')) setTimeout(() => applyShot(params.get('shot')), 600); //
 $('empty').hidden = Object.keys(store.world.agents).length > 0;
 invalidate();
 function setLighting(id) { setPxLighting(id); invalidate(); return pxLighting(); }
-window.hillinkWorld = { setLighting, get lighting() { return pxLighting(); }, shot: applyShot, get worldInfo() { return { source: siteSync?.state ?? siteSource, simulated: Boolean(siteWorld?.simulated), generator: siteWorld?.generator ?? null, seed: siteWorld?.seed ?? null, schema: siteWorld?.schema ?? null, fingerprint: siteWorld ? worldFingerprint(siteWorld) : null, historyLength: siteWorld?.history?.length ?? 0, layout: theme?.layout?.id ?? null, error: siteSync?.error ?? siteError }; }, get siteWorld() { return siteWorld; }, get demo() { return demo; }, demoStep, why: id => explainAgent(store.world, id), get commands() { return commandInfo; }, get constructionStatus() { return constructionStatus; }, store, get scene() { return scene; }, get theme() { return theme; }, camera, get sim() { return mode === 'sim' ? sim : null; }, focus, setTheme: applyTheme }; // Dev handle for tests and console. Live mode exposes no simulator (5E correction B4).
+// Art Factory Step 1: authored character sheets for the pixel renderer. Approved sheets load by default; candidate and
+// stand-in sheets only with ?assets=standin. ?charscale=N picks the x<N> sheets. Anything missing or invalid keeps the
+// procedural character. ?assets=off turns authored sprites off entirely (procedural debug view).
+const authored = createAuthoredSprites();
+const authoredScale = [1, 2, 3, 4].includes(Number(params.get('charscale'))) ? Number(params.get('charscale')) : 1;
+let authoredReady = false;
+if (params.get('assets') !== 'off') {
+  const decode = async bytes => { const bmp = await createImageBitmap(new Blob([bytes], { type: 'image/png' }), { premultiplyAlpha: 'none', colorSpaceConversion: 'none' }); const c = new OffscreenCanvas(bmp.width, bmp.height), g = c.getContext('2d'); g.drawImage(bmp, 0, 0); return g.getImageData(0, 0, bmp.width, bmp.height); };
+  const sha256 = async bytes => [...new Uint8Array(await crypto.subtle.digest('SHA-256', bytes))].map(b => b.toString(16).padStart(2, '0')).join('');
+  loadAuthoredSprites(authored, { decode, sha256, allowCandidates: params.get('assets') === 'standin', scale: authoredScale })
+    .then(() => { setAuthoredSprites(authored); authoredReady = true; for (const e of authored.log) console.info(`[World] authored sprite ${e.agent}:${e.theme} x${e.scale}: ${e.selected ? 'SELECTED' : 'not used'} (${e.reason})`); invalidate(); });
+} else authoredReady = true;
+window.hillinkWorld = { get authored() { return { ready: authoredReady, scale: authoredScale, mode: params.get('assets') ?? 'approved-only', selected: authored.keys(), log: authored.log }; }, setLighting, get lighting() { return pxLighting(); }, shot: applyShot, get worldInfo() { return { source: siteSync?.state ?? siteSource, simulated: Boolean(siteWorld?.simulated), generator: siteWorld?.generator ?? null, seed: siteWorld?.seed ?? null, schema: siteWorld?.schema ?? null, fingerprint: siteWorld ? worldFingerprint(siteWorld) : null, historyLength: siteWorld?.history?.length ?? 0, layout: theme?.layout?.id ?? null, error: siteSync?.error ?? siteError }; }, get siteWorld() { return siteWorld; }, get demo() { return demo; }, demoStep, why: id => explainAgent(store.world, id), get commands() { return commandInfo; }, get constructionStatus() { return constructionStatus; }, store, get scene() { return scene; }, get theme() { return theme; }, camera, get sim() { return mode === 'sim' ? sim : null; }, focus, setTheme: applyTheme }; // Dev handle for tests and console. Live mode exposes no simulator (5E correction B4).

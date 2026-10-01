@@ -6,6 +6,7 @@
 //   local-check  -> a local Ollama model (Qwen/Gemma): text classification or summaries only, never on the
 //                   critical path for correctness
 //   verify       -> HQ itself (deterministic git and evidence checks); no agent
+//   produce      -> HQ's local Art Factory process (headless Blender + deterministic pixel pass); not a model
 // ChatGPT is above this table: it submits objectives and makes orchestration decisions; it is never routed a step.
 export const ROUTES = {
   investigate: { operation: 'review-repo', safety: 'local-read-only', agents: ['codex', 'claude'] },
@@ -14,8 +15,9 @@ export const ROUTES = {
   implement: { operation: 'implement-repo', safety: 'local-worktree-write', agents: ['claude'] },
   'local-check': { operation: 'summarize-local', safety: 'local-read-only', agents: ['qwen', 'gemma'] },
   verify: { operation: null, safety: null, agents: ['hq'] },
+  produce: { operation: 'produce-asset', safety: 'local-artifact-write', agents: ['hq-verifier'] },
 };
-const PROVIDER = { codex: 'openai', claude: 'anthropic', qwen: 'local', gemma: 'local', hq: 'hq' };
+const PROVIDER = { codex: 'openai', claude: 'anthropic', qwen: 'local', gemma: 'local', hq: 'hq', 'hq-verifier': 'local' };
 export const providerOf = id => PROVIDER[id] ?? 'unknown';
 
 // The one gate every implementation dispatch passes. Throws; callers never catch it into a fallback.
@@ -34,7 +36,7 @@ export function candidates(step, { status, connected, capable, reviewRule = null
   if (step.kind === 'review' && reviewRule?.independentProvider) pool = pool.filter(a => providerOf(a) !== providerOf(implementerId ?? 'claude'));
   if (step.kind === 'review' && step.requireAgent) pool = pool.filter(a => a === step.requireAgent);
   pool = pool.filter(a => !(step.excludeAgents ?? []).includes(a));
-  const capability = { 'review-repo': 'review-repo', 'implement-repo': 'implement-repo', 'summarize-local': 'summarize' }[route.operation];
+  const capability = { 'review-repo': 'review-repo', 'implement-repo': 'implement-repo', 'summarize-local': 'summarize', 'produce-asset': 'produce-asset' }[route.operation];
   return pool.map(agentId => {
     if (step.kind === 'implement') assertImplementer(agentId);
     if (!connected(agentId)) return { agentId, usable: false, reason: 'not connected to HQ' };

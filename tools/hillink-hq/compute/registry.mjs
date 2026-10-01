@@ -55,6 +55,7 @@ export function routeFor(adapterId, operation, variant = null) {
 export const allRoutes = () => [...routes.values()].flat();
 
 registerRoute({ adapterId: 'local-checks', operations: ['inspect-repo', 'verify-hq', 'verify-unit'], computeClass: 'LOCAL', provider: 'local', backend: 'HQ allowlisted Node.js processes', authentication: 'none' });
+registerRoute({ adapterId: 'local-checks', operations: ['produce-asset'], computeClass: 'LOCAL', provider: 'local', backend: 'HQ Art Factory: headless Blender (bpy) and a deterministic pixel pass on this machine', authentication: 'none' });
 registerRoute({ adapterId: 'ollama-qwen', operations: ['summarize-local'], computeClass: 'LOCAL', provider: 'local', backend: 'Ollama on 127.0.0.1 (local model only)', authentication: 'none' });
 registerRoute({ adapterId: 'ollama-gemma', operations: ['summarize-local'], computeClass: 'LOCAL', provider: 'local', backend: 'Ollama on 127.0.0.1 (local model only)', authentication: 'none' });
 registerRoute({ adapterId: 'cli-claude', operations: ['review-repo'], computeClass: 'SUBSCRIPTION', provider: 'anthropic', backend: 'Claude Code CLI on the host, read-only tools', authentication: 'Kyle\'s Claude subscription sign-in; API keys stripped and refused (apiKeySource must be none)' });

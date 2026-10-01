@@ -53,8 +53,8 @@ export function ruleActors(layout, theme, team = T0_TEAM) {
 }
 
 // Renders a scenario in a theme: the building's surroundings at 1 art px per pixel.
-export function renderScenario(world, theme, { lighting = 'dusk', t = 0, pad = 60, selected = null } = {}) {
-  const layout = createGeneratedLayout(world, { theme }), stage = createStage(layout, theme, { lighting }), A = stage.A;
+export function renderScenario(world, theme, { lighting = 'dusk', t = 0, pad = 60, selected = null, sprites = null } = {}) {
+  const layout = createGeneratedLayout(world, { theme }), stage = createStage(layout, theme, { lighting, sprites }), A = stage.A;
   const H = layout.home, x0 = Math.floor(H.x / A) - pad, y0 = Math.floor(H.y / A) - pad, w = Math.ceil(H.w / A) + pad * 2, h = Math.ceil(H.h / A) + pad * 2;
   const actors = ruleActors(layout, theme).map(a => ({ ...a, foot: [a.point[0] / A, a.point[1] / A], selected: a.id === selected }));
   const out = new PixelBuffer(w, h);

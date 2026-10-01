@@ -118,6 +118,24 @@ export function implementationHandoff(task) {
   };
 }
 
+// HQ's own Art Factory handoff (Step 1), from the adapter's evidence only. No model wrote any of it.
+export function assetHandoff(task) {
+  const ev = task.evidence;
+  const completed = ev.filter(e => e.kind === 'COMPLETED').at(-1), commit = ev.filter(e => e.kind === 'COMMIT').at(-1);
+  const tests = ev.filter(e => e.kind === 'TEST_RESULT').at(-1);
+  const a = completed?.asset;
+  if (!a || !commit?.sha || commit.sha !== a.commit || tests?.result !== 'passed') return null;
+  if (a.determinism?.identical !== true || a.check?.ok !== true) return null;
+  return {
+    kind: 'asset', source: 'hq-evidence',
+    recipe: a.recipe, scale: a.scale, agent: a.agent, theme: a.theme, status: a.status, standIn: a.standIn === true,
+    branch: a.branch, base: a.base, commit: commit.sha, outDir: a.outDir, filesChanged: a.files,
+    sheetSha256: a.sheetSha256, input: a.input, clips: a.clips, determinism: a.determinism, check: a.check,
+    results: { passed: a.worldTests.passed, failed: a.worldTests.failed }, testsExecuted: a.worldTests.files,
+    evidenceDir: a.evidenceDir, factory: a.factory,
+  };
+}
+
 // The framing every read-only step gets: the task, the evidence HQ quotes as data, and the handoff format.
 export function framingFor(kind, { objective, quoted = [], extra = '' }) {
   const formats = {

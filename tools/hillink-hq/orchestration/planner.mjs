@@ -8,7 +8,7 @@ import { routesFor } from '../compute/registry.mjs';
 
 // Pass 4: the adapter HQ wires for each agent, so the plan can say, before anything runs, what compute each step
 // would use and whether any of it is metered. Deterministic: no model is asked what a model costs.
-const ADAPTER = { claude: 'cli-claude', codex: 'cli-codex', qwen: 'ollama-qwen', gemma: 'ollama-gemma' };
+const ADAPTER = { claude: 'cli-claude', codex: 'cli-codex', qwen: 'ollama-qwen', gemma: 'ollama-gemma', 'hq-verifier': 'local-checks' };
 // supports(adapterId, operation, variant): whether HQ can serve that route variant now (Pass 4.5). Unknown: assume yes.
 export function computePlan(kinds, mode, supports = () => undefined) {
   const steps = [...new Set(kinds)].map(kind => {
@@ -37,6 +37,7 @@ export const REQUIRED_EVIDENCE = {
   verify: 'HQ\'s own deterministic checks of the commit against git and the runner evidence.',
   review: 'A validated review handoff from a reviewer who is not the implementer: verdict, findings with severity, regression risks, recommendation.',
   rebuttal: 'A validated rebuttal handoff answering the other agent\'s evidence.',
+  produce: 'HQ evidence from the Art Factory run: the recipe and input hash, two renders with byte-identical sheets, the sheet checks passing, the World tests passing in the asset worktree, and a local commit containing only the generated sheet.',
 };
 
 // The implementation contract steps an objective can reach, as step definitions.
@@ -54,8 +55,12 @@ export function planObjective(objective, { computeMode = 'ZERO_CREDIT', supports
   if (input.type === 'investigate') steps.push({ id: stepId('investigate'), kind: 'investigate', role: 'investigator', dependsOn: [], requiredEvidence: REQUIRED_EVIDENCE.investigate });
   if (input.type === 'review') steps.push({ id: stepId('review'), kind: 'review', role: 'reviewer', dependsOn: [], reviewRule: { ...reviewRule, independentProvider: false }, standalone: true, requiredEvidence: REQUIRED_EVIDENCE.review });
   if (input.type === 'fix') steps.push({ id: stepId('investigate'), kind: 'investigate', role: 'investigator', dependsOn: [], requiredEvidence: REQUIRED_EVIDENCE.investigate });
+  if (input.type === 'asset') {
+    const produce = { id: stepId('produce'), kind: 'produce', role: 'art-factory', dependsOn: [], asset: input.asset, requiredEvidence: REQUIRED_EVIDENCE.produce };
+    steps.push(produce, { id: stepId('verify'), kind: 'verify', role: 'hq', dependsOn: [produce.id], requiredEvidence: REQUIRED_EVIDENCE.verify });
+  }
   if (input.type === 'implement') steps.push(...implementationSteps(objective, { objective: input.objective, scope: input.scope, tests: input.tests, acceptanceCriteria: input.acceptanceCriteria, constraints: input.constraints ?? 'Change nothing outside the scope.' }, { reviewRule }));
-  const path = { investigate: ['investigate'], review: ['review'], fix: ['investigate', 'implement (only if the evidence supports it and policy allows)', 'verify (HQ)', 'review (independent)'], implement: ['implement', 'verify (HQ)', 'review (independent)'] }[input.type];
+  const path = { investigate: ['investigate'], review: ['review'], fix: ['investigate', 'implement (only if the evidence supports it and policy allows)', 'verify (HQ)', 'review (independent)'], implement: ['implement', 'verify (HQ)', 'review (independent)'], asset: ['produce (Art Factory, local)', 'verify (HQ)'] }[input.type];
   return {
     version: 1,
     objective: input.objective,
@@ -67,10 +72,11 @@ export function planObjective(objective, { computeMode = 'ZERO_CREDIT', supports
     gates, preWorkGates: gates.filter(g => PRE_WORK_GATES.has(g)), postWorkGates: gates.filter(g => POST_WORK_GATES.has(g)) ,
     agentsNeeded: [...new Set(steps.map(s => s.role).concat(input.type === 'fix' ? ['implementer', 'hq', 'reviewer'] : []))],
     expectedPath: path,
-    implementationEligible: input.type === 'implement' ? 'yes: a complete contract was submitted' : input.type === 'fix' ? 'decided after investigation, from its evidence and the approved scope' : 'no: read-only objective',
+    asset: input.asset ?? null,
+    implementationEligible: input.type === 'asset' ? 'no model implements: HQ\'s Art Factory produces the files' : input.type === 'implement' ? 'yes: a complete contract was submitted' : input.type === 'fix' ? 'decided after investigation, from its evidence and the approved scope' : 'no: read-only objective',
     reviewRule,
-    verification: input.type === 'implement' || input.type === 'fix' ? ['HQ-run tests inside the sandbox must pass', 'HQ verifies the commit, scope and test evidence from git', `review by ${reviewRule.independentProvider ? 'an independent provider (Codex)' : 'a read-only reviewer other than the implementing session'}`] : ['the handoff must validate'],
-    completionCriteria: input.type === 'implement' || input.type === 'fix' ? ['an accepted investigation (fix) or a submitted contract (implement)', 'a verified local commit on an hq/impl branch', 'an approving review, or a recorded decision on a disagreement', ...gates.filter(g => POST_WORK_GATES.has(g)).map(g => `Kyle's decision on ${g} (HQ never performs it)`)] : ['an accepted handoff answering the objective'],
+    verification: input.type === 'asset' ? ['two Art Factory runs produce byte-identical sheets', 'the sheet checks pass (cell, anchor, binary alpha, one palette, four facings)', 'the World tests pass in the asset worktree', 'HQ verifies the commit holds only the generated sheet, from git'] : input.type === 'implement' || input.type === 'fix' ? ['HQ-run tests inside the sandbox must pass', 'HQ verifies the commit, scope and test evidence from git', `review by ${reviewRule.independentProvider ? 'an independent provider (Codex)' : 'a read-only reviewer other than the implementing session'}`] : ['the handoff must validate'],
+    completionCriteria: input.type === 'asset' ? ['a verified local commit on an hq/asset branch holding only the generated sheet', 'Kyle\'s visual approval before the asset is used by default (a candidate is shown only with ?assets=standin)'] : input.type === 'implement' || input.type === 'fix' ? ['an accepted investigation (fix) or a submitted contract (implement)', 'a verified local commit on an hq/impl branch', 'an approving review, or a recorded decision on a disagreement', ...gates.filter(g => POST_WORK_GATES.has(g)).map(g => `Kyle's decision on ${g} (HQ never performs it)`)] : ['an accepted handoff answering the objective'],
     steps,
     compute: computePlan(input.type === 'fix' ? ['investigate', 'implement', 'verify', 'review'] : steps.map(s => s.kind), computeMode, supports),
   };

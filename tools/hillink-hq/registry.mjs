@@ -16,5 +16,6 @@ export const operations = {
   'review-repo': { label: 'Ask Claude or Codex to review the repo (read-only)', capability: 'review-repo', description: 'Opt-in local CLI bridge; the agent reads the repository and answers. No edits, shell writes, deploys or database access.' },
   'inspect-repo': { label: 'Inspect repository source', capability: 'inspect-repo', description: 'Count source files locally; no network, credentials or database.' },
   'verify-hq': { label: 'Run HQ foundation tests', capability: 'verify-hq', description: 'Run isolated engine and persistence tests.' },
+  'produce-asset': { label: 'Produce a character sprite sheet (Art Factory)', capability: 'produce-asset', description: 'HQ runs the local Art Factory (headless Blender, deterministic pixel pass) on an allowlisted recipe in an isolated worktree, checks the result and commits only the generated sheet. No network, no model, never pushed.' },
   'verify-unit': { label: 'Run Hillink unit tests', capability: 'verify-unit', description: 'Run existing pure unit tests; never seed or run E2E.' },
 };
