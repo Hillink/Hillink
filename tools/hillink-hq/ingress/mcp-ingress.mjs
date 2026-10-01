@@ -19,7 +19,16 @@ import { TOOL_DEFINITIONS, createToolbox } from '../orchestrator-tools.mjs';
 import { TERMINAL } from '../orchestration/state.mjs';
 import { attention } from '../orchestration/attention.mjs';
 
-export const INGRESS_TOOLS = Object.freeze(['submit_objective', 'get_objective', 'wait_for_objective', 'get_task', 'get_hq_state', 'resolve_objective_decision', 'cancel_objective', 'acknowledge_objective', 'acknowledge_note']);
+export const INGRESS_TOOLS = Object.freeze(['submit_objective', 'get_objective', 'wait_for_objective', 'get_task', 'get_hq_state', 'resolve_objective_decision', 'cancel_objective', 'acknowledge_objective', 'acknowledge_note', 'restart_hq']);
+// restart_hq (restart.mjs, supervisor.mjs): an operational restart owned by the external supervisor. It reloads the
+// code already on disk and changes nothing else; approvals, decisions, blocked objectives and spend are replayed
+// unchanged from the journal. Refused while work is running, during another restart, and inside the cooldown.
+const RESTART_DEFINITION = {
+  name: 'restart_hq',
+  description: 'Restart Hillink HQ through its external supervisor (an operational restart: same code, same state). HQ records your reason first, then the supervisor shuts HQ down gracefully, starts it again and health-checks it. Refused while any run is in progress, while another restart is underway, or within the cooldown after the last one. HQ and this connector are unavailable for about 30 to 90 seconds and this call may lose its connection; that is expected. It returns accepted with a restart_id, not "healthy": call get_hq_state after about a minute and read hq_process.last_restart for that restart_id (completed or failed). It cannot change code, approvals, objectives, spend, credentials or settings.',
+  inputSchema: { type: 'object', properties: { reason: { type: 'string', description: 'Why HQ needs a restart, in one or two sentences (recorded in HQ\'s journal).', maxLength: 300 } }, required: ['reason'], additionalProperties: false },
+  annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+};
 // wait_for_objective lets ChatGPT chain steps inside one chat turn (submit -> wait -> read -> submit the next) without
 // Kyle relaying anything: ChatGPT cannot be woken by HQ, so it waits on HQ instead. Bounded per call; call it again
 // to keep waiting. It returns as soon as the objective needs someone (decision, approval) or is final.
@@ -43,7 +52,7 @@ export const INGRESS_TOOL_DEFINITIONS = [...TOOL_DEFINITIONS.filter(t => INGRESS
   description: DESCRIPTIONS[t.name] ?? t.description,
   inputSchema: t.parameters,
   annotations: { readOnlyHint: t.name.startsWith('get_'), destructiveHint: t.name === 'cancel_objective', openWorldHint: false },
-})), WAIT_DEFINITION];
+})), WAIT_DEFINITION, RESTART_DEFINITION];
 
 // Settled = final, or waiting on someone. Polls HQ's own state; never changes it.
 async function waitForObjective(engine, args, { sleep = ms => new Promise(r => setTimeout(r, ms)) } = {}) {
@@ -61,7 +70,7 @@ async function waitForObjective(engine, args, { sleep = ms => new Promise(r => s
 
 export function validIngressToken(token) { return typeof token === 'string' && TOKEN.test(token); }
 
-export async function startIngress({ engine, token, port = 4313, host = '127.0.0.1', log = () => {}, now = () => Date.now() } = {}) {
+export async function startIngress({ engine, token, port = 4313, host = '127.0.0.1', log = () => {}, now = () => Date.now(), restart = null } = {}) {
   if (!validIngressToken(token)) throw Error('Ingress token must be 43 to 128 URL-safe characters (32+ random bytes, base64url).');
   if (host !== '127.0.0.1') throw Error('The ingress binds to 127.0.0.1 only; use a tunnel to reach it.');
   const expected = Buffer.from(`/mcp/${token}`);
@@ -88,7 +97,10 @@ export async function startIngress({ engine, token, port = 4313, host = '127.0.0
         // A fresh toolbox per call: the orchestrator's per-turn limits apply per call. No calling HQ task exists,
         // so the request is attributed to the ChatGPT agent alone (requestedBy { agentId: 'chatgpt', taskId: null }).
         engine.connectorCall?.('chatgpt');
-        const out = name === 'wait_for_objective' ? await waitForObjective(engine, args) : createToolbox(engine, { taskId: null }).call(name, JSON.stringify(args));
+        let out;
+        if (name === 'wait_for_objective') out = await waitForObjective(engine, args);
+        else if (name === 'restart_hq') { const r = restart ? await restart(args) : { refused: 'HQ was started without a supervisor; restart_hq is unavailable.' }; out = { ok: Boolean(r.accepted), output: JSON.stringify(r) }; }
+        else out = createToolbox(engine, { taskId: null }).call(name, JSON.stringify(args));
         log(`ingress ${name}: ${out.ok ? 'ok' : 'refused'}`);
         // Observability: whatever ChatGPT called, anything it must follow up rides along, so an objective that ended
         // BLOCKED/FAILED/CANCELLED, a decision waiting on it, or a note from Kyle cannot go unnoticed between calls.

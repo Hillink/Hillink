@@ -27,6 +27,7 @@ import { computeLedger } from './compute/state.mjs';
 import { allRoutes, agentProfiles } from './compute/registry.mjs';
 import { catalog, rebindAdapters } from './agents.mjs';
 import { startIngress, validIngressToken } from './ingress/mcp-ingress.mjs';
+import { requestRestart, ipcSupervisor } from './restart.mjs';
 
 // Metered credentials HQ knows about. Only their presence is ever reported, never a value.
 export const METERED_CREDENTIALS = ['OPENAI_API_KEY', 'ANTHROPIC_API_KEY', 'HQ_SANDBOX_ANTHROPIC_API_KEY', 'CODEX_API_KEY', 'ANTHROPIC_AUTH_TOKEN'];
@@ -43,7 +44,7 @@ async function body(req) {
   return JSON.parse(raw);
 }
 
-export async function createHQ({ port = 4312, directory = path.join(here, '.state'), store, adapters, sink, intervalMs = 1000, ollama = false, cliAgents = false, orchestrator = false, implementation = false, env = process.env, request = fetch, sandboxFactory = ({ env: e }) => (process.platform === 'win32' ? new WslSandbox({ home: e.HQ_SANDBOX_HOME || undefined }) : new LinuxSandbox({ home: e.HQ_SANDBOX_HOME || undefined })), brokerOptions = {}, conductorOptions = {}, verifier = null, computeMode = null, nodeVersion = process.versions.node, ingress = false } = {}) {
+export async function createHQ({ port = 4312, directory = path.join(here, '.state'), store, adapters, sink, intervalMs = 1000, ollama = false, cliAgents = false, orchestrator = false, implementation = false, env = process.env, request = fetch, sandboxFactory = ({ env: e }) => (process.platform === 'win32' ? new WslSandbox({ home: e.HQ_SANDBOX_HOME || undefined }) : new LinuxSandbox({ home: e.HQ_SANDBOX_HOME || undefined })), brokerOptions = {}, conductorOptions = {}, verifier = null, computeMode = null, nodeVersion = process.versions.node, ingress = false, supervisor = null, gitHead = null } = {}) {
   assertSupportedNode(nodeVersion); // fail closed before any state, sandbox or agent is touched
   const journal = store ?? new FileStore(directory);
   const local = new LocalAdapter();
@@ -197,6 +198,8 @@ export async function createHQ({ port = 4312, directory = path.join(here, '.stat
         if (op === 'retry') return json(200, engine.retryAgent(id, { by: 'kyle' }));
         return json(200, await (op === 'disable' ? engine.disableAgent(id, { by: 'kyle', reason }) : engine.retireAgent(id, { by: 'kyle', reason })));
       }
+      // restart_hq for Kyle (owner API): the same supervised path ChatGPT's connector tool uses.
+      if (req.method === 'POST' && url.pathname === '/api/restart') { const out = await requestRestart(engine, supervisor, await body(req), { by: 'kyle', gitHead }); return json(out.accepted ? 202 : 409, out); }
       if (req.method === 'POST' && url.pathname === '/api/alerts/ack') { engine.acknowledgeAlert((await body(req)).key); return json(200, { ok: true }); }
       if (req.method === 'POST' && url.pathname === '/api/runs/reconcile') {
         const input = await body(req); engine.reconcileStoppedRun(input.runId, input.confirmedStopped, input.evidence); return json(200, { ok: true });
@@ -218,7 +221,7 @@ export async function createHQ({ port = 4312, directory = path.join(here, '.stat
         token = fs.readFileSync(tokenFile, 'utf8').trim();
       }
       if (!validIngressToken(token)) throw Error('HQ_INGRESS_TOKEN must be 43 to 128 URL-safe characters');
-      ingressServer = await startIngress({ engine, token, port: Number(env.HQ_INGRESS_PORT || 4313) });
+      ingressServer = await startIngress({ engine, token, port: Number(env.HQ_INGRESS_PORT || 4313), restart: args => requestRestart(engine, supervisor, args, { by: 'chatgpt', gitHead }) });
       ingressStatus = `ENABLED on ${ingressServer.base}/mcp/<token>`;
       ingressTokenFile = tokenFile;
     } catch (error) { ingressStatus = `UNAVAILABLE: ${String(error.message).slice(0, 160)}`; }
@@ -233,7 +236,13 @@ export async function createHQ({ port = 4312, directory = path.join(here, '.stat
     return ticking;
   };
   await tick();
-  return { engine, origin, ingress: () => ({ status: ingressStatus, base: ingressServer?.base ?? null, port: ingressServer?.port ?? null, tokenFile: ingressTokenFile }), close: async () => {
+  // The supervisor's outcome for a restart (or a recovery), journaled by the HQ that came up (or the one that stayed).
+  const recordRestart = record => {
+    const n = v => (Number.isFinite(v) ? v : null), s = (v, max) => (typeof v === 'string' ? v.slice(0, max) : null);
+    if (!record || !['completed', 'failed', 'started'].includes(record.phase) || record.phase === 'started') return;
+    engine.emit('HQ_RESTART', { id: s(record.id, 80) ?? `supervisor-${engine.now()}`, phase: record.phase, by: s(record.by, 40), reason: s(record.reason, 300), oldPid: n(record.oldPid), newPid: n(record.newPid), attempts: n(record.attempts), forced: Boolean(record.forced), durationMs: n(record.durationMs), gitHeadBefore: s(record.gitHeadBefore, 40), gitHeadAfter: s(record.gitHeadAfter, 40), diagnostic: s(record.diagnostic, 600) });
+  };
+  return { engine, origin, recordRestart, ingress: () => ({ status: ingressStatus, base: ingressServer?.base ?? null, port: ingressServer?.port ?? null, tokenFile: ingressTokenFile }), close: async () => {
     closing = true; clearTimeout(timer);
     await ticking;
     await Promise.allSettled([...new Set(Object.values(engine.adapters))].map(adapter => adapter.close?.()));
@@ -246,7 +255,21 @@ export async function createHQ({ port = 4312, directory = path.join(here, '.stat
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const sink = process.env.HQ_NOTIFICATION_WEBHOOK ? webhookSink(process.env.HQ_NOTIFICATION_WEBHOOK) : null;
-  const hq = await createHQ({ port: Number(process.env.HQ_PORT || 4312), directory: process.env.HQ_STATE_DIR || path.join(here, '.state'), sink, ollama: process.env.HQ_OLLAMA_ENABLED === '1', cliAgents: process.env.HQ_AGENTS_ENABLED === '1', orchestrator: process.env.HQ_ORCHESTRATOR_ENABLED === '1', implementation: (process.env.HQ_IMPLEMENTATION_ENABLED ?? process.env.HQ_AGENTS_ENABLED) === '1', ingress: process.env.HQ_INGRESS_ENABLED === '1' });
+  // Launched by supervisor.mjs, HQ has an IPC channel to it; started directly (node server.mjs) it has none, and
+  // restart_hq then refuses instead of trying to restart itself.
+  const supervised = typeof process.send === 'function';
+  let gitHead = null; try { gitHead = execFileSync('git', ['rev-parse', '--short', 'HEAD'], { cwd: here, encoding: 'utf8', windowsHide: true }).trim(); } catch { /* not a checkout */ }
+  const hq = await createHQ({ port: Number(process.env.HQ_PORT || 4312), directory: process.env.HQ_STATE_DIR || path.join(here, '.state'), sink, ollama: process.env.HQ_OLLAMA_ENABLED === '1', cliAgents: process.env.HQ_AGENTS_ENABLED === '1', orchestrator: process.env.HQ_ORCHESTRATOR_ENABLED === '1', implementation: (process.env.HQ_IMPLEMENTATION_ENABLED ?? process.env.HQ_AGENTS_ENABLED) === '1', ingress: process.env.HQ_INGRESS_ENABLED === '1', supervisor: supervised ? ipcSupervisor(process) : null, gitHead });
+  if (supervised) {
+    let closing = false;
+    process.on('message', async m => {
+      if (m?.type === 'shutdown' && !closing) { closing = true; hq.engine.draining = true; try { await hq.close(); } finally { process.exit(0); } }
+      if (m?.type === 'restart-aborted') hq.engine.draining = false;
+      if (m?.type === 'restart-record') try { hq.recordRestart(m.record); } catch { /* journal closed */ }
+    });
+    // A supervisor that goes away leaves HQ running: it simply cannot be restarted remotely until one is back.
+    process.on('disconnect', () => console.log('Supervisor channel closed; HQ keeps running.'));
+  }
   console.log(`Hillink HQ: ${hq.origin} (local control service; compute mode ${hq.engine.config.computeMode})`);
   const ing = hq.ingress();
   if (ing.status !== 'DISABLED') console.log(`ChatGPT ingress: ${ing.status}${ing.tokenFile ? ` (token in ${ing.tokenFile})` : ' (token from HQ_INGRESS_TOKEN)'}`);

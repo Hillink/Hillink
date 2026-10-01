@@ -95,7 +95,9 @@ export function createToolbox(engine, { taskId, now = () => engine.now() }) {
       const at = now();
       const tasks = Object.values(engine.state.tasks).sort((a, b) => b.createdAt - a.createdAt).slice(0, 15).map(taskView);
       const alerts = Object.values(engine.state.alerts).filter(a => a.active && a.kind !== 'HANDOFF_READY').slice(0, 10).map(a => ({ kind: a.kind, agent: a.agentId, task: a.taskId, needs_kyle: Boolean(a.ownerMustAct), action: clip(a.ownerAction ?? a.detail, 200) }));
-      return { observed_at: iso(at), needs_attention: attention(engine.state, { full: true }), agents: Object.values(engine.state.agents).map(a => agentView(engine, a, at)), recent_tasks: tasks, active_alerts: alerts };
+      const r = engine.state.restart;
+      const restart = r ? { restart_id: r.id, phase: r.phase, reason: clip(r.reason, 300), requested_by: r.by ?? null, at: iso(r.at), ...(r.phase === 'completed' ? { old_pid: r.oldPid, new_pid: r.newPid, attempts: r.attempts, duration_seconds: Math.round((r.durationMs ?? 0) / 1000), forced: Boolean(r.forced) } : {}), ...(r.diagnostic ? { diagnostic: clip(r.diagnostic, 600) } : {}) } : null;
+      return { observed_at: iso(at), hq_process: { pid: process.pid, supervised: typeof process.send === 'function', last_restart: restart }, needs_attention: attention(engine.state, { full: true }), agents: Object.values(engine.state.agents).map(a => agentView(engine, a, at)), recent_tasks: tasks, active_alerts: alerts };
     },
     get_task({ task_id }) {
       const t = engine.state.tasks[task_id];

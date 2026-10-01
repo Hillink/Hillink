@@ -99,6 +99,17 @@ To connect ChatGPT:
    - Authentication: none (the secret URL is the credential)
 4. Anyone with the full URL can submit objectives, so treat it like a password. To revoke it, delete `ingress-token` (or change `HQ_INGRESS_TOKEN`) and restart HQ.
 
+## Supervised restarts (`restart_hq`)
+
+HQ runs under a small external supervisor: `start-hillink-hq.ps1` runs `node supervisor.mjs`, which launches `server.mjs` as a child with an IPC channel and stays alive while HQ restarts. (Started directly with `node server.mjs`, HQ has no supervisor and `restart_hq` refuses.)
+
+- **Tool:** `restart_hq({ reason })` on the connector (and `POST /api/restart` for Kyle). HQ journals `HQ_RESTART requested` first, refuses while any run is in progress, then asks the supervisor. The answer is `accepted` with a `restart_id`, never "healthy": read `get_hq_state` → `hq_process.last_restart` after about a minute. The call may lose its connection while HQ restarts; the supervisor owns the restart, so that is expected.
+- **Sequence:** acknowledge → HQ drains (no new dispatch) → graceful shutdown over IPC (HQ closes its adapters, journal and `controller.lock`) → after 30 s, `taskkill /PID <pid> /T /F` → `controller.lock` released only if its pid is proven gone → relaunch the code already on disk (git HEAD recorded before and after; nothing is pulled or changed) → health check (process alive, `/api/state` with a journal at least as long as before, agents registered, connector port answering) → the new HQ journals `HQ_RESTART completed` with old and new pid, attempts, duration and whether force was needed.
+- **Loop protection:** one restart at a time (a second request is a duplicate), 2-minute cooldown, at most 6 per hour, at most 3 start attempts with 5/15/45 s backoff. When they are exhausted the supervisor stays up, writes `supervisor-status.json` and `supervisor.log` in the state directory, and answers on the connector port with a minimal `get_hq_state` that reports HQ DOWN and the diagnostic. It never loops.
+- **Self-recovery:** an HQ process that exits unexpectedly is restarted by the supervisor, at most 3 times an hour. Agent or worker problems (Claude offline, Codex usage limit) never restart HQ.
+- **Unchanged by a restart:** the journal is replayed, so every objective, decision, approval gate, note and the compute mode come back exactly as they were; a restart approves, clears or retries nothing. The supervisor strips the same paid credentials as the start script.
+- **Logs:** `supervisor.log` (JSON lines) and `supervisor-status.json` in the state directory; HQ's own output in `hq-supervised.out.log` / `hq-supervised.err.log` next to `server.mjs`.
+
 ## Claude implementation tasks (Pass 2.6)
 
 With `HQ_AGENTS_ENABLED=1` (or `HQ_IMPLEMENTATION_ENABLED=1`), Claude can take bounded implementation tasks, operation `implement-repo`. The safety class is `local-worktree-write`, which only this operation may use. ChatGPT asks through `request_implementation`, which can only go to Claude. The engine also refuses the operation for any agent without the `implement-repo` capability, which only Claude gets, so Codex can never be assigned one.

@@ -37,7 +37,7 @@ export function stallReason(run, now, config = defaults) {
 }
 const progressKinds = new Set(['PROGRESS', 'COMMIT', 'TEST_PROGRESS', 'TEST_RESULT', 'PR', 'REVIEW', 'FINDING', 'HANDOFF', 'COMPLETED', 'MODEL_OUTPUT', 'MODEL_RESULT']);
 const liveStages = new Set(['CLAIMED', 'IMPLEMENTING', 'TESTING', 'REVIEW']);
-const eventTypes = new Set(['AGENT_REGISTERED', 'AGENT_CONFIGURED', 'AGENT_OBSERVED', 'TASK_CREATED', 'DISPATCHED', 'WORKER_EVENT', 'RECOVERY', 'TASK_REQUEUED', 'TASK_PARKED', 'ALERT_OPENED', 'ALERT_RESOLVED', 'ALERT_ACKNOWLEDGED', 'NOTIFICATION_DELIVERED', 'NOTIFICATION_FAILED', 'OWNER_CONFIRMED_TERMINATION', 'AGENT_CREATED', 'AGENT_LIFECYCLE', 'AGENT_WAITING_UPDATED', ...ORCHESTRATION_EVENTS, ...COMPUTE_EVENTS]);
+const eventTypes = new Set(['AGENT_REGISTERED', 'AGENT_CONFIGURED', 'AGENT_OBSERVED', 'TASK_CREATED', 'DISPATCHED', 'WORKER_EVENT', 'RECOVERY', 'TASK_REQUEUED', 'TASK_PARKED', 'ALERT_OPENED', 'ALERT_RESOLVED', 'ALERT_ACKNOWLEDGED', 'NOTIFICATION_DELIVERED', 'NOTIFICATION_FAILED', 'OWNER_CONFIRMED_TERMINATION', 'AGENT_CREATED', 'AGENT_LIFECYCLE', 'AGENT_WAITING_UPDATED', 'HQ_RESTART', ...ORCHESTRATION_EVENTS, ...COMPUTE_EVENTS]);
 // Stages after which a task never runs again. CANCELLED (Pass 3) is final: later worker evidence cannot reopen it.
 export const FINAL_STAGES = new Set(['DONE', 'BLOCKED', 'CANCELLED']);
 const text = (value, max = 2000) => typeof value === 'string' && value.trim().length > 0 && value.length <= max;
@@ -49,6 +49,8 @@ export function reduce(state, event) {
   if (!eventTypes.has(type)) throw Error(`Unsupported event type ${type}; refusing partial replay`);
   state.seq = event.seq;
   state.events.push(event);
+  // restart_hq (restart.mjs / supervisor.mjs): a record only. It changes no task, objective, decision or gate.
+  if (type === 'HQ_RESTART') state.restart = { ...(state.restart?.id === d.id ? state.restart : {}), ...d, at };
   if (type === 'AGENT_REGISTERED') state.agents[d.id] = { ...d, observedStatus: 'UNKNOWN', observedAt: null, lastMeaningfulAt: null, assignment: null, usage: null };
   if (type === 'AGENT_CONFIGURED') Object.assign(state.agents[d.agentId], d.configuration);
   // Pass 5F: an agent Kyle created in HQ (agents.mjs). It starts REQUESTED and gets an execution binding only at READY.
@@ -294,7 +296,8 @@ export class Engine {
       }
       this.provision(); // Pass 5F: real provisioning checks run beside the queue, never blocking it
       await this.recover();
-      for (const task of this.runnable()) {
+      // An accepted restart drains HQ: nothing new starts while the supervisor shuts it down.
+      for (const task of this.draining ? [] : this.runnable()) {
         // The local concurrency limit is for local processes. A remote API adapter (the orchestrator) takes no
         // local slot, so a question to ChatGPT never queues behind a long local run, nor blocks one.
         const local = r => !this.adapters[this.state.agents[r.agentId]?.executionAdapter]?.remote;
