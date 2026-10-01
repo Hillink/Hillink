@@ -76,7 +76,7 @@ Evidence is real: the CLI's session start is the ACK, the live process sends hea
 
 ## ChatGPT connector ingress (subscription, $0)
 
-This lets ChatGPT on Kyle's subscription submit and follow objectives itself, without Kyle relaying anything and without a metered OpenAI API call. It is a remote MCP server (`ingress/mcp-ingress.mjs`) that exposes exactly four of the orchestrator's tools: `submit_objective`, `get_objective`, `get_task` and `get_hq_state`. They run through the same `createToolbox` validation and the same conductor policy.
+This lets ChatGPT on Kyle's subscription submit and follow objectives itself, without Kyle relaying anything and without a metered OpenAI API call. It is a remote MCP server (`ingress/mcp-ingress.mjs`) that exposes exactly six of the orchestrator's tools: `submit_objective`, `get_objective`, `get_task`, `get_hq_state`, `resolve_objective_decision` (only decisions HQ assigned to the orchestrator; decisions for Kyle are refused) and `cancel_objective`. They run through the same `createToolbox` validation and the same conductor policy.
 
 - **No approval tool.** There is no approval, merge, deploy, spend or cancel tool. Gates stay Kyle's (`POST /api/objectives/approve`).
 - **Attribution.** Objectives arrive as `requestedBy { agentId: 'chatgpt', taskId: null }`.

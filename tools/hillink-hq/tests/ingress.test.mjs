@@ -40,7 +40,7 @@ test('I1. the secret URL is the only door: wrong or missing token, other methods
   await assert.rejects(startIngress({ engine: h.engine, token: TOKEN, port: 0, host: '0.0.0.0' }), /127\.0\.0\.1 only/);
 });
 
-test('I2. MCP handshake: initialize, notifications, tools/list exposes exactly the four objective tools', async () => {
+test('I2. MCP handshake: initialize, notifications, tools/list exposes exactly the six objective tools', async () => {
   const h = harness();
   await withIngress(h, async c => {
     const init = await c.rpc('initialize', { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'chatgpt', version: '1' } });
@@ -51,7 +51,7 @@ test('I2. MCP handshake: initialize, notifications, tools/list exposes exactly t
     assert.deepEqual(tools.map(t => t.name).sort(), [...INGRESS_TOOLS].sort());
     for (const t of tools) { assert.equal(t.inputSchema.type, 'object'); assert.equal(t.inputSchema.additionalProperties, false); }
     // Everything else the in-HQ orchestrator has is not reachable through the door.
-    for (const name of ['resolve_objective_decision', 'cancel_objective', 'request_implementation', 'request_repo_review', 'request_kyle_approval', 'approve', 'shell']) assert.equal((await c.call(name, {})).rpcError.code, -32602, name);
+    for (const name of ['request_implementation', 'request_repo_review', 'request_kyle_approval', 'approve', 'shell']) assert.equal((await c.call(name, {})).rpcError.code, -32602, name);
     assert.equal((await c.rpc('resources/list', {})).error.code, -32601);
   });
 });
@@ -99,6 +99,32 @@ test('I4. approval gates stay Kyle\'s: an objective that asks to merge stops for
   });
 });
 
+test('I7. decisions: ChatGPT answers a decision HQ gave the orchestrator, cannot answer one that needs Kyle, and can cancel', async () => {
+  const h = harness({ codex: codexInvestigatesAndReviews(investigation({ recommendedAction: 'needs_owner' })) });
+  await withIngress(h, async c => {
+    const id = (await c.call('submit_objective', { objective: 'greet() is missing; find out why and fix it.', type: 'fix', title: 'Fix greet()', scope: ['sandbox/hq-implementation/'], tests: [], acceptance_criteria: null, constraints: null, requested_actions: [] })).value.objective_id;
+    await h.drive(h.settled(id));
+    let o = (await c.call('get_objective', { objective_id: id })).value;
+    assert.equal(o.status, 'AWAITING_DECISION', o.why);
+    const mine = o.decisions_pending.find(d => d.for === 'orchestrator');
+    assert.ok(mine, JSON.stringify(o.decisions_pending));
+    assert.equal((await c.call('resolve_objective_decision', { objective_id: id, decision_id: mine.decision_id, choice: 'merge_it', rationale: 'x' })).isError, true, 'only listed options');
+    const r = await c.call('resolve_objective_decision', { objective_id: id, decision_id: mine.decision_id, choice: 'escalate_to_kyle', rationale: 'The investigation says the owner must decide.' });
+    assert.equal(r.isError, false, JSON.stringify(r.value));
+    assert.equal(h.engine.state.objectives[id].decisions[mine.decision_id].status === 'PENDING', false);
+    await h.drive(h.settled(id));
+    o = (await c.call('get_objective', { objective_id: id })).value;
+    const kyles = o.decisions_pending.find(d => d.for === 'kyle');
+    assert.ok(kyles, 'escalation leaves a decision for Kyle');
+    const refused = await c.call('resolve_objective_decision', { objective_id: id, decision_id: kyles.decision_id, choice: kyles.options[0].id, rationale: 'x' });
+    assert.equal(refused.isError, true); assert.match(refused.value.refused, /needs Kyle/);
+    const cancel = await c.call('cancel_objective', { objective_id: id, reason: 'Smoke test over.' });
+    assert.equal(cancel.isError, false, JSON.stringify(cancel.value));
+    await h.drive(h.settled(id));
+    assert.equal((await c.call('get_objective', { objective_id: id })).value.status, 'CANCELLED');
+  });
+});
+
 test('I5. bad input is refused by HQ\'s own validation, and submissions are rate limited', async () => {
   const h = harness();
   await withIngress(h, async c => {
@@ -127,7 +153,7 @@ test('I6. HQ server: off by default; when enabled it reports status without the 
     assert.equal(stateText.includes(token), false, 'the token is not in HQ state');
     assert.match(JSON.parse(stateText).health.ingress, /^ENABLED/);
     const tools = await client(ing.base, token).rpc('tools/list', {});
-    assert.equal(tools.result.tools.length, 4);
+    assert.equal(tools.result.tools.length, INGRESS_TOOLS.length);
     assert.notEqual(token, session, 'the ingress secret is not the browser session token');
   } finally { await on.close(); }
   // The same token survives a restart (ChatGPT's connector URL keeps working).
