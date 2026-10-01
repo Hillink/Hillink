@@ -117,11 +117,15 @@ export function agentStatus(state, agent, now, config = defaults, seenAt = null)
 
 export class Engine {
   constructor({ store, adapters = {}, now = Date.now, config = {} }) {
-    this.store = store; this.adapters = adapters; this.now = now; this.config = { ...defaults, ...config }; this.busy = false; this.seen = {}; this.jobs = new Map(); this.checkedAt = {}; this.leaving = new Set(); this.provisioning = {};
+    this.store = store; this.adapters = adapters; this.now = now; this.config = { ...defaults, ...config }; this.busy = false; this.seen = {}; this.jobs = new Map(); this.checkedAt = {}; this.leaving = new Set(); this.provisioning = {}; this.connectors = {};
     // Fail closed: an unknown mode is ZERO_CREDIT, never something more permissive.
     if (!MODES.includes(this.config.computeMode)) this.config.computeMode = DEFAULT_MODE;
     this.state = store.read().reduce(reduce, emptyState());
   }
+  // An agent that reaches HQ from outside (ChatGPT through the MCP ingress) rather than being launched by an adapter.
+  // Display only: kept in memory, never journaled, and never used for routing or dispatch.
+  connectorOpened(agentId, via) { this.connectors[agentId] = { via, openedAt: this.now(), lastCallAt: null, calls: 0 }; }
+  connectorCall(agentId) { const c = this.connectors[agentId]; if (c) { c.lastCallAt = this.now(); c.calls += 1; } }
   status(agent, at = this.now()) { return agentStatus(this.state, agent, at, this.config, this.seen[agent.id]); }
   emit(type, data) {
     const event = { seq: this.state.seq + 1, id: randomUUID(), at: this.now(), type, data };
@@ -223,7 +227,7 @@ export class Engine {
   }
   runnable() { return Object.values(this.state.tasks).filter(t => t.stage === 'READY' && (t.safety === 'local-read-only' || t.safety === 'local-worktree-write')).sort((a, b) => b.priority - a.priority || a.createdAt - b.createdAt); }
   snapshot(at = this.now()) {
-    const tasks = Object.values(this.state.tasks), agents = Object.values(this.state.agents).map(a => ({ ...a, status: this.status(a, at), adapterAvailable: Boolean(this.adapters[a.executionAdapter]) }));
+    const tasks = Object.values(this.state.tasks), agents = Object.values(this.state.agents).map(a => ({ ...a, status: this.status(a, at), adapterAvailable: Boolean(this.adapters[a.executionAdapter]), connector: this.connectors[a.id] ? { ...this.connectors[a.id] } : null }));
     const counts = { ready: this.runnable().length, assigned: tasks.filter(t => liveStages.has(t.stage)).length, working: agents.filter(a => a.status === 'RUNNING').length, review: tasks.filter(t => t.stage === 'REVIEW').length, blocked: tasks.filter(t => t.stage === 'BLOCKED').length, done: tasks.filter(t => t.stage === 'DONE').length };
     const unresolvedRuns = Object.values(this.state.runs).filter(r => !r.endedAt).length;
     const compute = { mode: this.config.computeMode, ledger: computeLedger(this.state, { now: at }), capacity: Object.fromEntries(agents.map(a => [a.id, capacityOf(a, a.status, { connected: a.adapterAvailable, route: a.executionAdapter ? routeFor(a.executionAdapter, 'review-repo') : null })])) };

@@ -86,6 +86,7 @@ export async function startIngress({ engine, token, port = 4313, host = '127.0.0
         if (name === 'submit_objective' && !within(window.submissions, INGRESS_LIMITS.submissionsPerMinute)) return reply({ content: [{ type: 'text', text: JSON.stringify({ refused: 'Too many objectives this minute; wait and read the open ones.' }) }], isError: true });
         // A fresh toolbox per call: the orchestrator's per-turn limits apply per call. No calling HQ task exists,
         // so the request is attributed to the ChatGPT agent alone (requestedBy { agentId: 'chatgpt', taskId: null }).
+        engine.connectorCall?.('chatgpt');
         const out = name === 'wait_for_objective' ? await waitForObjective(engine, args) : createToolbox(engine, { taskId: null }).call(name, JSON.stringify(args));
         log(`ingress ${name}: ${out.ok ? 'ok' : 'refused'}`);
         return reply({ content: [{ type: 'text', text: out.output }], isError: !out.ok });
@@ -118,10 +119,11 @@ export async function startIngress({ engine, token, port = 4313, host = '127.0.0
   });
   await new Promise((resolve, reject) => { server.once('error', reject); server.listen(port, host, resolve); });
   const bound = server.address().port;
+  engine.connectorOpened?.('chatgpt', 'chatgpt-connector');
   return {
     port: bound,
     // The local endpoint WITHOUT the secret, for logs and health. The full URL is <base>/mcp/<token>.
     base: `http://${host}:${bound}`,
-    close: () => new Promise(resolve => server.close(resolve)),
+    close: () => { if (engine.connectors) delete engine.connectors.chatgpt; return new Promise(resolve => server.close(resolve)); },
   };
 }

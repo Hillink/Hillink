@@ -100,6 +100,18 @@ test('10. an agent with no runtime connected in HQ is shown as not connected, ne
   assert.equal(explainAgent(store.world, 'chatgpt').basis, 'hq');
 });
 
+test('10b. ChatGPT on the MCP connector is shown as connected through the connector, never as not connected', () => {
+  const viaConnector = last => snap({ agents: [agent('claude', 'IDLE'), agent('codex', 'IDLE'), agent('chatgpt', 'UNKNOWN', { executionAdapter: null, adapterAvailable: false, detail: 'Execution adapter is not connected in this controller.', connector: { via: 'chatgpt-connector', openedAt: 1_000, lastCallAt: last, calls: last ? 1 : 0 } })] });
+  const fresh = live(viaConnector(null)).store.world.agents.chatgpt;
+  assert.equal(fresh.truth.state, 'IDLE'); assert.match(fresh.truth.reason, /ChatGPT connector; no calls since HQ started/);
+  const { store } = live(viaConnector(4_000)); const g = store.world.agents.chatgpt;
+  assert.equal(g.truth.state, 'IDLE'); assert.match(g.truth.reason, /ChatGPT connector; last call 1970/);
+  const html = inspectHTML({ type: 'agent', id: 'chatgpt' }, store.world, 10_000, null, {}, { command: commandableOf(HQ_AGENTS).chatgpt ?? null, commands: [] });
+  assert.doesNotMatch(html, /Not connected/); assert.doesNotMatch(html, /cmd-text/, 'work goes through ChatGPT, not a World command box');
+  // Without the connector it is still plainly not connected.
+  assert.equal(live(idle()).store.world.agents.chatgpt.truth.state, 'NOT_CONNECTED');
+});
+
 test('simulated agents keep their scripted activity and say so', () => {
   const store = new WorldStore(emptyWorld());
   store.dispatch(makeEvent('AGENT_REGISTERED', { agentId: 'claude', name: 'Claude', role: 'Builder' }, { source: 'sim', at: 1 }));

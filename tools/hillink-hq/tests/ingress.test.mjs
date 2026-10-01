@@ -143,6 +143,22 @@ test('I8. wait_for_objective: ChatGPT chains steps in one turn; the wait returns
   });
 });
 
+test('I9. HQ shows ChatGPT as connected through the connector (display only), and forgets it when the door closes', async () => {
+  const h = harness();
+  const chatgpt = () => h.engine.snapshot().agents.find(a => a.id === 'chatgpt');
+  assert.equal(chatgpt().connector, null);
+  await withIngress(h, async c => {
+    assert.equal(chatgpt().connector.via, 'chatgpt-connector'); assert.equal(chatgpt().connector.lastCallAt, null);
+    const before = h.engine.store.read().length;
+    await c.rpc('tools/list', {}); assert.equal(chatgpt().connector.calls, 0, 'only tool calls count');
+    await c.call('get_hq_state', {});
+    assert.equal(chatgpt().connector.calls, 1); assert.equal(typeof chatgpt().connector.lastCallAt, 'number');
+    assert.equal(chatgpt().adapterAvailable, false, 'HQ still cannot launch ChatGPT itself');
+    assert.equal(h.engine.store.read().length, before, 'connector activity is never journaled');
+  });
+  assert.equal(chatgpt().connector, null);
+});
+
 test('I5. bad input is refused by HQ\'s own validation, and submissions are rate limited', async () => {
   const h = harness();
   await withIngress(h, async c => {

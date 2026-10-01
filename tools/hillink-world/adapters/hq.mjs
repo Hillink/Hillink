@@ -91,6 +91,7 @@ export function runtimeFor(snap, a) {
   const approvals = asked.filter(t => t.safety === 'owner-required' && t.stage === 'BLOCKED').map(t => ({ taskId: t.id, title: clip(t.title, 120) }));
   return {
     connected: a.adapterAvailable ?? Boolean(a.executionAdapter), adapter: a.executionAdapter ?? null,
+    connector: a.connector ? { via: String(a.connector.via ?? '').slice(0, 40), lastCallAt: a.connector.lastCallAt ?? null } : null,
     status: a.status ?? 'UNKNOWN', detail: clip(a.detail, 300), retryAt: a.retryAt ?? null,
     taskId: task?.id ?? null, runId: live ? task.runId : null, acknowledged: Boolean(live && run.acknowledgedAt),
     heartbeatAt: live ? run.heartbeatAt ?? null : null, activity: task ? stageActivity(task) : null,
