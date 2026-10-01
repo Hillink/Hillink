@@ -9,6 +9,7 @@
 import { authorize, visible, LIMITS } from './policy.mjs';
 import { sanitizeText, refusalText } from './sanitize.mjs';
 import { newRunKey, testVerdict } from '../test-verdict.mjs';
+import { whileRunning } from '../inflight.mjs';
 
 const READ_OPS = new Set(['list', 'read', 'search']);
 
@@ -121,7 +122,7 @@ export class BrokerSession {
     let out = '', ok = true;
     // HQ's runner with a fresh run key (test-verdict.mjs): what the tests print cannot change the counts HQ reports.
     const key = newRunKey(), strip = req.tests.some(t => t.endsWith('.ts')) ? ['--experimental-strip-types'] : [];
-    try { out = (await this.sandbox.exec(this.box, 'hq-test.sh', [...strip, ...req.tests], { input: `${key}\n`, timeoutMs: 330_000, maxBytes: 4 * 1024 * 1024, signal: this.abort.signal })).stdout; }
+    try { out = (await whileRunning(this.emitRaw, 'Sandbox test run (run_tests)', this.sandbox.exec(this.box, 'hq-test.sh', [...strip, ...req.tests], { input: `${key}\n`, timeoutMs: 330_000, maxBytes: 4 * 1024 * 1024, signal: this.abort.signal }))).stdout; }
     catch (error) { if (this.state !== 'OPEN' || /cancel/i.test(error.message)) throw error; ok = false; out = `${error.stdout ?? ''}\n${error.stderr ?? ''}`; }
     const v = testVerdict(out, { key, tests: req.tests, exitedOk: ok });
     this.audit('SANDBOX_TEST_COMPLETED', { op: 'test', outcome: v.green ? 'passed' : 'failed', passed: v.passed, failed: v.failed, reason: v.reason ? String(v.reason).slice(0, 200) : undefined });
