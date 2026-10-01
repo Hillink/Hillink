@@ -224,8 +224,8 @@ USE:
   - Pendant lamps hang every 2–3 tiles, with amber pools.
   - Monitors give cyan and rack LEDs give blue as secondary light.
   - Outside, a campfire and lamp posts.
-- **Materials**: dark timber beams, stone or brick walls, concrete slabs and plaster; foliage overgrowing the
-  building's edges and roof.
+- **Material richness** as a principle: texture, wear and overgrowing foliage on edges and roofs. The specific
+  materials (dark timber beams, stone and brick walls) are **not** adopted for Real. See §25 C19.
 - **Real T0** (panels 3, 3B):
   - Outside, a small finished building: a concrete and brick front, a wall sign, lit windows, rooftop solar panels, a
     lattice mast with a dish, crates and planters, and a van.
@@ -274,7 +274,8 @@ HILLINK APPLICATION:
   cutaway's "rooms in a row" become isometric rooms with back and side walls carrying the wall dressing.
 - Panels 5 and 6 are already isometric and can be followed closely for the plot-tile construction look, mapped to the
   10 truthful stages in §17.
-- Real T0 and Fantasy T0 compositions (§18) are taken from panels 3 and 4: three workstations, one planning corner and
+- Real T0 and Fantasy T0 compositions (§18) take their *layout and program* from panels 3 and 4, but Real keeps
+  modern materials (C19). They are: three workstations, one planning corner and
   one small compute corner (Real) or hearth (Fantasy), in one compact building.
 - Panel 7 defines how lighting is tested: one scene rendered at three ambient settings with the same assets (§9).
 
@@ -875,6 +876,8 @@ Still open (new from Reference 5):
 | C15 | **Claude's hard hat vs ambient workers:** ref 5's ambient workers wear the same yellow hard hat as construction Claude, so they read as Claude look-alikes | Claude is never confusable. Ambient workers get a different hat colour and no beard, are smaller in scale, and never wear orange-brown. |
 | C16 | **Real T0 size:** ref 5 shows one storey outside but two storeys inside | Needs the T0 reference. Leaning: one compact building, two small levels if the three workstations, planning corner and compute corner need it. |
 | C17 | **Monitors in Fantasy:** ref 5 panel 4B puts modern screens on Fantasy desks | Keep the material split (§8). Fantasy uses scrying glass, crystals, maps and ledgers, never modern monitors. |
+| C19 | **Real materials:** ref 5's Real HQ and Real T0 use dark timber beams and stone or brick walls, and read like a lodge close to Fantasy. That bends the approved Real material language (glass, steel, concrete, electronics, §8, §12 of Kyle's brief). | Keep the modern Real materials. Take only ref 5's layout, density, warmth and wear. A wood floor and some brick are fine as accents. |
+| C20 | **T0 lounge vs C8:** ref 5's Real T0 has a lounge (sofa, world map) with no capability behind it | Allow one shared planning or break space in T0 as environment. It is not an operational facility and holds no capability. Nothing more until a capability justifies it. |
 | C18 | **How literal Real wardrobe is:** ref 5's "Real" sheet still has ChatGPT in a crown and long cape, and Claude in a tank top | The crown stays as the silhouette lock (Kyle). Leaning: Real swaps the cape for a green and gold jacket or long coat with a crown or crown pin, so it's clearly the King but office-appropriate. Needs the Real-agents reference. |
 
 ---
