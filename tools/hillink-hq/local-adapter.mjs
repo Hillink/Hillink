@@ -3,8 +3,8 @@ import { fileURLToPath } from 'node:url';
 
 const workerPath = fileURLToPath(new URL('./worker.mjs', import.meta.url));
 export class LocalAdapter {
-  constructor({ spawnWorker = spawn, cancelGraceMs = 1000 } = {}) {
-    this.children = new Map(); this.spawnWorker = spawnWorker; this.cancelGraceMs = cancelGraceMs;
+  constructor({ spawnWorker = spawn, cancelGraceMs = 1000, pulseMs = 5000 } = {}) {
+    this.children = new Map(); this.spawnWorker = spawnWorker; this.cancelGraceMs = cancelGraceMs; this.pulseMs = pulseMs;
   }
   async health() { return { status: 'IDLE', detail: 'Local Node worker launcher available; no model credits source.' }; }
   async start({ task, runId, emit }) {
@@ -26,7 +26,12 @@ export class LocalAdapter {
       } catch { void this.cancel(runId); }
     });
     child.on('error', error => { stderr = error.message; });
+    // Liveness from the process itself, not from what it prints: while the child exists (no close yet) and has
+    // acknowledged, the adapter reports it alive. A worker whose event loop is busy in a long test is still alive.
+    const pulse = setInterval(() => { if (acknowledged && !entry.closed && !entry.cancelled) { try { emit({ kind: 'HEARTBEAT', summary: 'Local worker process alive.' }); } catch { /* run closed */ } } }, this.pulseMs);
+    pulse.unref?.();
     entry.closedPromise = new Promise(resolve => child.once('close', (code, signal) => {
+      clearInterval(pulse);
       entry.closed = true; this.children.delete(runId);
       try {
         emit({ kind: entry.cancelled ? 'CANCELLED' : code === 0 && acknowledged ? 'COMPLETED' : 'FAILED', summary: entry.cancelled ? 'Worker termination confirmed by process close.' : `Local process exited ${code ?? signal}${stderr ? `: ${stderr}` : ''}` });

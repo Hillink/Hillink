@@ -25,7 +25,7 @@ export const TRANSITIONS = {
 export const STEP_STATES = ['PENDING', 'RUNNING', 'DONE', 'FAILED', 'SKIPPED', 'CANCELLED', 'INTERRUPTED'];
 export const STEP_KINDS = ['investigate', 'implement', 'verify', 'review', 'rebuttal', 'local-check'];
 
-export const ORCHESTRATION_EVENTS = new Set(['OBJECTIVE_CREATED', 'OBJECTIVE_PLANNED', 'OBJECTIVE_TRANSITION', 'OBJECTIVE_CANCEL_REQUESTED', 'STEP_ADDED', 'STEP_TRANSITION', 'HANDOFF_ACCEPTED', 'HANDOFF_REJECTED', 'STEP_RETRY', 'APPROVAL_REQUESTED', 'APPROVAL_DECIDED', 'DECISION_REQUESTED', 'DECISION_RECORDED', 'DECISION_APPLIED', 'DISAGREEMENT_RECORDED', 'OBJECTIVE_RESULT', 'TASK_CANCELLED', 'RUN_RECONCILED']);
+export const ORCHESTRATION_EVENTS = new Set(['OBJECTIVE_CREATED', 'OBJECTIVE_PLANNED', 'OBJECTIVE_TRANSITION', 'OBJECTIVE_CANCEL_REQUESTED', 'STEP_ADDED', 'STEP_TRANSITION', 'HANDOFF_ACCEPTED', 'HANDOFF_REJECTED', 'STEP_RETRY', 'APPROVAL_REQUESTED', 'APPROVAL_DECIDED', 'DECISION_REQUESTED', 'DECISION_RECORDED', 'DECISION_APPLIED', 'DISAGREEMENT_RECORDED', 'OBJECTIVE_RESULT', 'TASK_CANCELLED', 'RUN_RECONCILED', 'OBJECTIVE_OUTCOME_ACKNOWLEDGED', 'ORCHESTRATOR_NOTE_POSTED', 'ORCHESTRATOR_NOTE_ACKNOWLEDGED']);
 
 export function canTransition(from, to) { return (TRANSITIONS[from] ?? []).includes(to); }
 
@@ -103,6 +103,12 @@ export function reduceOrchestration(state, event) {
       Object.assign(t, { stage: 'CANCELLED', cancelled: { at, by: d.by, reason: d.reason, confirmed: d.confirmed }, blocker: d.reason, ownerAction: d.confirmed ? null : t.ownerAction, recoveryPending: false, endedAt: t.endedAt ?? at });
       break;
     }
+    // Observability: an objective that ended without completing stays "needs follow-up" until the orchestrator (or
+    // Kyle) records that it saw the outcome and what happens next. Notes are standing guidance Kyle posts for the
+    // orchestrator (e.g. how to resume a sequence); they stay open until acknowledged.
+    case 'OBJECTIVE_OUTCOME_ACKNOWLEDGED': o.outcomeAck = { by: d.by, note: d.note, at }; o.updatedAt = at; break;
+    case 'ORCHESTRATOR_NOTE_POSTED': (state.orchestratorNotes ??= {})[d.id] = { id: d.id, title: d.title, body: d.body, by: d.by, postedAt: at, ack: null }; break;
+    case 'ORCHESTRATOR_NOTE_ACKNOWLEDGED': if (state.orchestratorNotes?.[d.id]) state.orchestratorNotes[d.id].ack = { by: d.by, note: d.note, at }; break;
     case 'RUN_RECONCILED': { const t = state.tasks[d.taskId]; if (t) t.interrupted = { at, evidence: d.evidence }; break; }
     case 'WORKER_EVENT': {
       // Measured spend attaches to the objective that owns the task (reported cost from the CLI's own counters).

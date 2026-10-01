@@ -52,6 +52,10 @@ export class OllamaAdapter {
     }
     if (!response.body) throw Error('Missing response stream');
     const decoder = new TextDecoder(); let pending = '', answer = '', acknowledged = false, lastPulse = 0, lastProgress = 0, chars = 0;
+    // Liveness from the open generation stream itself (the server is holding the request), not only from chunks.
+    const pulse = setInterval(() => { if (acknowledged && !entry.confirmedDone && Date.now() - lastPulse >= 4000) { try { emit({ kind: 'HEARTBEAT', summary: `Generation stream from ${this.model} open.` }); lastPulse = Date.now(); } catch { /* run closed */ } } }, 5000);
+    pulse.unref?.();
+    try {
     const consume = line => {
       if (!line.trim()) return;
       const chunk = JSON.parse(line);
@@ -84,6 +88,7 @@ export class OllamaAdapter {
     }
     pending += decoder.decode(); if (pending.trim()) consume(pending);
     if (!entry.confirmedDone) throw Error('Stream ended without done evidence');
+    } finally { clearInterval(pulse); }
   }
   async cancel(runId) {
     const entry = this.runs.get(runId); if (!entry) return false;

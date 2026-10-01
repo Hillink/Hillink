@@ -72,10 +72,10 @@ export class SubscriptionImplementer extends ClaudeImplementer {
       if (health.auth !== 'subscription') { emit({ kind: 'BLOCKED', summary: `${health.detail?.startsWith('AUTH_REQUIRED') ? '' : 'AUTH_REQUIRED: '}${health.detail ?? 'Claude Code subscription sign-in could not be verified.'} No metered fallback: the sandbox API route is never used instead. Nothing ran.`.slice(0, 1900), implementation: where, ownerAction: 'Sign Claude Code in with your Claude subscription (no API key), then retry the task.' }); return null; }
       stop();
       // 2. The sandbox: a fresh instance with the task's base tree. No key is ever placed in it.
-      await whileRunning(emit, 'Sandbox base image check', this.sandbox.verifyBase());
-      await whileRunning(emit, `Sandbox ${box} creation`, this.sandbox.create(box)); stop();
+      await whileRunning(emit, 'Sandbox base image check', this.sandbox.verifyBase(), { boundMs: 5 * 60_000 });
+      await whileRunning(emit, `Sandbox ${box} creation`, this.sandbox.create(box), { boundMs: 5 * 60_000 }); stop();
       emit({ kind: 'PROGRESS', summary: `Sandbox ${box} created (split broker: no credential inside).` });
-      await whileRunning(emit, `Sandbox ${box} staging`, this.sandbox.stage(box, { repo: dir, commit: where.base, git: this.hardening(), signal: entry.abort.signal })); stop();
+      await whileRunning(emit, `Sandbox ${box} staging`, this.sandbox.stage(box, { repo: dir, commit: where.base, git: this.hardening(), signal: entry.abort.signal }), { boundMs: 5 * 60_000 }); stop();
       // 3. The broker session, bound to this task, run, sandbox and contract. Cancellation closes it at once.
       opened = this.broker.open({ taskId: task.id, runId, objectiveId: task.link?.objectiveId ?? null, sandbox: this.sandbox, box, contract, emit, limits: this.limits });
       entry.abort.signal.addEventListener('abort', () => this.broker.closeSession(opened.session.id, 'cancelled'), { once: true });

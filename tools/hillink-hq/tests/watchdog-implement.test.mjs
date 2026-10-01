@@ -9,7 +9,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
 import { CliAgentAdapter, cliAgents, COMPACTION_MAX_MS, STREAM_PROGRESS_MS } from '../cli-agent-adapter.mjs';
-import { whileRunning, INFLIGHT_PROGRESS_MS } from '../inflight.mjs';
+import { whileRunning, PHASE_MARGIN_MS } from '../inflight.mjs';
 import { CLAUDE_TOOL_NAMES, BROKER_SERVER } from '../broker/policy.mjs';
 import { brokerArgs } from '../subscription-implementer.mjs';
 import { Engine, defaults } from '../engine.mjs';
@@ -64,7 +64,7 @@ function implementClaude(s, emit) {
 test('the implementation route streams tokens and its keepalives sit well inside the stall window', () => {
   assert.equal(defaults.progressMs, 120_000);
   assert.ok(brokerArgs('/tmp/x/mcp.json').includes('--include-partial-messages'));
-  assert.ok(STREAM_PROGRESS_MS < defaults.progressMs / 2 && INFLIGHT_PROGRESS_MS < defaults.progressMs / 2);
+  assert.ok(STREAM_PROGRESS_MS < defaults.progressMs / 2 && PHASE_MARGIN_MS < defaults.progressMs);
   assert.ok(COMPACTION_MAX_MS > defaults.progressMs && COMPACTION_MAX_MS <= 10 * 60_000, 'compaction is bounded, not open-ended');
 });
 
@@ -97,7 +97,7 @@ test('B. quiet implementation: HQ-bounded sandbox work (run_tests 5 min, accepta
   run.emit({ kind: 'ACK', summary: 'HQ implementation runner started.' });
   const now = () => s.clock.t;
   for (const [label, minutes] of [['Sandbox test run (run_tests)', 5], ['HQ acceptance tests in the sandbox', 5], ['Sandbox teardown', 3]]) {
-    let finish; const op = whileRunning(e => run.emit(e), label, new Promise(r => { finish = r; }), { now });
+    let finish; const op = whileRunning(e => run.emit(e), label, new Promise(r => { finish = r; }), { boundMs: minutes * 60_000 + 30_000 });
     for (let elapsed = 0; elapsed < minutes * 60_000; elapsed += 5_000) {
       s.clock.t += 5_000; t.mock.timers.tick(5_000); run.emit({ kind: 'HEARTBEAT', summary: 'HQ implementation runner alive.' });
       assert.equal(s.status(), 'RUNNING', `${label}: RUNNING at ${(elapsed + 5_000) / 1000}s`);
@@ -105,7 +105,7 @@ test('B. quiet implementation: HQ-bounded sandbox work (run_tests 5 min, accepta
     }
     finish({ stdout: '' }); await op;
   }
-  assert.ok(task().evidence.filter(e => e.inFlight).length >= 35, 'bounded operations reported their progress');
+  assert.equal(task().evidence.filter(e => e.inFlight && e.phases?.[0]?.state === 'begin').length, 3, 'each bounded operation declared one quiet phase');
   run.emit({ kind: 'COMPLETED', summary: 'Implementation committed.' });
   assert.equal(task().stage, 'DONE');
 });
@@ -137,7 +137,7 @@ test('C3. genuine stall: a hung bounded operation stops reporting when its own t
   t.mock.timers.enable({ apis: ['setInterval'] });
   const s = setup(); const { run, task } = await s.begin();
   run.emit({ kind: 'ACK', summary: 'HQ implementation runner started.' });
-  let fail; const op = whileRunning(e => run.emit(e), 'Sandbox test run (run_tests)', new Promise((_, reject) => { fail = reject; }), { now: () => s.clock.t });
+  let fail; const op = whileRunning(e => run.emit(e), 'Sandbox test run (run_tests)', new Promise((_, reject) => { fail = reject; }), { boundMs: 330_000 });
   for (let elapsed = 0; elapsed < 330_000; elapsed += 5_000) { s.clock.t += 5_000; t.mock.timers.tick(5_000); run.emit({ kind: 'HEARTBEAT', summary: 'alive' }); }
   fail(Error('timed out after 330000 ms')); await assert.rejects(op, /timed out/);
   const reports = task().evidence.filter(e => e.inFlight).length;

@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { initialAgents, operations } from './registry.mjs';
 import { validateImplementation } from './implementation-policy.mjs';
 import { ORCHESTRATION_EVENTS, reduceOrchestration } from './orchestration/state.mjs';
+import { needsFollowUp, ATTENTION_LIMITS } from './orchestration/attention.mjs';
 import { COMPUTE_EVENTS, reduceCompute, emptyCompute, computeLedger } from './compute/state.mjs';
 import { decideVariants, issueGrant, classRank, capacityOf, validateSpendAuthorization, authorizationStatus, DEFAULT_MODE, MODES } from './compute/policy.mjs';
 import { routeFor } from './compute/registry.mjs';
@@ -12,6 +13,27 @@ async function bounded(call, timeoutMs) {
   let timer;
   try { return await Promise.race([Promise.resolve().then(call), new Promise((_, reject) => { timer = setTimeout(() => reject(Error('Adapter response timed out')), timeoutMs); })]); }
   finally { clearTimeout(timer); }
+}
+// Quiet phases (watchdog model). Progress normally means fresh evidence within progressMs. Some legitimate work is
+// silent by nature: a tool call Claude is waiting on, the model preparing its first token, a context compaction, an
+// HQ-owned sandbox step, a test run. The component that KNOWS such a phase has begun (HQ code: an adapter parsing the
+// worker's protocol, or HQ's own runner) declares it with a reason and a hard bound, and ends it. While a declared
+// phase is within its bound, and liveness (heartbeats from a live process) continues, the run is RUNNING; a phase past
+// its bound is STALLED; with no phase open the ordinary progress rule applies. Heartbeats never count as progress, so
+// a live but silent worker with nothing declared is still STALLED, and a dead one is OFFLINE or ends on close.
+export const PHASE_LIMITS = Object.freeze({ maxBoundMs: 15 * 60_000, maxOpen: 16, maxPerEvent: 8 });
+export function quietState(run, now) {
+  const open = Object.entries(run?.phases ?? {});
+  const overdue = open.filter(([, p]) => now - p.since > p.boundMs);
+  return { active: open.length > 0, overdue: overdue.length > 0, open: open.map(([id, p]) => ({ id, ...p, elapsedMs: now - p.since })), overdueList: overdue.map(([id, p]) => ({ id, ...p, elapsedMs: now - p.since })) };
+}
+// Why a run is not RUNNING, in words, for the recovery record and the owner.
+export function stallReason(run, now, config = defaults) {
+  if (!run) return 'unknown run';
+  if (now - run.heartbeatAt > config.heartbeatMs) return `no liveness heartbeat for ${Math.round((now - run.heartbeatAt) / 1000)} s (process gone or unreachable)`;
+  const q = quietState(run, now);
+  if (q.overdue) return q.overdueList.map(p => `${p.reason} ran ${Math.round(p.elapsedMs / 1000)} s, past its ${Math.round(p.boundMs / 1000)} s bound`).join('; ');
+  return `no progress evidence for ${Math.round((now - run.lastMeaningfulAt) / 1000)} s and no declared quiet phase (process alive but silent)`;
 }
 const progressKinds = new Set(['PROGRESS', 'COMMIT', 'TEST_PROGRESS', 'TEST_RESULT', 'PR', 'REVIEW', 'FINDING', 'HANDOFF', 'COMPLETED', 'MODEL_OUTPUT', 'MODEL_RESULT']);
 const liveStages = new Set(['CLAIMED', 'IMPLEMENTING', 'TESTING', 'REVIEW']);
@@ -61,12 +83,17 @@ export function reduce(state, event) {
     if (d.kind === 'TEST_STARTED') task.stage = 'TESTING';
     if (d.kind === 'TEST_RESULT') task.verificationResult = d.result;
     if (d.kind === 'REVIEW') task.stage = 'REVIEW';
-    if (progressKinds.has(d.kind)) { run.lastMeaningfulAt = at; agent.lastMeaningfulAt = at; task.lastMeaningfulAt = at; }
+    if (progressKinds.has(d.kind) || d.phases) { run.lastMeaningfulAt = at; agent.lastMeaningfulAt = at; task.lastMeaningfulAt = at; }
+    if (d.phases) {
+      run.phases ??= {};
+      // Re-declaring an open phase keeps its original start: a phase cannot be extended by announcing it again.
+      for (const p of d.phases) { if (p.state === 'begin') run.phases[p.id] ??= { reason: p.reason, since: at, boundMs: p.boundMs }; else delete run.phases[p.id]; }
+    }
     if (d.kind === 'HANDOFF') task.handoffs.push({ ...d, at });
     if (d.kind === 'USAGE') agent.usage = { ...d.usage, at };
     if (d.kind === 'UNCERTAIN') Object.assign(task, { stage: 'BLOCKED', blocker: d.summary, ownerAction: d.ownerAction || 'Verify the remote worker stopped before releasing this run.' });
     if (['COMPLETED', 'FAILED', 'BLOCKED', 'CANCELLED', 'RATE_LIMITED'].includes(d.kind)) {
-      run.endedAt = at; run.terminal = d.kind; agent.assignment = null;
+      run.endedAt = at; run.terminal = d.kind; agent.assignment = null; run.phases = {};
       // A cancelled task stays CANCELLED: the run's own terminal evidence is recorded, the stage is not reopened.
       if (task.stage !== 'CANCELLED') task.stage = d.kind === 'COMPLETED' ? 'DONE' : 'BLOCKED';
       task.endedAt = at;
@@ -106,6 +133,9 @@ export function agentStatus(state, agent, now, config = defaults, seenAt = null)
     if (task.stage === 'BLOCKED') return 'BLOCKED';
     if (!run.acknowledgedAt) return 'UNKNOWN';
     if (now - run.heartbeatAt > config.heartbeatMs) return 'OFFLINE';
+    const quiet = quietState(run, now);
+    if (quiet.overdue) return 'STALLED'; // a declared quiet phase ran past its own hard bound: hung
+    if (quiet.active) return 'RUNNING'; // legitimately quiet, live, and within bound
     if (now - run.lastMeaningfulAt > config.progressMs) return 'STALLED';
     return 'RUNNING';
   }
@@ -200,6 +230,19 @@ export class Engine {
     if (!kinds.includes(payload.kind)) throw Error('Unknown evidence kind');
     // Pass 4.5 broker audit: HQ-authored metadata (operation, logical path, outcome, sizes), never file contents.
     if (payload.kind === 'BROKER' && (!payload.broker || typeof payload.broker !== 'object' || !/^[A-Z_]{3,40}$/.test(String(payload.broker.event)) || JSON.stringify(payload.broker).length > 2000)) throw Error('Invalid broker audit record');
+    if (payload.phases != null) {
+      const ps = payload.phases;
+      if (!Array.isArray(ps) || !ps.length || ps.length > PHASE_LIMITS.maxPerEvent) throw Error('Invalid quiet phases');
+      if (['ACK', 'HEARTBEAT', 'COMPLETED', 'FAILED', 'BLOCKED', 'CANCELLED', 'RATE_LIMITED', 'UNCERTAIN', 'USAGE'].includes(payload.kind)) throw Error('Quiet phases ride on progress evidence only');
+      for (const p of ps) {
+        if (!p || typeof p !== 'object' || !/^[A-Za-z0-9:_.\-]{1,100}$/.test(String(p.id)) || !['begin', 'end'].includes(p.state)) throw Error('Invalid quiet phase');
+        if (p.state === 'begin' && (!text(p.reason, 160) || !Number.isInteger(p.boundMs) || p.boundMs < 1000 || p.boundMs > PHASE_LIMITS.maxBoundMs)) throw Error(`A quiet phase needs a reason and a hard bound of at most ${PHASE_LIMITS.maxBoundMs / 60_000} minutes`);
+      }
+      const open = new Set(Object.keys(run.phases ?? {}));
+      for (const p of ps) { if (p.state === 'begin') open.add(p.id); else open.delete(p.id); }
+      if (open.size > PHASE_LIMITS.maxOpen) throw Error('Too many open quiet phases');
+      payload = { ...payload, phases: ps.map(p => (p.state === 'begin' ? { id: p.id, state: 'begin', reason: p.reason, boundMs: p.boundMs } : { id: p.id, state: 'end' })) };
+    }
     if (payload.kind === 'ACK' && run.acknowledgedAt) throw Error('Run already acknowledged');
     if (!run.acknowledgedAt && !['ACK', 'FAILED', 'CANCELLED', 'BLOCKED', 'UNCERTAIN', 'RATE_LIMITED'].includes(payload.kind)) throw Error('Worker acknowledgement required');
     if (payload.kind === 'TEST_RESULT' && !['passed', 'failed'].includes(payload.result)) throw Error('Test result required');
@@ -390,7 +433,8 @@ export class Engine {
       const agent = this.state.agents[run.agentId], status = this.status(agent);
       const ackExpired = !run.acknowledgedAt && this.now() - run.dispatchedAt > (agent.ackTimeoutMs ?? this.config.heartbeatMs);
       if (!failed && !ackExpired && !['OFFLINE', 'STALLED'].includes(status)) continue;
-      this.emit('RECOVERY', { taskId: task.id, step: 'diagnose', reason: failed ? task.blocker : ackExpired ? 'No worker acknowledgement' : status, runId: run.runId });
+      const why = failed ? task.blocker : ackExpired ? 'No worker acknowledgement' : `${status}: ${stallReason(run, this.now(), this.config)}`;
+      this.emit('RECOVERY', { taskId: task.id, step: 'diagnose', reason: why, runId: run.runId });
       let stopped = failed; // FAILED is terminal evidence from the adapter, not a lost response.
       if (!stopped) try { stopped = await bounded(() => this.adapters[agent.executionAdapter]?.cancel(run.runId), this.config.adapterTimeoutMs); } catch { /* Uncertain cancellation retains lease. */ }
       if (stopped !== true) {
@@ -402,7 +446,7 @@ export class Engine {
       if (task.stage === 'CANCELLED') { if (!task.cancelled?.confirmed) this.emit('TASK_CANCELLED', { taskId: task.id, by: 'hq-watchdog', reason: task.cancelled?.reason ?? 'Cancelled.', confirmed: true }); continue; }
       this.emit('AGENT_OBSERVED', { agentId: agent.id, status: 'OFFLINE', detail: 'Recovery quarantine; awaiting cooldown and fresh health check', quarantineUntil: this.now() + this.config.quarantineMs });
       // Different worker handoff is preferred; no blind repetition or arbitrary shell retries.
-      if (task.link) { this.emit('TASK_PARKED', { taskId: task.id, reason: `Watchdog: the worker was ${ackExpired ? 'not acknowledged in time' : status} (timed out) and was stopped.`, ownerAction: null }); continue; }
+      if (task.link) { this.emit('TASK_PARKED', { taskId: task.id, reason: `Watchdog: the worker was ${ackExpired ? 'not acknowledged in time' : `${status} (${why.replace(/^[A-Z]+: /, '')})`} and was stopped.`.slice(0, 1900), ownerAction: null }); continue; }
       const alternate = Object.values(this.state.agents).find(a => a.id !== agent.id && isWorking(a) && (!task.preferredAgentId || a.id === task.preferredAgentId) && a.capabilities.includes(task.capability) && !a.assignment && this.adapters[a.executionAdapter] && this.status(a) === 'IDLE');
       if (alternate && task.attempts < this.config.maxAttempts) {
         this.emit('RECOVERY', { taskId: task.id, step: 'handoff', reason: `Retry with ${alternate.name}`, from: agent.id, to: alternate.id });
@@ -428,6 +472,11 @@ export class Engine {
         if (['IDLE', 'OFFLINE', 'STALLED', 'RATE_LIMITED', 'UNKNOWN'].includes(agent.status)) add(`capacity:${agent.id}`, agent.adapterAvailable ? `UNEXPECTED_${agent.status}` : 'ADAPTER_UNAVAILABLE', agent, null, agent.adapterAvailable ? null : `Connect an execution/telemetry adapter for ${agent.name}, or route to a capable connected worker.`, agent.detail || 'Runnable work exists without verified execution on this worker.');
       }
       if (!snapshot.agents.some(a => isWorking(a) && a.adapterAvailable && this.runnable().some(t => (!t.preferredAgentId || t.preferredAgentId === a.id) && a.capabilities.includes(t.capability)))) add('queue:no-adapter', 'ADAPTER_UNAVAILABLE', null, null, 'Connect a capable execution adapter for the queued operation.', 'No connected worker can execute the safe queue.');
+    }
+    // Orchestration observability (orchestration/attention.mjs): an objective that ended without completing is an open
+    // alert until the orchestrator or Kyle acknowledges it with the next step, so it cannot sit unnoticed.
+    for (const o of Object.values(this.state.objectives ?? {})) {
+      if (needsFollowUp(o) && this.now() - (o.endedAt ?? o.updatedAt) <= ATTENTION_LIMITS.alertWindowMs) add(`objective:${o.id}`, 'OBJECTIVE_NEEDS_FOLLOW_UP', null, null, null, `Objective "${String(o.input?.title ?? o.id).slice(0, 120)}" ended ${o.status}: ${String(o.statusReason ?? '').slice(0, 300)} Nobody has acknowledged it yet; ChatGPT sees it on its next HQ call.`);
     }
     if (snapshot.cycleComplete) add('cycle:complete', 'HANDOFF_READY', null, null, null, 'READY=0, WORKING=0, REVIEW=0; remaining tasks have explicit blockers.');
     for (const [key, alert] of desired) {

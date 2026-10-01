@@ -178,6 +178,9 @@ export async function createHQ({ port = 4312, directory = path.join(here, '.stat
       if (req.method === 'POST' && url.pathname === '/api/objectives') { const id = conductor.submit(await body(req)); return json(201, { id }); }
       if (req.method === 'POST' && url.pathname === '/api/objectives/cancel') { const b = await body(req); return json(200, await conductor.cancel(String(b.id), { by: 'kyle', reason: typeof b.reason === 'string' ? b.reason : 'Cancelled by Kyle.' })); }
       if (req.method === 'POST' && url.pathname === '/api/objectives/approve') { const b = await body(req); return json(200, conductor.approve(String(b.id), String(b.gate), b.decision, { by: 'kyle', note: typeof b.note === 'string' ? b.note : null })); }
+      if (req.method === 'POST' && url.pathname === '/api/objectives/acknowledge') { const b = await body(req); return json(200, conductor.acknowledgeOutcome(String(b.id), { by: 'kyle', note: typeof b.note === 'string' ? b.note : '' })); }
+      if (req.method === 'POST' && url.pathname === '/api/orchestrator/notes') { const b = await body(req); return json(201, { id: conductor.postNote({ title: b.title, body: b.body }, { by: 'kyle' }) }); }
+      if (req.method === 'POST' && url.pathname === '/api/orchestrator/notes/ack') { const b = await body(req); return json(200, conductor.acknowledgeNote(String(b.id), { by: 'kyle', note: typeof b.note === 'string' ? b.note : '' })); }
       if (req.method === 'POST' && url.pathname === '/api/objectives/decide') { const b = await body(req); return json(200, conductor.decide(String(b.id), String(b.decisionId), String(b.choice), { by: 'kyle', rationale: typeof b.rationale === 'string' ? b.rationale : '' })); }
       // The World contract: a truthful snapshot plus activity since a journal sequence number.
       if (req.method === 'GET' && url.pathname === '/api/world') {

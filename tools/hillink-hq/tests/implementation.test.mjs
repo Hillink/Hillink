@@ -117,7 +117,7 @@ test('7-9, 13. a valid implementation: one task, linked, real worktree branch, H
   assert.equal(run.command, 'claude-test.exe'); assert.equal(run.opts.shell, false, 'no shell between HQ and Claude');
   assert.match(run.opts.cwd, /hq-impl-wt-/, 'Claude worked in the task worktree');
   assert.match(run.child.stdin.written, /Scope \(the only paths you may create or change\):\n- sandbox\/hq-implementation\//);
-  const kinds = t.evidence.map(e => e.kind).filter(k => k !== 'HEARTBEAT');
+  const kinds = t.evidence.map(e => e.kind).filter(k => k !== 'HEARTBEAT' && k !== 'PROGRESS') // PROGRESS: quiet-phase markers, checked in the watchdog suites;
   // Pass 3: HQ's runner acknowledges first (it is HQ code and has started); Claude's session start follows as output.
   assert.deepEqual(kinds, ['ACK', 'MODEL_OUTPUT', 'MODEL_OUTPUT', 'MODEL_RESULT', 'USAGE', 'FINDING', 'TEST_STARTED', 'TEST_RESULT', 'COMMIT', 'COMPLETED']);
   const result = t.evidence.find(e => e.kind === 'COMPLETED').implementation;

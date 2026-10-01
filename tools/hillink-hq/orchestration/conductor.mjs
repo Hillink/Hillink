@@ -15,6 +15,7 @@ import { parseHandoff, implementationHandoff, framingFor, hashOf } from './hando
 import { classify, retryDecision, loopGuard, repeated } from './retry.mjs';
 import { validateImplementation } from '../implementation-policy.mjs';
 import { decideBest, decideCompute } from '../compute/policy.mjs';
+import { UNRESOLVED, ATTENTION_LIMITS } from './attention.mjs';
 
 const KIND_STATE = { investigate: 'INVESTIGATING', implement: 'IMPLEMENTING', verify: 'VERIFYING', review: 'REVIEWING', rebuttal: 'REVIEWING', 'local-check': 'INVESTIGATING' };
 const HANDOFF_KIND = { investigate: 'investigation', review: 'review', rebuttal: 'rebuttal' };
@@ -61,6 +62,33 @@ export class Conductor {
     if (!['approve', 'deny'].includes(decision)) throw Error('decision must be approve or deny');
     this.engine.emit('APPROVAL_DECIDED', { objectiveId: id, gate, decision, by, note: note ? clip(note, 600) : null });
     return { gate, decision };
+  }
+  // Observability (attention.mjs): who saw an unresolved outcome and what happens next. Records a fact only.
+  acknowledgeOutcome(id, { by, note }) {
+    if (!['chatgpt', 'kyle'].includes(by)) throw Error('Only the orchestrator or Kyle can acknowledge an objective outcome.');
+    const o = this.objective(id);
+    if (!UNRESOLVED.has(o.status)) throw Error(`Objective is ${o.status}; only a BLOCKED, FAILED or CANCELLED outcome needs acknowledging.`);
+    if (o.outcomeAck) return { objective_id: id, already: true, acknowledged_by: o.outcomeAck.by };
+    if (typeof note !== 'string' || !note.trim() || note.length > ATTENTION_LIMITS.ackNote) throw Error(`note must say what happens next, at most ${ATTENTION_LIMITS.ackNote} characters`);
+    this.engine.emit('OBJECTIVE_OUTCOME_ACKNOWLEDGED', { objectiveId: id, by, note: note.trim() });
+    return { objective_id: id, acknowledged: true };
+  }
+  postNote({ title, body }, { by }) {
+    if (by !== 'kyle') throw Error('Only Kyle (the owner API) can post orchestrator notes.');
+    if (typeof title !== 'string' || !title.trim() || title.length > ATTENTION_LIMITS.noteTitle) throw Error(`title must be 1 to ${ATTENTION_LIMITS.noteTitle} characters`);
+    if (typeof body !== 'string' || !body.trim() || body.length > ATTENTION_LIMITS.noteBody) throw Error(`body must be 1 to ${ATTENTION_LIMITS.noteBody} characters`);
+    const id = randomUUID();
+    this.engine.emit('ORCHESTRATOR_NOTE_POSTED', { id, title: title.trim(), body: body.trim(), by });
+    return id;
+  }
+  acknowledgeNote(id, { by, note }) {
+    if (!['chatgpt', 'kyle'].includes(by)) throw Error('Only the orchestrator or Kyle can acknowledge a note.');
+    const n = this.state.orchestratorNotes?.[id];
+    if (!n) throw Error('Unknown note');
+    if (n.ack) return { note_id: id, already: true };
+    if (typeof note !== 'string' || !note.trim() || note.length > ATTENTION_LIMITS.ackNote) throw Error(`note must say what you will do, at most ${ATTENTION_LIMITS.ackNote} characters`);
+    this.engine.emit('ORCHESTRATOR_NOTE_ACKNOWLEDGED', { id, by, note: note.trim() });
+    return { note_id: id, acknowledged: true };
   }
   decide(id, decisionId, choice, { by, rationale = '' } = {}) {
     const o = this.objective(id), d = o.decisions[decisionId];
