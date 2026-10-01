@@ -1932,6 +1932,11 @@ The World dominates the screen. Hillink never regresses into a dashboard with a 
   - a minimap and zoom
   - the Real/Fantasy switch
   - the NEEDS KYLE indicator (canonical)
+  - [code] surfaces 5H already ships from canonical data and Ref 10 doesn't show: the **Attention** list (owner
+    approvals not tied to an agent, §21), the **Recent activity** feed, the simulation/live banner, and the
+    real-world date and time. These are existing product features, not invented mechanics. Ref 10 does not remove
+    them; the slice decides whether each stays persistent or moves behind a collapsed corner widget. The
+    simulation banner must stay visible whenever the World is not live.
 
   The exact set is decided in the vertical slice.
 
@@ -1947,6 +1952,11 @@ at most a one-word high-level state.
 - No giant labels and no task descriptions float over characters.
 - Idle or default presentation stays clean.
 - Ambient inhabitants never get chips (§20).
+- [ref 10A, readability risk] In 10A, Real ChatGPT and Real Codex are both dark-haired men in dark clothing with
+  dark eyewear, and at 24 px they read almost alike without their chips. That fails the §4 nameplate-free silhouette
+  test. The 6B/7A designs must keep them apart at gameplay zoom: ChatGPT's all-black suit with white shirt and tie and
+  no eyewear (10A's sunglasses rejected); Codex's grey hoodie, clear glasses, headphones and tablet. Their palettes
+  (§4: black and white vs grey and blue-grey) must stay distinct.
 
 **Selection** [Kyle]. Selecting an entity draws a **small, clear World indicator**: a restrained ground ring, outline,
 ground marker or subtle highlight.
