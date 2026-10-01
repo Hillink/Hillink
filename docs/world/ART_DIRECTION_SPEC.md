@@ -1,7 +1,10 @@
-# HILLINK ART DIRECTION SPEC — DRAFT 1
+# HILLINK ART DIRECTION SPEC — DRAFT 1 (revision 2)
 
-Status: **draft for Kyle/ChatGPT review. Nothing in it is implemented.** Written 2026-10-01 on `claude/world-5h`, in
-answer to "PASS 5H — ITERATION 2" (Kyle, 2026-10-01 00:06Z).
+Status: **the overall direction is approved by Kyle as a working foundation (2026-10-01 00:12Z). That is not approval to
+implement.** No artwork, no vertical slice and no Pass 5I until Kyle approves. Conflicts C1–C11 are resolved by Kyle
+(§25). Questions that need more references stay [open] (§24). Reference Batch 2 is expected.
+
+Written 2026-10-01 on `claude/world-5h`, in answer to "PASS 5H — ITERATION 2" (Kyle, 2026-10-01 00:06Z).
 
 References are stored in `docs/world/references/pass5h-iter2/` (ref1–ref4). The 5H iteration 1 evidence it is compared
 against is in `docs/world/evidence/pass5h/`.
@@ -221,7 +224,8 @@ The pillars:
   - No pure greys, except steel and concrete, and even those are tinted.
 - [proposed] **Dithering** is used sparingly and only for large gradients: sky, glow falloff and water.
 - [proposed] **Texture** comes from pixel clusters (brick courses, plank seams, stone joints, fabric folds), not noise.
-- [open] Who or what authors the pixels: hand-authored sprite data, or procedural pixel sprites, or both. See §25 C9.
+- [Kyle C9] Hybrid authoring: bespoke pixel sprites for the core agents, modular parts for everything else (§19). Either
+  way, the rule "appearance data is data, never code" still holds.
   The rule "appearance data is data, never code" still holds either way. Sprites would be palette-indexed pixel grids
   stored as plain data.
 
@@ -249,9 +253,20 @@ The pillars:
   - **Claude:** a broad, short body with a beard mass, plus a hammer head above the shoulder.
   - **Codex:** an asymmetric head, with one glowing eye and a mechanical plate, plus one mechanical arm.
 - [proposed] Each agent has one dominant hue, one secondary hue and one accent glow:
-  - ChatGPT: [open, §25 C1], gold and gem.
-  - Claude: orange-brown, leather and steel, forge-orange glow.
-  - Codex: blue or dark grey, steel, eye glow [open, §25 C2].
+  - **ChatGPT:** [Kyle C1] green and gold are the identity palette. Royal cream, gold and richer garment detail may be
+    added, but green must stay recognizable. Neither reference is copied literally.
+  - **Claude:** orange-brown, leather and steel, forge-orange glow. [Kyle C3] Visible red/orange hair and a full beard
+    always. A hard hat or helmet appears **only while he is actively doing construction work**, so equipment shows the
+    activity.
+  - **Codex:** [Kyle C2] a **half-human cyborg** (a human body with cybernetics, not a full robot) with **ONE RED EYE**.
+    The red eye is a permanent identity and silhouette feature in every view, clip and theme.
+- [Kyle C4] **Identity persists across themes.** The three agents never become generic humans in Real.
+  - Real changes wardrobe, equipment and presentation for a modern technology company.
+  - Fantasy uses the stronger archetype form.
+  - Each must be instantly recognizable as the same individual in either theme.
+  - [proposed] What stays fixed across themes: face, hair or beard, body plan, silhouette signature, identity palette
+    and Codex's red eye. What changes: clothing, held equipment and props.
+  - [open] What exactly the Real versions look like. Needs references (§24).
 
 ## 5. Agent archetype rules
 
@@ -341,7 +356,11 @@ The pillars:
 ## 9. Lighting language
 
 - [ref 1–3] **Warm, local key lights inside and a cool ambient outside.** The default time is dusk or evening.
-  [open, §25 C6: whether there is a day/night cycle]
+  [Kyle C6] Hillink is **not** permanently locked to dusk. Dusk or evening stays the showcase condition for visual
+  development because it shows lighting best.
+- [Kyle C6] The art system must keep a future day/night cycle possible: light sources, ambient colour and sky are
+  parameters, not baked into sprites. [proposed] Sprites carry base colours only. Ambient tint and light pools are a
+  separate pass. No day/night system is built in this pass.
 - [proposed] Light sources are objects in the World. Each one casts a soft additive pool of 2–4 tiles, with a dithered
   falloff in amber, monitor cyan or forge orange.
 - [proposed] Unlit areas sit 1–2 ramp steps darker. Rooms are never evenly bright.
@@ -395,7 +414,9 @@ The pillars:
   - a stack of boxes not yet unpacked
   - plants that are slightly overgrown
 - [ref 3a] Glass curtain walls show the interior from outside. Light spills onto the plaza at night.
-- [open] Real HQ character identity. See §25 C4.
+- [Kyle C4] Characters keep their identity in Real. ChatGPT is still recognizably the King, Claude the dwarf
+  builder and Codex the half-human cyborg, dressed for a modern technology company. [open] The exact Real wardrobe
+  needs references (§24).
 
 ## 12. Fantasy rules
 
@@ -445,7 +466,13 @@ The pillars:
   5. vegetation (trees, bushes, flowers, tufts)
 - [proposed] Real terrain is an urban plot: paving, kerb, planters, street lamps and a few trees [ref 3a]. Fantasy
   terrain is wilder, with meadow, rock, water and dense trees [ref 3b].
-- [open] Underground (caves, mines, crystals) appears in refs 1 and 2 but has no Hillink capability. See §25 C8.
+- [Kyle C8] **Environment is not an operational facility.**
+  - Environmental flavour is allowed and encouraged: water, dock, garden, woods, cliffs, caves or cave entrances,
+    landscaping, paths, benches and scenic terrain.
+  - An operational facility (a department, specialized room or capability) exists only if Hillink has that capability.
+  - So a scenic cave is fine, but a working mining department is not. A pond or dock is fine, but a dedicated facility
+    must match a real capability.
+- [proposed] Flavour terrain never carries a capability label, workstation or agent destination.
 
 ## 15. Architecture rules
 
@@ -513,8 +540,19 @@ The pillars:
   | — | inspection (scaffold coming down, Codex inspecting) |
   | 11 operational | operational |
 
-  Only the 3/4, 6/7 and 9/10 splits need HQ to report progress within a stage. Without that, each pair shows its first
-  look until the canonical stage changes. See §25 C10.
+- [Kyle C10] **Canonical construction authority does not change for art.** The visual stages map underneath the
+  existing canonical stages. Visual sub-stages are allowed inside one canonical stage only if they can be derived
+  deterministically without inventing progress.
+- [code] **Limitation:** each canonical stage advances on one piece of HQ evidence. Within a stage there is no further
+  canonical progress signal, so the paired brief stages (3/4, 6/7, 9/10) **cannot be shown truthfully as a sequence.**
+- [proposed] How the pairs are handled truthfully:
+  - Each pair is drawn as **one combined composition** for that canonical stage. For example, foundation shows
+    material piles staged beside an excavated footing; exterior shows walls going up with the roof frame started;
+    furnishing shows furniture in with finishing details partly placed.
+  - Nothing animates from the first half to the second over time.
+  - Facts that are already canonical but aren't progress may vary what is shown, deterministically. Examples: which
+    agent is assigned, whether the work is blocked, whether there is rework, the order number. They never imply
+    advancement.
 
 ## 18. Procedural expansion rules (World growth)
 
@@ -530,7 +568,14 @@ The pillars:
   | T3 Expanded | second storey, meeting room | walls, gate, more districts |
   | T4+ | additional buildings, compound, campus | settlement, town, kingdom |
 
-- [open] Today's T0 conflicts with the earlier "two-floor HQ baseline" decision. See §25 C5.
+- [Kyle C5] **Start small supersedes the two-floor baseline as the starting state.** The larger HQ is **not
+  discarded**; it becomes an **earned growth stage**.
+- [Kyle C5] Small does not mean primitive.
+  - **Real T0:** a compact, legitimate, *finished* small HQ suitable for three agents.
+  - **Fantasy T0:** a compact, established outpost, small keep or workshop suitable for three agents.
+  - The progression visibly grows toward the larger HQ or settlement.
+  - This replaces the ref 3d camp and single glass room in the table above as T0 *candidates*.
+- [open] The exact T0 appearance in both themes is waiting on reference images (§24).
 - [code] The default simulation boots with only Claude and Codex (`sim/simulator.mjs` `SIM_ROSTER`). ChatGPT appears
   only when an evidence script registers it, so the three-agent start is not what you see on boot today. The vertical
   slice should register all three by default.
@@ -551,8 +596,15 @@ The pillars:
 - [Kyle] Appearance and theme metadata stay data, never code. This 5H rule is kept.
 - [proposed] **Fallback art:** an unknown role gets a generic but finished-looking specialist (a hooded worker with a
   satchel, in its colour), never an unfinished placeholder.
-- [open] Whether unique sprites for future agents are authored by hand when the agent is approved, or assembled from
-  parts. See §25 C9.
+- [Kyle C9] **Hybrid authoring: bespoke personality plus procedural scalability.**
+  - **Core agents** (ChatGPT, Claude, Codex) get authored, bespoke sprite identities. They are deliberately designed,
+    not assembled from generic interchangeable parts.
+  - **The reusable system** stays modular: body plans, equipment, palettes, materials, props, animation conventions
+    and attachment points.
+  - **Future agents** may start with a coherent identity generated from the modular system. Important or permanent
+    agents can later get a bespoke refinement without breaking the animation or World architecture. [proposed] To make
+    that possible, a bespoke sprite set must fit the same body plan, frame count and attachment-point contract (§5, §6).
+  - **All production art is original.** Reference artwork is never shipped or traced.
 
 ## 20. Ambient animation principles
 
@@ -572,7 +624,17 @@ The pillars:
   - It never implies agent state.
   - Reduced motion freezes it.
   - It is phase-offset by a deterministic hash so things don't pulse in sync.
-- [proposed] Critters (birds, a rabbit) are allowed only as rare, non-canonical ambient life. See §25 C7.
+- [Kyle C7] **AGENTS vs AMBIENT INHABITANTS.**
+  - **Agents** are actual AI or system actors with canonical identity and state. The current core agent population is
+    ChatGPT, Claude and Codex.
+  - **Ambient inhabitants** are purely visual World life. They are allowed, and may eventually include construction
+    helpers, maintenance workers, justified background staff, birds, rabbits and other small critters.
+  - Ambient inhabitants must **never** masquerade as agents, receive fake canonical work, imply AI capabilities that
+    don't exist, or distort the visible agent population.
+- [proposed] To keep that distinction visible:
+  - Ambient inhabitants have no nameplate, no status icon, no selection panel and no HUD count.
+  - They use a reduced detail level and never an agent's silhouette signature or identity palette.
+  - They don't appear in agent lists, and the renderer derives them from scenery data, never from World agents.
 
 ## 21. UI and status relationship to the World
 
@@ -595,14 +657,17 @@ The pillars:
   - ChatGPT becomes the King in both themes.
   - Claude becomes the dwarf.
   - Codex becomes the cyborg.
-  - Real characters move to the pixel language even if C4 keeps them human.
+  - [Kyle C4] Identities persist in Real: the King, dwarf and cyborg in modern dress, not generic humans.
+  - Claude's hard hat appears only during active construction work [Kyle C3], and Codex has one red eye [Kyle C2].
 - **Rendering:** smooth canvas vectors become a low-resolution pixel buffer, integer-upscaled.
 - **Outline:** one ink outline becomes selective outlines.
 - **Colour:** flat fills become hue-shifted ramps with texture.
 - **Density:** isolated props in open floors become clustered, wall-heavy dressing with story props bound to state.
 - **Lighting:** even lighting becomes warm local pools against a dusk ambient, with light meaning activity.
 - **Construction:** 6 visual stages become 11 visual stages, with scaffolds, materials and builder interaction.
-- **Starting World:** the large layout becomes a small T0 that grows (pending C5).
+- **Starting World:** [Kyle C5] a compact, finished T0 that grows. The current two-floor HQ becomes an earned later
+  stage.
+- **Ambient life:** [Kyle C7] ambient inhabitants are strictly separate from agents.
 - **Population:** simulation and evidence default to three agents. The other characters appear only in a scalability
   demo.
 - **Status:** emblem plus ring becomes diegetic first with small icons. Rings appear only on selection.
@@ -622,55 +687,55 @@ The pillars:
 - Test strategy: boundary and determinism tests, not pixel tests.
 - The camera.
 
-## 24. Remaining visual questions requiring reference material
+## 24. Remaining visual questions requiring reference material [open]
 
-1. **Real HQ characters:** close-ups of archetypes at modern desks *versus* human staff. This resolves C4.
-2. **Exact pixel density:** a reference at the intended zoom (for example, one room at 3×) showing how many pixels a
-   character is.
-3. **Day and night:** do we want a daytime version? Is dusk the default?
-4. **T0 starting World:** a reference of the "small, complete, alive" three-agent start in both themes.
-5. **Construction mid-stages in isometric:** stages 2–4 and 8–9 aren't shown in ref 3d.
-6. **Exterior of Real HQ at T0 and T1:** the street context for a small office.
-7. **Fantasy terrain edge:** where the World ends. A cliff, forest, fog or map edge?
-8. **UI frame:** HUD and panel styling for the pixel look. No UI reference has been given yet.
-9. **Night lighting of Fantasy exteriors:** torch density along paths.
+These stay open until Reference Batch 2 or later.
+
+1. **Real T0 HQ:** the exact compact, finished three-agent HQ, inside and out.
+2. **Fantasy T0 settlement:** the exact compact outpost, small keep or workshop.
+3. **Real versions of ChatGPT, Claude and Codex:** how the King, dwarf and cyborg dress and equip for a technology
+   company while staying recognizable (C4).
+4. **Character pixel density:** how many art pixels tall a character is at default zoom, and how much detail fits.
+5. **Isometric construction stages:** especially the paired compositions (§17) and the stages ref 3d doesn't show.
+6. **Terrain boundaries:** where each World ends (cliff, forest, water, fog, map edge) at small and large sizes.
+7. **Real exterior architecture:** the street, plaza and façade at T0 and as it grows.
+8. **Fantasy exterior architecture:** walls, roofs and paths of the outpost as it grows.
+9. **UI and HUD:** panels, nameplates and status icons in the pixel language.
+10. **Lighting variations:** dusk showcase plus at least one other time, to prove the system isn't dusk-locked (C6).
+11. **Environmental detail:** close-ups of prop clusters and wall dressing for each workspace (Claude, Codex,
+    ChatGPT), in both themes.
+12. **Kyle avatar (C12)** and **room labels (C13):** still undecided. See §25.
 
 ---
 
-## 25. Conflicts between references (not silently resolved) [open]
+## 25. Reference conflicts and Kyle's decisions
 
-Agent leanings, which are not decisions:
-- **C1:** green and gold, keeping the ermine and sceptre.
-- **C2:** half-human with blue armour and ONE red eye. This uses ref 3c's body with ref 4's eye.
-- **C3:** bare-headed with a red beard; the hard hat appears only on construction sites.
-- **C4:** the same character in both themes.
-- **C5:** start small.
-- **C6:** dusk by default.
-- **C7:** no anonymous workers; rare critters are allowed.
-- **C8:** landscape flavour only, no rooms without a capability.
-- **C9:** authored pixel sprite sheets allowed in the repo for the core agents, with procedural parts for props and
-  future agents.
-- **C11:** no castle behind Real.
+Resolved by Kyle on 2026-10-01 at 00:12Z:
 
-| # | Conflict | Sources | Options (agent leaning, not a decision) |
-|---|---|---|---|
-| C1 | **King's palette:** green and gold with a green cape, *vs* blue robe with ermine trim | ref 4 and the earlier bible / ref 3c | Either works. Green keeps ChatGPT's established brand colour. |
-| C2 | **Codex's eye and build:** one red eye in an armoured blue helmet, *vs* a cyan-glowing eye with black hair and a mechanical arm, otherwise human | ref 4 / ref 3c, plus the 5G bible "half-human, ONE red eye, not a robot" | ref 3c fits "half-human" better; ref 4 fits "red eye". Possible blend: ref 3c's body with a red eye. |
-| C3 | **Claude's headgear:** an orange hard-hat helmet, *vs* bare red hair with a full beard | ref 4 / ref 3c | Possibly by context: hard hat during construction, bare-headed otherwise. |
-| C4 | **Real HQ characters:** ordinary humans at work, *vs* the dwarf, cyborg and King at modern desks | ref 1–2 / ref 3a and 3c | This is the biggest identity question. ref 3 suggests one identity across both themes, with only the environment translated. |
-| C5 | **Starting size:** a small T0 (camp, single room), *vs* the earlier decision "keep today's two-floor HQ as baseline" | ref 3d plus the Iteration 2 brief / Kyle decision 2026-09-29 | The newer brief ("small first") likely supersedes, but it was not explicitly revoked. |
-| C6 | **Time of day:** every reference is dusk or night | refs 1–3 | Fixed dusk, or a day/night cycle. |
-| C7 | **Non-agent people:** hardhat workers, a fisherman, a miner and NPCs fill refs 1–3, *vs* "only three agents" | refs 1–3 / Kyle's population rule | Are non-agent workers and critters allowed as ambient life? 5H currently has some. |
-| C8 | **Flavour spaces without a capability:** a gym, dock, caves, mine and a castle on the horizon, *vs* "no unnecessary departments" | refs 1–2 / Kyle | Allow landscape flavour (dock, water) but not rooms, unless a capability justifies them. |
-| C9 | **How sprites are authored:** the references are hand-pixelled (AI-generated) art, *vs* 5H's procedural, data-only, all-original rule | all refs / Kyle's "all assets original" | Options: (a) hand-authored pixel sprite data; (b) procedural pixel sprites from parts; (c) a hybrid, with authored core agents and procedural props and future agents. The references themselves can't be shipped. |
-| C10 | **Construction stage count:** 11 visual stages *vs* 9 canonical stages (6 looks in 5H) | Kyle's brief / `procgen/construction.mjs` | Lean: use the §17 grouping now, and add within-stage progress from HQ later for the 3/4, 6/7 and 9/10 splits. |
-| C12 | **Kyle avatar:** ref 4 includes an owner avatar | ref 4 / the three-agent population rule | Lean: no permanent avatar. Owner presence shows as the sealed scroll or flagged board item (§13). |
-| C13 | **Room labels:** refs 1–2 label rooms with signs (Servers, Gym), *vs* "identify rooms by props" | refs 1–2 / the Iteration 2 brief | Lean: no floating labels. Labels show on hover only, or as an in-world sign where a real building would have one. |
-| C11 | **Cross-theme backdrop:** the Real HQ references show a fantasy castle on the horizon | refs 1–2 | Keep the themes strictly separate, or allow a subtle backdrop nod. |
+| # | Conflict | Decision [Kyle] |
+|---|---|---|
+| C1 | ChatGPT's palette | **Green and gold** is the identity palette. Royal cream, gold and richer garment detail may be added; green stays recognizable. Neither reference is copied literally. |
+| C2 | Codex's design | **Half-human cyborg with ONE RED EYE.** A human or cybernetic body, not a full robot. The red eye is a permanent identity and silhouette feature. |
+| C3 | Claude's headgear | **Red or orange hair and a full beard.** A hard hat or helmet appears only while actively doing construction work. |
+| C4 | Real HQ character identity | **Identities persist across themes.** Never generic humans in Real. Real changes wardrobe, equipment and presentation for a technology company; Fantasy uses the stronger archetypes. The same individual is recognizable in both. |
+| C5 | Starting size | **Start small supersedes** the two-floor baseline as the starting state. The larger HQ is kept as an **earned growth stage**. Small is not primitive: Real T0 is a compact, finished small HQ; Fantasy T0 is a compact established outpost, small keep or workshop. Exact looks wait on references. |
+| C6 | Time of day | **Not locked to dusk.** The system must allow a future day/night cycle. Dusk is the showcase condition for now. No day/night system in this pass. |
+| C7 | Non-agent inhabitants | **Allowed, as ambient inhabitants strictly separate from agents.** They never masquerade as agents, receive fake work, imply nonexistent capabilities or distort the agent population. The agents are ChatGPT, Claude and Codex. |
+| C8 | Flavour spaces | **Environment is allowed and encouraged**, but it is not an operational facility. No department, specialized room or capability exists only because it looks cool. |
+| C9 | Sprite authoring | **Hybrid.** Bespoke authored identities for the core agents; a modular system (body plans, equipment, palettes, materials, props, animation, attachments) for everything reusable and for future agents, who can be refined later. All production art is original; references are never shipped or traced. |
+| C10 | Construction stages | **Canonical authority does not change.** Visual stages map underneath the canonical stages. Sub-stages are allowed only if they can be derived deterministically without false progress; otherwise the limitation is documented. Limitation and handling are in §17. |
+| C11 | Cross-theme backdrop | **No fantasy castle behind Real.** Each theme stays physically coherent. Subtle shared motifs are fine, but the settings never blend. |
+
+Still open:
+
+| # | Question | Agent leaning (not a decision) |
+|---|---|---|
+| C12 | **Kyle avatar:** ref 4 has an owner avatar. Does Kyle appear in the World? | No permanent avatar. Owner presence is shown by the sealed scroll or flagged board item (§13). |
+| C13 | **Room labels:** refs 1–2 use signs, but the brief wants rooms identified by props | No floating labels. Labels show on hover, or as an in-world sign where a real building would have one. |
 
 ---
 
 ## Next steps (only after approval)
-REFERENCES → **this spec** → review → more references or corrections → approved visual language → small
+REFERENCES → spec → review → **Reference Batch 2 (next)** → more references or corrections → approved visual language → small
 vertical-slice prototype (one room, three agents, both themes) → visual review → refinement → propagation. [Kyle]
 No implementation, no Pass 5I and no World-wide redesign until Kyle approves.
