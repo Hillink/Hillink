@@ -1,4 +1,4 @@
-# HILLINK ART DIRECTION SPEC — DRAFT 1 (revision 6)
+# HILLINK ART DIRECTION SPEC — DRAFT 1 (revision 7)
 
 Status: **the overall direction is approved by Kyle as a working foundation (2026-10-01 00:12Z). That is not approval to
 implement.** No artwork, no vertical slice and no Pass 5I until Kyle approves. Kyle's decisions are in §25. Questions
@@ -782,6 +782,8 @@ USE:
   - Real: a glass doorway on the inside, and a matching wall opening and canopy on the outside.
   - Fantasy: a timber-and-stone doorway with a banner on the inside, and a stone arch with a timber passage on the
     outside.
+  - *Limited by C29 (01:15Z): only the doorway and wall-opening forms are valid today. The canopy, the freestanding arch
+    and the timber passage need topology the planner doesn't model.*
 - **The environment responds (9D).**
   - Before: grass and trees.
   - During: cleared and disturbed ground, material staging, temporary paths and barriers.
@@ -812,7 +814,7 @@ DO NOT COPY:
 - **9E's mislabelled thumbnails.** The "Fantasy day" thumbnail shows the Real building.
 - **The exact wing shape, side, roofline, windows, landscaping, worker count and camera framing.**
 - **Building mutation.** For example, 9B's Fantasy T0 is a slate-roofed stone-and-timber hall, not 6C's crenellated
-  outpost (see C27).
+  outpost. C27: T0 stays the 6C outpost, and slate halls are additions only.
 - Generated text and malformed logos.
 
 HILLINK APPLICATION:
@@ -1230,7 +1232,7 @@ The pillars:
   - **War / command table (ChatGPT):** green and gold banners over a map table.
   - **Arcane-mechanical analysis station (Codex):** a contained blue/violet instrument glow and brass mechanisms.
   - **Arcane Core / Archive (infrastructure):** a pulsing contained crystal, rune columns and scroll shelving.
-  - **Gate:** a portcullis and torches.
+  - **Gate:** a portcullis and torches, only where the canonical layout has a gate or entrance (C29).
 
 ## 13. Real ↔ Fantasy translation rules
 
@@ -1303,11 +1305,15 @@ The pillars:
   tower or hall), each built through the §17 stages. This matches 5G/5H's existing building-and-room data.
 - [ref 3d] A building grows by adding modules to an existing one, not by replacing it.
 - [Kyle 01:09Z, ref 9C] **Connections between old and new are intentional, with no impossible geometry.**
-  - Real may use a doorway, a glass connector, a short corridor, a wall opening or a covered walkway.
-  - Fantasy may use a stone doorway, an arch, a timber passage, a courtyard connection, a covered walkway or a gate.
-  - [proposed] A connector is drawn only where the canonical layout has a door, corridor or path between the old and
-    new spaces. Its style comes from the theme and the connector's length (a door, a corridor or a covered walk).
-    T0's existing walls get one clean opening; they are never rebuilt.
+  - [Kyle C29, 01:15Z] **The renderer never invents topology.** The canonical planner decides the spatial
+    relationship, and the art translates it. Today the only valid connection types are the ones the planner produces:
+    **doors (a wall opening), corridors and paths**, plus its existing stair and road links.
+    - Real draws a door as a glass or solid modern door. Fantasy draws it as a stone or timber doorway, which may have
+      an arched head. This is styling of one canonical door, not new topology.
+    - Not drawn until the planner supports the topology: courtyards, bridges, covered walkways, glass connectors,
+      gates, freestanding arches, timber passages or other special connectors. They may become planner capabilities
+      later.
+  - [proposed] T0's existing walls get one clean opening where the canonical door is; they are never rebuilt.
 
 ## 16. Prop rules
 
@@ -1544,7 +1550,11 @@ never hides it.
   - **Fantasy T0 (6C):** a compact stone outpost with corner towers and a timber interior. Inside: three role corners
     (war/command table, forge, arcane-mechanical analysis station), the Arcane Core/Archive in the server bay's slot,
     one shared central table, and the same circulation and scale. Station contents per 7B.
-- [Kyle 01:09Z] The T0 → T1 step is defined in §18.1. [open] The Fantasy T0 exterior massing is in C27.
+- [Kyle 01:09Z] The T0 → T1 step is defined in §18.1.
+- [Kyle C27, 01:15Z] **Fantasy T0 is 6C's towered stone outpost.** It is never redesigned into the slate-roofed hall
+  drawn incidentally in References 8 and 9. Those references are authoritative for construction, growth, materials and
+  stage progression, not for T0's architecture. Slate-roofed halls, workshops, towers, chambers and other
+  planner-supported structures are allowed as **later additions**, and the original outpost is always preserved.
 - [code] The default simulation boots with only Claude and Codex (`sim/simulator.mjs` `SIM_ROSTER`). ChatGPT appears
   only when an evidence script registers it, so the three-agent start is not what you see on boot today. The vertical
   slice should register all three by default.
@@ -1594,6 +1604,15 @@ A player looking at T1 recognizes T0 inside it; it reads as "T0 grew", not "the 
 - a circulation connection
 
 What gets added depends on what the new capability requires. Not every expansion uses the same geometry.
+- [Kyle C29, 01:15Z] Of these forms, only the ones the planner can truthfully produce are drawn today. Courtyards and
+  bridges are not drawn until the planner models them.
+- [Kyle C28, 01:15Z] **Growth need not be visible outside.** When the planner legitimately expands or reorganizes
+  capacity inside an existing structure (`existing-room`, `subdivide`, and the interior of `add-floor` or
+  `add-basement`), that counts as growth.
+  - The exterior may stay nearly or completely unchanged.
+  - The interior shows the change.
+  - No wing, exterior construction, new building or scaffolding is ever fabricated for drama.
+  - Canonical truth wins.
 - [code] The 5A planner (`procgen/planner.mjs` `OPTIONS`) already chooses deterministically among these canonical
   growth forms, and the art follows whichever one it picks:
   - `existing-room`, `subdivide`, `add-wing`, `add-floor`, `add-basement`
@@ -1751,6 +1770,15 @@ state-appropriate effects change. Expansion geometry never depends on time of da
 ## 21. UI and status relationship to the World
 
 - [Kyle] **Diegetic first.** The World shows the activity, and icons reinforce it.
+- [Kyle 01:15Z] **World first, UI second.** The World is the primary visual experience.
+  - Status is communicated mainly through agent pose, location, animation, activity, held objects and environmental
+    interaction.
+  - UI clarifies canonical information. It never turns the World back into a dashboard covered in labels and panels.
+- [Kyle 01:15Z] **One product interface across themes.** The World changes its visual aliases; the Hillink product
+  interface stays recognizably the same product. Fantasy does **not** get a separate medieval or parchment
+  application UI, and two unrelated HUD systems are never designed.
+- [Kyle 01:15Z] **Provisional until Reference 10A/10B.** The items below are earlier proposals. The final HUD,
+  selection, hover, indicators, zoom and World boundaries wait for Reference 10.
 - [proposed] Priority, from first read to last:
   1. location and prop state (lit monitors, the forge burning, plans on the table)
   2. pose and clip (hammering, scanning, gesturing)
@@ -1815,16 +1843,15 @@ Resolved by refs 5–8:
 - construction at gameplay scale, its parity, and Claude's and Codex's construction roles (ref 8, §17.1)
 - ambient builders versus Claude (ref 8, C24)
 - the T0 → T1 growth step: additive growth, same plot, environment response, connections and parity (ref 9, §18.1)
+- Fantasy T0 architecture (C27), interior-only growth (C28) and planner-only connection types (C29)
 
 Still open:
 1. **Kyle's avatar** (C14). Not inferred from any reference.
-2. **UI/HUD** in the pixel language.
+2. **UI/HUD** in the pixel language. Awaits Reference 10A (Real) and 10B (Fantasy): gameplay zoom, HUD, selection,
+   hover, status indicators, World boundaries and composition. Not designed ahead of it.
 3. **The terrain-edge visual system** at T0 and as the World grows. Ref 9 shows the plot interior responding, not the World's outer edge.
 4. **The shared central zone in Fantasy:** 7B shows a central table and hearth but no clear Fantasy translation of
    Real's sofa and table (6C's red sofa is rejected). Low priority.
-5. **Fantasy T0 exterior massing** (C27).
-6. **Growth that needs no new exterior** (C28).
-7. **Connector and courtyard forms the planner can't express yet** (C29).
 
 ---
 
@@ -1858,20 +1885,20 @@ Resolved by Kyle on 2026-10-01 at 00:12Z:
 | C25 | Fantasy functional spaces (resolved 00:51Z) | **Four fixed mappings:** Real command/orchestration office ↔ Fantasy war/command table; Real construction/builder workshop ↔ Fantasy forge/artificer workshop; Real engineering/testing station ↔ Fantasy arcane-mechanical analysis station; Real server/infrastructure bay ↔ Fantasy Arcane Core/Archive. **Not separate canonical systems** (§13). 6C's monitors, office chairs and desk-like forge remain rejected. |
 | C26 | Fantasy banner colour (resolved 00:51Z) | **Fantasy organizational banners are GREEN and GOLD primary.** Blue is a **local secondary** only, for Codex, arcane energy, magical technical systems and accents (§12). The earlier blue-and-gold-heraldry leaning is withdrawn. |
 | C24 | Ambient builders vs Claude (resolved 01:01Z, ref 8) | **Ambient builders are allowed during construction as non-agent inhabitants.** They own no identity, task or capability, never advance construction, and never add to the agent count; their activity is downstream of canonical state. **Never Claude clones:** Real workers vary in skin tone, hair, facial hair, build, vest and hard-hat colour, tools and silhouette. Fantasy builders vary by trade, body, species where appropriate, clothing and equipment, and never repeat Fantasy Claude's dwarf-artificer identity (§20). |
+| C27 | Fantasy T0 architecture (resolved 01:15Z) | **Fantasy T0 is 6C's towered stone outpost.** It is not redesigned into the slate-roofed hall drawn incidentally in refs 8 and 9, which are authoritative for construction, growth, materials and stages, not T0 architecture. Slate halls, workshops, towers, chambers and other planner-supported structures are allowed as later additions, and T0 is always preserved (§18). |
+| C28 | Interior growth (resolved 01:15Z) | **Growth does not require a visible exterior expansion.** Legitimate interior expansion or reorganization by the planner counts as growth. No wing, exterior construction, new building or scaffolding is fabricated for drama. The exterior may stay unchanged, and the interior shows the change (§18.1). |
+| C29 | Connection types (resolved 01:15Z, for now) | **The art only draws connection types the planner truthfully produces:** doors, corridors, paths and existing stair and road links. No courtyards, bridges, covered walkways, gates or special connectors until the planner supports that topology. The planner decides the relationship, the art translates it, and the renderer never invents topology (§15). |
 | C13 | Room labels (resolved 2026-10-01 00:25Z) | **Environment first, text second.** Rooms are recognized by their physical design. Labels may appear on hover, on selection, in the inspector, in a map view, or as subtle architectural signage. No large permanent floating labels. |
 
 Still open:
 
 | # | Question | Agent leaning (not a decision) |
 |---|---|---|
-| C27 | **Fantasy T0 exterior massing (ref 9, 01:09Z):** 6C's Fantasy T0 is a crenellated stone outpost with corner towers. 8B scene 4 and 9B show a slate-roofed stone-and-timber hall instead. | 6C stays authoritative for T0 (Kyle's reference authority). Slate-roofed stone-and-timber massing is allowed for **additions**, so T1 still visibly contains the towered outpost. Needs Kyle's confirmation. |
-| C28 | **Growth with no new exterior (ref 9):** the planner's cheapest feasible option may be `existing-room`, `subdivide`, `add-floor` or `add-basement`, so T1 may show little or no new exterior. | Any completed canonical expansion counts as T1. Interior growth is drawn with the §17.1 interior scenes, staging shows at the entrance, and the new rooms light up. The art never fakes an exterior wing. |
-| C29 | **Connector and courtyard forms (ref 9):** the planner has no courtyard, bridge, glass-connector or covered-walkway option, and `add-wing` always extends to the rear along the corridor. | The art draws connectors only from canonical doors, corridors and paths (§15). New geometric forms would be planner work in a later pass, not art. |
 | C14 | **Kyle avatar appearance:** how Kyle looks, and how his avatar stays clearly separate from agents. Not to be inferred from any reference [Kyle 00:51Z]. | A distinct human owner silhouette, visible only during owner interactions (C12). Never in a black suit, hard hat or glasses, so he can't be mistaken for a Real alias. |
 
 ---
 
 ## Next steps (only after approval)
-REFERENCES → spec → review → Reference Batch 2C (7A/7B, done) → Reference 8 (construction, done) → Reference 9 (T0 → T1 growth, done) → **full gameplay screen, both themes (next):** T0 at default zoom with the HUD, hover and selection, status icons, the World's terrain edge and the Fantasy T0 exterior (settles UI/HUD, terrain edges and C27) → more references or corrections → approved visual language → small
+REFERENCES → spec → review → Reference Batch 2C (7A/7B, done) → Reference 8 (construction, done) → Reference 9 (T0 → T1 growth, done) → **Reference 10A (Real) + 10B (Fantasy) gameplay presentation (next, from Kyle)** → more references or corrections → approved visual language → small
 vertical-slice prototype (one room, three agents, both themes) → visual review → refinement → propagation. [Kyle]
 No implementation, no Pass 5I and no World-wide redesign until Kyle approves.
