@@ -1,0 +1,4 @@
+# Pinned for repeatable output (Blender as a Python module; Python 3.11).
+bpy==5.0.1
+numpy==1.26.4
+pillow==12.3.0
