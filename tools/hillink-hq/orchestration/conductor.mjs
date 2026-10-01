@@ -34,7 +34,8 @@ export class Conductor {
     const input = validateObjectiveInput(raw);
     const open = Object.values(this.state.objectives ?? {}).filter(o => !TERMINAL.has(o.status)).length;
     if (open >= this.limits.maxActiveObjectives) throw Error(`HQ already has ${open} open objectives (limit ${this.limits.maxActiveObjectives}); finish or cancel one first.`);
-    if (requestedBy && (!this.state.agents[requestedBy.agentId] || !this.state.tasks[requestedBy.taskId])) throw Error('Unknown requesting agent or task');
+    // taskId null = ChatGPT through the connector ingress (ingress/mcp-ingress.mjs): no HQ orchestration turn is calling.
+    if (requestedBy && (!this.state.agents[requestedBy.agentId] || (requestedBy.taskId !== null && !this.state.tasks[requestedBy.taskId]))) throw Error('Unknown requesting agent or task');
     const id = randomUUID();
     this.engine.emit('OBJECTIVE_CREATED', { id, input, requestedBy, limits: { ...this.limits }, deadlineAt: this.now() + this.limits.deadlineMs });
     return id;

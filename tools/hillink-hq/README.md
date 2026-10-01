@@ -74,6 +74,31 @@ Evidence is real: the CLI's session start is the ACK, the live process sends hea
 - **Scheduling:** it's a remote adapter, so it takes no local-process slot. A question to ChatGPT never waits behind a local run.
 - **The key:** read from HQ's environment and sent only to api.openai.com. It is never journaled, logged or returned, and OpenAI error text is redacted.
 
+## ChatGPT connector ingress (subscription, $0)
+
+This lets ChatGPT on Kyle's subscription submit and follow objectives itself, without Kyle relaying anything and without a metered OpenAI API call. It is a remote MCP server (`ingress/mcp-ingress.mjs`) that exposes exactly four of the orchestrator's tools: `submit_objective`, `get_objective`, `get_task` and `get_hq_state`. They run through the same `createToolbox` validation and the same conductor policy.
+
+- **No approval tool.** There is no approval, merge, deploy, spend or cancel tool. Gates stay Kyle's (`POST /api/objectives/approve`).
+- **Attribution.** Objectives arrive as `requestedBy { agentId: 'chatgpt', taskId: null }`.
+- **Off by default.** Enable it with `HQ_INGRESS_ENABLED=1`.
+- **Binding.** It listens on `127.0.0.1:${HQ_INGRESS_PORT:-4313}`, never on another interface.
+- **Auth.** A 256-bit secret in the path, `/mcp/<token>`, compared in constant time. Anything else gets a bare 404.
+  - The token comes from `HQ_INGRESS_TOKEN` (43–128 URL-safe characters), or from `<state dir>/ingress-token`. HQ creates that file once with mode 0600 and reuses it, so the connector URL survives restarts.
+  - HQ never prints, logs or returns the token, and it is not the browser session token.
+- **Limits.** 64 KiB bodies, 120 requests a minute, 5 objective submissions a minute, and HQ's own open-objective limit.
+- **Transport.** MCP Streamable HTTP, POST JSON-RPC with JSON responses (no SSE stream). Checked with the official MCP TypeScript SDK client 1.31.0.
+
+To connect ChatGPT:
+
+1. Start HQ with `HQ_INGRESS_ENABLED=1`, and with `HQ_IMPLEMENTATION_ENABLED=1` so Claude takes the implementation steps. It prints `ChatGPT ingress: ENABLED on http://127.0.0.1:4313/mcp/<token> (token in …\ingress-token)`.
+2. Run a tunnel to that port, for example `cloudflared tunnel --url http://127.0.0.1:4313` (install with `winget install Cloudflare.cloudflared`).
+   - A quick tunnel prints a new `https://<name>.trycloudflare.com` address every time it starts.
+   - A named Cloudflare tunnel keeps one address.
+3. In ChatGPT, open Settings, then Apps & Connectors, then Advanced, and turn on Developer mode. Create a connector with:
+   - URL: `https://<tunnel address>/mcp/<token>`
+   - Authentication: none (the secret URL is the credential)
+4. Anyone with the full URL can submit objectives, so treat it like a password. To revoke it, delete `ingress-token` (or change `HQ_INGRESS_TOKEN`) and restart HQ.
+
 ## Claude implementation tasks (Pass 2.6)
 
 With `HQ_AGENTS_ENABLED=1` (or `HQ_IMPLEMENTATION_ENABLED=1`), Claude can take bounded implementation tasks, operation `implement-repo`. The safety class is `local-worktree-write`, which only this operation may use. ChatGPT asks through `request_implementation`, which can only go to Claude. The engine also refuses the operation for any agent without the `implement-repo` capability, which only Claude gets, so Codex can never be assigned one.
