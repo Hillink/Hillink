@@ -1,4 +1,4 @@
-# HILLINK ART DIRECTION SPEC — DRAFT 1 (revision 5)
+# HILLINK ART DIRECTION SPEC — DRAFT 1 (revision 6)
 
 Status: **the overall direction is approved by Kyle as a working foundation (2026-10-01 00:12Z). That is not approval to
 implement.** No artwork, no vertical slice and no Pass 5I until Kyle approves. Kyle's decisions are in §25. Questions
@@ -12,13 +12,14 @@ that need more references stay [open] (§24).
 - **7A** for Real functional spaces (workstations, server bay, Real prop families) [Kyle 00:51Z].
 - **7B** for Fantasy functional spaces (workstations, Arcane Core/Archive, Fantasy prop families, banners) [Kyle 00:51Z].
 - **8** for the construction system in both themes (scenes, parity, roles, ambient workers, construction props) [Kyle 01:01Z]. Its exact building is illustrative.
+- **9** for the world-growth system T0 → T1 (additive growth, same plot, environment response, connections, parity) [Kyle 01:09Z]. It is a system and grammar, not a mockup.
 
 Earlier references stay valid for what they were approved for. Where an older *character* reference conflicts with 6B or
 6D, 6B or 6D wins. Where a generated incidental detail conflicts with this spec, the spec wins.
 
 Written 2026-10-01 on `claude/world-5h`, in answer to "PASS 5H — ITERATION 2" (Kyle, 2026-10-01 00:06Z).
 
-References are stored in `docs/world/references/pass5h-iter2/` (ref1–ref6, `ref6r-6a-6d-aliases.png`, `ref7a-real-functional-spaces.png`, `ref7b-fantasy-functional-spaces.png` and `ref8-construction-gameplay-scale.png`). The 5H iteration 1 evidence it is compared
+References are stored in `docs/world/references/pass5h-iter2/` (ref1–ref6, `ref6r-6a-6d-aliases.png`, `ref7a-real-functional-spaces.png`, `ref7b-fantasy-functional-spaces.png` `ref8-construction-gameplay-scale.png` and `ref9-world-growth-t0-t1.png`). The 5H iteration 1 evidence it is compared
 against is in `docs/world/evidence/pass5h/`.
 
 Every rule carries one of these labels:
@@ -755,6 +756,69 @@ HILLINK APPLICATION:
 - **§16:** the construction prop families.
 - **§9:** construction lighting.
 
+### REFERENCE 9: world growth T0 → T1, Real and Fantasy (`ref9-world-growth-t0-t1.png`) [Kyle, 2026-10-01 01:09Z]
+
+The board covers both themes on the same plot. It has seven panels:
+- **9A:** the Real sequence, from T0 to an expansion under construction to T1.
+- **9B:** the same sequence in Fantasy.
+- **9C:** interior and exterior connections between old and new, in both themes.
+- **9D:** the environment before, during and after construction.
+- **9E:** the same scene at day, dusk and night.
+- **9F:** a 24 px character scale strip.
+- **9G:** eight growth principles.
+
+It is authoritative **for the system and visual grammar only**. It is not a mockup [Kyle]. The exact building,
+expansion shape, landscaping, windows, roof, worker positions, furniture, camera framing and prop placement are not
+to be reproduced.
+
+USE:
+- **Additive growth on the same plot.** In 9A.1 → 9A.3 and 9B.1 → 9B.3, the original building stays in place and is
+  recognizable, and the new wing physically attaches to it. T1 reads as "T0 grew".
+- **Construction uses Reference 8's language** while the wing is built.
+  - Real (9A.2): a steel frame, a lift, a forklift, barriers and work lights.
+  - Fantasy (9B.2): timber framing on stone, scaffolding and material carts.
+  - In both, the original building stays lit and in use.
+- **Intentional connections (9C).**
+  - Real: a glass doorway on the inside, and a matching wall opening and canopy on the outside.
+  - Fantasy: a timber-and-stone doorway with a banner on the inside, and a stone arch with a timber passage on the
+    outside.
+- **The environment responds (9D).**
+  - Before: grass and trees.
+  - During: cleared and disturbed ground, material staging, temporary paths and barriers.
+  - After: permanent paving, planters and new vegetation, exterior lights, and fence or wall extensions.
+- **Same art at day, dusk and night (9E).** At night Real uses work lights and Fantasy uses torches.
+- **Scale continuity (9F).** Characters stay 24 px as the World grows.
+- **9G principles.** All eight match Kyle's brief: same plot, additive and connected, environment changes, staged
+  construction, one canonical expansion in both themes, 24 px, day/dusk/night, and growth meaning a capability or
+  workspace rather than a specific agent.
+
+DO NOT COPY:
+- **Agent duplication and an implied Agent #4.**
+  - 9A.3 shows several black-suit figures, so multiple Real ChatGPTs.
+  - 9B.3 shows several green-robed King-like figures and several dark Codex-like figures.
+  - 9B.2 shows several red-bearded dwarf-like builders, which are Claude clones (C24).
+  - The canonical agents are ChatGPT, Claude and Codex, one of each. The new wing is a capability or workspace, not a
+    fourth agent.
+- **Large green and gold fabric banners on the Real exterior** (9A.1, 9A.3). Real branding stays understated and
+  modern (C22, §11).
+- **9A.1's dark annex beside Real T0.** Real T0 is one modest building (6A, C16). The annex is a generation artifact,
+  not part of T0.
+- **The blue crystal obelisk or fountain in the 9B.3 courtyard as a capability.** An outdoor arcane object is
+  environment only (C8). It must not imply the Arcane Core or any capability unless canonical state places one
+  there.
+- **9E's mislabelled thumbnails.** The "Fantasy day" thumbnail shows the Real building.
+- **The exact wing shape, side, roofline, windows, landscaping, worker count and camera framing.**
+- **Building mutation.** For example, 9B's Fantasy T0 is a slate-roofed stone-and-timber hall, not 6C's crenellated
+  outpost (see C27).
+- Generated text and malformed logos.
+
+HILLINK APPLICATION:
+- **§18:** T0 and T1 definitions, the additive and same-plot rules, preservation of the original, semantic growth
+  parity, procedural growth requirements, authored constraints, and the "no Agent #4" rule.
+- **§14:** how the environment responds to growth.
+- **§15:** old-to-new connection rules.
+- **§17.1:** construction of the new structure (reused, unchanged).
+
 ---
 
 ## 0. One canonical agent, two visual aliases [Kyle, 2026-10-01 00:13Z]
@@ -1216,6 +1280,15 @@ The pillars:
   - So a scenic cave is fine, but a working mining department is not. A pond or dock is fine, but a dedicated facility
     must match a real capability.
 - [proposed] Flavour terrain never carries a capability label, workstation or agent destination.
+- [Kyle 01:09Z, ref 9D] **The environment responds to growth.** An expansion changes its surroundings, not only the
+  building. A finished expansion is settled into the World, never pasted onto the map.
+  - **During construction:** disturbed ground, cleared vegetation, temporary paths, material staging, barriers,
+    scaffolding, temporary lighting, worker circulation and equipment.
+  - **After construction:** permanent paths, landscaping, new planting, exterior lighting, benches, drainage, fencing
+    or walls, signs, infrastructure and circulation routes.
+  - [proposed] These change only with the canonical project's stage and its paths, roads and clearing (5A
+    `entrancePath`, `routeTo`, `clearEnvironment`), never with the clock. New planting starts small and does not grow
+    on a timer.
 
 ## 15. Architecture rules
 
@@ -1226,6 +1299,12 @@ The pillars:
 - [proposed] **Modular construction:** buildings are assembled from footprint modules (a room, corridor, stair core,
   tower or hall), each built through the §17 stages. This matches 5G/5H's existing building-and-room data.
 - [ref 3d] A building grows by adding modules to an existing one, not by replacing it.
+- [Kyle 01:09Z, ref 9C] **Connections between old and new are intentional, with no impossible geometry.**
+  - Real may use a doorway, a glass connector, a short corridor, a wall opening or a covered walkway.
+  - Fantasy may use a stone doorway, an arch, a timber passage, a courtyard connection, a covered walkway or a gate.
+  - [proposed] A connector is drawn only where the canonical layout has a door, corridor or path between the old and
+    new spaces. Its style comes from the theme and the connector's length (a door, a corridor or a covered walk).
+    T0's existing walls get one clean opening; they are never rebuilt.
 
 ## 16. Prop rules
 
@@ -1432,13 +1511,13 @@ changes (§9). At night, Real adds work lights and Fantasy adds torches and lant
 never hides it.
 
 **Scope** [Kyle]. Reference 8 answers how *one structure* is built. It does **not** define how the whole World expands
-(T0 → T1 stays open, §18, §24).
+(T0 → T1 is defined separately by Reference 9, §18.1).
 
 ## 18. Procedural expansion rules (World growth)
 
-- [Kyle] Progression: need or capability emerges → an agent is added → construction → the space becomes operational →
-  the agent moves in.
-- [proposed] **Growth tiers** (visual names; canonical capability drives them):
+- [Kyle, refined 01:09Z] Progression: need or capability emerges → an agent **may** be added if required →
+  construction or expansion → the workspace becomes available (operational) → an agent inhabits or uses it.
+- [proposed, **contents superseded** by 6A/6C T0 and §18.1] **Growth tiers.** These are visual names only, and canonical capability drives them. The T0 and T1 cells below are historical; T2+ are indicative scale only:
 
   | Tier | Real | Fantasy |
   |---|---|---|
@@ -1462,12 +1541,128 @@ never hides it.
   - **Fantasy T0 (6C):** a compact stone outpost with corner towers and a timber interior. Inside: three role corners
     (war/command table, forge, arcane-mechanical analysis station), the Arcane Core/Archive in the server bay's slot,
     one shared central table, and the same circulation and scale. Station contents per 7B.
-- [open] Exact exteriors at gameplay zoom, and the T0 → T1 step, still need references.
+- [Kyle 01:09Z] The T0 → T1 step is defined in §18.1. [open] The Fantasy T0 exterior massing is in C27.
 - [code] The default simulation boots with only Claude and Codex (`sim/simulator.mjs` `SIM_ROSTER`). ChatGPT appears
   only when an evidence script registers it, so the three-agent start is not what you see on boot today. The vertical
   slice should register all three by default.
 - [proposed] Slots for growth come from deterministic layout rules, as in 5G's procedural layout. The empty land
   around the starting World is **wild terrain**, not reserved blank plots, so a small World doesn't look unfinished.
+
+### 18.1 Reference 9: the first growth step, T0 → T1 [Kyle 01:09Z, ref 9]
+
+**Definitions** [Kyle]:
+- **T0** is the smallest complete starting Hillink organization: ChatGPT, Claude and Codex in one compact, finished
+  building. Real T0 is 6A and Fantasy T0 is 6C, with stations per 7A and 7B. It is intentionally small but complete.
+- **T1** is the **first meaningful organizational expansion**. It happens only because Hillink gains a legitimate new
+  need, capability, workspace or agent. T1 is never:
+  - a replacement map
+  - a redesigned T0
+  - an arbitrary visual upgrade
+  - a bigger building because time passed
+- [proposed] Tiers are **derived, never stored or advanced by art**. A World's tier is the number of completed
+  canonical expansions beyond T0. T1 is the World after its first expansion becomes `operational`.
+- Higher tiers are further expansions under the same rules. The names in the tier table above (T2 "specialized" and
+  so on) are indicative only.
+
+**Additive-growth rule** [Kyle]. The sequence is:
+1. T0
+2. a new need or capability
+3. an expansion is required
+4. construction (§17.1)
+5. T1
+
+A player looking at T1 recognizes T0 inside it; it reads as "T0 grew", not "the game loaded a different HQ".
+
+**Same plot, and the original is preserved** [Kyle]:
+- Growth happens on the same physical plot.
+- The original structure stays recognizable throughout: during construction, and in T1, it keeps its footprint,
+  openings, materials, branding and stations.
+- T0 is never redesigned or replaced because T1 exists.
+- In Fantasy, the outpost is never replaced by an unrelated larger castle.
+
+**Forms of growth** [Kyle]. Growth may add:
+- a wing or an attached room
+- a separate nearby structure
+- a courtyard
+- a path or bridge
+- infrastructure or exterior equipment
+- landscaping
+- a wall or fence extension
+- a circulation connection
+
+What gets added depends on what the new capability requires. Not every expansion uses the same geometry.
+- [code] The 5A planner (`procgen/planner.mjs` `OPTIONS`) already chooses deterministically among these canonical
+  growth forms, and the art follows whichever one it picks:
+  - `existing-room`, `subdivide`, `add-wing`, `add-floor`, `add-basement`
+  - `new-building`, `new-district`, `outdoor-plot`
+  - Planning never changes the World; `applyPlan` tags each new structure with its construction project.
+
+**Real ↔ Fantasy growth parity** [Kyle]:
+- One canonical expansion has two visual translations. For example, Real adds a modern workspace to the HQ while
+  Fantasy adds the equivalent structure to the outpost.
+- They need **not** match in shape, objects, materials or architecture.
+- They **must** show the same canonical need, the same capability, the same growth event and the same completion
+  state.
+- [proposed] Both themes come from the same canonical footprint and connection. They may differ in massing on top of
+  it (roof form, towers, arches), never in where the space is or whether it exists.
+
+**No Agent #4** [Kyle]:
+- Reference 9 canonizes no fourth agent. Its expansion stands for a **new capability or workspace**.
+- The future flow is:
+  1. a need or capability emerges
+  2. an agent *may* be added, if one is required
+  3. construction or expansion
+  4. the workspace becomes available
+  5. an agent inhabits or uses it
+- Nothing in the art hard-codes a specific fourth agent.
+- A new workspace with no assigned agent is drawn furnished, lit at a reduced level, and unoccupied. It is never
+  staffed with placeholder people.
+
+**Reference 8 still governs the new structure** [Kyle]:
+- Claude builds.
+- Ambient workers may assist (C24).
+- Codex appears for legitimate inspection or verification.
+- Canonical stage authority is unchanged.
+- Blocked or waiting construction visibly stops.
+- Visuals never advance state.
+- [proposed] T0 keeps operating during construction. Its agents keep their canonical activity, and only the agent
+  canonical state sends to the site goes there.
+
+**Procedural growth with authored constraints** [Kyle]. Do not hard-code "T1 always adds this wing". The system
+chooses the expansion from:
+- available space and terrain
+- the required capability and workspace type
+- the current building configuration
+- connection requirements
+- theme and growth tier
+
+That needs a modular visual kit, per theme:
+- wall sections, floors and roofs
+- connectors, doors and windows
+- paths and terrain transitions
+- infrastructure
+- prop families
+- construction states
+
+[proposed] Constraints the result must pass. They are deterministic and testable, not pixel tests:
+- **Connected.** Every new space reaches the existing circulation through a door or connector. There are no
+  inaccessible rooms and no orphan buildings without a path.
+- **Unobstructed.** No door, path or walk node is blocked by structure, props, construction staging or landscaping.
+- **No overlap.** New structures never overlap old ones, roads, water or other plots.
+- **Material grammar.** An addition uses its theme's materials (§8, §15). An addition may vary the massing, but it
+  continues T0's base, wall and roof language. Fantasy additions never introduce modern objects, and Real additions
+  never introduce fantasy ones.
+- **Composition.** Additions avoid both mirror symmetry and random jitter. They align to T0's grid and eave or parapet
+  lines, they step down rather than tower over T0 at T1, and they keep T0's front and entrance as the main face.
+- **Deterministic.** The same canonical World always produces the same growth. There is no randomness outside the
+  seeded RNG, and nothing depends on time of day.
+
+**Scale continuity** [Kyle]. The World grows; characters stay 24 px. There is no camera scale change, furniture scale
+drift or larger sprite because the World got larger. Zooming out to show a bigger World is a camera framing choice
+(5H `frames()`), never a change of art scale.
+
+**Time of day** [Kyle]. T0, construction and T1 all work at day, dusk and night with the same art. Only lighting and
+state-appropriate effects change. Expansion geometry never depends on time of day.
 
 ## 19. Future-agent visual-generation rules
 
@@ -1579,8 +1774,8 @@ never hides it.
 - **Density:** isolated props in open floors become clustered, wall-heavy dressing with story props bound to state.
 - **Lighting:** even lighting becomes warm local pools against a dusk ambient, with light meaning activity.
 - **Construction:** 6 visual looks become Reference 8's 7 scenes (11 brief stages at the finest grain) over the 9 unchanged canonical stages, with scaffolds, materials, Claude building, Codex inspecting, and a non-agent ambient crew.
-- **Starting World:** [Kyle C5] a compact, finished T0 that grows. The current two-floor HQ becomes an earned later
-  stage.
+- **Starting World:** [Kyle C5] a compact, finished T0 that grows additively on the same plot (§18.1). The current
+  two-floor HQ becomes an earned later stage.
 - **Ambient life:** [Kyle C7] ambient inhabitants are strictly separate from agents.
 - **Population:** simulation and evidence default to three agents. The other characters appear only in a scalability
   demo.
@@ -1616,15 +1811,17 @@ Resolved by refs 5–8:
 - Fantasy banner colour (C26)
 - construction at gameplay scale, its parity, and Claude's and Codex's construction roles (ref 8, §17.1)
 - ambient builders versus Claude (ref 8, C24)
+- the T0 → T1 growth step: additive growth, same plot, environment response, connections and parity (ref 9, §18.1)
 
 Still open:
 1. **Kyle's avatar** (C14). Not inferred from any reference.
 2. **UI/HUD** in the pixel language.
-3. **Terrain edges** at T0 and as the World grows.
-4. **The T0 → T1 world growth step** in each theme. Reference 8 shows how one structure is built, not how the World
-   expands.
-5. **The shared central zone in Fantasy:** 7B shows a central table and hearth but no clear Fantasy translation of
+3. **The terrain-edge visual system** at T0 and as the World grows. Ref 9 shows the plot interior responding, not the World's outer edge.
+4. **The shared central zone in Fantasy:** 7B shows a central table and hearth but no clear Fantasy translation of
    Real's sofa and table (6C's red sofa is rejected). Low priority.
+5. **Fantasy T0 exterior massing** (C27).
+6. **Growth that needs no new exterior** (C28).
+7. **Connector and courtyard forms the planner can't express yet** (C29).
 
 ---
 
@@ -1664,11 +1861,14 @@ Still open:
 
 | # | Question | Agent leaning (not a decision) |
 |---|---|---|
+| C27 | **Fantasy T0 exterior massing (ref 9, 01:09Z):** 6C's Fantasy T0 is a crenellated stone outpost with corner towers. 8B scene 4 and 9B show a slate-roofed stone-and-timber hall instead. | 6C stays authoritative for T0 (Kyle's reference authority). Slate-roofed stone-and-timber massing is allowed for **additions**, so T1 still visibly contains the towered outpost. Needs Kyle's confirmation. |
+| C28 | **Growth with no new exterior (ref 9):** the planner's cheapest feasible option may be `existing-room`, `subdivide`, `add-floor` or `add-basement`, so T1 may show little or no new exterior. | Any completed canonical expansion counts as T1. Interior growth is drawn with the §17.1 interior scenes, staging shows at the entrance, and the new rooms light up. The art never fakes an exterior wing. |
+| C29 | **Connector and courtyard forms (ref 9):** the planner has no courtyard, bridge, glass-connector or covered-walkway option, and `add-wing` always extends to the rear along the corridor. | The art draws connectors only from canonical doors, corridors and paths (§15). New geometric forms would be planner work in a later pass, not art. |
 | C14 | **Kyle avatar appearance:** how Kyle looks, and how his avatar stays clearly separate from agents. Not to be inferred from any reference [Kyle 00:51Z]. | A distinct human owner silhouette, visible only during owner interactions (C12). Never in a black suit, hard hat or glasses, so he can't be mistaken for a Real alias. |
 
 ---
 
 ## Next steps (only after approval)
-REFERENCES → spec → review → Reference Batch 2C (7A/7B, done) → Reference 8 (construction, done) → **T0 → T1 world-growth reference (next)** → more references or corrections → approved visual language → small
+REFERENCES → spec → review → Reference Batch 2C (7A/7B, done) → Reference 8 (construction, done) → Reference 9 (T0 → T1 growth, done) → **full gameplay screen, both themes (next):** T0 at default zoom with the HUD, hover and selection, status icons, the World's terrain edge and the Fantasy T0 exterior (settles UI/HUD, terrain edges and C27) → more references or corrections → approved visual language → small
 vertical-slice prototype (one room, three agents, both themes) → visual review → refinement → propagation. [Kyle]
 No implementation, no Pass 5I and no World-wide redesign until Kyle approves.
