@@ -2174,6 +2174,24 @@ them.
   - Recommendation: a small, deterministic, tested procgen seed and config change, so that meeting and break share one
     space and the result is one compact storey. The renderer must not merge rooms itself (C29).
   - Also: `SIM_ROSTER` must register all three agents (§18).
+- **P3. ChatGPT's canonical workstation is not the command space.**
+  - `core/agents.mjs` gives ChatGPT `workstation: { kind: 'reception', location: 'queue' }` and the role text
+    "Workspace: Lobby reception". Claude and Codex have plain `desk` stations.
+  - 7A/7B put ChatGPT at the command office / war table, which the T0 seed's `command` capability provides. If the
+    definition is left alone, the renderer would either seat him at a reception desk or have to move him itself,
+    which would invent his location (§17.1 rule).
+  - Recommendation: a small canonical definition change binding ChatGPT's station to the `command` space, and each
+    of the three stations to its capability, tested like P2.
+- **P4. C30 naming collision between canonical names and art vocabulary.**
+  - Canonically, `engineering` is **Claude's** making space and `review` is **Codex's** (`procgen/capabilities.mjs`;
+    `contract.mjs` maps implementing → engineering, testing and reviewing → review).
+  - The spec's art vocabulary (6B, 7A, C25) calls Real Codex "Engineer" and his station the "engineering / testing
+    station", and Claude's the "construction / builder workshop".
+  - Under C30 the UI shows canonical names, so Claude's workspace would be labelled "Engineering" while the art
+    presents Codex as the engineer. That is a visible mismatch in the slice's select card.
+  - Options for Kyle: (a) give capabilities a canonical display name (one name, identical in both themes, so C30
+    holds), e.g. `engineering` → "Build Workshop", `review` → "Engineering & Testing"; or (b) keep canonical names and
+    rename the art vocabulary so Codex's station is the "review / testing station". Not decided here.
 
 **Not blocking:**
 - C14 (Kyle's avatar), deferred by Kyle.
