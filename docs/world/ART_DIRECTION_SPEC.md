@@ -1,4 +1,4 @@
-# HILLINK ART DIRECTION SPEC — DRAFT 1 (revision 7)
+# HILLINK ART DIRECTION SPEC — DRAFT 1 (revision 8)
 
 Status: **the overall direction is approved by Kyle as a working foundation (2026-10-01 00:12Z). That is not approval to
 implement.** No artwork, no vertical slice and no Pass 5I until Kyle approves. Kyle's decisions are in §25. Questions
@@ -13,13 +13,14 @@ that need more references stay [open] (§24).
 - **7B** for Fantasy functional spaces (workstations, Arcane Core/Archive, Fantasy prop families, banners) [Kyle 00:51Z].
 - **8** for the construction system in both themes (scenes, parity, roles, ambient workers, construction props) [Kyle 01:01Z]. Its exact building is illustrative.
 - **9** for the world-growth system T0 → T1 (additive growth, same plot, environment response, connections, parity) [Kyle 01:09Z]. It is a system and grammar, not a mockup.
+- **10A / 10B** for gameplay presentation in normal use (composition, UI hierarchy, selection, disclosure, World edge, parity) [Kyle 01:34Z]. Conceptual; no exact geometry, labels or mechanics.
 
 Earlier references stay valid for what they were approved for. Where an older *character* reference conflicts with 6B or
 6D, 6B or 6D wins. Where a generated incidental detail conflicts with this spec, the spec wins.
 
 Written 2026-10-01 on `claude/world-5h`, in answer to "PASS 5H — ITERATION 2" (Kyle, 2026-10-01 00:06Z).
 
-References are stored in `docs/world/references/pass5h-iter2/` (ref1–ref6, `ref6r-6a-6d-aliases.png`, `ref7a-real-functional-spaces.png`, `ref7b-fantasy-functional-spaces.png` `ref8-construction-gameplay-scale.png` and `ref9-world-growth-t0-t1.png`). The 5H iteration 1 evidence it is compared
+References are stored in `docs/world/references/pass5h-iter2/` (ref1–ref6, `ref6r-6a-6d-aliases.png`, `ref7a-real-functional-spaces.png`, `ref7b-fantasy-functional-spaces.png` `ref8-construction-gameplay-scale.png` `ref9-world-growth-t0-t1.png`, `ref10a-real-gameplay.png` and `ref10b-fantasy-gameplay.png`). The 5H iteration 1 evidence it is compared
 against is in `docs/world/evidence/pass5h/`.
 
 Every rule carries one of these labels:
@@ -550,7 +551,7 @@ DO NOT COPY:
 HILLINK APPLICATION:
 - These are the Fantasy aliases in §4.
 - The exact balance of arcane and mechanical in Fantasy Codex was open here; **resolved by C23 (00:51Z):** an
-  arcane-mechanical hybrid with one red eye (§4).
+  arcane-mechanical hybrid with one red eye (§4). Corrected 01:34Z: a cyborg with a half-mechanical face (§4, C23).
 
 ### REFERENCE 7A: Real T0 functional spaces (`ref7a-real-functional-spaces.png`) [Kyle, 2026-10-01 00:51Z]
 
@@ -824,6 +825,86 @@ HILLINK APPLICATION:
 - **§15:** old-to-new connection rules.
 - **§17.1:** construction of the new structure (reused, unchanged).
 
+### REFERENCE 10A + 10B: gameplay presentation, Real and Fantasy (`ref10a-real-gameplay.png`, `ref10b-fantasy-gameplay.png`) [Kyle, 2026-10-01 01:34Z]
+
+These are the first references of Hillink World **in normal use**: one full screen per theme, at the same moment and
+with the same UI. Each screen has:
+- a top product bar
+- the World filling the screen
+- small name chips over the three agents
+- Claude selected, with a ring and a context card
+- a minimap with zoom buttons at bottom left
+- an agent roster at bottom right
+
+They are conceptual. They are authoritative for composition, information hierarchy, gameplay scale, UI philosophy,
+selection, hover and detail behaviour, status presentation, environmental framing, the land edge, and Real/Fantasy
+parity. They are **not** authoritative for any exact geometry, label, number or mechanic [Kyle].
+
+**10A, Real**
+
+USE:
+- **Composition.** The HQ sits in the middle of a living environment: trees, paths, planters, lamps, rocks and water.
+  The World covers almost the whole screen, and the persistent UI hugs the edges.
+- **Readable cutaway interiors** with warm practical light and visible functional spaces (§11).
+- **Agents small relative to the environment**, identifiable at this zoom by silhouette (§4) and a compact chip.
+- **The 6B aliases**: ChatGPT in a black suit, Claude in a hard hat and workwear, Codex with glasses and a tablet.
+
+DO NOT COPY:
+- **T0 inflation.** The HQ has several rooms and wings, a parking lot with two trucks, and an outdoor fire pit lounge.
+  That is larger than 6A's one modest building. T0 stays 6A (§18).
+- **Status the World doesn't show.** The card says "Building — Constructing: Office Expansion 42%" while Claude
+  stands in a finished courtyard with no construction site. Under §21, the World shows it first.
+- Waterfront, dock, boat, roads, parking and exact building, landscape, furniture and plant geometry.
+
+**10B, Fantasy**
+
+USE:
+- **Fantasy T0 as the towered stone outpost** (6C, C27): a crenellated tower, stone walls, timber interiors, torches.
+- **The same scale, hierarchy and product UI as 10A.**
+- **Warm settlement against dark surrounding wilderness.** Forest, cliffs and water frame it naturally, with no
+  border.
+- **The 6D aliases.**
+  - ChatGPT: the King, with crown, green and gold.
+  - Claude: the red-bearded dwarf, without a hard hat.
+  - Codex: the cyborg with one red eye and mechanical parts.
+
+DO NOT COPY:
+- **Red banners with the gold logo.** Fantasy organizational banners are green and gold (C26).
+- **The blue holographic table** at Codex's station. It must read as rune or crystal apparatus, never a hologram
+  screen (§12, C17).
+- **Expanded massing beyond T0**, such as extra halls and the outer bailey. They come only through canonical growth
+  (§18.1).
+- Waterfall, cliffs, dock, boat and every exact geometry.
+
+**Both screens**
+
+DO NOT COPY:
+- **Invented mechanics:**
+  - the "3,420" currency, "6/6" energy, the "3/3" agent cap with a denominator
+  - "Mon 4:32 PM" and the sun clock
+  - the menu categories "Build / Research / Progress"
+  - the minimap's exact framing
+  - any resource, research or clock system
+
+  None of these exist canonically. The reference is authoritative only for the *idea* of a restrained persistent
+  product layer [Kyle].
+- **The context card's contents:**
+  - the animation-clip list (Carry Materials / Hammer / Build / Inspect Plan), which is not information
+  - the "42%" bar, since canonical construction has stages, not percentages
+  - the task names
+  - the "HQ – Construction Site" location string
+- **Theme-renamed canonical data.** Real says "Office Expansion" and Fantasy says "Workshop Expansion" for the same
+  event. Product UI shows canonical names (C30).
+- Generated text errors, duplicate characters, implied future agents, and implied topology.
+
+HILLINK APPLICATION:
+- **§21:** the UI hierarchy, persistent HUD, identification, selection, progressive disclosure, status and progress.
+- **§10:** normal gameplay zoom.
+- **§14:** the World edge, and visual versus navigable extent.
+- **§7:** density versus interactability.
+- **§4 and C23:** Fantasy Codex's corrected cyborg identity.
+- **§18:** T0 stays small.
+
 ---
 
 ## 0. One canonical agent, two visual aliases [Kyle, 2026-10-01 00:13Z]
@@ -941,7 +1022,7 @@ The pillars:
   |---|---|---|
   | ChatGPT | a dark suit block with a white collar and tie | crown points plus a robe or cape widening the lower outline |
   | Claude | a hard hat and hi-vis vest plus a beard | a broad, short dwarf body with a beard mass, plus a hammer |
-  | Codex | glasses, headphones around the neck and a backpack | a hooded coat with an asymmetric head (one red eye) |
+  | Codex | glasses, headphones around the neck and a backpack | an asymmetric head (half-mechanical face, one red eye) plus mechanical body or arm parts and a coat |
 
 - [Kyle 00:40Z] **Identity locks per alias.** These hold in every view, clip and state of that alias.
   - **ChatGPT (one canonical agent):**
@@ -958,11 +1039,18 @@ The pillars:
   - **Codex (one canonical agent):**
     - **Real: an engineer.** A human man in technical or professional workwear, with engineering tools, a computer,
       plans or inspection gear. No cybernetic eye, no cybernetic shoulder, no armour, no robot silhouette.
-    - **Fantasy: an ARCANE-MECHANICAL HYBRID inspector** [Kyle C23, 00:51Z]. Not a pure wizard and not a pure machine.
-      Human, with dark hair and **ONE red eye** [C2] (Fantasy alias only). Mechanical half: the red eye, brass
-      fittings, precision instruments and mechanical components. Arcane half: controlled magical energy, an orb or
-      crystal, runes, scrolls and books. Never a visor across both eyes, never two cybernetic eyes, never a full
-      robot or plated body, never a pointed-hat, long-beard wizard.
+    - **Fantasy: a CYBORG inspector and engineer, a human/machine hybrid** [Kyle C2, C23; corrected 01:34Z, authoritative].
+      - **Face:** about **half the face is mechanical** and carries **ONE red cybernetic eye**. The other half stays
+        recognizably organic and human, with dark hair. This is on the Fantasy alias only.
+      - **Body:** mechanical elements may extend into the body and equipment, such as an arm, a shoulder, fittings or
+        tools.
+      - **Visual language:** arcane-mechanical. Brass and dark metal mechanisms, precision instruments and
+        components, with controlled magical energy, runes, scrolls and books in his tools and station.
+      - **Never:**
+        - a normal human (rejected 10B attempt)
+        - a full robot (rejected 10B attempt)
+        - a visor across both eyes, or two cybernetic eyes
+        - a pointed-hat, long-beard wizard
 - [proposed] Palettes per alias, from the 6B and 6D swatches:
 
   | Agent | Real | Fantasy |
@@ -982,7 +1070,7 @@ The pillars:
 - [Kyle] The three core roles, with their alias per theme:
   - **ChatGPT = orchestrator.** Real: boss or executive. Fantasy: King.
   - **Claude = builder.** Real: construction worker. Fantasy: dwarf artificer.
-  - **Codex = inspector or engineer.** Real: engineer. Fantasy: arcane-mechanical hybrid inspector [C23].
+  - **Codex = inspector or engineer.** Real: engineer. Fantasy: cyborg inspector-engineer with a half-mechanical face and one red eye, arcane-mechanical language [C23].
 - [proposed] An archetype is a data record. Its fields:
   - `body` (a body plan: humanoid-short, humanoid-standard, broad, small-winged, hunched, large-creature or mechanical)
   - `silhouetteSignature`
@@ -1009,7 +1097,7 @@ The pillars:
   across every view and state" and the one-red-eye lock.
   - [proposed] Every archetype declares `asymmetric: true|false`. Asymmetric agents get authored left-facing views (or
     a mirrored base with the identity layer redrawn on the correct side), never a plain flip.
-  - [proposed] Fantasy Codex's red eye and augmentation stay on one fixed side of his body in all five views, both facings
+  - [proposed] Fantasy Codex's half-mechanical face, red eye and augmentation stay on one fixed side of his body in all five views, both facings
     and every clip; in views where that side faces away, the eye glow may still show as a rim light, but never moves.
   - [proposed] The same check applies to held items and one-sided details on any alias (Fantasy ChatGPT's sceptre hand,
     either Claude's tool side, Real Codex's backpack strap) and to future agents; the §4 silhouette test is run on both facings.
@@ -1146,6 +1234,8 @@ The pillars:
 
 - [proposed] One isometric floor tile is about 0.9h wide. A single desk workstation is about 2×2 tiles including the
   chair.
+- [Kyle 01:34Z, ref 10] **Normal gameplay zoom** shows the HQ, its immediate surroundings, all three agents, the
+  important activity and the selection at once (§21.1). The World grows; the art scale doesn't (§18.1).
 - [Kyle] When zoomed out, agents stay recognizable. [proposed] Below 2× zoom, core agents get a 1-pixel brighter rim,
   and their per-alias silhouette signature (§4) is kept visible by a level-of-detail sprite.
 
@@ -1260,7 +1350,7 @@ The pillars:
   |---|---|---|
   | ChatGPT | boss, executive, orchestrator | King, orchestrator |
   | Claude | construction worker, builder | dwarf builder, artificer |
-  | Codex | engineer | arcane-mechanical hybrid inspector [C23] |
+  | Codex | engineer | cyborg inspector-engineer, arcane-mechanical [C23] |
 
 - [proposed] **Parity rule:** every canonical state visible in one theme must be visible in the other, with the same
   location role, the same *pose semantics* (each alias may perform it in its own way, §0) and the same
@@ -1285,6 +1375,23 @@ The pillars:
   - So a scenic cave is fine, but a working mining department is not. A pond or dock is fine, but a dedicated facility
     must match a real capability.
 - [proposed] Flavour terrain never carries a capability label, workstation or agent destination.
+- [Kyle 01:34Z, ref 10] **The World edge is environmental, not artificial.** The playable World reads as a miniature
+  place inside a larger environment.
+  - Avoid an obvious rectangular developer grid, an empty void beyond the map, a giant artificial border, or a glowing
+    game-board edge, unless one is functionally required.
+  - Prefer natural termination through combinations of vegetation, terrain elevation, rock, water, forest, slope,
+    rising environmental density and visual occlusion.
+  - Water, cliffs, docks, boats and waterfalls are **not** canonized. A World is not required to be waterfront and
+    has no permanent dock. Different Worlds may end through different terrain where the terrain system supports it.
+- [Kyle 01:34Z] **Visual extent vs canonical navigable extent.**
+  - **Canonical navigable extent** is the traversable geometry the World and planner define: parcels, paths, walks
+    and nav nodes. It alone decides where agents can go and what exists.
+  - **Visual World extent** is environmental art that may continue beyond it. It implies no navigation, no
+    capability, no plot and no topology.
+  - [proposed] Nothing interactable, selectable or state-bearing is ever drawn outside the navigable extent. Agents
+    and ambient inhabitants are never pathed there. Edge art is derived deterministically from the terrain seed. The
+    camera may frame part of it but never pans to reveal an end-of-art void.
+  - This creates no new canonical topology [Kyle].
 - [Kyle 01:09Z, ref 9D] **The environment responds to growth.** An expansion changes its surroundings, not only the
   building. A finished expansion is settled into the World, never pasted onto the map.
   - **During construction:** disturbed ground, cleared vegetation, temporary paths, material staging, barriers,
@@ -1791,12 +1898,110 @@ state-appropriate effects change. Expansion geometry never depends on time of da
   idea, alert, working, building, complete, waiting, blocked, plus owner-needed.
 - [proposed] 5H's coloured ground rings are dropped as the default. They come back only on hover or selection.
 
+### 21.1 Gameplay presentation (Reference 10A/10B) [Kyle 01:34Z]
+
+These rules supersede the provisional notes above wherever they differ.
+
+**Information hierarchy** [Kyle]. From first read to last:
+1. the World
+2. agents and their activity
+3. contextual information
+4. persistent product UI
+
+The World dominates the screen. Hillink never regresses into a dashboard with a decorative World behind it.
+
+**Normal gameplay composition** [Kyle]. At normal zoom the player sees all of these at once, without extreme zoom:
+- the HQ and its immediate surroundings
+- the three agents
+- the important activity
+- the current selection
+- the environmental context
+- [proposed] Default framing: the whole T0 building plus a margin of surroundings fills about 70–80% of the viewport.
+  Characters stay 24 art px at an integer screen scale (about 2× on a 1080p-class window).
+- Characters are never enlarged into UI avatars. Portraits belong in UI cards, never in the World. The environment is
+  deliberately larger than the agents.
+
+**Persistent HUD** [Kyle]. The product layer is restrained and stays at the screen edges.
+- [proposed] It uses at most about 12% of the screen area when nothing is selected. That is a slim top bar plus small
+  corner widgets, and no full-height side panels by default.
+- It contains only concepts that exist canonically in Hillink. No currencies, energy, research trees, clocks or
+  invented menu categories.
+- [proposed] Candidates that do exist:
+  - product navigation
+  - the agent roster (canonical agents and their high-level state)
+  - a minimap and zoom
+  - the Real/Fantasy switch
+  - the NEEDS KYLE indicator (canonical)
+
+  The exact set is decided in the vertical slice.
+
+**One product UI** [Kyle]. Real and Fantasy share one interface. Navigation, selection, hover, information panels,
+status language, controls, typography hierarchy and panel placement are structurally identical.
+- Only the World and the agent portraits change alias.
+- Subtle contextual treatment may come later. A separate parchment or medieval HUD never does.
+- [proposed, C30] UI text shows **canonical** names and states identically in both themes, for example the
+  capability's canonical name. Themed nouns live in the World, not in UI data.
+
+**Agent identification** [Kyle]. A compact chip may sit near an agent at normal zoom: name, a small status icon, and
+at most a one-word high-level state.
+- No giant labels and no task descriptions float over characters.
+- Idle or default presentation stays clean.
+- Ambient inhabitants never get chips (§20).
+
+**Selection** [Kyle]. Selecting an entity draws a **small, clear World indicator**: a restrained ground ring, outline,
+ground marker or subtle highlight.
+- It is obvious without overwhelming the sprite. There are no giant glows.
+- Only selected or actively relevant entities get strong emphasis.
+- [proposed] Use one ring style in both themes, drawn under the feet in the depth order (5H rings return only here).
+
+**Progressive disclosure** [Kyle]:
+1. **Default:** the World stays clean.
+2. **Hover:** small, immediate identity and status.
+3. **Select:** richer contextual information in a card near the entity.
+4. **Detail:** deeper information, opened through the product interface.
+
+Maximum information is never shown all the time.
+- [proposed] The select card shows canonical fields only:
+  - the agent
+  - its current high-level state
+  - the current canonical task or project
+  - where it is
+  - a link to detail
+- It never lists animation clips.
+
+**Status is diegetic first** [Kyle]. An agent's state reads first from position, movement, animation, pose, held tool,
+workstation and environmental interaction.
+- Claude building *looks* like building before "Building" is read.
+- Codex inspecting looks like inspection.
+- ChatGPT orchestrating reads differently from both.
+- Icons and text only clarify.
+- [proposed] If the World can't yet show a state the UI reports (no construction site drawn while "Building" is
+  shown), that is a rendering bug to fix, not a reason to add more UI.
+
+**Progress is canonical only** [Kyle].
+- Progress appears only when canonical state provides meaningful progress.
+- Percentages, timers, completion estimates and task stages are never fabricated from animation.
+- [code-based, proposed] Canonical construction has discrete stages (§17), so construction progress is shown as the
+  canonical stage, for example "Systems, stage 6 of 9", or as a stepped indicator. A percentage bar appears only if a
+  canonical numeric field exists.
+
+**Density and interactability** [Kyle]. The density of 10A and 10B is aspirational. Important interactable or
+state-bearing elements stay visually distinguishable from decorative clutter.
+- [proposed] They get stronger value contrast and the light-equals-activity glow (§9).
+- Decorative clutter sits at lower contrast on edges and walls (§7).
+
+**T0 stays small** [Kyle]. Environmental richness is not organizational size. T0 is ChatGPT, Claude and Codex, plus
+permitted ambient life. It is small, complete, alive and detailed, never large, empty or overbuilt.
+
+**Ambient life** [Kyle]. Foliage, water, fire, smoke and lighting may move subtly (§20). Decorative life is never
+converted into agents, and no autonomous workers appear outside the C24 rules.
+
 ## 22. What specifically changes from current 5H
 
 - **Character art:** vector chibi becomes pixel sprites at about 3 heads, with small eyes and no blush.
   - **Real (6B):** ChatGPT is the boss in a black suit, Claude is a hard-hat construction worker, and Codex is an
     engineer.
-  - **Fantasy (6D):** ChatGPT is the King, Claude is the dwarf artificer, and Codex is the arcane-mechanical hybrid inspector
+  - **Fantasy (6D):** ChatGPT is the King, Claude is the dwarf artificer, and Codex is the cyborg inspector (half-mechanical face, one red eye)
     with one red eye.
   - Each alias is its own design; continuity comes from role (§0, §4).
 - **Rendering:** smooth canvas vectors become a low-resolution pixel buffer, integer-upscaled.
@@ -1810,7 +2015,7 @@ state-appropriate effects change. Expansion geometry never depends on time of da
 - **Ambient life:** [Kyle C7] ambient inhabitants are strictly separate from agents.
 - **Population:** simulation and evidence default to three agents. The other characters appear only in a scalability
   demo.
-- **Status:** emblem plus ring becomes diegetic first with small icons. Rings appear only on selection.
+- **Status and UI:** emblem plus ring becomes diegetic first with small icons. A restrained ring appears only on selection, with World → hover → select → detail disclosure, and one product UI for both themes (§21.1).
 
 ## 23. What specifically remains from current 5H
 
@@ -1844,14 +2049,23 @@ Resolved by refs 5–8:
 - ambient builders versus Claude (ref 8, C24)
 - the T0 → T1 growth step: additive growth, same plot, environment response, connections and parity (ref 9, §18.1)
 - Fantasy T0 architecture (C27), interior-only growth (C28) and planner-only connection types (C29)
+- gameplay presentation, the UI/HUD philosophy and hierarchy, and the World-edge philosophy (ref 10, §21.1, §14)
+- Fantasy Codex's exact cyborg appearance (C23, corrected 01:34Z)
 
 Still open:
 1. **Kyle's avatar** (C14). Not inferred from any reference.
-2. **UI/HUD** in the pixel language. Awaits Reference 10A (Real) and 10B (Fantasy): gameplay zoom, HUD, selection,
-   hover, status indicators, World boundaries and composition. Not designed ahead of it.
-3. **The terrain-edge visual system** at T0 and as the World grows. Ref 9 shows the plot interior responding, not the World's outer edge.
-4. **The shared central zone in Fantasy:** 7B shows a central table and hearth but no clear Fantasy translation of
-   Real's sofa and table (6C's red sofa is rejected). Low priority.
+2. **UI component detail.** The philosophy and hierarchy are locked by ref 10 (§21.1). Still to decide, in the
+   vertical slice or with a UI reference:
+   - the exact persistent-HUD contents
+   - the card fields and layout
+   - the icon set
+   - typography and colours
+   - the hover chip design
+3. **World-edge kit.** The philosophy is locked (§14). The concrete edge pieces per terrain, and how edge art is
+   derived from the terrain seed, are still undecided. They can be settled in the vertical slice without another
+   reference.
+4. **The shared central zone in Fantasy:** ref 10B doesn't show one clearly. Low priority.
+5. **Canonical vs themed names in UI text** (C30).
 
 ---
 
@@ -1881,7 +2095,7 @@ Resolved by Kyle on 2026-10-01 at 00:12Z:
 | C22 | King banners in Real (resolved 00:40Z) | **No green and gold banners in Real** just to echo the King. Real ChatGPT's identity is the black-suit boss. Subtle Hillink branding is allowed, but his Real workspace is not royal-themed. |
 | C19 | Real materials (resolved 00:32Z) | **Real uses modern materials** (§11). Ref 5's lodge identity is rejected; its warmth, density, intimacy, storytelling, lighting and layout ideas are kept. Ref 6 is authoritative. |
 | C20 | T0 shared space (resolved 00:32Z) | **One modest shared multipurpose space** in T0, for planning, breaks and informal meetings. It is not a capability or department. No large lounge, cafeteria or recreation area for decoration. |
-| C23 | Fantasy Codex, arcane vs mechanical (resolved 00:51Z) | **An ARCANE-MECHANICAL HYBRID**, not a pure wizard and not a pure machine. He keeps **ONE RED EYE**, on the Fantasy alias only. Mechanical: the eye, brass fittings, precision instruments, components. Arcane: controlled magical energy, orb or crystal, runes, scrolls, books (§4). |
+| C23 | Fantasy Codex, arcane vs mechanical (resolved 00:51Z; **corrected 01:34Z**) | **A CYBORG, a human/machine hybrid**, with arcane-mechanical visual language. About **half the face is mechanical with ONE red cybernetic eye**; the other half stays organic and human. Mechanical elements may extend into the body and equipment. Never a normal human, never a full robot. Fantasy alias only. *Earlier wording:* not a pure wizard and not a pure machine. He keeps **ONE RED EYE**, on the Fantasy alias only. Mechanical: the eye, brass fittings, precision instruments, components. Arcane: controlled magical energy, orb or crystal, runes, scrolls, books (§4). |
 | C25 | Fantasy functional spaces (resolved 00:51Z) | **Four fixed mappings:** Real command/orchestration office ↔ Fantasy war/command table; Real construction/builder workshop ↔ Fantasy forge/artificer workshop; Real engineering/testing station ↔ Fantasy arcane-mechanical analysis station; Real server/infrastructure bay ↔ Fantasy Arcane Core/Archive. **Not separate canonical systems** (§13). 6C's monitors, office chairs and desk-like forge remain rejected. |
 | C26 | Fantasy banner colour (resolved 00:51Z) | **Fantasy organizational banners are GREEN and GOLD primary.** Blue is a **local secondary** only, for Codex, arcane energy, magical technical systems and accents (§12). The earlier blue-and-gold-heraldry leaning is withdrawn. |
 | C24 | Ambient builders vs Claude (resolved 01:01Z, ref 8) | **Ambient builders are allowed during construction as non-agent inhabitants.** They own no identity, task or capability, never advance construction, and never add to the agent count; their activity is downstream of canonical state. **Never Claude clones:** Real workers vary in skin tone, hair, facial hair, build, vest and hard-hat colour, tools and silhouette. Fantasy builders vary by trade, body, species where appropriate, clothing and equipment, and never repeat Fantasy Claude's dwarf-artificer identity (§20). |
@@ -1894,11 +2108,12 @@ Still open:
 
 | # | Question | Agent leaning (not a decision) |
 |---|---|---|
+| C30 | **Canonical vs themed names in UI (ref 10):** 10A's card says "Office Expansion" and 10B's says "Workshop Expansion" for the same event. | Product UI shows the **canonical** name and state, identical in both themes (one product UI). Themed nouns appear only in the World art. Proposed; needs Kyle's confirmation because users will see it. |
 | C14 | **Kyle avatar appearance:** how Kyle looks, and how his avatar stays clearly separate from agents. Not to be inferred from any reference [Kyle 00:51Z]. | A distinct human owner silhouette, visible only during owner interactions (C12). Never in a black suit, hard hat or glasses, so he can't be mistaken for a Real alias. |
 
 ---
 
 ## Next steps (only after approval)
-REFERENCES → spec → review → Reference Batch 2C (7A/7B, done) → Reference 8 (construction, done) → Reference 9 (T0 → T1 growth, done) → **Reference 10A (Real) + 10B (Fantasy) gameplay presentation (next, from Kyle)** → more references or corrections → approved visual language → small
+REFERENCES → spec → review → Reference Batch 2C (7A/7B, done) → Reference 8 (construction, done) → Reference 9 (T0 → T1 growth, done) → Reference 10A/10B (gameplay presentation, done) → **Kyle avatar reference, C14 (next)** → more references or corrections → approved visual language → small
 vertical-slice prototype (one room, three agents, both themes) → visual review → refinement → propagation. [Kyle]
 No implementation, no Pass 5I and no World-wide redesign until Kyle approves.
