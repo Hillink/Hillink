@@ -40,7 +40,7 @@ test('I1. the secret URL is the only door: wrong or missing token, other methods
   await assert.rejects(startIngress({ engine: h.engine, token: TOKEN, port: 0, host: '0.0.0.0' }), /127\.0\.0\.1 only/);
 });
 
-test('I2. MCP handshake: initialize, notifications, tools/list exposes exactly the six objective tools', async () => {
+test('I2. MCP handshake: initialize, notifications, tools/list exposes exactly the seven objective tools', async () => {
   const h = harness();
   await withIngress(h, async c => {
     const init = await c.rpc('initialize', { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'chatgpt', version: '1' } });
@@ -122,6 +122,24 @@ test('I7. decisions: ChatGPT answers a decision HQ gave the orchestrator, cannot
     assert.equal(cancel.isError, false, JSON.stringify(cancel.value));
     await h.drive(h.settled(id));
     assert.equal((await c.call('get_objective', { objective_id: id })).value.status, 'CANCELLED');
+  });
+});
+
+test('I8. wait_for_objective: ChatGPT chains steps in one turn; the wait returns when the objective settles, times out unsettled, and validates input', async () => {
+  const h = harness({ codex: codexInvestigatesAndReviews(investigation({ recommendedAction: 'no_change' })) });
+  await withIngress(h, async c => {
+    const id = (await c.call('submit_objective', { objective: 'How does greet() work?', type: 'investigate', title: 'Q', scope: [], tests: [], acceptance_criteria: null, constraints: null, requested_actions: [] })).value.objective_id;
+    // Not driven yet: a short wait times out unsettled and changes nothing.
+    const early = await c.call('wait_for_objective', { objective_id: id, timeout_seconds: 1 });
+    assert.equal(early.isError, false); assert.equal(early.value.settled, false); assert.equal(early.value.objective.id, id);
+    // HQ works while ChatGPT waits; the wait returns as soon as the objective is final.
+    const [waited] = await Promise.all([c.call('wait_for_objective', { objective_id: id, timeout_seconds: 30 }), h.drive(h.settled(id))]);
+    assert.equal(waited.value.settled, true); assert.equal(waited.value.objective.status, 'COMPLETE');
+    assert.ok(waited.value.waited_seconds < 30);
+    // Then the next step, chained on the result.
+    const next = await c.call('submit_objective', { objective: `Follow-up on ${id}: list the tests that cover greet().`, type: 'investigate', title: 'Q2', scope: [], tests: [], acceptance_criteria: null, constraints: null, requested_actions: [] });
+    assert.equal(next.isError, false, JSON.stringify(next.value));
+    for (const bad of [{ objective_id: 'nope' }, { objective_id: id, timeout_seconds: 0 }, { objective_id: id, timeout_seconds: 56 }, { objective_id: id, extra: 1 }, {}]) assert.equal((await c.call('wait_for_objective', bad)).isError, true, JSON.stringify(bad));
   });
 });
 
