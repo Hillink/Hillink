@@ -83,7 +83,7 @@ With `HQ_AGENTS_ENABLED=1` (or `HQ_IMPLEMENTATION_ENABLED=1`), Claude can take b
   - scope paths are refused if they are absolute or drive paths, use `..`, `~`, wildcards, backslashes or shell characters, or point at a directory less than two levels deep
   - scope paths are also refused inside `.git`, `.github`, `.claude`, `.vscode`, `node_modules`, `tools/hillink-hq`, `supabase`, `.vercel` or `.next`, if they are package manifests or root config files, or if they look like secrets
 - **Run** (`implementation-runner.mjs`):
-  1. A fresh `git worktree` on a new branch `hq/impl/<task>` from `origin/main`, under `~/.hillink-hq/worktrees` (`HQ_WORKTREE_DIR` to move it).
+  1. A fresh `git worktree` on a new branch `hq/impl/<task>` from the implementation base, under `~/.hillink-hq/worktrees` (`HQ_WORKTREE_DIR` to move it). The base is `origin/main` unless `HQ_IMPL_BASE` names one remote-tracking branch as `origin/<branch>` (for World work: `HQ_IMPL_BASE=origin/claude/dev-baseline`, after `git fetch origin claude/dev-baseline`). Any other value, or a ref that does not resolve, disables implementation at start (`/api/state` → `health.implementation` says why); the resolved ref and commit are shown in `health.implementationRoutes.base`.
   2. Claude Code launched directly, with no shell. It gets `--tools Read,Grep,Glob,Edit,Write` (no Bash, no web), `--permission-mode dontAsk`, and `Edit(./<scope>)`/`Write(./<scope>)` as the only pre-approved edits. `--setting-sources user` stops project settings from widening that.
   3. HQ lists what git says changed; anything outside the scope blocks the task.
   4. HQ, not Claude, runs `node --test <tests>` in the worktree with a minimal environment.
@@ -164,7 +164,7 @@ The local adapter is useful now for actual verification. It does not prove that 
 
 Cancellation sends SIGTERM, waits up to one second, then sends SIGKILL and waits up to one more second. Only a process close event confirms termination. Missing close evidence retains the lease even if a signal was accepted. Windows may terminate immediately on SIGTERM; deterministic tests exercise ignored-signal escalation independently of OS behavior.
 
-Any local process running as the same user can acquire the session token; this is a single-user local control surface, not isolation from local processes. Alert details (including time since progress, queue size and recovery) are snapshots captured when the episode opens, not live counters. Node 24+ remains the supported minimum tested here; passing tests on Node 22 does not expand the supported runtime contract.
+Any local process running as the same user can acquire the session token; this is a single-user local control surface, not isolation from local processes. Alert details (including time since progress, queue size and recovery) are snapshots captured when the episode opens, not live counters. Node 24+ is required and enforced: `createHQ` refuses to start on an older Node, the Linux sandbox is unavailable when the Node it would mount is older than 24, and the guest test controller and per-file test process exit 99 on an older Node. (Node 22 reports node:test events differently; it once let an empty acceptance file count as a pass. The per-file process now also counts only passes attributed to the launched file, on any version.)
 
 ## Recovery review follow-up
 
