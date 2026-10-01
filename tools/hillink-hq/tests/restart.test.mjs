@@ -142,6 +142,17 @@ test('7. the supervisor survives an HQ crash and recovers it, rate-limited; work
   assert.ok(!Object.getOwnPropertyNames(Supervisor.prototype).some(m => /agent|worker|quarantine/i.test(m)), 'nothing in the supervisor reacts to agent or worker status');
 });
 
+test('an HQ that dies while the supervisor is still bringing it up is retried by that launch loop only, never by a parallel recovery', async () => {
+  const h = harness();
+  h.sup.health = async ({ child }) => { if (h.children.indexOf(child) === 0) { h.exit(child, 1); return { ok: false, detail: 'crashed on boot' }; } return { ok: true, eventCount: 10, detail: 'ok' }; };
+  assert.equal(await h.sup.start(), true);
+  for (let i = 0; i < 50; i++) await new Promise(r => setImmediate(r));
+  await h.settle();
+  assert.equal(h.children.length, 2, 'one retry, no second competing launch');
+  assert.equal(h.alive.size, 1, 'exactly one HQ running');
+  assert.ok(!h.logs.some(l => l.event === 'hq-exited'), 'the boot crash was not treated as a runtime exit');
+});
+
 // ---------------------------------------------------------------- HQ side
 const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), 'hq-restart-'));
 const fakeSupervisor = (ack = { accepted: true }) => ({ calls: [], async request(r) { this.calls.push(r); return { id: r.id, ...ack }; } });
@@ -164,6 +175,13 @@ test('restart_hq validates its input, refuses without a supervisor or with work 
   assert.deepEqual(journal, [['requested', 'chatgpt', 'connector stuck'], ['accepted', 'chatgpt', 'connector stuck']]);
   const refused = await requestRestart(new Engine({ store: new MemoryStore() }), fakeSupervisor({ accepted: false, duplicate: true, activeId: 'R0', reason: 'restart R0 is already in progress' }), { reason: 'again' }, { by: 'chatgpt' });
   assert.deepEqual([refused.duplicate, refused.restart_id], [true, 'R0']);
+  const e2 = new Engine({ store: new MemoryStore() });
+  await requestRestart(e2, fakeSupervisor({ accepted: false, reason: 'cooldown' }), { reason: 'again' }, { by: 'chatgpt' });
+  assert.equal(e2.draining, false, 'a refused restart leaves HQ dispatching');
+  const e3 = new Engine({ store: new MemoryStore() });
+  let drainingWhileAsking = null;
+  await requestRestart(e3, { async request() { drainingWhileAsking = e3.draining; return { accepted: true }; } }, { reason: 'x' }, { by: 'kyle' });
+  assert.equal(drainingWhileAsking, true, 'dispatch stops before the supervisor is asked, so nothing starts in between');
 });
 
 test('12-13. a restart replays every objective, decision, approval gate and note unchanged; nothing is cleared or approved', async () => {

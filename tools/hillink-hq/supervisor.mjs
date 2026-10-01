@@ -125,7 +125,13 @@ export class Supervisor {
   }
 
   // Launch + health check, bounded attempts with backoff. Never loops forever.
-  async bring({ id, kind, reason = null, by = null, oldPid = null, forced = false, startedAt = this.now(), headBefore = this.gitHead() }) {
+  async bring(opts) {
+    // While bring() owns a launch, a child that dies is its business (the next attempt), never a second recovery.
+    this.bringing = true;
+    try { return await this.bringOnce(opts); } finally { this.bringing = false; }
+  }
+
+  async bringOnce({ id, kind, reason = null, by = null, oldPid = null, forced = false, startedAt = this.now(), headBefore = this.gitHead() }) {
     this.state = 'STARTING';
     let diagnostic = null;
     for (let attempt = 1; attempt <= this.limits.maxAttempts; attempt++) {
@@ -176,7 +182,7 @@ export class Supervisor {
 
   // An HQ that exits on its own (not during a restart or supervisor shutdown) is recovered, rate-limited.
   onExit(child, code, signal) {
-    if (child !== this.child || this.stopping || this.restarting || this.expectExit === child) return;
+    if (child !== this.child || this.stopping || this.restarting || this.bringing || this.expectExit === child) return;
     this.child = null;
     const now = this.now();
     this.recoveries = this.recoveries.filter(t => now - t < 3_600_000);

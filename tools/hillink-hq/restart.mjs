@@ -25,15 +25,17 @@ export async function requestRestart(engine, supervisor, args, { by, gitHead = n
   const id = randomUUID();
   // Persisted before anything else happens: the intent is in the journal even if every later step fails.
   engine.emit('HQ_RESTART', { id, phase: 'requested', by, reason, pid: process.pid, gitHead });
+  // Stop dispatching before asking, so no run can start between the in-flight check and the shutdown.
+  engine.draining = true;
   let ack;
   try { ack = await supervisor.request({ id, reason, by }); }
   catch (error) { ack = { accepted: false, reason: `the supervisor did not answer (${String(error.message).slice(0, 120)})` }; }
   if (!ack?.accepted) {
+    engine.draining = false;
     engine.emit('HQ_RESTART', { id, phase: 'refused', by, reason: String(ack?.reason ?? 'refused').slice(0, 300), activeId: ack?.activeId ?? null });
     return { refused: `Restart not started: ${ack?.reason ?? 'refused by the supervisor'}`, restart_id: ack?.activeId ?? id, duplicate: Boolean(ack?.duplicate), retry_after_seconds: ack?.retryAfterSeconds ?? null };
   }
   // No new work from here: the supervisor shuts HQ down gracefully next.
-  engine.draining = true;
   engine.emit('HQ_RESTART', { id, phase: 'accepted', by, reason });
   return {
     accepted: true, restart_id: id, status: 'RESTART_INITIATED',

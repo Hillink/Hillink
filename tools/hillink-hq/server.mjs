@@ -268,7 +268,8 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
       if (m?.type === 'restart-record') try { hq.recordRestart(m.record); } catch { /* journal closed */ }
     });
     // A supervisor that goes away leaves HQ running: it simply cannot be restarted remotely until one is back.
-    process.on('disconnect', () => console.log('Supervisor channel closed; HQ keeps running.'));
+    // It also stops draining: with no supervisor left, an accepted restart can never happen, so HQ must not sit idle.
+    process.on('disconnect', () => { hq.engine.draining = false; console.log('Supervisor channel closed; HQ keeps running and dispatching.'); });
   }
   console.log(`Hillink HQ: ${hq.origin} (local control service; compute mode ${hq.engine.config.computeMode})`);
   const ing = hq.ingress();
