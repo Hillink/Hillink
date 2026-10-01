@@ -13,6 +13,8 @@
 // resolve_objective_decision answers a decision HQ gave to the orchestrator (never one that needs Kyle), and
 // cancel_objective stops it. There is no approval tool: approval gates are Kyle's alone.
 
+import { HANDOFF_LIMITS } from './orchestration/handoff.mjs';
+
 const clip = (s, n) => (typeof s === 'string' ? (s.length > n ? `${s.slice(0, n - 1)}…` : s) : null);
 const iso = at => (Number.isFinite(at) ? new Date(at).toISOString() : null);
 const REVIEWERS = ['claude', 'codex'];
@@ -70,7 +72,7 @@ function agentView(engine, a, at) {
 const objectiveView = o => ({
   id: o.id, title: clip(o.input.title, 160), type: o.input.type, status: o.status, why: clip(o.statusReason, 400),
   plan: o.plan ? { risk: o.plan.risk, risk_reasons: o.plan.riskReasons, gates: o.plan.gates, expected_path: o.plan.expectedPath, review_rule: o.plan.reviewRule, completion_criteria: o.plan.completionCriteria } : null,
-  steps: o.order.map(id => { const s = o.steps[id]; return { id: s.id, kind: s.kind, status: s.status, agent: s.agentId, attempts: s.attempts, retries: s.retries.map(r => `${r.reason} ${r.count}/${r.max}`), handoff: s.handoff ? clip(JSON.stringify(s.handoff), 1500) : null }; }),
+  steps: o.order.map(id => { const s = o.steps[id]; return { id: s.id, kind: s.kind, status: s.status, agent: s.agentId, attempts: s.attempts, retries: s.retries.map(r => `${r.reason} ${r.count}/${r.max}`), handoff: s.handoff ? clip(JSON.stringify(s.handoff), HANDOFF_LIMITS.block + 6_000) : null }; }),
   approvals_pending_for_kyle: Object.values(o.approvals).filter(a => a.status === 'PENDING').map(a => ({ gate: a.gate, why: a.reason })),
   decisions_pending: Object.values(o.decisions).filter(d => d.status === 'PENDING').map(d => ({ decision_id: d.id, for: d.resume?.authority === 'kyle' ? 'kyle' : 'orchestrator', question: clip(d.question, 600), options: d.options })),
   disagreement: o.disagreement ? clip(JSON.stringify(o.disagreement), 1500) : null,

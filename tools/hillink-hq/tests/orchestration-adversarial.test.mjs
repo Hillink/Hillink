@@ -3,7 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { ROUTES, candidates, assertImplementer } from '../orchestration/routing.mjs';
-import { parseHandoff, implementationHandoff } from '../orchestration/handoff.mjs';
+import { parseHandoff, implementationHandoff, HANDOFF_LIMITS } from '../orchestration/handoff.mjs';
 import { validateObjectiveInput, implementationEligibility, gatesFor } from '../orchestration/policy.mjs';
 import { worldActivity } from '../orchestration/activity.mjs';
 import { TOOL_NAMES, TOOL_DEFINITIONS, createToolbox } from '../orchestrator-tools.mjs';
@@ -178,6 +178,27 @@ test('smuggle a dangerous scope or a shell command through a handoff: refused by
     assert.throws(() => parseHandoff(handoffText(investigation({ proposedTests: [cmd] })), 'investigation'), /path|segment/, cmd);
   assert.throws(() => parseHandoff(handoffText({ ...investigation(), exec: 'rm -rf /' }), 'investigation'), /unexpected field "exec"/);
   assert.throws(() => parseHandoff('```hq-handoff\n' + JSON.stringify(investigation({ findings: ['x'.repeat(30_000)] })) + '\n```', 'investigation'), /larger than|longer than/);
+});
+
+test('finding length: a legitimate long finding (> 600 characters) is accepted and read back whole; unreasonable payloads stay bounded', async () => {
+  // The first historical-state run: Claude's normal procgen investigation wrote a ~1,000-character finding and HQ refused it.
+  const long = `procgen/world.mjs builds the kingdom in three seeded passes. ${'Terrain, districts and props each derive their own sub-seed from the root seed, so a change in one pass never reshuffles the others. '.repeat(8)}`.slice(0, 1_400);
+  assert.ok(long.length > 600 && long.length <= HANDOFF_LIMITS.finding);
+  const inv = parseHandoff(handoffText(investigation({ findings: [long, 'A second, short finding.'] })), 'investigation');
+  assert.equal(inv.findings[0], long.trim());
+  assert.equal(parseHandoff(handoffText(review({ findings: [{ severity: 'low', detail: long, file: null, evidence: null }] })), 'review').findings[0].detail, long.trim());
+  // Still bounded: one character over the per-finding cap, too many findings, and an oversized block are all refused.
+  assert.throws(() => parseHandoff(handoffText(investigation({ findings: ['x'.repeat(HANDOFF_LIMITS.finding + 1)] })), 'investigation'), /findings\[0\] is longer than 2000/);
+  assert.throws(() => parseHandoff(handoffText(review({ findings: [{ severity: 'low', detail: 'x'.repeat(HANDOFF_LIMITS.finding + 1), file: null, evidence: null }] })), 'review'), /detail is longer than 2000/);
+  assert.throws(() => parseHandoff(handoffText(investigation({ findings: Array(11).fill('ok') })), 'investigation'), /1 to 10 items/);
+  assert.throws(() => parseHandoff(handoffText(investigation({ findings: Array(10).fill('y'.repeat(HANDOFF_LIMITS.finding)), risks: Array(10).fill('z'.repeat(400)) })), 'investigation'), /larger than 24000/);
+  // End to end: the long finding survives HQ validation and get_objective returns the handoff complete (no 1,500-character clip).
+  const h = harness({ codex: codexOk(investigation({ findings: [long], recommendedAction: 'no_change' })) });
+  const id = h.conductor.submit({ objective: 'How does procgen seed the kingdom?', type: 'investigate' });
+  await h.drive(h.settled(id));
+  const o = JSON.parse(createToolbox(h.engine, { taskId: null }).call('get_objective', JSON.stringify({ objective_id: id })).output);
+  assert.equal(o.status, 'COMPLETE', o.why);
+  assert.equal(JSON.parse(o.steps[0].handoff).findings[0], long.trim());
 });
 
 test('impersonate another agent: attribution is HQ\'s record of the run, never a claim in the output', async () => {
