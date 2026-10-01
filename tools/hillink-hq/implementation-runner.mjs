@@ -1,5 +1,6 @@
 // Claude implementation runs (Pass 2.6). One HQ 'implement-repo' task:
-//   1. a fresh git worktree on a new branch hq/impl/<task> from origin/main (never main, never HQ's own checkout)
+//   1. a fresh git worktree on a new branch hq/impl/<task> from the implementation base (origin/main unless Kyle sets
+//      HQ_IMPL_BASE; see resolveImplementationBase), never main itself, never HQ's own checkout
 //   2. Claude Code in that worktree with task-specific permissions: Read/Grep/Glob/Edit/Write only (no shell,
 //      no web), permission mode dontAsk, edits pre-approved only inside the task's scope, user settings only
 //   3. HQ checks git's own list of changes against the scope; anything outside it blocks the task
@@ -61,8 +62,20 @@ export function emptyTestFiles(out, tests) {
   return tests.filter(t => names.has(t));
 }
 
+// The ref every implementation worktree starts from. Default origin/main. HQ_IMPL_BASE may name one other
+// remote-tracking branch explicitly (e.g. origin/claude/dev-baseline); anything that is not a plain origin/<branch>
+// name is refused rather than guessed, and server.mjs disables implementation if the ref does not resolve.
+export const DEFAULT_IMPL_BASE = 'origin/main';
+export function resolveImplementationBase(env = process.env) {
+  const raw = env.HQ_IMPL_BASE;
+  if (raw == null || raw === '') return { base: DEFAULT_IMPL_BASE, source: 'default' };
+  const ok = /^origin\/[A-Za-z0-9][A-Za-z0-9._/-]*$/.test(raw) && !/\.\.|\/\/|\/$|\.$|\.lock(\/|$)|\/\./.test(raw) && raw !== 'origin/HEAD';
+  if (!ok) throw Error(`HQ_IMPL_BASE must name a remote-tracking branch as origin/<branch>; refusing ${JSON.stringify(raw.slice(0, 80))}`);
+  return { base: raw, source: 'HQ_IMPL_BASE' };
+}
+
 export class ClaudeImplementer {
-  constructor({ repoRoot, worktreeRoot = path.join(os.homedir(), '.hillink-hq', 'worktrees'), claudeBin = null, env = process.env, execFile = nodeExecFile, spawn, base = 'origin/main', testTimeoutMs = 5 * 60_000, pulseMs = 5000, cliOptions = {}, sandbox = null, unsandboxed = false, sandboxKeyVar = 'HQ_SANDBOX_ANTHROPIC_API_KEY' } = {}) {
+  constructor({ repoRoot, worktreeRoot = path.join(os.homedir(), '.hillink-hq', 'worktrees'), claudeBin = null, env = process.env, execFile = nodeExecFile, spawn, base = DEFAULT_IMPL_BASE, testTimeoutMs = 5 * 60_000, pulseMs = 5000, cliOptions = {}, sandbox = null, unsandboxed = false, sandboxKeyVar = 'HQ_SANDBOX_ANTHROPIC_API_KEY' } = {}) {
     // Pass 2.7: Claude and the tests run inside an OS sandbox (sandbox.mjs). Without one the runner refuses every
     // task (fail closed). unsandboxed:true is the Pass 2.6 host mode, kept for unit tests only; HQ never sets it.
     Object.assign(this, { repoRoot, worktreeRoot, claudeBin, env, execFileImpl: execFile, spawn, base, testTimeoutMs, pulseMs, cliOptions, sandbox, unsandboxed, sandboxKeyVar, runs: new Map() });

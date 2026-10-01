@@ -11,12 +11,13 @@ import { operations } from './registry.mjs';
 import { connectOllama } from './ollama-adapter.mjs';
 import { connectCliAgents } from './cli-agent-adapter.mjs';
 import { connectOrchestrator } from './orchestrator-adapter.mjs';
-import { ClaudeImplementer, ClaudeRouter, findClaudeBinary } from './implementation-runner.mjs';
+import { ClaudeImplementer, ClaudeRouter, findClaudeBinary, resolveImplementationBase } from './implementation-runner.mjs';
 import { WslSandbox } from './sandbox.mjs';
 import { LinuxSandbox } from './sandbox/linux.mjs';
 import { BrokerServer } from './broker/mcp-server.mjs';
 import { SubscriptionImplementer } from './subscription-implementer.mjs';
 import { execFileSync } from 'node:child_process';
+import { assertSupportedNode } from './node-version.mjs';
 import { Conductor } from './orchestration/conductor.mjs';
 import { CommitVerifier } from './orchestration/verify.mjs';
 import { reconcileInterrupted } from './orchestration/recovery.mjs';
@@ -41,7 +42,8 @@ async function body(req) {
   return JSON.parse(raw);
 }
 
-export async function createHQ({ port = 4312, directory = path.join(here, '.state'), store, adapters, sink, intervalMs = 1000, ollama = false, cliAgents = false, orchestrator = false, implementation = false, env = process.env, request = fetch, sandboxFactory = ({ env: e }) => (process.platform === 'win32' ? new WslSandbox({ home: e.HQ_SANDBOX_HOME || undefined }) : new LinuxSandbox({ home: e.HQ_SANDBOX_HOME || undefined })), brokerOptions = {}, conductorOptions = {}, verifier = null, computeMode = null } = {}) {
+export async function createHQ({ port = 4312, directory = path.join(here, '.state'), store, adapters, sink, intervalMs = 1000, ollama = false, cliAgents = false, orchestrator = false, implementation = false, env = process.env, request = fetch, sandboxFactory = ({ env: e }) => (process.platform === 'win32' ? new WslSandbox({ home: e.HQ_SANDBOX_HOME || undefined }) : new LinuxSandbox({ home: e.HQ_SANDBOX_HOME || undefined })), brokerOptions = {}, conductorOptions = {}, verifier = null, computeMode = null, nodeVersion = process.versions.node } = {}) {
+  assertSupportedNode(nodeVersion); // fail closed before any state, sandbox or agent is touched
   const journal = store ?? new FileStore(directory);
   const local = new LocalAdapter();
   // Pass 4: ZERO_CREDIT unless HQ's own environment says BUDGETED. Requests, agents and tasks cannot change it.
@@ -65,25 +67,33 @@ export async function createHQ({ port = 4312, directory = path.join(here, '.stat
     const sandbox = sandboxFactory({ env });
     sandboxRef = sandbox;
     const box = sandbox.available();
-    if (!claudeBin) implementationStatus = 'UNAVAILABLE: Claude Code binary not found (set HQ_CLAUDE_BIN)';
+    const repoRoot = path.resolve(here, '../..');
+    // The implementation base: explicit and verified at start, or no implementation at all (fail closed).
+    let implBase = null, baseProblem = null;
+    try {
+      implBase = resolveImplementationBase(env);
+      implBase.commit = execFileSync('git', ['rev-parse', '--verify', '--quiet', `${implBase.base}^{commit}`], { cwd: repoRoot, encoding: 'utf8', windowsHide: true, stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+    } catch (error) { baseProblem = implBase ? `implementation base ${implBase.base} does not resolve in this repository (git fetch origin first)` : error.message; }
+    if (baseProblem) implementationStatus = `UNAVAILABLE: ${baseProblem}`;
+    else if (!claudeBin) implementationStatus = 'UNAVAILABLE: Claude Code binary not found (set HQ_CLAUDE_BIN)';
     else if (!box.ok) implementationStatus = `UNAVAILABLE: ${box.reason}`;
     else {
       sandbox.cleanupStale().catch(() => {}); // instances left by a crash are disposable
-      const repoRoot = path.resolve(here, '../..'), worktreeRoot = env.HQ_WORKTREE_DIR || undefined;
+      const worktreeRoot = env.HQ_WORKTREE_DIR || undefined, base = implBase.base;
       // Pass 2.7 direct-sandbox runner (metered key; BUDGETED + authorization only). Kept as the optional paid path.
-      const implementer = new ClaudeImplementer({ repoRoot, worktreeRoot, claudeBin, env, sandbox });
+      const implementer = new ClaudeImplementer({ repoRoot, worktreeRoot, claudeBin, env, sandbox, base });
       // Pass 4.5 split broker (subscription). Needs a sandbox that supports broker operations.
       let subscription = null;
       const brokerReady = sandbox.brokerSupport?.() ?? { ok: false, reason: 'sandbox has no broker support' };
       if (brokerReady.ok) {
         brokerServer = await new BrokerServer().start();
-        subscription = new SubscriptionImplementer({ repoRoot, worktreeRoot, claudeBin, env, sandbox, broker: brokerServer, ...brokerOptions });
+        subscription = new SubscriptionImplementer({ repoRoot, worktreeRoot, claudeBin, env, sandbox, base, broker: brokerServer, ...brokerOptions });
       }
       engine.adapters['cli-claude'] = new ClaudeRouter(engine.adapters['cli-claude'], implementer, subscription);
       if (!engine.state.agents.claude.assignment) engine.configureAgent('claude', { capabilities: [...new Set([...engine.state.agents.claude.capabilities, 'implement-repo'])] });
       const direct = implementer.available();
       implementationStatus = 'CONFIGURED';
-      implementationRoutes = { subscriptionSplitBroker: brokerReady.ok ? 'READY' : `UNAVAILABLE: ${brokerReady.reason}`, apiKeySandbox: direct.ok ? 'AVAILABLE (METERED: BUDGETED mode + Kyle authorization only)' : `UNAVAILABLE: ${direct.reason}` };
+      implementationRoutes = { base: { ref: implBase.base, commit: implBase.commit, source: implBase.source }, subscriptionSplitBroker: brokerReady.ok ? 'READY' : `UNAVAILABLE: ${brokerReady.reason}`, apiKeySandbox: direct.ok ? 'AVAILABLE (METERED: BUDGETED mode + Kyle authorization only)' : `UNAVAILABLE: ${direct.reason}` };
     }
   }
   // A capability recorded by an earlier start does not survive a start without the sandbox (fail closed).
