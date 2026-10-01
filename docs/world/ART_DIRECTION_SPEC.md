@@ -279,6 +279,121 @@ HILLINK APPLICATION:
   one small compute corner (Real) or hearth (Fantasy), in one compact building.
 - Panel 7 defines how lighting is tested: one scene rendered at three ambient settings with the same assets (§9).
 
+### REFERENCE 6: Batch 2B, Real agents and Real T0 (`ref6-batch2b-real-t0.png`) [Kyle, 2026-10-01 00:32Z]
+
+**Approved by Kyle as a strong visual-direction reference.** For the topics below it is **more authoritative than
+Reference 5**:
+- Real agent appearance
+- Real T0 materials and interior character
+- character and environment scale
+- gameplay pixel density
+- Real workstations
+- modern density
+- the Real lighting and material language
+
+It does not override approved architectural or canonical rules. Where the spec and an accidental generated detail
+disagree, the spec wins [Kyle].
+
+It has nine panels:
+1. the Real T0 interior in the 2.5D isometric gameplay view
+2. Real character sheets
+3. walking
+4. working and interaction
+5. workstation close-ups
+6. character detail close-ups
+7. scale
+8. Real props
+9. the same room at day, dusk and night
+
+USE:
+- **Real identity:** a small, living, handcrafted technology and engineering HQ [Kyle]. Not a corporate office, a
+  lodge, a sterile visualization, a large campus, a fantasy building with computers, or a side-scroller base.
+- **Camera** (panel 1): a 2.5D isometric cutaway that matches Hillink's camera. It is guidance for viewing angle, room
+  readability, depth and furniture scale.
+- **Real T0 layout** (panel 1): one compact single-level open-plan HQ.
+  - Three role corners: ChatGPT back left, Claude back right, Codex right with the server bay behind glass.
+  - One central shared table with stools and a lamp, plus a sofa: the C20 planning, break and informal meeting space.
+  - An entrance with a door and signage.
+  - Railings, exterior planters, a paved approach and greenery.
+- **Real materials** (panel 1):
+  - dark concrete or blockwork walls
+  - stone-tile floor with rugs
+  - a glass partition with a steel frame
+  - steel railings
+  - modern desks with 2–3 monitors
+  - server racks with LED strips
+  - warm practical lamps (pendants, wall sconces, desk lamps)
+  - shelves of books and binders
+  - many potted plants
+  - cables, papers and personal items
+  Warm and dense, but modern [Kyle C19].
+- **Character scale** (panel 7): **24 art pixels tall** at gameplay zoom [Kyle].
+  - A door is about 1.4h.
+  - A shelf is about 1.2h.
+  - A plant is about 0.8–1h.
+  - A desk is about 0.45h.
+- **Real ChatGPT** (panels 2, 6): a young-looking orchestrator.
+  - A gold crown with gems.
+  - A green jacket with gold trim and an emblem on the back.
+  - A black tee with a gold emblem.
+  Modern King DNA [Kyle].
+- **Real Claude** (panels 2, 6): stout and broad.
+  - Red-orange hair and a full beard.
+  - A cream work shirt with rolled sleeves.
+  - A brown leather harness and belt with pouches, and a tool pack on his back.
+  - Work trousers and boots.
+  Modern builder with dwarf DNA [Kyle].
+- **Real Codex** (panels 2, 6): human, with dark hair.
+  - **ONE red cybernetic eye on one side.**
+  - A mechanical shoulder and arm on the same side.
+  - A dark technical jacket, with a back plate.
+  Restrained augmentation, with the human/cyborg contrast clear [Kyle].
+- **Clips** (panels 3, 4):
+  - walk in profile, about 4 frames
+  - ChatGPT: idle, working, talking, interacting
+  - Claude: idle, working, building, reading
+  - Codex: idle, inspecting, testing, using a tablet
+  Proportions stay stable across all of them [Kyle].
+- **Workstations** (panel 5):
+  - **ChatGPT:** command and planning, with a world map, three monitors, green and gold wall banners, a leather armchair
+    and plants.
+  - **Claude:** engineering and building, with a pegboard wall of tools, parts bins, boxes, a workbench desk with
+    monitors and a red task chair.
+  - **Codex:** inspection and testing, with server racks and blue LEDs, two monitors with readouts, a darker, cooler
+    corner and diagnostic gear.
+- **Prop kit** (panel 8): sofas, armchairs, desk chairs, desks, a fridge, a cabinet, monitors, lamps, potted plants,
+  bookshelves, a server rack and side tables.
+  - It is a good starting inventory for the Real T0 prop set.
+- **Lighting** (panel 9): the same room at day, dusk and night with the same assets. This confirms §9.
+
+DO NOT COPY:
+- **Codex's look in the gameplay scene** (panel 1). At gameplay zoom his eye area reads as a red band across both eyes.
+  The single eye must read as single at 24 pixels: one bright red pixel cluster on one side only, never spanning both
+  eyes [Kyle C2].
+- **The dog on the sofa** and any other decorative animals or people. They are not required, and never canonical
+  [Kyle].
+- **Exact prop placement, the floor plan, or text on banners and screens.** Verify every word independently. The sign
+  here correctly reads "HILLINK"; keep the spelling **Hillink** regardless of the reference [Kyle].
+- **Impossible geometry.** Walls that end in mid-air and railings that cut through rooms are generation artifacts.
+- **Floating name labels** over agents [Kyle C13].
+- **Real ChatGPT's face** as automatically final. It conflicts with the elderly, white-bearded Fantasy King. See §25
+  C21.
+
+HILLINK APPLICATION:
+- **Real T0 = this composition** in Hillink's isometric room system, as a single storey that matches its exterior (C16).
+  - Three role corners, one shared central table zone, one server bay, an entrance and circulation.
+  - The open floor stays clear for navigation (§7).
+- The 24-pixel target sets the relative scale of the T0 World: character, furniture, room and building. It is not a
+  licence to resize the existing World arbitrarily [Kyle].
+- Workstation props are visual metaphors for canonical activity. They create no capability and no work [Kyle].
+- The panel 5 corners are the starting story-prop clusters for §11.
+- Panel 6 detail callouts (crown, jacket back, harness, cyber shoulder) define the **identity features that must survive
+  every view and clip** (§4).
+
+CONFLICTS / RESOLUTION:
+- C15, C16, C17, C18, C19 and C20 are resolved by Kyle with this reference. See §25.
+- New C21 (ChatGPT's face and age across aliases) and C22 (King banners in Real) are listed in §25.
+
 ---
 
 ## 0. One canonical agent, two visual aliases [Kyle, 2026-10-01 00:13Z]
@@ -366,9 +481,10 @@ The pillars:
 
 - [ref 3c, 4] About 3 heads tall. The head is about 1/3 of the height *including hair or headgear*. The face itself is
   smaller.
-- [proposed, narrowed by ref 5] At art scale, characters are **about 22–26 art pixels tall** at default zoom. Ref 5's
-  gameplay shot measures about 24. Most are humanoid; the broad dwarf is about 2 pixels shorter and wider.
-  [open] The final number waits on the dedicated pixel-density reference.
+- [Kyle, ref 6] **Target: 24 art pixels tall** at normal gameplay zoom (narrowed from ref 5's 22–26). Most are
+  humanoid; the broad dwarf is about 2 pixels shorter and wider.
+  - The goal is the relationship between character, furniture, room and building. It is not permission to resize the
+    World arbitrarily [Kyle].
   - The head is about 8 pixels.
   - Eyes are 1×1 or 1×2 pixels with no visible whites at default zoom.
   - The torso is about 6–7 pixels, the legs about 5–6 pixels, and the feet 2 pixels.
@@ -394,6 +510,19 @@ The pillars:
     activity.
   - **Codex:** [Kyle C2] a **half-human cyborg** (a human body with cybernetics, not a full robot) with **ONE RED EYE**.
     The red eye is a permanent identity and silhouette feature in every view, clip and theme.
+- [Kyle, ref 6] **Identity locks per agent.** These hold in every view, clip and state:
+  - **ChatGPT:** King/Orchestrator. Green and gold palette, the crown motif and a regal silhouette.
+    - Real is a **modern orchestrator with King DNA** (a green and gold jacket, a literal crown allowed), not a medieval
+      costume in an office.
+  - **Claude:** Dwarf/Builder/Artificer. Shorter and stouter, with red-orange hair and a full red-orange beard.
+    - Real wears engineering workwear: work shirt, harness, belt, boots, tools.
+    - The yellow hard hat is **contextual** and appears only during actual construction work. He is recognized by body,
+      hair, beard, palette and builder language.
+  - **Codex:** half-human cyborg inspector. Clearly human, with dark human hair (never changing colour), **ONE red
+    cybernetic eye**, asymmetric cybernetic detail on one side and restrained augmentation.
+    - Never a visor across both eyes, never two cybernetic eyes, never a full robot.
+- [Kyle] **Identity is stable across animation.** Walking Claude is the same Claude. Working Codex doesn't become more
+  robotic. Seated ChatGPT keeps his proportions.
 - [Kyle C4] **Identity persists across themes.** The three agents never become generic humans in Real.
   - Real changes wardrobe, equipment and presentation for a modern technology company.
   - Fantasy uses the stronger archetype form.
@@ -514,8 +643,8 @@ The pillars:
 
   | Element | Size |
   |---|---|
-  | Door | 1.3h tall, 0.6h wide |
-  | Storey (floor to floor) | about 2–2.6h. Ref 3a reads about 2.6h, ref 5 is cosier at about 2–2.5h. [open] Final value waits on the pixel-density reference |
+  | Door | about 1.4h tall, 0.6h wide [ref 6] |
+  | Storey (floor to floor) | about 2–2.5h. Ref 6's T0 is a single storey with walls of about 2h visible in the cutaway; ref 3a reads about 2.6h |
   | Desk | 0.45h |
   | Chair seat | 0.3h |
   | Server rack | 1.1h |
@@ -541,6 +670,15 @@ The pillars:
   | **Codex** | Inspection lab | test bench with an oscilloscope and probes, several monitors with graphs and logs, a magnifier lamp, a small rack, a checklist board |
   | **ChatGPT** | Planning and oversight office | wall map or display with routes and tasks, a planning table with pins and cards, a raised desk overlooking the floor, a status board |
 
+- [Kyle, ref 6] **Real T0** is compact, finished, modern, warm, dense, functional, expandable, and designed for the
+  three-agent organization.
+  - It contains three agent workstations, one modest shared planning, break and informal meeting space [C20], a small
+    server or technical corner, circulation and suitable props.
+  - No extra departments just because there is room.
+- [Kyle C19, ref 6] **Real materials:** steel, concrete, finished wall surfaces, glass, modern desks, monitors, server
+  equipment, cables, technical equipment, warm practical lamps, plants, books, papers, tools and personal objects.
+  Visual clutter is controlled. Ref 5's timber and stone lodge identity is rejected for Real; only its warmth, density,
+  intimacy, storytelling, lighting and layout ideas carry over.
 - [Kyle] Shared spaces only appear when a capability justifies them. Examples: meeting room, server room, workshop,
   planning area, lounge, storage, infrastructure. No filler departments.
 - [proposed] Real can be cleaner than Fantasy, but must look lived in:
@@ -829,22 +967,21 @@ The pillars:
 
 ## 24. Remaining visual questions requiring reference material [open]
 
-These stay open until Reference Batch 2 or later.
+Resolved by refs 5–6: Real agents, Real T0 interior and materials, pixel density (24 px), Real workstations and lighting
+behaviour.
 
-1. **Real T0 HQ:** the exact compact, finished three-agent HQ, inside and out.
-2. **Fantasy T0 settlement:** the exact compact outpost, small keep or workshop.
-3. **Real versions of ChatGPT, Claude and Codex:** how the King, dwarf and cyborg dress and equip for a technology
-   company while staying recognizable (C4).
-4. **Character pixel density:** how many art pixels tall a character is at default zoom, and how much detail fits.
-5. **Isometric construction stages:** especially the paired compositions (§17) and the stages ref 3d doesn't show.
-6. **Terrain boundaries:** where each World ends (cliff, forest, water, fog, map edge) at small and large sizes.
-7. **Real exterior architecture:** the street, plaza and façade at T0 and as it grows.
-8. **Fantasy exterior architecture:** walls, roofs and paths of the outpost as it grows.
-9. **UI and HUD:** panels, nameplates and status icons in the pixel language.
-10. **Lighting variations:** dusk showcase plus at least one other time, to prove the system isn't dusk-locked (C6).
-11. **Environmental detail:** close-ups of prop clusters and wall dressing for each workspace (Claude, Codex,
-    ChatGPT), in both themes.
-12. **Kyle's avatar appearance (C14)** and the new Batch 2A conflicts (C15–C18). See §25.
+Still open:
+1. **Fantasy T0 at gameplay scale:** the Fantasy counterpart of ref 6, in the same camera and pixel density.
+2. **Fantasy aliases at 24 pixels:** the King, dwarf and cyborg in Fantasy dress, matching their Real faces (C21).
+3. **Function translation in Fantasy (C17):** what Codex's arcane-analysis station, ChatGPT's war table and the
+   server-equivalent look like.
+4. **Real T0 exterior** that matches ref 6's single-storey interior volume (C16).
+5. **Construction at gameplay scale:** the 10 truthful stages (§17), especially in Real steel.
+6. **Ambient workers:** their own look, distinct from Claude (C15).
+7. **Kyle's avatar** (C14).
+8. **UI/HUD** in the pixel language.
+9. **Terrain edges** at T0 and as the World grows.
+10. **The T0 → T1 growth step:** what the first expansion adds in each theme.
 
 ---
 
@@ -866,19 +1003,21 @@ Resolved by Kyle on 2026-10-01 at 00:12Z:
 | C10 | Construction stages | **Canonical authority does not change.** Visual stages map underneath the canonical stages. Sub-stages are allowed only if they can be derived deterministically without false progress; otherwise the limitation is documented. Only walls and roof share a stage; §17 has the mapping and how that pair is drawn. |
 | C11 | Cross-theme backdrop | **No fantasy castle behind Real.** Each theme stays physically coherent. Subtle shared motifs are fine, but the settings never blend. |
 | C12 | Kyle avatar (resolved 2026-10-01 00:25Z) | **Kyle may have a visual avatar. He is NOT an AI agent.** He represents the human owner and player. He appears only for legitimate owner interactions: NEEDS KYLE, approvals, owner decisions, meetings, inspections or visits, and ceremonies. He never autonomously performs AI work and never adds to the apparent agent population. His exact appearance is still open. |
+| C15 | Ambient workers vs Claude (resolved 00:32Z) | **Ambient workers must not duplicate Claude.** They have their own silhouettes, clothing, palettes and headgear. They may wear construction gear, but they are never Claude clones, and they remain non-agent inhabitants. |
+| C16 | Real T0 storeys (resolved 00:32Z) | **Exterior and interior are the same physical volume.** A cutaway may expose spaces but never invent an impossible interior. Ref 6's T0 is a single storey. |
+| C17 | Monitors in Fantasy (resolved 00:32Z) | **No literal modern monitors in Fantasy.** Themes translate *function*, not *object*: a diagnostic workstation becomes an arcane-analysis station, a planning display becomes a map, war table or magical planning apparatus, and server equipment becomes the established world's equivalent. A deliberate hybrid technology needs a future reference that explicitly establishes it. |
+| C18 | Real wardrobe (resolved 00:32Z) | **Theme-translated identity.** ChatGPT is a modern green and gold orchestrator with King DNA. Claude is a modern builder or engineer with dwarf/artificer DNA. Codex is a modern technical inspector with half-human cyborg DNA. Fantasy costumes are never copied whole into Real; strong signature elements (the crown) may survive where they help recognition. |
+| C19 | Real materials (resolved 00:32Z) | **Real uses modern materials** (§11). Ref 5's lodge identity is rejected; its warmth, density, intimacy, storytelling, lighting and layout ideas are kept. Ref 6 is authoritative. |
+| C20 | T0 shared space (resolved 00:32Z) | **One modest shared multipurpose space** in T0, for planning, breaks and informal meetings. It is not a capability or department. No large lounge, cafeteria or recreation area for decoration. |
 | C13 | Room labels (resolved 2026-10-01 00:25Z) | **Environment first, text second.** Rooms are recognized by their physical design. Labels may appear on hover, on selection, in the inspector, in a map view, or as subtle architectural signage. No large permanent floating labels. |
 
-Still open (new from Reference 5):
+Still open:
 
 | # | Question | Agent leaning (not a decision) |
 |---|---|---|
-| C14 | **Kyle avatar appearance:** how Kyle looks, and how his avatar stays clearly separate from agents (no nameplate status, no work clips) | A distinct human owner silhouette. Visible only during owner interactions (C12). |
-| C15 | **Claude's hard hat vs ambient workers:** ref 5's ambient workers wear the same yellow hard hat as construction Claude, so they read as Claude look-alikes | Claude is never confusable. Ambient workers get a different hat colour and no beard, are smaller in scale, and never wear orange-brown. |
-| C16 | **Real T0 size:** ref 5 shows one storey outside but two storeys inside | Needs the T0 reference. Leaning: one compact building, two small levels if the three workstations, planning corner and compute corner need it. |
-| C17 | **Monitors in Fantasy:** ref 5 panel 4B puts modern screens on Fantasy desks | Keep the material split (§8). Fantasy uses scrying glass, crystals, maps and ledgers, never modern monitors. |
-| C19 | **Real materials:** ref 5's Real HQ and Real T0 use dark timber beams and stone or brick walls, and read like a lodge close to Fantasy. That bends the approved Real material language (glass, steel, concrete, electronics, §8, §12 of Kyle's brief). | Keep the modern Real materials. Take only ref 5's layout, density, warmth and wear. A wood floor and some brick are fine as accents. |
-| C20 | **T0 lounge vs C8:** ref 5's Real T0 has a lounge (sofa, world map) with no capability behind it | Allow one shared planning or break space in T0 as environment. It is not an operational facility and holds no capability. Nothing more until a capability justifies it. |
-| C18 | **How literal Real wardrobe is:** ref 5's "Real" sheet still has ChatGPT in a crown and long cape, and Claude in a tank top | The crown stays as the silhouette lock (Kyle). Leaning: Real swaps the cape for a green and gold jacket or long coat with a crown or crown pin, so it's clearly the King but office-appropriate. Needs the Real-agents reference. |
+| C14 | **Kyle avatar appearance:** how Kyle looks, and how his avatar stays clearly separate from agents | A distinct human owner silhouette, visible only during owner interactions (C12). |
+| C21 | **ChatGPT's face across aliases:** Real ChatGPT (ref 6) is young, brown-haired and beardless; Fantasy ChatGPT in ref 3c (and 5H iteration 1) is an elderly King with a white beard. Kyle requires "the same individual" in both themes (C4). | Pick one face for both aliases, and translate only the wardrobe. Needs the Fantasy counterpart reference to settle. |
+| C22 | **King banners in Real:** ref 6 hangs green and gold emblem banners in ChatGPT's Real corner | Allowed as a subtle shared motif (C11), as branded wall hangings with the Hillink mark. Never medieval heraldry. |
 
 ---
 
