@@ -555,7 +555,17 @@ The pillars:
 - [ref 4] The clip matrix is five directions by these clips:
   - `idle`, `walk`, `run`, `work`, `talk`, `think`, `carry`, `inspect`, `celebrate`
   - plus 5H's `waiting`, `blocked` and `type` (seated)
-  - Left-facing views mirror the right-facing ones.
+  - Left-facing views mirror the right-facing ones, **except where mirroring would move an identity feature** (below).
+- [Kyle 2B §7, ref 6] **Mirroring must not break an identity lock.** 5H builds left-facing views by mirroring the
+  right-facing ones. For a symmetric agent that is harmless, but Codex's single red eye and his one-sided cybernetic
+  shoulder/arm would jump to the other side of his body whenever he turns. That breaks "identity and proportions stable
+  across every view and state" and the one-red-eye lock.
+  - [proposed] Every archetype declares `asymmetric: true|false`. Asymmetric agents get authored left-facing views (or
+    a mirrored base with the identity layer redrawn on the correct side), never a plain flip.
+  - [proposed] Codex's red eye and augmentation stay on one fixed side of his body in all five views, both facings and
+    every clip; in views where that side faces away, the eye glow may still show as a rim light, but never moves.
+  - [proposed] The same check applies to held items and one-sided details on any agent (ChatGPT's sceptre hand,
+    Claude's tool side) and to future agents; the §4 silhouette test is run on both facings.
 - [proposed] Frame counts at the 5H cycle timings:
 
   | Clip | Frames |
