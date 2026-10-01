@@ -225,8 +225,7 @@ The pillars:
 - [proposed] **Dithering** is used sparingly and only for large gradients: sky, glow falloff and water.
 - [proposed] **Texture** comes from pixel clusters (brick courses, plank seams, stone joints, fabric folds), not noise.
 - [Kyle C9] Hybrid authoring: bespoke pixel sprites for the core agents, modular parts for everything else (§19). Either
-  way, the rule "appearance data is data, never code" still holds.
-  The rule "appearance data is data, never code" still holds either way. Sprites would be palette-indexed pixel grids
+  way, the rule "appearance data is data, never code" still holds. [proposed] Sprites are palette-indexed pixel grids
   stored as plain data.
 
 ## 3. Character proportions
