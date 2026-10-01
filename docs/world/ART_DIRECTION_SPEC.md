@@ -497,8 +497,24 @@ The pillars:
 - [Kyle] Builders visibly interact: Claude carries materials and hammers at the active stage's work point.
 - [Kyle] **Art never advances progress.** The stage comes only from canonical construction state. This 5H rule is
   kept.
-- [open] 5G/5H currently have 6 canonical stages. Mapping 11 visual stages onto them needs either sub-stage data from
-  HQ or an agreed 6→11 grouping. See §25 C10.
+- [code] Canonical construction (`procgen/construction.mjs` `STAGES`) has **9** stages: planning, site-preparation,
+  foundation, structure, exterior, systems, furnishing, inspection and operational. 5H draws 6 looks over them.
+- [proposed] Mapping of the 11 brief stages onto the 9 canonical stages:
+
+  | Brief stage | Canonical stage |
+  |---|---|
+  | 1 untouched | planning |
+  | 2 surveyed | site-preparation |
+  | 3 materials and 4 excavation/foundation | foundation |
+  | 5 frame | structure |
+  | 6 walls and 7 roof | exterior |
+  | 8 systems | systems |
+  | 9 furnishing and 10 finishing | furnishing |
+  | — | inspection (scaffold coming down, Codex inspecting) |
+  | 11 operational | operational |
+
+  Only the 3/4, 6/7 and 9/10 splits need HQ to report progress within a stage. Without that, each pair shows its first
+  look until the canonical stage changes. See §25 C10.
 
 ## 18. Procedural expansion rules (World growth)
 
@@ -515,6 +531,9 @@ The pillars:
   | T4+ | additional buildings, compound, campus | settlement, town, kingdom |
 
 - [open] Today's T0 conflicts with the earlier "two-floor HQ baseline" decision. See §25 C5.
+- [code] The default simulation boots with only Claude and Codex (`sim/simulator.mjs` `SIM_ROSTER`). ChatGPT appears
+  only when an evidence script registers it, so the three-agent start is not what you see on boot today. The vertical
+  slice should register all three by default.
 - [proposed] Slots for growth come from deterministic layout rules, as in 5G's procedural layout. The empty land
   around the starting World is **wild terrain**, not reserved blank plots, so a small World doesn't look unfinished.
 
@@ -620,6 +639,19 @@ The pillars:
 
 ## 25. Conflicts between references (not silently resolved) [open]
 
+Agent leanings, which are not decisions:
+- **C1:** green and gold, keeping the ermine and sceptre.
+- **C2:** half-human with blue armour and ONE red eye. This uses ref 3c's body with ref 4's eye.
+- **C3:** bare-headed with a red beard; the hard hat appears only on construction sites.
+- **C4:** the same character in both themes.
+- **C5:** start small.
+- **C6:** dusk by default.
+- **C7:** no anonymous workers; rare critters are allowed.
+- **C8:** landscape flavour only, no rooms without a capability.
+- **C9:** authored pixel sprite sheets allowed in the repo for the core agents, with procedural parts for props and
+  future agents.
+- **C11:** no castle behind Real.
+
 | # | Conflict | Sources | Options (agent leaning, not a decision) |
 |---|---|---|---|
 | C1 | **King's palette:** green and gold with a green cape, *vs* blue robe with ermine trim | ref 4 and the earlier bible / ref 3c | Either works. Green keeps ChatGPT's established brand colour. |
@@ -631,7 +663,9 @@ The pillars:
 | C7 | **Non-agent people:** hardhat workers, a fisherman, a miner and NPCs fill refs 1–3, *vs* "only three agents" | refs 1–3 / Kyle's population rule | Are non-agent workers and critters allowed as ambient life? 5H currently has some. |
 | C8 | **Flavour spaces without a capability:** a gym, dock, caves, mine and a castle on the horizon, *vs* "no unnecessary departments" | refs 1–2 / Kyle | Allow landscape flavour (dock, water) but not rooms, unless a capability justifies them. |
 | C9 | **How sprites are authored:** the references are hand-pixelled (AI-generated) art, *vs* 5H's procedural, data-only, all-original rule | all refs / Kyle's "all assets original" | Options: (a) hand-authored pixel sprite data; (b) procedural pixel sprites from parts; (c) a hybrid, with authored core agents and procedural props and future agents. The references themselves can't be shipped. |
-| C10 | **Construction stage count:** 11 visual stages *vs* 6 canonical stages | Kyle's brief / current World data | Group visual stages under canonical ones, or extend the canonical stage data in HQ. |
+| C10 | **Construction stage count:** 11 visual stages *vs* 9 canonical stages (6 looks in 5H) | Kyle's brief / `procgen/construction.mjs` | Lean: use the §17 grouping now, and add within-stage progress from HQ later for the 3/4, 6/7 and 9/10 splits. |
+| C12 | **Kyle avatar:** ref 4 includes an owner avatar | ref 4 / the three-agent population rule | Lean: no permanent avatar. Owner presence shows as the sealed scroll or flagged board item (§13). |
+| C13 | **Room labels:** refs 1–2 label rooms with signs (Servers, Gym), *vs* "identify rooms by props" | refs 1–2 / the Iteration 2 brief | Lean: no floating labels. Labels show on hover only, or as an in-world sign where a real building would have one. |
 | C11 | **Cross-theme backdrop:** the Real HQ references show a fantasy castle on the horizon | refs 1–2 | Keep the themes strictly separate, or allow a subtle backdrop nod. |
 
 ---
