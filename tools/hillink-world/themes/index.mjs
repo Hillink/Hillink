@@ -11,6 +11,7 @@ import { createArtSkin } from '../render/art5d/skin.mjs';
 import { createInterpreter } from './interpreter.mjs';
 import { createKingdomLayout } from '../world/kingdom-layout.mjs';
 import { createKingdomSkin } from '../render/kingdom-skin.mjs';
+import { createPxSkin } from '../render/px/skin.mjs';
 
 export const THEME_ORDER = ['real', 'fantasy', 'blueprint'];
 export const THEME_NAMES = { real: 'Realistic', fantasy: 'Fantasy', blueprint: 'Blueprint' };
@@ -36,7 +37,7 @@ function scenery(L) {
 // The Pass 5G kingdom (world/kingdom-layout.mjs) is SUPERSEDED and inactive: it stays in the code, reachable only with
 // the explicit debug option layout: 'kingdom-5g' (?layout=kingdom-5g), and never drives the slice or Fantasy.
 export const SUPERSEDED_LAYOUTS = { 'kingdom-5g': 'Pass 5G 12-district kingdom: superseded by P1 (one shared planner layout); debug only' };
-export function loadTheme(id, { world = null, art = null, layout: layoutId = null, pxSkin = null } = {}) {
+export function loadTheme(id, { world = null, art = null, layout: layoutId = null, pxSkin = createPxSkin } = {}) {
   const key = THEME_ORDER.includes(id) ? id : 'real';
   if (world && key === 'fantasy' && layoutId === 'kingdom-5g') {
     const K = createKingdomLayout(world);

@@ -213,3 +213,29 @@ lineup.html + ui/lineup.mjs   character sheets (lineup, views, states, status)
   sections: borrowed principles per reference; what not to copy; character rules; environment rules; shared DNA; how
   the two themes stay distinct; scale/perspective; palette/material/lighting; density; animation; procedural rules for
   future agents and buildings; how the World evolves visually. Stop there. Nothing is implemented until Kyle approves.
+
+## P1–P4 and the vertical slice (Kyle approved P1/P2, 2026-10-01 01:40Z)
+
+Status: implemented on `claude/world-5h`, awaiting Kyle's visual review. Not merged, not deployed.
+
+**P1 (confirmed by Kyle).** Real and Fantasy run on ONE canonical planner layout (`world/generated-layout.mjs`). Themes
+translate materials, architecture, props and environment only. The 5G kingdom stays in the code, superseded and
+inactive (`?layout=kingdom-5g`, debug only).
+**P2 (confirmed by Kyle).** T0 = one compact storey (13.5 × 13 m) with ChatGPT, Claude and Codex. Break and meeting are
+both `shareable` and share one common room in canonical data (`shareRooms`). Worlds founded before 5H replay as they were.
+**P3 (agent default, adopted after Kyle's approval).** ChatGPT's canonical workstation is the command office.
+**P4 (agent default).** One canonical display name per capability (`CAPABILITY_NAMES`), the same in both themes; a
+shared room joins its names ("Break & Meeting"). The older HUD/roster still shows the 5B theme labels.
+
+### Slice (`?art=px`, plus `?light=day|dusk|night`, `L` cycles lighting, `Enter` opens details)
+- `render/px/buffer.mjs` pixel raster; `palette.mjs` ramps and lighting settings; `character.mjs` shared body plans,
+  part masks, tools and clips (idle, walk, work, sit; four facings), six aliases plus a TEST look for reference sheets only;
+  `kit.mjs` materials, floor patterns, prop recipes per theme, decor, vegetation, posts, sconces, glows;
+  `compose.mjs` builds the scene from canonical records by rule; `stage.mjs` bakes static layers and renders frames;
+  `skin.mjs` plugs into the canvas renderer (hover chip, gold selection ring, details card).
+- 2× display (one art pixel = 2 screen pixels), zoom snapped to whole pixels; characters 24 px.
+- Harness: `node scripts/px-harness.mjs <dir> [--frames]` renders four seeds, a planner wing and a planner room split in
+  both themes, plus the alias sheet, with pixel hashes in `manifest.json`.
+- Evidence: `docs/world/evidence/pass5h-slice/`.
+- To see T0 locally without touching an existing world: `WORLD_STATE_DIR=<new folder> node serve.mjs`, then open
+  `/?art=px`. A World saved before 5H keeps its two-storey layout by design.

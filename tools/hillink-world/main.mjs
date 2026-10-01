@@ -19,6 +19,8 @@ import { createConstructionDemo, DEMO_STEPS, REFIT_CAPABILITY } from './sim/cons
 import { STAGE_LABEL as PROJECT_STAGE } from './procgen/construction.mjs';
 import { loadSite, createSiteSync, sourceLabel } from './ui/site-sync.mjs';
 import { worldFingerprint } from './procgen/world.mjs';
+import { setPxLighting, pxLighting } from './render/px/skin.mjs';
+import { LIGHTING_IDS } from './render/px/palette.mjs';
 
 const $ = id => document.getElementById(id);
 const storage = {
@@ -27,6 +29,10 @@ const storage = {
 };
 const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
 const params = new URLSearchParams(location.search);
+// Pass 5H slice: ?art=px is the pixel renderer (both themes); ?light=day|dusk|night its lighting setting.
+const pxMode = () => theme?.art === 'px';
+if (params.get('light')) setPxLighting(params.get('light'));
+const deviceRatio = () => Math.min(2, devicePixelRatio || 1);
 // Source: live HQ when it answers (default), or the dev simulator. `?source=sim` forces the simulator.
 const requested = params.get('source') ?? 'auto';
 let mode = 'sim';
@@ -44,6 +50,12 @@ let theme, scene, view;
 let siteWorld = null, demo = null;
 let hover = null, selected = null, follow = null, lastFrame = performance.now(), running = false;
 
+// The home framing. The slice (art px) opens at its 2x scale centred on the building; other skins fit the overview.
+function overview(opts = {}) {
+  if (!pxMode()) return camera.overview(opts);
+  const h = theme.layout.home, z = theme.skin.defaultZoom(deviceRatio());
+  camera.animateTo({ ...(h ? camera.centerFor(h.x + h.w / 2, h.y + h.h / 2, z) : {}), zoom: z }, opts.duration);
+}
 // Themes: same World state, different layout and art. Switching rebuilds only the view.
 function applyTheme(id, { keepCamera = false } = {}) {
   const cam0 = keepCamera && theme ? camera.toJSON() : null;
@@ -57,14 +69,14 @@ function applyTheme(id, { keepCamera = false } = {}) {
   view.step(0, performance.now(), { instant: true }, stepPath);
   hover = null; if (!keepCamera) { select(null); cameraTouched = false; }
   const cam = cam0 ?? (params.get('camera') ? null : storage.get(`hlw:camera:${theme.id}${siteWorld ? ':gen' : ''}`));
-  if (cam && Number.isFinite(cam.zoom)) camera.animateTo(cam, 0); else camera.overview({ duration: 0 });
+  if (cam && Number.isFinite(cam.zoom)) camera.animateTo(cam, 0); else overview({ duration: 0 });
   storage.set('hlw:theme', theme.id);
   document.documentElement.dataset.theme = theme.id;
   for (const b of $('themes').children) b.setAttribute('aria-checked', String(b.dataset.theme === theme.id));
   renderNav(); renderHud(); invalidate();
 }
 $('themes').innerHTML = THEME_ORDER.map(id => `<button role="radio" data-theme="${id}">${THEME_NAMES[id]}</button>`).join('');
-$('themes').addEventListener('click', e => { const id = e.target.closest('[data-theme]')?.dataset.theme; if (id && id !== theme.id) applyTheme(id); });
+$('themes').addEventListener('click', e => { const id = e.target.closest('[data-theme]')?.dataset.theme; if (id && id !== theme.id) applyTheme(id, { keepCamera: pxMode() }); });
 
 // The header and roster are fixed over the canvas; the camera frames the world between them.
 let cameraTouched = false;
@@ -76,12 +88,12 @@ function updateInsets() {
   const right = panel && host.width > 760 && !document.body.classList.contains('ui-hidden') ? Math.round(Math.min(host.width * 0.4, host.right - panel.getBoundingClientRect().left + 8)) : 0;
   if (camera.insets.bottom === bottom && camera.insets.top === top && camera.insets.right === right) return;
   camera.insets = { top, right, bottom, left: 0 };
-  if (cameraTouched || storage.get(`hlw:camera:${theme?.id}`)) camera.clamp(); else camera.overview({ duration: 0 });
+  if (cameraTouched || storage.get(`hlw:camera:${theme?.id}`)) camera.clamp(); else overview({ duration: 0 });
   invalidate();
 }
 function resize() {
   const r = canvas.parentElement.getBoundingClientRect();
-  camera.resize(r.width, r.height); updateInsets(); renderer.resize(r.width, r.height, Math.min(2, devicePixelRatio || 1)); invalidate();
+  camera.resize(r.width, r.height); updateInsets(); renderer.resize(r.width, r.height, deviceRatio()); invalidate();
 }
 new ResizeObserver(resize).observe(canvas.parentElement);
 
@@ -104,6 +116,7 @@ function frame(now) {
   // Pass 5C: follow is frame-rate independent (the same glide at 30 or 144 fps), so a tracked walker never jitters.
   if (follow) { const e = scene.get(follow); if (e && !camera.tween) { const c = camera.centerFor(e.x, e.y - e.h / 2), k = 1 - Math.exp(-dt * 7); camera.x += (c.x - camera.x) * k; camera.y += (c.y - camera.y) * k; camera.clamp(); } }
   const cameraMoving = camera.step(now);
+  if (pxMode()) camera.zoom = theme.skin.snapZoom(camera.zoom, deviceRatio()); // whole device pixels per art pixel
   const fx = effects.active(now);
   // Art themes always have ambient life (water, machinery, staff); the blueprint only animates its agents.
   const ambient = !instant; // the building always has quiet ambient life (street, lights, idle breathing)
@@ -140,7 +153,7 @@ canvas.addEventListener('pointermove', e => {
   if (hit?.id !== hover?.id) { hover = hit; canvas.style.cursor = hit ? 'pointer' : 'grab'; invalidate(); }
   const tip = $('tooltip');
   const text = hit ? hoverText(hit.ref.type === 'room' ? { ...hit.ref, name: hit.location.name } : hit.ref, shown(), { status: hit.kind === 'agent' ? statusLine(hit, shown(), theme.layout) : undefined }) : '';
-  tip.hidden = !text; tip.textContent = text; tip.style.transform = `translate(${e.offsetX + 14}px, ${e.offsetY + 14}px)`;
+  tip.hidden = !text || (pxMode() && hit?.kind === 'agent'); // the slice draws its own agent chip tip.textContent = text; tip.style.transform = `translate(${e.offsetX + 14}px, ${e.offsetY + 14}px)`;
 });
 canvas.addEventListener('pointerup', e => {
   pointers.delete(e.pointerId); if (pointers.size < 2) pinchDist = null;
@@ -149,18 +162,27 @@ canvas.addEventListener('pointerup', e => {
   select(scene.pick(wx, wy, pickSlop()));
 });
 canvas.addEventListener('pointerleave', () => { $('tooltip').hidden = true; if (hover) { hover = null; invalidate(); } });
-canvas.addEventListener('wheel', e => { e.preventDefault(); camera.zoomAt(Math.exp(-e.deltaY * 0.0015), e.offsetX, e.offsetY); savePrefs(); invalidate(); }, { passive: false });
+let wheelAcc = 0;
+canvas.addEventListener('wheel', e => {
+  e.preventDefault();
+  if (pxMode()) { wheelAcc += e.deltaY; if (Math.abs(wheelAcc) < 80) return; const dir = wheelAcc < 0 ? 1 : -1; wheelAcc = 0; camera.zoomAt(theme.skin.stepZoom(camera.zoom, deviceRatio(), dir) / camera.zoom, e.offsetX, e.offsetY); savePrefs(); invalidate(); return; }
+  camera.zoomAt(Math.exp(-e.deltaY * 0.0015), e.offsetX, e.offsetY); savePrefs(); invalidate();
+}, { passive: false });
 addEventListener('keydown', e => {
   if (e.target.closest('input,textarea,select')) return;
   const step = 80;
+  if (pxMode() && (e.key === 'l' || e.key === 'L')) { setLighting(LIGHTING_IDS[(LIGHTING_IDS.indexOf(pxLighting()) + 1) % LIGHTING_IDS.length]); return; }
+  if (pxMode() && e.key === 'Enter' && selected) { select(selected, { details: true }); return; }
+  if (pxMode() && ['+', '=', '-'].includes(e.key)) { e.preventDefault(); camera.zoomAt(theme.skin.stepZoom(camera.zoom, deviceRatio(), e.key === '-' ? -1 : 1) / camera.zoom); savePrefs(); invalidate(); return; }
   if (e.key === 'h' || e.key === 'H') { document.body.classList.toggle('ui-hidden'); updateInsets(); return; } // hide overlays: the world on its own
-  const actions = { ArrowLeft: () => camera.pan(step, 0), ArrowRight: () => camera.pan(-step, 0), ArrowUp: () => camera.pan(0, step), ArrowDown: () => camera.pan(0, -step), '+': () => camera.zoomAt(1.2), '=': () => camera.zoomAt(1.2), '-': () => camera.zoomAt(1 / 1.2), Escape: () => { select(null); follow = null; camera.overview(); } };
+  const actions = { ArrowLeft: () => camera.pan(step, 0), ArrowRight: () => camera.pan(-step, 0), ArrowUp: () => camera.pan(0, step), ArrowDown: () => camera.pan(0, -step), '+': () => camera.zoomAt(1.2), '=': () => camera.zoomAt(1.2), '-': () => camera.zoomAt(1 / 1.2), Escape: () => { select(null); follow = null; overview(); } };
   if (actions[e.key]) { e.preventDefault(); actions[e.key](); savePrefs(); invalidate(); }
 });
 
-function select(entity) {
+function select(entity, { details = false } = {}) {
   selected = entity; follow = null;
-  if (entity) showInspect(entity); else $('inspect').hidden = true;
+  // The slice shows a contextual card for an agent; the full inspector opens on Enter (details).
+  if (entity && (!pxMode() || details || entity.kind !== 'agent')) showInspect(entity); else $('inspect').hidden = true;
   $('side').hidden = !!entity;
   updateInsets(); invalidate();
 }
@@ -241,7 +263,7 @@ for (const id of ['inspect', 'side', 'roster']) $(id).addEventListener('click', 
 // Camera commands: the hooks for "show me what Codex is doing" / "show the whole company".
 export function focus(target) {
   cameraTouched = true; // a chosen view must survive HUD resizes
-  if (target === 'overview') { follow = null; camera.overview(); return invalidate(); }
+  if (target === 'overview') { follow = null; overview(); return invalidate(); }
   const cut = target.indexOf(':'), kind = target.slice(0, cut), id = target.slice(cut + 1); // ids may contain ':' (site:meeting-room)
   if (kind === 'room') { const l = theme.layout.locationById[id]; follow = null; camera.focusRect({ x: l.x, y: l.y, w: l.w, h: l.h }, { maxZoom: theme.camera.maxZoom * 0.75 }); }
   else {
@@ -455,4 +477,5 @@ if (params.get('shot')) setTimeout(() => applyShot(params.get('shot')), 600); //
 
 $('empty').hidden = Object.keys(store.world.agents).length > 0;
 invalidate();
-window.hillinkWorld = { shot: applyShot, get worldInfo() { return { source: siteSync?.state ?? siteSource, simulated: Boolean(siteWorld?.simulated), generator: siteWorld?.generator ?? null, seed: siteWorld?.seed ?? null, schema: siteWorld?.schema ?? null, fingerprint: siteWorld ? worldFingerprint(siteWorld) : null, historyLength: siteWorld?.history?.length ?? 0, layout: theme?.layout?.id ?? null, error: siteSync?.error ?? siteError }; }, get siteWorld() { return siteWorld; }, get demo() { return demo; }, demoStep, why: id => explainAgent(store.world, id), get commands() { return commandInfo; }, get constructionStatus() { return constructionStatus; }, store, get scene() { return scene; }, get theme() { return theme; }, camera, get sim() { return mode === 'sim' ? sim : null; }, focus, setTheme: applyTheme }; // Dev handle for tests and console. Live mode exposes no simulator (5E correction B4).
+function setLighting(id) { setPxLighting(id); invalidate(); return pxLighting(); }
+window.hillinkWorld = { setLighting, get lighting() { return pxLighting(); }, shot: applyShot, get worldInfo() { return { source: siteSync?.state ?? siteSource, simulated: Boolean(siteWorld?.simulated), generator: siteWorld?.generator ?? null, seed: siteWorld?.seed ?? null, schema: siteWorld?.schema ?? null, fingerprint: siteWorld ? worldFingerprint(siteWorld) : null, historyLength: siteWorld?.history?.length ?? 0, layout: theme?.layout?.id ?? null, error: siteSync?.error ?? siteError }; }, get siteWorld() { return siteWorld; }, get demo() { return demo; }, demoStep, why: id => explainAgent(store.world, id), get commands() { return commandInfo; }, get constructionStatus() { return constructionStatus; }, store, get scene() { return scene; }, get theme() { return theme; }, camera, get sim() { return mode === 'sim' ? sim : null; }, focus, setTheme: applyTheme }; // Dev handle for tests and console. Live mode exposes no simulator (5E correction B4).

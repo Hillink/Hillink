@@ -21,8 +21,8 @@ import { applyHqEvent, fromHqActivity } from './procgen/contract.mjs';
 const root = path.dirname(fileURLToPath(import.meta.url));
 const types = { '.html': 'text/html; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.jpg': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp' };
 const listed = (dir, exts) => { try { return fs.readdirSync(path.join(root, dir)).filter(f => exts.includes(path.extname(f))).map(f => `${dir}/${f}`); } catch { return []; } };
-const allowed = new Set(['index.html', 'style.css', 'main.mjs', 'site.html', 'site.mjs', 'site.css', 'lineup.html', ...['core', 'engine', 'render', 'render/art5d', 'render/art', 'ui', 'sim', 'adapters', 'themes', 'themes/fantasy', 'world', 'procgen'].flatMap(dir => listed(dir, ['.mjs']))]);
-for (const f of ['procgen/persist.mjs', 'procgen/evidence.mjs']) allowed.delete(f); // server side only (file system)
+const allowed = new Set(['index.html', 'style.css', 'main.mjs', 'site.html', 'site.mjs', 'site.css', 'lineup.html', ...['core', 'engine', 'render', 'render/art5d', 'render/art', 'render/px', 'ui', 'sim', 'adapters', 'themes', 'themes/fantasy', 'world', 'procgen'].flatMap(dir => listed(dir, ['.mjs']))]);
+for (const f of ['procgen/persist.mjs', 'procgen/evidence.mjs', 'render/px/png.mjs']) allowed.delete(f); // server side only (file system)
 const headers = { 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer', 'Content-Security-Policy': "default-src 'self'; style-src 'self'; script-src 'self'; img-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'" };
 
 // Pass 5F: the part of an HQ-created agent's definition the World may see: no instructions, no custom metadata.
