@@ -491,7 +491,15 @@ test('B20. broker unavailable (old sandbox image) in ZERO_CREDIT: HQ waits; it n
     const blocked = h.engine.state.events.filter(e => e.type === 'SPEND_APPROVAL_REQUIRED');
     assert.equal(blocked.length, 1, 'ZERO_CREDIT: the only runnable variant is metered, so the spend gate reports it');
     assert.match(blocked[0].data.reason, /\$0 route is not available here .*predates the Pass 4\.5 broker/);
+    // The owner sees the real cause first, and that no spend is needed (not "authorize a payment").
+    assert.match(blocked[0].data.ownerAction, /^The \$0 route cannot run here: claude-subscription-implementation: the sandbox base image predates .*no spend is needed/);
   } finally { await h.close(); }
+});
+
+test('B20b. a split broker HQ could not wire at start reports why (e.g. a stale image), not a generic "not configured"', () => {
+  const none = { available: () => ({ ok: true }) };
+  assert.equal(new ClaudeRouter(none, none, null, 'the sandbox base image predates the Pass 4.5 broker (hq-test-runner.mjs differs)').supports('implement-repo', 'split-broker').reason, 'the sandbox base image predates the Pass 4.5 broker (hq-test-runner.mjs differs)');
+  assert.match(new ClaudeRouter(none, none, null).supports('implement-repo', 'split-broker').reason, /not configured/);
 });
 
 test('B21. BUDGETED with a valid authorization still prefers the $0 broker: the authorization is not used', async () => {

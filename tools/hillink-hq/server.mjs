@@ -90,7 +90,7 @@ export async function createHQ({ port = 4312, directory = path.join(here, '.stat
         brokerServer = await new BrokerServer().start();
         subscription = new SubscriptionImplementer({ repoRoot, worktreeRoot, claudeBin, env, sandbox, base, broker: brokerServer, ...brokerOptions });
       }
-      engine.adapters['cli-claude'] = new ClaudeRouter(engine.adapters['cli-claude'], implementer, subscription);
+      engine.adapters['cli-claude'] = new ClaudeRouter(engine.adapters['cli-claude'], implementer, subscription, brokerReady.ok ? null : brokerReady.reason);
       if (!engine.state.agents.claude.assignment) engine.configureAgent('claude', { capabilities: [...new Set([...engine.state.agents.claude.capabilities, 'implement-repo'])] });
       const direct = implementer.available();
       implementationStatus = 'CONFIGURED';

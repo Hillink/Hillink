@@ -193,9 +193,12 @@ export class Conductor {
   spendGate(o, s, gate) {
     if (Object.values(o.decisions).some(d => d.status === 'PENDING' && d.resume?.type === 'spend')) return;
     const n = Object.values(o.decisions).filter(d => d.resume?.type === 'spend').length + 1;
-    this.engine.emit('SPEND_APPROVAL_REQUIRED', { taskId: null, objectiveId: o.id, stepId: s.id, code: gate.code, provider: gate.provider, agentId: gate.agentId, backend: gate.backend, why: gate.why, reason: gate.reason, estimatedCostUsd: gate.estimatedCostUsd, maxCostUsd: gate.maxCostUsd, alternatives: gate.alternatives, waitingWouldHelp: gate.waitingWouldHelp, mode: gate.mode, ownerAction: gate.mode === 'BUDGETED' ? `Authorize up to $${(gate.maxCostUsd ?? 0).toFixed(2)} for this objective in HQ, then choose retry.` : 'ZERO_CREDIT mode forbids metered compute. Use a $0 alternative, or restart HQ with HQ_COMPUTE_MODE=BUDGETED and authorize a bounded amount.' });
-    return this.requestDecision(o, `spend-${s.id}-${n}`, { authority: 'kyle', type: 'spend', stepId: s.id }, `${gate.code}: the ${s.kind} step needs metered ${gate.provider} compute (${gate.backend}). ${gate.reason} Why paid compute: ${gate.why} $0 alternatives: ${gate.alternatives.join(' ')}`, [
-      { id: 'retry', label: 'I authorized a bounded spend in HQ; try again' },
+    const freeDown = gate.mode !== 'BUDGETED' && Boolean(gate.freeUnavailable);
+    this.engine.emit('SPEND_APPROVAL_REQUIRED', { taskId: null, objectiveId: o.id, stepId: s.id, code: gate.code, provider: gate.provider, agentId: gate.agentId, backend: gate.backend, why: gate.why, reason: gate.reason, estimatedCostUsd: gate.estimatedCostUsd, maxCostUsd: gate.maxCostUsd, alternatives: gate.alternatives, waitingWouldHelp: gate.waitingWouldHelp, mode: gate.mode, ownerAction: gate.mode === 'BUDGETED' ? `Authorize up to $${(gate.maxCostUsd ?? 0).toFixed(2)} for this objective in HQ, then choose retry.` : freeDown ? `The $0 route cannot run here: ${gate.freeUnavailable}. Fix that, then retry; no spend is needed. HQ will not use the metered route in ZERO_CREDIT mode.`.slice(0, 1900) : 'ZERO_CREDIT mode forbids metered compute. Use a $0 alternative, or restart HQ with HQ_COMPUTE_MODE=BUDGETED and authorize a bounded amount.' });
+    // ZERO_CREDIT with the $0 route down (for example a stale sandbox image): lead with that, not with paying.
+    const lead = freeDown ? `The $0 ${s.kind} route is unavailable: ${gate.freeUnavailable}. Fix that, then retry; no spend is needed. HQ will not fall back to metered compute in ${gate.mode} mode. ` : '';
+    return this.requestDecision(o, `spend-${s.id}-${n}`, { authority: 'kyle', type: 'spend', stepId: s.id }, `${lead}${gate.code}: the ${s.kind} step needs metered ${gate.provider} compute (${gate.backend}). ${gate.reason} Why paid compute: ${gate.why} $0 alternatives: ${gate.alternatives.join(' ')}`, [
+      { id: 'retry', label: freeDown ? 'I fixed the $0 route (or authorized a bounded spend); try again' : 'I authorized a bounded spend in HQ; try again' },
       { id: 'stop', label: 'Stop the objective (nothing was paid, nothing ran)' },
     ]);
   }

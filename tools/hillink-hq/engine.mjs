@@ -323,7 +323,11 @@ export class Engine {
       if (unsupported.length) blocked = { ...blocked, reason: `${blocked.reason} The $0 route is not available here (${unsupported.map(u => `${u.route.routeId ?? u.route.variant}: ${u.reason}`).join('; ')}).`.slice(0, 900) };
       const ownerAction = mode === 'BUDGETED'
         ? `Authorize up to $${(blocked.maxCostUsd ?? 0).toFixed(2)} for this task in HQ (Spend), then retry it; or use a $0 alternative: ${blocked.alternatives.join(' ')}`.slice(0, 1900)
-        : `This needs metered ${blocked.provider} API compute, which ZERO_CREDIT mode forbids. $0 alternatives: ${blocked.alternatives.join(' ')} To pay for it: start HQ with HQ_COMPUTE_MODE=BUDGETED and authorize a bounded amount for this task.`.slice(0, 1900);
+        : unsupported.some(u => u.route.computeClass !== 'METERED_API')
+          ? `The $0 route cannot run here: ${unsupported.filter(u => u.route.computeClass !== 'METERED_API').map(u => `${u.route.routeId ?? u.route.variant}: ${u.reason}`).join('; ')}. Fix that and retry; no spend is needed. HQ will not use the metered route in ZERO_CREDIT mode.`.slice(0, 1900)
+          : unsupported.length
+          ? `The $0 route cannot run here: ${unsupported.map(u => `${u.route.routeId ?? u.route.variant}: ${u.reason}`).join('; ')}. Fix that and retry; no spend is needed. HQ will not use the metered route in ZERO_CREDIT mode.`.slice(0, 1900)
+          : `This needs metered ${blocked.provider} API compute, which ZERO_CREDIT mode forbids. $0 alternatives: ${blocked.alternatives.join(' ')} To pay for it: start HQ with HQ_COMPUTE_MODE=BUDGETED and authorize a bounded amount for this task.`.slice(0, 1900);
       this.emit('SPEND_APPROVAL_REQUIRED', { taskId: task.id, code: blocked.code, provider: blocked.provider, agentId: blocked.agentId, backend: blocked.backend, why: blocked.why, reason: blocked.reason, estimatedCostUsd: blocked.estimatedCostUsd, maxCostUsd: blocked.maxCostUsd, alternatives: blocked.alternatives, waitingWouldHelp: blocked.waitingWouldHelp, mode, ownerAction });
       return null;
     }

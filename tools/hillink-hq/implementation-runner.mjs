@@ -290,11 +290,13 @@ export class ClaudeImplementer {
 //   split-broker   -> SubscriptionImplementer (host Claude on Kyle's subscription, broker tools, sandboxed files/tests)
 //   direct-sandbox -> ClaudeImplementer (Claude inside the sandbox on the metered key; BUDGETED + authorization only)
 export class ClaudeRouter {
-  constructor(review, implement, broker = null) { Object.assign(this, { review, implement, broker, owner: new Map() }); }
+  // brokerProblem: why the split broker was not wired at start (for example a stale sandbox image), so HQ reports
+  // the real cause instead of a generic "not configured".
+  constructor(review, implement, broker = null, brokerProblem = null) { Object.assign(this, { review, implement, broker, brokerProblem, owner: new Map() }); }
   health() { return this.review.health(); }
   supports(operation, variant) {
     if (operation !== 'implement-repo') return variant === 'default';
-    if (variant === 'split-broker') return this.broker ? this.broker.available() : { ok: false, reason: 'the subscription split broker is not configured in this HQ' };
+    if (variant === 'split-broker') return this.broker ? this.broker.available() : { ok: false, reason: this.brokerProblem ? String(this.brokerProblem).slice(0, 300) : 'the subscription split broker is not configured in this HQ' };
     if (variant === 'direct-sandbox') return this.implement ? this.implement.available() : { ok: false, reason: 'the API-key sandbox runner is not configured' };
     return false;
   }
