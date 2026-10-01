@@ -1,4 +1,4 @@
-# HILLINK ART DIRECTION SPEC — DRAFT 1 (revision 4)
+# HILLINK ART DIRECTION SPEC — DRAFT 1 (revision 5)
 
 Status: **the overall direction is approved by Kyle as a working foundation (2026-10-01 00:12Z). That is not approval to
 implement.** No artwork, no vertical slice and no Pass 5I until Kyle approves. Kyle's decisions are in §25. Questions
@@ -11,13 +11,14 @@ that need more references stay [open] (§24).
 - **6D** for the Fantasy agent aliases.
 - **7A** for Real functional spaces (workstations, server bay, Real prop families) [Kyle 00:51Z].
 - **7B** for Fantasy functional spaces (workstations, Arcane Core/Archive, Fantasy prop families, banners) [Kyle 00:51Z].
+- **8** for the construction system in both themes (scenes, parity, roles, ambient workers, construction props) [Kyle 01:01Z]. Its exact building is illustrative.
 
 Earlier references stay valid for what they were approved for. Where an older *character* reference conflicts with 6B or
 6D, 6B or 6D wins. Where a generated incidental detail conflicts with this spec, the spec wins.
 
 Written 2026-10-01 on `claude/world-5h`, in answer to "PASS 5H — ITERATION 2" (Kyle, 2026-10-01 00:06Z).
 
-References are stored in `docs/world/references/pass5h-iter2/` (ref1–ref6, `ref6r-6a-6d-aliases.png`, `ref7a-real-functional-spaces.png` and `ref7b-fantasy-functional-spaces.png`). The 5H iteration 1 evidence it is compared
+References are stored in `docs/world/references/pass5h-iter2/` (ref1–ref6, `ref6r-6a-6d-aliases.png`, `ref7a-real-functional-spaces.png`, `ref7b-fantasy-functional-spaces.png` and `ref8-construction-gameplay-scale.png`). The 5H iteration 1 evidence it is compared
 against is in `docs/world/evidence/pass5h/`.
 
 Every rule carries one of these labels:
@@ -278,7 +279,7 @@ DO NOT COPY:
   Real Codex has no cybernetic eye at all (6B). Treated as a reference artifact.
 - **Codex's hair colour varies** between frames (black and brown). Treated as a reference inconsistency.
 - **Hard-hat workers who look like Claude.** The ambient worker in the server bay and outside T0 wears the same yellow
-  hard hat as construction Claude. See §25 C15.
+  hard hat as construction Claude. See §25 C15 and C24 (§20 rule).
 - **Modern monitors in the Fantasy interior** (panel 4B). This conflicts with the Fantasy material language (§8). See
   §25 C17.
 - **The Real T0 exterior and interior don't match**: one storey outside, two inside. See §25 C16.
@@ -587,7 +588,7 @@ USE:
 
 DO NOT COPY:
 - **The second hard-hat worker beside Claude in 7A.1.** He duplicates Claude's silhouette and violates C15. Real
-  helpers wait on C24.
+  helpers are now governed by C24 (resolved by ref 8).
 - **The two large green "HILLINK" fabric banners in 7A.3.** They are too prominent for understated branding and sit
   close to the C22 line. Branding is reduced to modern formats (§11).
 - Generated text and the floating name labels (C13).
@@ -680,6 +681,79 @@ What deliberately differs:
 - **Light sources.** Real uses electric light; Fantasy uses fire and crystal.
 - **Branding.** Real has an understated logo; Fantasy has green and gold banners.
 - **Codex's look.** The Real alias has no cybernetics; the Fantasy alias is the hybrid with one red eye.
+
+### REFERENCE 8: construction at gameplay scale, Real and Fantasy (`ref8-construction-gameplay-scale.png`) [Kyle, 2026-10-01 01:01Z]
+
+The board shows one construction event in both themes at 24 px in 2.5D isometric. It is laid out as follows:
+- **8A:** the Real sequence in 7 scenes.
+- **8A.1:** Real ambient workers, Real Claude, Real Codex, and Real construction props.
+- **8B and 8B.1:** the same for Fantasy.
+- **8C:** a stage-by-stage comparison of the two themes.
+- **8D:** the same floor plan through all stages, top-down.
+- **8E:** construction lighting at day, dusk and night.
+
+It is authoritative for the construction **system**: stage legibility, parity, roles, ambient workers and construction
+props. The exact generated building is illustrative only [Kyle].
+
+USE:
+- **Seven readable scenes per theme**, matched one to one across themes:
+
+  | Scene | Real (8A) | Fantasy (8B) |
+  |---|---|---|
+  | 1 site / planning | survey tripod, string lines, cones, a plan table, material pallets | a survey tent, rope lines, stakes, a plan table, stone and timber piles |
+  | 2 foundation | formwork, a poured slab, block courses, a concrete mixer | a stone footing ring and block courses |
+  | 3 structure | structural steel columns and beams | timber post-and-beam frame on the stone base |
+  | 4 walls + roof | concrete or panel walls going up, roof deck started, a crane hook | masonry walls going up, slate roof started, scaffolding |
+  | 5 systems / rough-in | ducts, cable trays, steel studs, racks arriving | timber partitions, runic conduits, a crystal panel being set |
+  | 6 interior / finishing | drywall closed, racks in, desks arriving, plants | shelving, rugs, banners and lights going in |
+  | 7 operational | the finished, furnished, lit T0 | the finished, furnished, lit T0 with green and gold banners |
+
+- **Claude as the builder.** Clips: idle, walk, build, carry, inspect plan, talk. Both aliases.
+- **Codex as the inspector.**
+  - Real clips: idle, walk, inspect, test, write, talk.
+  - Fantasy clips: idle, walk, inspect, study, write, talk.
+- **Ambient workers as a varied crew.**
+  - Real clips: idle, walk, carry, use tool, hammer, drill, weld, lift, push, point, talk.
+  - Fantasy clips: idle, walk, carry, hammer, mason, carpenter, push, lift, point, talk.
+  - Workers vary in hard-hat colour (white, grey, blue, yellow), vest, body, hair, tools and skin tone. The Fantasy
+    crew has its own trades, such as mason and carpenter.
+- **Construction prop rows.**
+  - Real: cones or barriers, materials, steel beams, concrete, tools, a scissor lift, a forklift, framing, HVAC units,
+    electrical, drywall, doors and windows, interior and office props.
+  - Fantasy: stone blocks, timber beams, scaffolding, rope and pulley, tools, crates and barrels, lanterns and
+    torches, rune stones, crafting parts, a workbench, anvil and forge, banners, doors and windows, interior props.
+- **8C.** The two themes share stage timing, camera and footprint.
+- **8D.** The intent is one footprint carried through every stage.
+- **8E.** The same art serves day, dusk and night. At night, Real uses work lights and Fantasy uses torches and
+  lanterns.
+
+DO NOT COPY:
+- **Modern machinery and gear in Fantasy.**
+  - The yellow forklift in 8B scene 3.
+  - Yellow modern hard hats on Fantasy workers in 8B scenes 1–2.
+  - The grey AC units outside the finished Fantasy building in 8B scene 7.
+  - The blue vehicle at the Fantasy site in 8C.
+  - Fantasy hauls with carts, sledges, rope and pulley and windlass; the crew wears cloth caps, hoods or nothing on
+    their heads.
+- **Footprint and massing mutation.**
+  - 8D's site outline differs from the later rectangle.
+  - The Fantasy foundation outline differs from its later walls.
+  - Real scene 3's steel frame reads taller than the one-storey finished building.
+  - Windows, doors and room splits shift between scenes.
+  - All of this is the "AI-image architectural mutation" Kyle bans. See the §17 same-building rule.
+- **Workers who are near-Claude.** Several 8A.1 workers combine a yellow-orange hat, an orange vest and a reddish
+  beard, so they read as Claude copies. The C24 rule (§20) forbids that combination.
+- **Exact worker count**, duplicated workers, malformed tools, generated text and the panel labels.
+- **The dense overlap in scenes 3–5**, where agents almost disappear into the crew. Agents must stay readable on top
+  (§7, §20).
+
+HILLINK APPLICATION:
+- **§17:** the seven scenes become the **visual scene grouping** over the existing truthful mapping. Canonical stages
+  are unchanged.
+- **§20 and C24:** the ambient-worker rule.
+- **§6:** the Claude, Codex and worker construction clips.
+- **§16:** the construction prop families.
+- **§9:** construction lighting.
 
 ---
 
@@ -811,7 +885,7 @@ The pillars:
       part of his Real identity**, with work boots and a tool belt or construction gear. He clearly reads as the person
       physically building things. He keeps a red-orange beard and hair (6B).
     - **Fantasy: a dwarf builder and artificer.** Dwarf anatomy, a large red-orange beard, forge and building identity,
-      hammer and tools, artificer styling. Headgear is contextual [C3].
+      hammer and tools, artificer styling. Headgear is contextual [C3]: a leather cap or smith's helmet, never a modern hard hat (ref 8).
   - **Codex (one canonical agent):**
     - **Real: an engineer.** A human man in technical or professional workwear, with engineering tools, a computer,
       plans or inspection gear. No cybernetic eye, no cybernetic shoulder, no armour, no robot silhouette.
@@ -910,6 +984,14 @@ The pillars:
     canonical activity; none implies state that isn't canonical.
   - [proposed] "maintain" at the infrastructure station is a Codex pose shown only when canonical state puts Codex
     there; the server bay or core never animates an agent by itself.
+- [Kyle 01:01Z, ref 8] **Construction clips:**
+  - **Claude**, both aliases: idle, walk, build, carry, inspect plan, talk. `measure` and `direct` are proposed poses.
+  - **Codex:**
+    - Real: idle, walk, inspect, test, write, talk.
+    - Fantasy: idle, walk, inspect, study, write, talk.
+  - **Ambient workers:** a separate, cheaper clip set (§20).
+    - Real: idle, walk, carry, use tool, hammer, drill, weld, lift, push, point, talk.
+    - Fantasy: idle, walk, carry, hammer, mason, carpenter, push, lift, point, talk.
 - [proposed] Props held in clips use the 5H attachment points: handNear, handFar, back, hip and head.
 - [Kyle] Celebrate plays only on canonical completion. Animation never implies a state that isn't canonical.
 - [proposed] Characters are animated by frame swapping, not by rotating limbs, so the pixel grid stays clean.
@@ -959,6 +1041,8 @@ The pillars:
   [Kyle C6] Hillink is **not** permanently locked to dusk. Dusk or evening stays the showcase condition for visual
   development because it shows lighting best.
 - [ref 7A.8, 7B 7I] Day (bright), dusk (warm) and night (moody) of the *same* room in both themes confirm this rule.
+- [Kyle, ref 8E] Construction sites follow the same rule. At night, Real adds work lights and Fantasy adds torches and
+  lanterns. The assets are the same; only the lighting differs.
 - [ref 5] **Time-of-day behaviour:** the same assets serve day, dusk and night. Only sky, ambient tint and light-pool
   strength change. Interior lights glow at all times and dominate more at night.
 - [Kyle C6] The art system must keep a future day/night cycle possible: light sources, ambient colour and sky are
@@ -1161,6 +1245,23 @@ The pillars:
 - [Kyle 00:51Z] Never carry generation artifacts into production props: generated text or misspellings, impossible
   geometry, duplicated objects, inconsistent proportions, decorative characters, malformed props, impossible floor
   plans, modern tech in Fantasy, or fantasy in Real. The written spec outranks any reference artifact.
+- [Kyle 01:01Z, ref 8] **Construction prop families.** These are vocabulary, not a checklist. They appear only on a
+  canonical construction site, and they change with the canonical stage (§17.1).
+  - **Real:**
+    - barriers and cones
+    - material pallets, steel beams, concrete and framing
+    - tools, lifts, electrical and HVAC
+    - drywall and panels, doors and windows
+    - crates and construction equipment
+    - [proposed] Vehicles such as a van, mixer or forklift are temporary site props for a stage. They are never
+      agents or capabilities.
+  - **Fantasy:**
+    - stone blocks, timber beams, scaffolding, ropes and pulleys
+    - tools, crates and barrels
+    - forge components and crafted hardware
+    - rune stones and arcane infrastructure
+    - doors and windows, and interior materials
+    - No modern machinery.
 - [proposed] Props are placed by the existing 5H dressing rules (never on walks, stations, solids or plots), extended
   with the §7 cluster rules and the density targets.
 - [proposed] **Story props bound to state** (read-only) swap variants, such as an open book, a lit monitor or a
@@ -1169,7 +1270,7 @@ The pillars:
 
 ## 17. Construction visual system
 
-- [Kyle] Eleven stages, each a canonical construction stage:
+- [Kyle] Eleven brief stages. They are *visual* stages, mapped onto the 9 canonical stages below and grouped into Reference 8's seven scenes (§17.1):
 
   | # | Stage | Real visuals | Fantasy visuals |
   |---|---|---|---|
@@ -1185,8 +1286,8 @@ The pillars:
   | 10 | finishing or detail | plants, lamps, signage | banners, torches, flowers |
   | 11 | operational | lights on, agent moves in | smoke, glow, agent moves in |
 
-- [proposed] Scaffolding, ladders, temporary work lights and a tarp appear during stages 5–8.
-- [Kyle] Builders visibly interact: Claude carries materials and hammers at the active stage's work point.
+- [proposed] Scaffolding, ladders, temporary work lights and a tarp appear during stages 5–8 (Fantasy: scaffolding, ladders, torches and a rope and pulley; no tarp of modern material).
+- [Kyle] Builders visibly interact: Claude carries materials and hammers at the active stage's work point (roles in §17.1).
 - [Kyle] **Art never advances progress.** The stage comes only from canonical construction state. This 5H rule is
   kept.
 - [code] Canonical construction (`procgen/construction.mjs` `STAGES`) has **9** stages: planning, site-preparation,
@@ -1215,6 +1316,123 @@ The pillars:
   - Nothing animates from walls to roof over time.
   - Facts that are already canonical but aren't progress may vary what is shown, deterministically. Examples: the
     assigned agent, a blocked or waiting gate, rework, the order number. They never imply advancement.
+
+### 17.1 Reference 8: seven visual scenes over the truthful mapping [Kyle 01:01Z, ref 8]
+
+- [Kyle] **Construction is a visual representation of canonical construction state, never decorative animation.** One
+  canonical project feeds both themes. Real and Fantasy never advance construction independently, and artwork never
+  creates or advances state.
+- [proposed] **The seven scenes group the canonical stages.** No canonical stage is added, split or renamed [Kyle C10].
+  The 11-row brief mapping above stays the finest truthful grain inside each scene.
+
+  | Ref 8 scene | Canonical stages | Brief rows | Variation allowed inside the scene (deterministic, from canonical facts only) |
+  |---|---|---|---|
+  | — (no scene) | no project exists for the plot | 1 | wild terrain, never a placeholder [§18] |
+  | 1 site / planning | `planning`, `site-preparation` | 2–3 | `planning` shows stakes, lines and the plan table; `site-preparation` adds cleared ground, cones and material piles |
+  | 2 foundation | `foundation` | 4 | none |
+  | 3 structure | `structure` | 5 | none |
+  | 4 walls + roof | `exterior` | 6–7 | **one combined composition** (walls rising, roof started); never a walls → roof sequence (§17) |
+  | 5 systems / rough-in | `systems` | 8 | none |
+  | 6 interior / finishing | `furnishing`, `inspection`, and `completed` before verification | 9–10 | `furnishing` shows interiors going in; `inspection` and completed-unverified add Codex inspecting on site |
+  | 7 operational | `operational` | 11 | lights on, agents move in, workers leave |
+
+- [proposed] Scenes 1 and 6 each span two canonical stages, so they show the stage they are actually in using the
+  variants above. They never show the second stage early.
+- [proposed] Facts that are canonical but are not progress may change *who* and *how*, never *how far*:
+  - `builders`
+  - `blocked`
+  - `waiting`
+  - `rework`
+  - `inspection` / `verdict`
+- [proposed] When a project is `blocked` or `waiting`, its work stops visibly. Tools are down, workers idle or leave,
+  and the work lights dim. The existing 5H blocked or waiting gate icon shows above the site. Nothing moves forward.
+
+**Same-building rule** [Kyle 01:01Z]. Every scene is the same structure. The player follows footprint → foundation →
+frame → enclosure → systems → interior → finished building.
+- [proposed] Every scene is drawn from one canonical footprint (the plot or room record) and one fixed opening plan.
+  The opening plan is the positions of the doors, windows and internal walls, derived deterministically from the
+  footprint.
+  - Scene 1's lines trace the exact footprint.
+  - Scene 2's slab fills it.
+  - Scene 3's columns stand at its corners and openings.
+  - Scene 4's walls leave gaps exactly where scene 7's doors and windows are.
+  - Scene 5's systems run where scene 7's equipment stands.
+- [proposed] There is no footprint teleportation, no change in dimensions or storey count, no moving doors or windows,
+  and no finished building that doesn't descend from its frame.
+- [proposed] Each scene is a superset of the previous one's permanent structure. Temporary items (scaffolding,
+  materials, vehicles in Real, carts in Fantasy, the crew) come and go.
+
+**Real construction** [Kyle] is modern:
+- concrete, structural steel and steel framing
+- modern wall systems, glass, doors and windows
+- electrical, networking, HVAC and technical infrastructure
+- modern tools, scaffolding and lifts
+
+There is no timber post-and-beam framing in Real.
+
+**Fantasy construction** [Kyle] translates the same progression into Fantasy's own material culture:
+- stone, masonry, timber and wooden framing
+- scaffolding, rope and pulleys
+- forge-made components and crafted hardware
+- runic infrastructure and arcane conduits
+
+Fantasy never reskins modern machinery. There are no forklifts, mixers, AC units, vehicles or hard hats; carts,
+sledges, a windlass and the crew do the work instead.
+
+**Claude's role** [Kyle]. Claude is the primary visual builder in both themes. Real Claude is the construction
+worker; Fantasy Claude is the dwarf builder and artificer.
+- He inspects plans, measures, hammers, builds, carries, directs work, handles materials and uses tools.
+- [proposed] He appears on site while the canonical project names him in `builders`, or by default during the build
+  stages (`site-preparation` to `furnishing`).
+- His clip follows the scene:
+
+  | Scene | Claude's clip |
+  |---|---|
+  | 1 | inspect plan or measure |
+  | 2–4 | carry, hammer or build |
+  | 5–6 | build or direct |
+
+- His animation reflects the stage. It never causes progress.
+
+**Codex's role** [Kyle]. Codex shows inspection, engineering and verification.
+- Real Codex, the engineer, inspects, measures, tests, reviews plans, and uses a tablet or engineering tools.
+- Fantasy Codex, the arcane-mechanical inspector, inspects, studies, tests, examines runes and systems, and verifies
+  work with his instruments.
+- [proposed] He appears on site when canonical state calls for it:
+  - at `inspection`
+  - while a completed project awaits verification
+  - when a review `verdict` or `rework` is recorded
+  - when HQ assigns him as a builder
+- Otherwise he stays at his station.
+- He is never shown as the primary builder unless canonical activity says so.
+
+**Activity and motion** [Kyle]. Construction feels active without becoming noise:
+- carrying, hammering, carts and lifts
+- welding sparks (Real) and forge sparks (Fantasy)
+- dust
+- material piles that shrink as the canonical stage moves past them
+- inspection
+- lights and systems coming on at `operational`
+
+[proposed] At most about 6 looping ambient motions are visible on one site at a time. Agents stay readable on top of
+the crew (§7).
+
+**Diegetic first** [Kyle]. A player can roughly tell the stage by looking:
+- a site looks like a site
+- a foundation shows foundation work
+- a structure exposes its structure
+- systems show infrastructure
+- finishing looks nearly complete
+- operational looks inhabited
+
+UI may clarify the exact canonical stage (§21).
+
+**Lighting** [Kyle, ref 8E]. Construction stays readable at day, dusk and night with the same art; only lighting
+changes (§9). At night, Real adds work lights and Fantasy adds torches and lanterns. Light supports the activity and
+never hides it.
+
+**Scope** [Kyle]. Reference 8 answers how *one structure* is built. It does **not** define how the whole World expands
+(T0 → T1 stays open, §18, §24).
 
 ## 18. Procedural expansion rules (World growth)
 
@@ -1305,9 +1523,31 @@ The pillars:
 - [proposed] To keep that distinction visible:
   - Ambient inhabitants have no nameplate, no status icon, no selection panel and no HUD count.
   - They use a reduced detail level and never an agent's silhouette signature or identity palette.
-  - [proposed, C15] Real Claude is himself a hard-hat construction worker (6B), so Real construction helpers must be
-    clearly different from him: a white or blue hard hat (never his yellow-orange), no beard, a different vest colour
-    (never his orange hi-vis), and a different build. See C24.
+  - [Kyle C24, 01:01Z] **Ambient builders are allowed during construction. They are not agents.** They make
+    legitimate canonical construction feel populated.
+    - They own no AI-agent identity and receive no Hillink tasks.
+    - They represent no capability and never advance construction.
+    - They never add to the agent count.
+    - What they do (walk, carry, hammer, lift, push carts, operate tools, move between work areas, loop work
+      animations) is downstream of canonical construction state. It never makes the renderer authoritative over
+      progress.
+  - [Kyle C24] **Never Claude clones.**
+    - **Real workers** vary in skin tone, hair, facial hair, body proportions, vest and workwear colours, hard-hat
+      colours, tools, equipment and silhouette.
+    - **Fantasy builders** vary by role (mason, carpenter, labourer, material carrier, scaffolder, smith's
+      assistant), and in body type, species or human appearance where appropriate, clothing, hair, equipment and
+      silhouette. Fantasy Claude's dwarf-artificer identity is never repeated across the crew.
+  - [proposed] A testable form of that rule:
+    - **Real:** no worker combines more than one of Real Claude's three cues (a yellow-orange hard hat, an orange
+      hi-vis vest, a red-orange full beard). No worker ever has the red-orange full beard.
+    - **Fantasy:** no worker combines dwarf proportions with a red-orange beard, a leather artificer apron or the
+      forge hammer.
+    - Both: every crew palette is checked against the §4 silhouette test.
+  - [proposed] **Crew size and presence** come deterministically from canonical facts:
+    - the stage, from 0 at `planning` up to a small cap of about 2–4 per site
+    - `blocked` or `waiting`, which leaves the crew idle or gone
+    - `operational`, at which point the crew leaves
+    The crew never comes from the clock and never appears on a site without a canonical project.
   - They don't appear in agent lists, and the renderer derives them from scenery data, never from World agents.
 
 ## 21. UI and status relationship to the World
@@ -1338,7 +1578,7 @@ The pillars:
 - **Colour:** flat fills become hue-shifted ramps with texture.
 - **Density:** isolated props in open floors become clustered, wall-heavy dressing with story props bound to state.
 - **Lighting:** even lighting becomes warm local pools against a dusk ambient, with light meaning activity.
-- **Construction:** 6 visual looks become 11 visual stages over the 9 canonical stages, with scaffolds, materials and builder interaction.
+- **Construction:** 6 visual looks become Reference 8's 7 scenes (11 brief stages at the finest grain) over the 9 unchanged canonical stages, with scaffolds, materials, Claude building, Codex inspecting, and a non-agent ambient crew.
 - **Starting World:** [Kyle C5] a compact, finished T0 that grows. The current two-floor HQ becomes an earned later
   stage.
 - **Ambient life:** [Kyle C7] ambient inhabitants are strictly separate from agents.
@@ -1363,7 +1603,7 @@ The pillars:
 
 ## 24. Remaining visual questions requiring reference material [open]
 
-Resolved by refs 5–7B:
+Resolved by refs 5–8:
 - pixel density (24 pixels)
 - Real T0 environment and materials (6A)
 - Real aliases (6B)
@@ -1374,20 +1614,16 @@ Resolved by refs 5–7B:
 - functional spaces in both themes, including Fantasy workstations without monitors (7A/7B, C25)
 - Fantasy Codex's arcane/mechanical balance (C23)
 - Fantasy banner colour (C26)
+- construction at gameplay scale, its parity, and Claude's and Codex's construction roles (ref 8, §17.1)
+- ambient builders versus Claude (ref 8, C24)
 
 Still open:
-1. **Construction at gameplay scale** for the 10 truthful stages (§17), in Real steel and Fantasy timber and stone,
-   with each theme's Claude performing it.
-   This is the next major problem. Kyle's working sequence (not yet spec, not finalized here):
-   - Real: site → foundation → structural steel → walls + roof → systems → interior → operational.
-   - Fantasy: site → foundation → timber/stone → walls + roof → systems/craft infrastructure → interior → operational.
-2. **Ambient workers**, especially Real construction helpers versus construction-worker Claude (C24). Waits for the
-   construction reference.
-3. **Kyle's avatar** (C14). Not inferred from 7A or 7B.
-4. **UI/HUD** in the pixel language.
-5. **Terrain edges** at T0 and as the World grows.
-6. **The T0 → T1 growth step** in each theme.
-7. **The shared central zone in Fantasy:** 7B shows a central table and hearth but no clear Fantasy translation of
+1. **Kyle's avatar** (C14). Not inferred from any reference.
+2. **UI/HUD** in the pixel language.
+3. **Terrain edges** at T0 and as the World grows.
+4. **The T0 → T1 world growth step** in each theme. Reference 8 shows how one structure is built, not how the World
+   expands.
+5. **The shared central zone in Fantasy:** 7B shows a central table and hearth but no clear Fantasy translation of
    Real's sofa and table (6C's red sofa is rejected). Low priority.
 
 ---
@@ -1400,7 +1636,7 @@ Resolved by Kyle on 2026-10-01 at 00:12Z:
 |---|---|---|
 | C1 | ChatGPT's palette | **Green and gold** is the identity palette. Royal cream, gold and richer garment detail may be added; green stays recognizable. Neither reference is copied literally. *Scope narrowed 00:40Z: this applies to **Fantasy** ChatGPT. Real ChatGPT's identity is the all-black suit (6B).* |
 | C2 | Codex's design | **Half-human cyborg with ONE RED EYE.** A human or cybernetic body, not a full robot. The red eye is a permanent identity and silhouette feature. *Scope narrowed 00:40Z: this applies to **Fantasy** Codex. Real Codex is an engineer with no cybernetics (6B). Refined 00:51Z by C23: an arcane-mechanical hybrid, still with one red eye.* |
-| C3 | Claude's headgear | **Red or orange hair and a full beard.** A hard hat or helmet appears only while actively doing construction work. *Scope narrowed 00:40Z: contextual headgear applies to **Fantasy** Claude. Real Claude's hard hat is part of his identity (6B).* |
+| C3 | Claude's headgear | **Red or orange hair and a full beard.** A hard hat or helmet appears only while actively doing construction work. *Scope narrowed 00:40Z: contextual headgear applies to **Fantasy** Claude. Real Claude's hard hat is part of his identity (6B). Ref 8 (01:01Z): Fantasy headgear is a leather cap or smith's helmet, never a modern hard hat.* |
 | C4 | Real HQ character identity | ~~Identities persist across themes… the same individual is recognizable in both.~~ **Superseded 00:40Z** by the alias model (§0): Real aliases are human role translations (boss, construction worker, engineer). They need not share anatomy, face, age, clothing or species with the Fantasy aliases. They are never generic: each reads as its role. |
 | C5 | Starting size | **Start small supersedes** the two-floor baseline as the starting state. The larger HQ is kept as an **earned growth stage**. Small is not primitive: Real T0 is a compact, finished small HQ; Fantasy T0 is a compact established outpost, small keep or workshop. Exact looks wait on references. |
 | C6 | Time of day | **Not locked to dusk.** The system must allow a future day/night cycle. Dusk is the showcase condition for now. No day/night system in this pass. |
@@ -1410,7 +1646,7 @@ Resolved by Kyle on 2026-10-01 at 00:12Z:
 | C10 | Construction stages | **Canonical authority does not change.** Visual stages map underneath the canonical stages. Sub-stages are allowed only if they can be derived deterministically without false progress; otherwise the limitation is documented. Only walls and roof share a stage; §17 has the mapping and how that pair is drawn. |
 | C11 | Cross-theme backdrop | **No fantasy castle behind Real.** Each theme stays physically coherent. Subtle shared motifs are fine, but the settings never blend. |
 | C12 | Kyle avatar (resolved 2026-10-01 00:25Z) | **Kyle may have a visual avatar. He is NOT an AI agent.** He represents the human owner and player. He appears only for legitimate owner interactions: NEEDS KYLE, approvals, owner decisions, meetings, inspections or visits, and ceremonies. He never autonomously performs AI work and never adds to the apparent agent population. His exact appearance is still open. |
-| C15 | Ambient workers vs Claude (resolved 00:32Z) | **Ambient workers must not duplicate Claude.** They have their own silhouettes, clothing, palettes and headgear. They may wear construction gear, but they are never Claude clones, and they remain non-agent inhabitants. |
+| C15 | Ambient workers vs Claude (resolved 00:32Z; detailed by C24) | **Ambient workers must not duplicate Claude.** They have their own silhouettes, clothing, palettes and headgear. They may wear construction gear, but they are never Claude clones, and they remain non-agent inhabitants. |
 | C16 | Real T0 storeys (resolved 00:32Z) | **Exterior and interior are the same physical volume.** A cutaway may expose spaces but never invent an impossible interior. Ref 6's T0 is a single storey. |
 | C17 | Monitors in Fantasy (resolved 00:32Z) | **No literal modern monitors in Fantasy.** Themes translate *function*, not *object*: a diagnostic workstation becomes an arcane-analysis station, a planning display becomes a map, war table or magical planning apparatus, and server equipment becomes the established world's equivalent. A deliberate hybrid technology needs a future reference that explicitly establishes it. |
 | C18 | Real wardrobe (resolved 00:32Z, **superseded 00:40Z**) | ~~Modern King DNA, dwarf DNA, cyborg DNA.~~ **Now:** Real wardrobe is the 6B role aliases. ChatGPT wears an all-black suit with no crown. Claude is a hard-hat construction worker, not a dwarf. Codex is an engineer with no cybernetics. Fantasy costumes are never carried into Real. |
@@ -1421,6 +1657,7 @@ Resolved by Kyle on 2026-10-01 at 00:12Z:
 | C23 | Fantasy Codex, arcane vs mechanical (resolved 00:51Z) | **An ARCANE-MECHANICAL HYBRID**, not a pure wizard and not a pure machine. He keeps **ONE RED EYE**, on the Fantasy alias only. Mechanical: the eye, brass fittings, precision instruments, components. Arcane: controlled magical energy, orb or crystal, runes, scrolls, books (§4). |
 | C25 | Fantasy functional spaces (resolved 00:51Z) | **Four fixed mappings:** Real command/orchestration office ↔ Fantasy war/command table; Real construction/builder workshop ↔ Fantasy forge/artificer workshop; Real engineering/testing station ↔ Fantasy arcane-mechanical analysis station; Real server/infrastructure bay ↔ Fantasy Arcane Core/Archive. **Not separate canonical systems** (§13). 6C's monitors, office chairs and desk-like forge remain rejected. |
 | C26 | Fantasy banner colour (resolved 00:51Z) | **Fantasy organizational banners are GREEN and GOLD primary.** Blue is a **local secondary** only, for Codex, arcane energy, magical technical systems and accents (§12). The earlier blue-and-gold-heraldry leaning is withdrawn. |
+| C24 | Ambient builders vs Claude (resolved 01:01Z, ref 8) | **Ambient builders are allowed during construction as non-agent inhabitants.** They own no identity, task or capability, never advance construction, and never add to the agent count; their activity is downstream of canonical state. **Never Claude clones:** Real workers vary in skin tone, hair, facial hair, build, vest and hard-hat colour, tools and silhouette. Fantasy builders vary by trade, body, species where appropriate, clothing and equipment, and never repeat Fantasy Claude's dwarf-artificer identity (§20). |
 | C13 | Room labels (resolved 2026-10-01 00:25Z) | **Environment first, text second.** Rooms are recognized by their physical design. Labels may appear on hover, on selection, in the inspector, in a map view, or as subtle architectural signage. No large permanent floating labels. |
 
 Still open:
@@ -1428,11 +1665,10 @@ Still open:
 | # | Question | Agent leaning (not a decision) |
 |---|---|---|
 | C14 | **Kyle avatar appearance:** how Kyle looks, and how his avatar stays clearly separate from agents. Not to be inferred from any reference [Kyle 00:51Z]. | A distinct human owner silhouette, visible only during owner interactions (C12). Never in a black suit, hard hat or glasses, so he can't be mistaken for a Real alias. |
-| C24 | **Real construction helpers vs Real Claude:** Real Claude is a hard-hat construction worker, so ambient construction workers risk looking like him (C15). 7A.1 even shows a second hard-hat worker beside him. Ambient workers need their own faces, silhouettes, palettes, clothing and equipment [Kyle 00:51Z]. **Waits for the construction reference.** | Helpers get white or blue hard hats, no beard, a non-orange vest and a different build (§20). |
 
 ---
 
 ## Next steps (only after approval)
-REFERENCES → spec → review → Reference Batch 2C (7A/7B, done) → **construction reference (next)** → more references or corrections → approved visual language → small
+REFERENCES → spec → review → Reference Batch 2C (7A/7B, done) → Reference 8 (construction, done) → **T0 → T1 world-growth reference (next)** → more references or corrections → approved visual language → small
 vertical-slice prototype (one room, three agents, both themes) → visual review → refinement → propagation. [Kyle]
 No implementation, no Pass 5I and no World-wide redesign until Kyle approves.
