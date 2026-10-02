@@ -6,7 +6,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { randomBytes } from 'node:crypto';
-import { loadVaultConfig, VaultLibrary, VaultWriter, objectiveNoteName } from '../vault.mjs';
+import { loadVaultConfig, VaultLibrary, VaultWriter, objectiveNoteName, meta } from '../vault.mjs';
 import { startIngress, INGRESS_TOOLS, VAULT_TOOLS } from '../ingress/mcp-ingress.mjs';
 import { createHQ } from '../server.mjs';
 import { MemoryStore } from '../store.mjs';
@@ -66,6 +66,21 @@ test('V2. library: lists, reads and searches Markdown only, inside the vault, sk
   assert.throws(() => lib.search({ query: '  ' }), /query/);
 });
 
+test('V2b. library: notes carry frontmatter id, type and status; templates stay out unless asked for', () => {
+  const v = vaults(), lib = new VaultLibrary(loadVaultConfig({ env: { HQ_VAULTS_FILE: v.file } }));
+  fs.mkdirSync(path.join(v.hq, '90 Templates'));
+  fs.writeFileSync(path.join(v.hq, '90 Templates', 'Decision Template.md'), '---\nid: "{{id}}"\ntype: decision\n---\n# routing template\n');
+  fs.mkdirSync(path.join(v.hq, '04 Decisions'));
+  fs.writeFileSync(path.join(v.hq, '04 Decisions', '2026-10-02 Routing.md'), '---\r\nid: decision-20261002-routing\r\ntype: decision\r\nstatus: superseded\r\n---\r\n# Routing\r\nOld routing rule.\r\n');
+  const listed = lib.list({ vault: 'hq' }).notes;
+  assert.ok(!listed.some(n => n.path.startsWith('90 Templates/')), 'templates are not knowledge');
+  assert.deepEqual(listed.find(n => n.path === '04 Decisions/2026-10-02 Routing.md'), { vault: 'hq', path: '04 Decisions/2026-10-02 Routing.md', id: 'decision-20261002-routing', type: 'decision', status: 'superseded' });
+  assert.equal(lib.list({ vault: 'hq', folder: '90 Templates' }).notes.length, 1, 'asked for by folder');
+  assert.deepEqual(lib.search({ query: 'routing' }).hits.map(h => [h.path, h.status]), [['04 Decisions/2026-10-02 Routing.md', 'superseded']]);
+  assert.equal(lib.read({ vault: 'hq', path: '04 Decisions/2026-10-02 Routing.md' }).status, 'superseded');
+  assert.deepEqual(meta('no frontmatter'), {});
+});
+
 test('V3. library: a symlink out of the vault is neither listed nor readable', { skip: process.platform === 'win32' && 'symlinks need privileges on Windows' }, () => {
   const v = vaults(), lib = new VaultLibrary(loadVaultConfig({ env: { HQ_VAULTS_FILE: v.file } }));
   fs.symlinkSync(path.join(v.base, 'outside.md'), path.join(v.ref, 'link.md'));
@@ -73,7 +88,7 @@ test('V3. library: a symlink out of the vault is neither listed nor readable', {
   assert.throws(() => lib.read({ vault: 'ref', path: 'link.md' }), /leaves the vault/);
 });
 
-test('V4. writer: objective, approval, decision and daily-log notes under HQ/ only; no duplicates across restarts', async () => {
+test('V4. writer: objective, approval, decision and daily-log records under 10 HQ Activity only; no duplicates across restarts', async () => {
   const v = vaults(), config = loadVaultConfig({ env: { HQ_VAULTS_FILE: v.file } }), cursorFile = path.join(tmp(), 'vault-sync.json');
   const h = harness();
   const before = new VaultWriter(config.vaults[0], { cursorFile });
@@ -87,29 +102,31 @@ test('V4. writer: objective, approval, decision and daily-log notes under HQ/ on
   assert.ok(writer.sync(h.engine.state) > 0);
   const o = h.engine.state.objectives[id], name = objectiveNoteName(o);
   assert.equal(name, `${id.slice(0, 8)} Pricing page slow  perf`);
-  const note = fs.readFileSync(path.join(v.hq, 'HQ', 'Objectives', `${name}.md`), 'utf8');
-  assert.match(note, new RegExp(`hq_id: ${id}`));
+  const note = fs.readFileSync(path.join(v.hq, '10 HQ Activity', 'Objectives', `${name}.md`), 'utf8');
+  // HQ Brain note schema: a generated record citing the objective
+  assert.deepEqual(meta(note), { id: `record-objective-${id}`, type: 'record', status: 'active' });
+  for (const field of ['owner: hq', 'claim_basis: observed-in-runtime', `sources: ["hq-objective:${id}"]`, `scope: "objective:${id}"`, 'objective_status: QUEUED', 'tags: [hq-brain/record]']) assert.ok(note.includes(field), field);
   assert.match(note, /\*\*merge\*\*: APPROVED by kyle: Fine\./);
   assert.match(note, /Which reviewer\?: \*\*codex\*\* by chatgpt/);
-  const decisions = fs.readdirSync(path.join(v.hq, 'HQ', 'Decisions'));
+  const decisions = fs.readdirSync(path.join(v.hq, '10 HQ Activity', 'Decisions'));
   assert.equal(decisions.length, 2);
   assert.ok(decisions.some(f => f.endsWith('approval merge.md')) && decisions.some(f => f.endsWith('decision d1.md')));
-  const daily = fs.readdirSync(path.join(v.hq, 'HQ', 'Daily'));
+  const daily = fs.readdirSync(path.join(v.hq, '10 HQ Activity', 'Daily'));
   assert.equal(daily.length, 1);
-  const log = fs.readFileSync(path.join(v.hq, 'HQ', 'Daily', daily[0]), 'utf8');
+  const log = fs.readFileSync(path.join(v.hq, '10 HQ Activity', 'Daily', daily[0]), 'utf8');
   assert.match(log, new RegExp(`Objective received: \\[\\[${name}\\]\\]`));
   assert.match(log, /Approval merge approved by kyle/);
   assert.match(log, /Decision on .* codex by chatgpt/);
   // A restarted HQ (new writer, same cursor) neither repeats nor backfills the log; unchanged notes are not rewritten.
   const restarted = new VaultWriter(config.vaults[0], { cursorFile });
   assert.equal(restarted.sync(h.engine.state), 0);
-  assert.equal(fs.readFileSync(path.join(v.hq, 'HQ', 'Daily', daily[0]), 'utf8'), log);
+  assert.equal(fs.readFileSync(path.join(v.hq, '10 HQ Activity', 'Daily', daily[0]), 'utf8'), log);
   h.engine.emit('ORCHESTRATOR_NOTE_POSTED', { id: 'n1', title: 'Resume the pricing sequence', body: 'x', by: 'kyle' });
   assert.equal(restarted.sync(h.engine.state), 1);
-  assert.match(fs.readFileSync(path.join(v.hq, 'HQ', 'Daily', daily[0]), 'utf8'), /Note for the orchestrator: Resume the pricing sequence\n$/);
+  assert.match(fs.readFileSync(path.join(v.hq, '10 HQ Activity', 'Daily', daily[0]), 'utf8'), /Note for the orchestrator: Resume the pricing sequence\n$/);
   // Kyle's own notes and the read-only vault are untouched; HQ wrote only under HQ/.
   assert.equal(fs.readFileSync(path.join(v.hq, 'Mine.md'), 'utf8'), 'Kyle wrote this.\n');
-  assert.deepEqual(fs.readdirSync(v.hq).sort(), ['HQ', 'Mine.md', 'Runbooks']);
+  assert.deepEqual(fs.readdirSync(v.hq).sort(), ['10 HQ Activity', 'Mine.md', 'Runbooks']);
   assert.deepEqual(fs.readdirSync(v.ref).sort(), ['.obsidian', 'Product', 'image.png']);
   assert.throws(() => new VaultWriter(config.vaults[1]), /writable/);
 });
@@ -148,7 +165,7 @@ test('V6. createHQ: vaults.json turns the notebook on, a broken one leaves HQ ru
   try {
     assert.match(hq.vaults().status, /^ENABLED: hq \(HQ writes here\), ref \(read-only\)$/);
     const id = hq.engine.conductor.submit({ objective: 'Investigate X.', type: 'investigate', title: 'Investigate X' });
-    const file = path.join(v.hq, 'HQ', 'Objectives', `${id.slice(0, 8)} Investigate X.md`);
+    const file = path.join(v.hq, '10 HQ Activity', 'Objectives', `${id.slice(0, 8)} Investigate X.md`);
     for (let i = 0; i < 100 && !fs.existsSync(file); i++) await new Promise(r => setTimeout(r, 20));
     assert.ok(fs.existsSync(file), 'HQ wrote the objective note on its tick');
     const session = await fetch(`${hq.origin}/api/session`, { headers: { 'x-hq-client': 'command-center' } }).then(r => r.json());

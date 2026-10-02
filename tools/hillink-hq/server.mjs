@@ -148,7 +148,7 @@ export async function createHQ({ port = 4312, directory = path.join(here, '.stat
   // here; its loopback listener starts only when enabled.
   const owner = new OwnerDoor(engine, { conductor });
   // Obsidian vaults (vault.mjs): off unless HQ_VAULTS_FILE or <state dir>/vaults.json lists them. HQ writes its notes
-  // only under HQ/ in the one writable vault; other vaults are read-only references. A vault problem never stops HQ.
+  // only under "10 HQ Activity" in the one writable vault; other vaults are read-only references. A vault problem never stops HQ.
   let vaults = null, vaultWriter = null, vaultStatus = 'DISABLED', vaultError = null;
   try {
     const config = loadVaultConfig({ env, directory: store ? null : directory });

@@ -1,22 +1,27 @@
 // Obsidian vaults: HQ's notebook and its reference shelf. Off unless a vault list exists.
 //
 // - Config: HQ_VAULTS_FILE, or vaults.json in HQ's state directory:
-//   { "vaults": [ { "name": "hq", "path": "C:\\...\\Hillink HQ Vault", "writable": true },
-//                 { "name": "hillink", "path": "C:\\...\\claude" } ] }
-//   Names are 1-32 lowercase letters, digits or dashes. Paths are absolute existing directories. At most one vault is
-//   writable; every other vault is read-only reference material that HQ never writes to.
-// - Writes (VaultWriter): only inside <writable vault>/HQ/, never elsewhere in that vault, so Kyle's own notes are never
-//   touched. Objective and decision notes are regenerated from HQ's journal state (HQ stays the source of truth; a hand
-//   edit inside HQ/ is overwritten), and the daily log gets one line per notable journal event. Writes are atomic and
-//   skipped when nothing changed.
+//   { "vaults": [ { "name": "hq-brain", "path": "C:\\...\\Hillink HQ Vault", "writable": true },
+//                 { "name": "hillink-brain", "path": "C:\\...\\claude\\Hillink" } ] }
+//   Names are 1-32 lowercase letters, digits or dashes. Paths are absolute existing directories (a folder inside a
+//   vault is fine). At most one vault is writable; every other vault is read-only reference material HQ never writes to.
+// - Writes (VaultWriter): only inside <writable vault>/10 HQ Activity/ (the HQ Brain's generated-records folder), never
+//   elsewhere in that vault. Objective and decision records are regenerated from HQ's journal state (HQ stays the source
+//   of truth; a hand edit there is overwritten), and the daily log gets one line per notable journal event. Records
+//   carry the HQ Brain's frontmatter schema (type: record, claim_basis: observed-in-runtime, sources). Writes are atomic
+//   and skipped when nothing changed.
 // - Reads (VaultLibrary): list, read and search Markdown notes in any registered vault, confined to the vault (no
-//   absolute paths, no "..", no symlinks, no dot-folders such as .obsidian), with size caps. Note text is reference
-//   data written by people or HQ, never instructions.
+//   absolute paths, no "..", no symlinks, no dot-folders such as .obsidian), with size caps. Listings and search hits
+//   carry each note's id, type and status so callers can skip superseded notes; "90 Templates" (schema, not knowledge)
+//   is left out unless asked for by folder. Note text is reference data written by people or HQ, never instructions.
 import fs from 'node:fs';
 import path from 'node:path';
 
 export const VAULT_LIMITS = Object.freeze({ files: 5000, depth: 10, listed: 200, noteBytes: 100_000, searchBytes: 20_000_000, hits: 20, snippet: 160, query: 200 });
 const NAME = /^[a-z0-9-]{1,32}$/;
+// The HQ Brain's folders (see its Note Schema): templates are schema, never knowledge; records are HQ's generated notes.
+export const TEMPLATES_DIR = '90 Templates';
+export const ACTIVITY_DIR = '10 HQ Activity';
 const clip = (s, n) => (typeof s === 'string' ? (s.length > n ? `${s.slice(0, n - 1)}…` : s) : '');
 const line = (s, n = 300) => clip(String(s ?? '').replace(/\s+/g, ' ').trim(), n);
 
@@ -52,6 +57,19 @@ function confined(root, rel) {
   return real;
 }
 
+// id, type and status from a note's YAML frontmatter (simple "key: value" lines), when present.
+export function meta(text) {
+  const m = /^---\r?\n([\s\S]*?)\r?\n---/.exec(text ?? '');
+  const out = {};
+  if (!m) return out;
+  for (const l of m[1].split(/\r?\n/)) {
+    const kv = /^(id|type|status):\s*(.*)$/.exec(l);
+    if (kv) out[kv[1]] = line(kv[2].replace(/^"(.*)"$/, '$1'), 80);
+  }
+  return out;
+}
+const head = full => { const fd = fs.openSync(full, 'r'); try { const b = Buffer.alloc(2048); return b.toString('utf8', 0, fs.readSync(fd, b, 0, 2048, 0)); } finally { fs.closeSync(fd); } };
+
 export class VaultLibrary {
   constructor(config) { this.vaults = config?.vaults ?? []; }
   describe() { return this.vaults.map(v => ({ name: v.name, writable: v.writable, description: v.description })); }
@@ -75,12 +93,14 @@ export class VaultLibrary {
     walk(v.path, 0);
     return out;
   }
+  // Templates are left out unless the caller asks for that folder.
+  included(p, prefix) { return prefix ? p.startsWith(prefix) : !p.startsWith(`${TEMPLATES_DIR}/`); }
   list({ vault = null, folder = null } = {}) {
     const vaults = vault ? [this.vault(vault)] : this.vaults;
     const prefix = folder ? `${String(folder).replace(/\\/g, '/').replace(/\/+$/, '')}/` : '';
     const notes = [];
     let total = 0;
-    for (const v of vaults) for (const p of this.notes(v)) if (!prefix || p.startsWith(prefix)) { total += 1; if (notes.length < VAULT_LIMITS.listed) notes.push({ vault: v.name, path: p }); }
+    for (const v of vaults) for (const p of this.notes(v)) if (this.included(p, prefix)) { total += 1; if (notes.length < VAULT_LIMITS.listed) notes.push({ vault: v.name, path: p, ...meta(head(path.join(v.path, p))) }); }
     return { vaults: this.describe(), notes, total, truncated: total > notes.length };
   }
   read({ vault, path: rel }) {
@@ -90,7 +110,8 @@ export class VaultLibrary {
     try {
       const buf = Buffer.alloc(Math.min(st.size, VAULT_LIMITS.noteBytes));
       fs.readSync(fd, buf, 0, buf.length, 0);
-      return { vault: v.name, path: rel.replace(/\\/g, '/'), bytes: st.size, truncated: st.size > buf.length, modified: st.mtime.toISOString(), text: buf.toString('utf8') };
+      const text = buf.toString('utf8');
+      return { vault: v.name, path: rel.replace(/\\/g, '/'), ...meta(text), bytes: st.size, truncated: st.size > buf.length, modified: st.mtime.toISOString(), text };
     } finally { fs.closeSync(fd); }
   }
   search({ query, vault = null }) {
@@ -99,6 +120,7 @@ export class VaultLibrary {
     let scanned = 0;
     for (const v of vault ? [this.vault(vault)] : this.vaults) {
       for (const p of this.notes(v)) {
+        if (!this.included(p, '')) continue;
         if (hits.length >= VAULT_LIMITS.hits || scanned > VAULT_LIMITS.searchBytes) break;
         const full = path.join(v.path, p), st = fs.statSync(full);
         if (st.size > VAULT_LIMITS.noteBytes * 10) continue;
@@ -106,7 +128,7 @@ export class VaultLibrary {
         const text = fs.readFileSync(full, 'utf8'), i = text.toLowerCase().indexOf(q);
         if (i < 0 && !p.toLowerCase().includes(q)) continue;
         const from = Math.max(0, i - VAULT_LIMITS.snippet / 2);
-        hits.push({ vault: v.name, path: p, snippet: i < 0 ? line(text, VAULT_LIMITS.snippet) : line(text.slice(from, from + VAULT_LIMITS.snippet), VAULT_LIMITS.snippet) });
+        hits.push({ vault: v.name, path: p, ...meta(text), snippet: i < 0 ? line(text, VAULT_LIMITS.snippet) : line(text.slice(from, from + VAULT_LIMITS.snippet), VAULT_LIMITS.snippet) });
       }
     }
     return { query: q, hits, truncated: hits.length >= VAULT_LIMITS.hits || scanned > VAULT_LIMITS.searchBytes };
@@ -123,17 +145,18 @@ const safe = s => line(s, 60).replace(/[[\]#^|\\/:*?"<>]/g, '').replace(/\.+$/, 
 export const objectiveNoteName = o => `${o.id.slice(0, 8)} ${safe(o.input?.title || o.input?.objective)}`;
 const link = (state, id) => { const o = state.objectives?.[id]; return o ? `[[${objectiveNoteName(o)}]]` : `objective ${line(id, 40)}`; };
 const yaml = s => JSON.stringify(String(s ?? ''));
+// Frontmatter in the HQ Brain's Note Schema: a generated record, observed in HQ's runtime, citing the objective.
+function record({ id, title, objective: o, updated = o.updatedAt, extra = [] }) {
+  return ['---', `id: ${yaml(id)}`, 'type: record', `title: ${yaml(title)}`, 'status: active', `scope: ${yaml(`objective:${o.id}`)}`, `created: ${day(o.createdAt)}`, `updated: ${day(updated)}`, 'owner: hq', 'claim_basis: observed-in-runtime', `sources: [${yaml(`hq-objective:${o.id}`)}]`, ...extra, 'tags: [hq-brain/record]', '---'];
+}
 
 export function renderObjective(o) {
   const steps = o.order.map(id => o.steps[id]);
   const approvals = Object.values(o.approvals ?? {}), decisions = Object.values(o.decisions ?? {});
   const out = [
-    '---',
-    `hq_id: ${o.id}`, `type: ${yaml(o.input?.type)}`, `status: ${o.status}`, `created: ${iso(o.createdAt)}`, `updated: ${iso(o.updatedAt)}`,
-    `requested_by: ${yaml(o.requestedBy?.agentId ?? 'kyle')}`, 'tags: [hq/objective]',
-    '---',
+    ...record({ id: `record-objective-${o.id}`, title: objectiveNoteName(o), objective: o, extra: [`objective_type: ${yaml(o.input?.type)}`, `objective_status: ${o.status}`, `requested_by: ${yaml(o.requestedBy?.agentId ?? 'kyle')}`] }),
     `# ${line(o.input?.title || o.input?.objective, 160)}`, '',
-    '> Written by HQ from its journal. Edits here are overwritten; put your own notes elsewhere in the vault.', '',
+    '> Record written by HQ from its journal. Edits here are overwritten.', '',
     `**Status:** ${o.status}: ${line(o.statusReason, 400)}`, '',
     '## Objective', '', clip(String(o.input?.objective ?? ''), 2000), '',
   ];
@@ -151,7 +174,7 @@ export function renderDecision(o, kind, d) {
   const title = kind === 'approval' ? `Approval: ${d.gate}` : `Decision: ${line(d.question, 120)}`;
   const decided = kind === 'approval' ? d.status !== 'PENDING' : d.status === 'DECIDED';
   return [
-    '---', `hq_objective: ${o.id}`, `kind: ${kind}`, `status: ${d.status}`, `requested: ${iso(d.requestedAt)}`, ...(decided ? [`decided: ${iso(d.decidedAt)}`, `by: ${yaml(d.by)}`] : []), 'tags: [hq/decision]', '---',
+    ...record({ id: `record-${kind}-${o.id}-${safe(kind === 'approval' ? d.gate : d.id)}`, title, objective: o, updated: decided ? d.decidedAt : d.requestedAt, extra: [`kind: ${kind}`, `decision_status: ${d.status}`, `requested_at: ${iso(d.requestedAt)}`, ...(decided ? [`decided_at: ${iso(d.decidedAt)}`, `decided_by: ${yaml(d.by)}`] : [])] }),
     `# ${title}`, '', `Objective: [[${objectiveNoteName(o)}]]`, '',
     ...(kind === 'approval'
       ? [`**Why it needs approval:** ${line(d.reason, 600)}`, '', decided ? `**Outcome:** ${d.status} by ${d.by}${d.channel ? ` (${d.channel})` : ''}${d.note ? `: ${line(d.note, 600)}` : ''}` : '**Outcome:** waiting for Kyle']
@@ -188,7 +211,7 @@ export class VaultWriter {
   // neither repeats nor backfills the whole journal into the daily log.
   constructor(vault, { cursorFile = null } = {}) {
     if (!vault?.writable) throw Error('VaultWriter needs the writable vault');
-    this.root = path.join(vault.path, 'HQ');
+    this.root = path.join(vault.path, ACTIVITY_DIR);
     const st = fs.lstatSync(this.root, { throwIfNoEntry: false });
     if (st && (st.isSymbolicLink() || !st.isDirectory())) throw Error(`${this.root} must be a plain folder`);
     for (const sub of ['Objectives', 'Decisions', 'Daily']) fs.mkdirSync(path.join(this.root, sub), { recursive: true });
@@ -222,7 +245,7 @@ export class VaultWriter {
     }
     for (const [k, lines] of byDay) {
       const file = path.join(this.root, 'Daily', `${k}.md`);
-      if (!fs.existsSync(file)) fs.writeFileSync(file, `---\ndate: ${k}\ntags: [hq/daily]\n---\n# HQ log ${k}\n\n`);
+      if (!fs.existsSync(file)) fs.writeFileSync(file, ['---', `id: "record-daily-${k}"`, 'type: record', `title: "HQ log ${k}"`, 'status: active', 'scope: hq', `created: ${k}`, `updated: ${k}`, 'owner: hq', 'claim_basis: observed-in-runtime', 'sources: ["hq-journal"]', 'tags: [hq-brain/record]', '---', `# HQ log ${k}`, '', ''].join('\n'));
       fs.appendFileSync(file, `${lines.join('\n')}\n`);
       changed += lines.length;
     }
