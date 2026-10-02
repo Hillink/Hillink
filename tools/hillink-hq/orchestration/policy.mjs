@@ -57,7 +57,7 @@ const paths = (v, name, max, kind) => {
 // The only shape an objective can have. Unknown fields are refused, so nothing unvalidated reaches the planner.
 export function validateObjectiveInput(input) {
   if (!input || typeof input !== 'object' || Array.isArray(input)) throw Error('Objective must be an object');
-  const allowed = ['objective', 'type', 'system', 'scope', 'tests', 'acceptanceCriteria', 'constraints', 'requestedActions', 'title', 'reviewCommit'];
+  const allowed = ['objective', 'type', 'system', 'scope', 'tests', 'acceptanceCriteria', 'constraints', 'requestedActions', 'title', 'reviewCommit', 'resumeFrom'];
   for (const k of Object.keys(input)) if (!allowed.includes(k)) throw Error(`Unexpected objective field "${String(k).slice(0, 40)}"`);
   const objective = str(input.objective, 'objective', 2000);
   const type = input.type ?? 'fix';
@@ -79,6 +79,14 @@ export function validateObjectiveInput(input) {
     if (type !== 'review') throw Error('reviewCommit is only for review objectives');
     if (typeof input.reviewCommit !== 'string' || !/^[0-9a-f]{40}$/.test(input.reviewCommit)) throw Error('reviewCommit must be a full 40-character lowercase hex sha');
     out.reviewCommit = input.reviewCommit;
+  }
+  // Resume preserved implementation work (resume.mjs): the conductor resolves and checks it against HQ's evidence.
+  if (input.resumeFrom != null) {
+    if (type !== 'implement') throw Error('resumeFrom is only for implement objectives');
+    const r = input.resumeFrom;
+    if (typeof r === 'string') out.resumeFrom = r.trim().slice(0, 40);
+    else if (r && typeof r === 'object' && !Array.isArray(r)) out.resumeFrom = { worktree: String(r.worktree ?? '').slice(0, 40), ...(r.patchHash != null ? { patchHash: String(r.patchHash).slice(0, 64) } : {}), ...(r.base != null ? { base: String(r.base).slice(0, 40) } : {}) };
+    else throw Error('resumeFrom must be a preserved worktree name');
   }
   if (type === 'implement') {
     // A direct implementation objective must already be a complete, valid Pass 2.6 contract.

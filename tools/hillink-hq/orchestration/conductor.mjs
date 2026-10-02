@@ -14,6 +14,7 @@ import { candidates, assertImplementer, ROUTES } from './routing.mjs';
 import { parseHandoff, implementationHandoff, framingFor, hashOf } from './handoff.mjs';
 import { classify, retryDecision, loopGuard, repeated } from './retry.mjs';
 import { validateImplementation } from '../implementation-policy.mjs';
+import { resolveResume } from '../resume.mjs';
 import { REVIEW_META_DIR } from '../review-snapshot.mjs';
 
 // Linked task briefs are capped at 16,000 characters by the engine; quoted evidence is fitted under this budget.
@@ -51,6 +52,9 @@ export class Conductor {
   submit(raw, { requestedBy = null } = {}) {
     const input = validateObjectiveInput(raw);
     if (input.reviewCommit && !this.verifiedImplementation(input.reviewCommit)) throw Error(`HQ has no record of verifying commit ${input.reviewCommit}; only an HQ-verified commit can be reviewed this way.`);
+    // Resolved now, from HQ's own evidence (or Kyle's stated hash and base on the HTTP API only), and journaled with
+    // the objective; the runner verifies it again on disk before importing anything.
+    if (input.resumeFrom != null) { input.resume = resolveResume(this.state, input.resumeFrom, { scope: input.scope, owner: requestedBy == null }); delete input.resumeFrom; }
     const open = Object.values(this.state.objectives ?? {}).filter(o => !TERMINAL.has(o.status)).length;
     if (open >= this.limits.maxActiveObjectives) throw Error(`HQ already has ${open} open objectives (limit ${this.limits.maxActiveObjectives}); finish or cancel one first.`);
     // taskId null = ChatGPT through the connector ingress (ingress/mcp-ingress.mjs): no HQ orchestration turn is calling.
