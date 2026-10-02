@@ -5,7 +5,8 @@
 import { drawPlant, plantHeight } from '../../art5d/ground.mjs';
 import { skyColors } from '../sky.mjs';
 import { css } from '../color.mjs';
-import { TAU, HT, LOW, shade, mix, poly, glow, h1, pattern, TEX, fillPlan, inPlan, drawGround, ib, baseH, frontFace, paintFront, table, chair, screen, glyphRows, drawSite, drawRefit, decorSpans, tallSpans, windowsOf, wallOfDoor, wallFace, orientedBox } from './common.mjs';
+import { TAU, HT, LOW, shade, mix, poly, glow, h1, pattern, TEX, fillPlan, inPlan, drawGround, ib, baseH, frontFace, paintFront, table, chair, screen, glyphRows, drawSite, drawRefit, decorSpans, tallSpans, windowsOf, wallOfDoor, wallFace, orientedBox, hearthSpots as hearthSpotsOf, spotBox, spotFace, spotAt } from './common.mjs';
+import { modernSite } from './modern-site.mjs';
 
 const C = {
   plaster: '#ebe5da', cut: '#3a3e46', concrete: '#a4a8ae', concreteDark: '#7e838b', oak: '#c99a62', oakDark: '#9c7244', steel: '#2c3038', alu: '#b9bec5',
@@ -23,6 +24,26 @@ export function createModernStyle({ K, U, model }) {
   const decor = decorSpans(model), tall = tallSpans(model);
   const winOf = new Map(model.walls.map(w => [w, windowsOf(w, decor, tall, 30, 20)]));
   const doorWall = new Map(model.doors.map(dr => [dr, wallOfDoor(model, dr)]));
+  // The lounge's fireplace spot (shared with Fantasy): a walnut feature wall with a linear fireplace and a canvas.
+  const hearthSpots = hearthSpotsOf(model, winOf);
+  const ext = modernSite({ K, U, model, C, hearthSpots });
+  function fireplace(d, sp) {
+    const { ctx, K } = d, f = sp.f, T = d.reduced ? 0 : d.T, face = (b, h0, h1, fn) => { const [kind, c, a, e] = spotFace(sp, b); K.onFace(ctx, f, kind, c, a, e, h0, h1, e - a, h1 - h0, g => fn(g, e - a, h1 - h0)); };
+    const pb = { ...spotBox(sp, 0, 3, -30, 30), h0: 0, h1: HT - 8 };
+    K.box(ctx, f, pb, '#5a4637', { top: '#3a2e25' });
+    face(pb, 0, HT - 8, (g, w, h) => {
+      g.fillStyle = 'rgba(0,0,0,0.18)'; for (let x = 2; x < w; x += 3) g.fillRect(x, 0, 0.6, h);
+      // A canvas above the fire.
+      g.fillStyle = '#f1efea'; g.fillRect(w * 0.18, 10, w * 0.64, 30); const cols = ['#3a7bd5', '#e0b85a', '#c0533d', '#2b2f36']; for (let i = 0; i < 4; i++) { g.fillStyle = cols[i]; g.beginPath(); g.arc(w * (0.3 + i * 0.13), 18 + (i % 2) * 10, 5 + (i % 3) * 2, 0, TAU); g.fill(); } g.strokeStyle = '#2b2f36'; g.lineWidth = 0.6; g.strokeRect(w * 0.18, 10, w * 0.64, 30);
+      // The firebox: a black slot with a low flame line over pale stones.
+      const y = h - 26; g.fillStyle = '#121418'; g.fillRect(w * 0.12, y, w * 0.76, 12); g.fillStyle = '#d9d4ca'; for (let x = w * 0.14; x < w * 0.86; x += 3.2) { g.beginPath(); g.ellipse(x, y + 10.5, 1.5, 0.9, 0, 0, TAU); g.fill(); }
+      const gr = g.createLinearGradient(0, y + 10, 0, y + 2); gr.addColorStop(0, '#ffd27a'); gr.addColorStop(0.6, '#ff8a3a'); gr.addColorStop(1, 'rgba(255,100,40,0)'); g.fillStyle = gr; g.beginPath(); g.moveTo(w * 0.14, y + 10); for (let x = w * 0.14; x <= w * 0.86; x += 1.4) g.lineTo(x, y + 10 - 2.5 - 4 * Math.abs(Math.sin(x * 0.6 + T * 6)) * (0.6 + 0.4 * Math.sin(T * 2.3 + x * 0.2))); g.lineTo(w * 0.86, y + 10); g.closePath(); g.fill();
+      g.fillStyle = 'rgba(255,255,255,0.07)'; g.fillRect(w * 0.12, y, w * 0.2, 12);
+    });
+    K.box(ctx, f, { ...spotBox(sp, 0, 9, -34, 34), h0: 0, h1: 5 }, '#d9d4ca', { edge: 'rgba(255,255,255,0.5)' });
+    const [lx, lz] = spotAt(sp, 6, 0), [gx, gy] = K.at(lx, lz, f, 14); glow(ctx, gx, gy, 30, '#ffb060', 0.35 + 0.05 * Math.sin(T * 5));
+    for (const k of [-26, 24]) { const [vx, vz] = spotAt(sp, 5, k); K.cylinder(ctx, f, vx, vz, 5, 12, 2, k < 0 ? '#e9e6df' : '#3a3e46'); }
+  }
 
   const floorFill = (ctx, kind) => {
     const [mat, base] = FLOORS[kind] ?? ['oak', '#c99d6b'];
@@ -223,11 +244,7 @@ export function createModernStyle({ K, U, model }) {
     },
     wall(d, w) {
       const { ctx, K } = d, f = w.f, b = { ...w.box, h0: w.h0, h1: w.h1 }, kind = w.room;
-      if (w.near) {
-        K.box(ctx, f, b, C.concrete, { top: '#8b9097' });
-        K.box(ctx, f, { x0: b.x0 - 0.5, x1: b.x1 + 0.5, z0: b.z0 - 0.5, z1: b.z1 + 0.5, h0: b.h1, h1: b.h1 + 1.6 }, C.oak, { edge: 'rgba(255,255,255,0.3)' });
-        return;
-      }
+      if (w.near) { ext.nearWall(d, w); return; }
       if (w.type === 'low' || w.type === 'partition') {
         if (w.h0 > 0) { K.box(ctx, f, b, WALLS[kind] ?? C.plaster, { top: C.cut }); return; }
         K.box(ctx, f, { ...b, h1: LOW }, WALLS[kind] ?? C.plaster, { top: C.cut });
@@ -243,6 +260,8 @@ export function createModernStyle({ K, U, model }) {
       K.onFace(ctx, f, F.kind, F.c, F.a, F.b, w.h0, w.h1, L, H, g => {
         if (w.h0 === 0) { g.fillStyle = 'rgba(30,30,36,0.55)'; g.fillRect(0, H - 2.5, L, 2.5); }
         if (kind === 'development' || kind === 'lounge') { const s = L * 0.3, e = L * 0.7; g.fillStyle = C.oak; g.fillRect(s, 6, e - s, H - 8.5); g.fillStyle = 'rgba(60,35,15,0.35)'; for (let x = s + 1.5; x < e; x += 2.4) g.fillRect(x, 6, 0.6, H - 8.5); }
+        // The lounge's linear fireplace set into its oak wall: a black firebox with a low, living flame line.
+        if ((kind === 'lounge' || kind === 'lounge-like') && w.h0 === 0 && w.type === 'back') { const s = L * 0.36, e = L * 0.64, y = H - 26, T = d.reduced ? 0 : d.T; g.fillStyle = '#16181c'; g.fillRect(s, y, e - s, 11); g.fillStyle = '#2b2f36'; g.fillRect(s - 2, y + 11, e - s + 4, 1.6); const gr = g.createLinearGradient(0, y + 9, 0, y + 3); gr.addColorStop(0, '#ffcf6a'); gr.addColorStop(1, 'rgba(255,120,40,0)'); g.fillStyle = gr; g.beginPath(); g.moveTo(s + 2, y + 9.5); for (let x = s + 2; x <= e - 2; x += 1.5) g.lineTo(x, y + 9.5 - 3 - 2.5 * Math.abs(Math.sin(x * 0.7 + T * 6)) * (0.6 + 0.4 * Math.sin(T * 3 + x))); g.lineTo(e - 2, y + 9.5); g.closePath(); g.fill(); g.fillStyle = 'rgba(255,255,255,0.08)'; g.fillRect(s, y, (e - s) * 0.3, 11); }
         if (kind === 'command') { g.fillStyle = '#34405a'; g.fillRect(0, H * 0.62, L, H * 0.38 - 2.5); }
         if (kind === 'servers' || kind === 'servers-like') { g.fillStyle = 'rgba(255,255,255,0.05)'; for (let x = 0; x < L; x += 8) g.fillRect(x, 0, 0.6, H); g.fillStyle = 'rgba(80,170,255,0.5)'; g.fillRect(0, H * 0.18, L, 0.8); }
         for (const [s, e] of winOf.get(w) ?? []) {
@@ -253,6 +272,7 @@ export function createModernStyle({ K, U, model }) {
           g.fillStyle = '#d9d6cf'; g.fillRect(x - 2, y1, ww + 4, 1.6);
         }
       });
+      for (const sp of hearthSpots) if (sp.w === w) fireplace(d, sp);
     },
     door(d, dr) {
       const { ctx, K } = d, f = dr.f, w = doorWall.get(dr), a = dr.axis === 'z' ? Math.min(dr.a.x, dr.b.x) : Math.min(dr.a.z, dr.b.z), e = dr.axis === 'z' ? Math.max(dr.a.x, dr.b.x) : Math.max(dr.a.z, dr.b.z), at = dr.axis === 'z' ? dr.a.z : dr.a.x;
@@ -306,8 +326,12 @@ export function createModernStyle({ K, U, model }) {
     },
     plantHeight: pl => plantHeight(pl, U),
     plant(d, pl) { drawPlant(d, pl, U); },
+    corner: ext.corner,
+    levelTop: ext.levelTop,
+    buildingLights: ext.buildingLights,
     extra(d, ex) {
       const { ctx, K } = d, f = 0, T = d.reduced ? 0 : d.T;
+      if (ext.extras[ex.type]) { ext.extras[ex.type](d, ex); return; }
       if (ex.type === 'lamp') { K.box(ctx, f, { x0: ex.x - 0.6, x1: ex.x + 0.6, z0: ex.z - 0.6, z1: ex.z + 0.6, h0: 0, h1: ex.h }, C.steel); K.box(ctx, f, { x0: ex.x - 2.5, x1: ex.x + 2.5, z0: ex.z - 1.2, z1: ex.z + 1.2, h0: ex.h, h1: ex.h + 1.6 }, C.steel); const [x, y] = K.at(ex.x, ex.z, f, ex.h - 0.2); ctx.fillStyle = d.night > 0.2 ? '#ffe2a8' : '#d6d0c2'; ctx.fillRect(x - 3, y, 6, 1); return; }
       if (ex.type === 'planter') { const b = { x0: ex.x - ex.w / 2, x1: ex.x + ex.w / 2, z0: ex.z - ex.d / 2, z1: ex.z + ex.d / 2 }; K.box(ctx, f, { ...b, h1: ex.h }, C.concreteDark, { top: '#5a4632' }); pottedLeaves(d, f, ex.x, ex.z, ex.h, 18, ex.x); return; }
       if (ex.type === 'bench') { items.bench(d, { ...ex, f, id: 'bench', facing: 'front' }); return; }
@@ -318,7 +342,7 @@ export function createModernStyle({ K, U, model }) {
         K.onFace(ctx, f, 'front', b.z0, b.x0, b.x1, 0, ex.h, ex.w, ex.h, g => { g.fillStyle = '#f4f6f8'; g.font = 'bold 9px ui-sans-serif, system-ui'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('HILLINK', ex.w / 2, ex.h * 0.42); g.fillStyle = C.blue; g.fillRect(ex.w * 0.2, ex.h * 0.68, ex.w * 0.6, 1.4); g.font = '4px ui-sans-serif, system-ui'; g.fillStyle = '#aeb8c6'; g.fillText('HQ', ex.w / 2, ex.h * 0.84); });
       }
     },
-    ground(d, R) { drawGround(d, R, { key: 'modern', grass: '#7fae58', lawn: '#8dbc62', edge: 'rgba(60,90,40,0.35)', roadEdge: '#9b9a94', road: () => '#4a4f57', roadMarks: (g, w) => { g.setLineDash([2.2 * U, 2.6 * U]); g.strokeStyle = 'rgba(242,242,236,0.75)'; g.lineWidth = 0.14 * U; g.beginPath(); w.pts.forEach(([x, z], i) => (i ? g.lineTo(x, z) : g.moveTo(x, z))); g.stroke(); g.setLineDash([]); }, pathEdge: '#9c9a93', path: g => pattern(g, 'm:pavers', 17, 17, TEX.tiles('#cfcac0', { s: 17 / 2 })), dirt: 'rgba(150,120,80,0.45)', tufts: ['#5f8f3f', '#7aa850'], flowers: ['#f4f1e6', '#f2d24b', '#b99cf0', '#ef8f8f'] }); },
+    ground(d, R) { drawGround(d, R, { key: 'modern', under: g => { for (const b of model.buildings) { const m = 0.55 * U, r = b.r; g.fillStyle = pattern(g, 'm:gravel', 30, 30, TEX.speckle('#c9c4b8', { n: 260, k: 0.14 })); g.fillRect(r.x0 - m, r.z0 - m, r.x1 - r.x0 + 2 * m, r.z1 - r.z0 + 2 * m); g.strokeStyle = '#8f8c86'; g.lineWidth = 1.2; g.strokeRect(r.x0 - m, r.z0 - m, r.x1 - r.x0 + 2 * m, r.z1 - r.z0 + 2 * m); } }, grass: '#7fae58', lawn: '#8dbc62', edge: 'rgba(60,90,40,0.35)', roadEdge: '#9b9a94', road: () => '#4a4f57', roadMarks: (g, w) => { g.setLineDash([2.2 * U, 2.6 * U]); g.strokeStyle = 'rgba(242,242,236,0.75)'; g.lineWidth = 0.14 * U; g.beginPath(); w.pts.forEach(([x, z], i) => (i ? g.lineTo(x, z) : g.moveTo(x, z))); g.stroke(); g.setLineDash([]); }, pathEdge: '#9c9a93', path: g => pattern(g, 'm:pavers', 17, 17, TEX.tiles('#cfcac0', { s: 17 / 2 })), dirt: 'rgba(150,120,80,0.45)', tufts: ['#5f8f3f', '#7aa850'], flowers: ['#f4f1e6', '#f2d24b', '#b99cf0', '#ef8f8f'] }); },
     vehicle(d, v) {
       const L = 2.4 * U * 0.42, W = 0.96 * U * 0.42, a = v.angle ?? 0, f = 0;
       d.ctx.save(); d.ctx.globalAlpha *= v.alpha ?? 1;
@@ -327,9 +351,9 @@ export function createModernStyle({ K, U, model }) {
       d.ctx.restore();
     },
     agentLook(a, e) {
-      if (a.id === 'claude') return { skin: '#f0c8a0', hair: '#5a3a24', hairStyle: 'swept', hat: 'hardhat', hatColor: '#ff9a3d', top: '#3d5a80', top2: '#3d5a80', vest: '#ff8a3d', vestStripe: '#f4f6f0', bottom: '#4a4f57', shoes: '#5a3d2a', belt: '#2b2f36', tool: 'hammer', screen: '#ffd9a8', carryColor: '#c8a26a', accent: AGENT_COLOR.claude };
-      if (a.id === 'codex') return { skin: '#e2b48e', hair: '#1f2328', hairStyle: 'swept', top: '#2e4e7a', top2: '#2e4e7a', bottom: '#2a2f38', shoes: '#e9e6df', glasses: '#1d1f26', headset: true, chestLight: '#4aa3ff', holdItem: 'tablet', screen: '#8fd0ff', accent: AGENT_COLOR.codex };
-      if (a.id === 'chatgpt') return { skin: '#c99a76', hair: '#1a1a1e', hairStyle: 'swept', top: '#17191e', top2: '#17191e', jacketOpen: true, shirt: '#f2f2f2', tie: '#2fbf71', bottom: '#17191e', shoes: '#0d0e10', holdItem: 'tablet', screen: '#9be39b', accent: AGENT_COLOR.chatgpt };
+      if (a.id === 'claude') return { skin: '#f0c8a0', hair: '#5a3a24', hairStyle: 'swept', hat: 'hardhat', hatColor: '#ff9a3d', top: '#3d5a80', top2: '#3d5a80', vest: '#ff8a3d', vestStripe: '#f4f6f0', bottom: '#4a4f57', shoes: '#5a3d2a', belt: '#2b2f36', toolbelt: '#7a5532', gloves: '#e0a640', tool: 'hammer', screen: '#ffd9a8', carryColor: '#c8a26a', accent: AGENT_COLOR.claude };
+      if (a.id === 'codex') return { skin: '#e2b48e', hair: '#1f2328', hairStyle: 'swept', top: '#2e4e7a', top2: '#2e4e7a', bottom: '#2a2f38', shoes: '#e9e6df', glasses: '#1d1f26', headset: true, lanyard: '#4aa3ff', pack: '#3a3f4a', packTrim: '#4aa3ff', holdItem: 'tablet', screen: '#8fd0ff', accent: AGENT_COLOR.codex };
+      if (a.id === 'chatgpt') return { scale: 1.06, skin: '#c99a76', hair: '#1a1a1e', hairStyle: 'swept', top: '#17191e', top2: '#17191e', jacketOpen: true, shirt: '#f2f2f2', tie: '#2fbf71', lapels: '#050608', pocketSquare: '#2fbf71', bottom: '#17191e', shoes: '#0d0e10', holdItem: 'tablet', screen: '#9be39b', accent: AGENT_COLOR.chatgpt };
       return { skin: '#e0b896', hair: '#3a2a20', top: '#6b7480', bottom: '#3b3f46' };
     },
     ambientLook(i) {
@@ -351,7 +375,7 @@ export function createModernStyle({ K, U, model }) {
       return null;
     },
     decorLight(dc) { return dc.type === 'statusScreen' || dc.type === 'codeWall' ? { r: 46, col: '#8fc0ff', i: 0.45 } : null; },
-    extraLight(ex, d) { if (ex.type === 'lamp') return { r: 64, col: '#ffd59a', i: 0.9, h: ex.h }; if (ex.type === 'sign') return { r: 40, col: '#cfe0ff', i: 0.5, h: ex.h }; return null; },
+    extraLight(ex, d) { if (ex.type === 'lamp') return { r: 64, col: '#ffd59a', i: 0.9, h: ex.h }; if (ex.type === 'sign') return { r: 40, col: '#cfe0ff', i: 0.5, h: ex.h }; return ext.extraLight(ex, d); },
     meetingMarker(d, x, y) { const ctx = d.ctx; ctx.beginPath(); ctx.roundRect(x - 11, y - 9, 22, 14, 5); ctx.fillStyle = '#2f6fd6'; ctx.fill(); for (let i = -1; i <= 1; i++) { ctx.beginPath(); ctx.arc(x + i * 5, y - 2, 1.6, 0, TAU); ctx.fillStyle = '#fff'; ctx.fill(); } },
   };
   function generic(d, it) { d.K.box(d.ctx, it.f, { ...ib(it), h0: baseH(it), h1: baseH(it) + it.h }, '#b9bec5', { edge: 'rgba(255,255,255,0.3)' }); }

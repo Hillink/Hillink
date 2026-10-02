@@ -8,7 +8,8 @@
 import { plantHeight } from '../../art5d/ground.mjs';
 import { skyColors } from '../sky.mjs';
 import { css } from '../color.mjs';
-import { TAU, HT, LOW, shade, mix, poly, glow, h1, texture, pattern, TEX, fillPlan, inPlan, drawGround, ib, baseH, frontFace, paintFront, table, chair, screen, glyphRows, drawSite, drawRefit, decorSpans, tallSpans, windowsOf, wallOfDoor, wallFace, orientedBox } from './common.mjs';
+import { TAU, HT, LOW, shade, mix, poly, glow, h1, texture, pattern, TEX, fillPlan, inPlan, drawGround, ib, baseH, frontFace, paintFront, table, chair, screen, glyphRows, drawSite, drawRefit, decorSpans, tallSpans, windowsOf, wallOfDoor, wallFace, orientedBox, hearthSpots as hearthSpotsOf, spotBox, spotFace, spotAt } from './common.mjs';
+import { fantasySite } from './fantasy-site.mjs';
 
 const C = {
   stone: '#b5a891', stoneDark: '#8c806c', plaster: '#e8dcbf', timber: '#5b3a22', timberLight: '#8a5a34', oak: '#7a4e2c', brass: '#c9a24a', gold: '#e8b832',
@@ -59,6 +60,25 @@ export function createFantasyStyle({ K, U, model }) {
   function book(d, f, x, z, h, col, open) { const { ctx, K } = d; if (open) { K.box(ctx, f, { x0: x - 4, x1: x + 4, z0: z - 2.5, z1: z + 2.5, h0: h, h1: h + 0.8 }, col); K.box(ctx, f, { x0: x - 3.6, x1: x - 0.2, z0: z - 2.2, z1: z + 2.2, h0: h + 0.8, h1: h + 1.2 }, C.parchment); K.box(ctx, f, { x0: x + 0.2, x1: x + 3.6, z0: z - 2.2, z1: z + 2.2, h0: h + 0.8, h1: h + 1.2 }, '#f4ead0'); } else K.box(ctx, f, { x0: x - 2.5, x1: x + 2.5, z0: z - 1.8, z1: z + 1.8, h0: h, h1: h + 1.6 }, col, { edge: 'rgba(255,230,160,0.4)' }); }
   function crystal(ctx, x, y, s, col, T, seed) { const p = 0.75 + 0.25 * Math.sin(T * 2 + seed); glow(ctx, x, y - s, s * 4, col, 0.3 * p); ctx.fillStyle = col; ctx.beginPath(); ctx.moveTo(x, y - s * 2.2); ctx.lineTo(x + s * 0.7, y - s * 0.8); ctx.lineTo(x, y); ctx.lineTo(x - s * 0.7, y - s * 0.8); ctx.closePath(); ctx.fill(); ctx.fillStyle = 'rgba(255,255,255,0.55)'; ctx.beginPath(); ctx.moveTo(x, y - s * 2.2); ctx.lineTo(x - s * 0.7, y - s * 0.8); ctx.lineTo(x - s * 0.15, y - s * 0.9); ctx.closePath(); ctx.fill(); }
 
+  // The mead hall's hearth (the lounge's fireplace spot, shared with Modern): a stone fireplace with a chimney breast.
+  const hearthSpots = hearthSpotsOf(model, winOf);
+  function hearth(d, sp) {
+    const { ctx, K } = d, f = sp.f, T = d.reduced ? 0 : d.T, face = (b, h0, h1, fn) => { const [kind, c, a, e] = spotFace(sp, b); K.onFace(ctx, f, kind, c, a, e, h0, h1, e - a, h1 - h0, g => fn(g, e - a, h1 - h0)); };
+    const br = { ...spotBox(sp, 0, 6, -15, 15), h0: 40, h1: HT };
+    K.box(ctx, f, br, C.stone, { top: C.cut });
+    face(br, 40, HT, (g, w, h) => { TEX.stone(C.stone, { w, h, row: 5 })(g); g.save(); g.translate(w / 2, 18); g.strokeStyle = '#9aa3ad'; g.lineWidth = 1.1; g.beginPath(); g.moveTo(-12, -12); g.lineTo(12, 10); g.moveTo(12, -12); g.lineTo(-12, 10); g.stroke(); g.fillStyle = C.emeraldDark; g.beginPath(); g.moveTo(-7, -8); g.lineTo(7, -8); g.lineTo(7, 1); g.quadraticCurveTo(0, 10, -7, 1); g.closePath(); g.fill(); g.strokeStyle = C.gold; g.lineWidth = 0.9; g.stroke(); g.fillStyle = C.gold; sigil(g, 0, -1.5, 4); g.restore(); });
+    const fb = { ...spotBox(sp, 0, 10, -22, 22), h0: 0, h1: 38 };
+    K.box(ctx, f, fb, C.stone, { top: '#a3967f' });
+    face(fb, 0, 38, (g, w, h) => { TEX.stone(C.stone, { w, h, row: 5.5 })(g); g.fillStyle = '#1c1414'; g.beginPath(); g.moveTo(9, 38); g.lineTo(9, 20); g.quadraticCurveTo(22, 6, 35, 20); g.lineTo(35, 38); g.closePath(); g.fill(); g.strokeStyle = '#8c806c'; g.lineWidth = 1.5; g.stroke(); g.fillStyle = 'rgba(255,120,40,0.3)'; g.fillRect(10, 26, 24, 12); });
+    K.box(ctx, f, { ...spotBox(sp, 0, 13, -25, 25), h0: 38, h1: 42 }, C.timber, { edge: 'rgba(255,220,160,0.35)' });
+    const [px, pz] = spotAt(sp, 10), [fx, fy] = K.at(px, pz, f, 2);
+    ctx.fillStyle = '#4a2a1a'; ctx.save(); ctx.translate(fx, fy - 1); ctx.rotate(-0.2); ctx.fillRect(-8, -1.5, 16, 3); ctx.rotate(0.4); ctx.fillRect(-7, -3, 14, 3); ctx.restore();
+    glow(ctx, fx, fy - 6, 40, '#ff8a2a', 0.45 + 0.1 * Math.sin(T * 7));
+    for (const [dx, sz, sd] of [[-5, 3, 1], [0, 4.2, 2], [5, 2.8, 3], [-2, 2.2, 4]]) flame(ctx, fx + dx, fy - 1, sz, T, sd);
+    for (const k of [-18, 18]) { const [cx, cz] = spotAt(sp, 6, k); candle(d, f, cx, cz, 42, T, k); }
+    const [kx, kz] = spotAt(sp, 6, -6); K.cylinder(ctx, f, kx, kz, 42, 47, 2.2, '#b8693a', { top: '#d08a50' });
+  }
+  const ext = fantasySite({ K, U, model, C, flame, candle, crystal, hearthSpots });
   const items = {
     desk(d, it) {
       const b = ib(it), f = it.f, h = it.h, T = d.T, st = d.stationState(it.station) ?? d.near?.(it);
@@ -316,6 +336,7 @@ export function createFantasyStyle({ K, U, model }) {
         // Sconce torches on the stone base line.
         for (let x = 24; x < L - 10; x += 72) { const X = x + F.a; if (wins.some(([s, e]) => X > s - 4 && X < e + 4)) continue; g.fillStyle = C.iron; g.fillRect(x - 0.8, H - base - 14, 1.6, 6); g.fillStyle = '#ffb347'; g.beginPath(); g.ellipse(x, H - base - 16 - Math.sin(T * 9 + x) * 0.4, 1.3, 2.2, 0, 0, TAU); g.fill(); }
       });
+      for (const sp of hearthSpots) if (sp.w === w) hearth(d, sp);
     },
     door(d, dr) {
       const { ctx, K } = d, f = dr.f, w = doorWall.get(dr), a = dr.axis === 'z' ? Math.min(dr.a.x, dr.b.x) : Math.min(dr.a.z, dr.b.z), e = dr.axis === 'z' ? Math.max(dr.a.x, dr.b.x) : Math.max(dr.a.z, dr.b.z), at = dr.axis === 'z' ? dr.a.z : dr.a.x;
@@ -370,8 +391,12 @@ export function createFantasyStyle({ K, U, model }) {
     },
     plantHeight: pl => plantHeight(pl, U) * 0.85,
     plant(d, pl) { fantasyPlant(d, pl); },
+    corner: ext.corner,
+    levelTop: ext.levelTop,
+    buildingLights: ext.buildingLights,
     extra(d, ex) {
       const { ctx, K } = d, f = 0, T = d.reduced ? 0 : d.T;
+      if (ext.extras[ex.type]) { ext.extras[ex.type](d, ex); return; }
       if (ex.type === 'lamp') { K.box(ctx, f, { x0: ex.x - 0.8, x1: ex.x + 0.8, z0: ex.z - 0.8, z1: ex.z + 0.8, h0: 0, h1: ex.h }, C.iron); const [x, y] = K.at(ex.x, ex.z, f, ex.h); ctx.strokeStyle = C.iron; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + 6, y - 2); ctx.stroke(); ctx.fillStyle = C.iron; ctx.fillRect(x + 4, y - 1, 4, 1); ctx.fillStyle = d.night > 0.2 ? '#ffd27a' : '#e8d9a8'; ctx.fillRect(x + 4.6, y, 2.8, 4); ctx.fillStyle = C.iron; ctx.fillRect(x + 4, y + 4, 4, 1); if (d.night > 0.2) glow(ctx, x + 6, y + 2, 10, '#ffb347', 0.5 * d.night); return; }
       if (ex.type === 'planter') { K.cylinder(ctx, f, ex.x, ex.z, 0, ex.h, ex.w * 0.45, C.stone, { top: '#5a3a22' }); urnPlant(d, f, ex.x, ex.z, ex.h - 3, 20, ex.x); return; }
       if (ex.type === 'bench') { items.bench(d, { ...ex, f, id: 'bench', facing: 'front' }); return; }
@@ -395,9 +420,9 @@ export function createFantasyStyle({ K, U, model }) {
       d.ctx.restore();
     },
     agentLook(a) {
-      if (a.id === 'claude') return { scale: 0.86, girth: 1.28, legs: 0.8, skin: '#efc29a', hair: '#a04a22', hairStyle: 'swept', beard: '#b0562a', hat: 'leathercap', hatColor: '#6b3f22', goggles: '#9fe7ff', top: '#b5652e', top2: '#9a5226', apron: '#4a2f1c', belt: '#2a1a10', buckle: C.brass, bottom: '#5a3d2a', shoes: '#2a1a10', tool: 'hammer', holdItem: 'scroll', carryColor: '#a8784a', accent: AGENT_COLOR.claude };
-      if (a.id === 'codex') return { skin: '#d9b08e', hair: '#1d1f2a', hat: 'hood', hatColor: '#2c3466', top: '#33416e', top2: '#2c3466', cape: '#232a52', bottom: '#232a52', shoes: '#1a1a22', cyborg: '#9aa3ad', eyeRed: '#ff3b30', chestLight: '#9fe7ff', belt: C.brass, tool: 'staff', holdItem: 'lens', accent: '#9fe7ff' };
-      if (a.id === 'chatgpt') return { skin: '#c99a76', hair: '#3a2a1c', hairStyle: 'swept', beard: '#4a3424', hat: 'crown', hatColor: C.gold, gem: '#3ddc84', top: '#2e8b57', top2: '#2e8b57', cape: '#1f5e3c', sash: C.gold, belt: '#5a3a1c', buckle: C.gold, bottom: '#1f3a2a', shoes: '#2a1a10', holdItem: 'scroll', accent: AGENT_COLOR.chatgpt };
+      if (a.id === 'claude') return { scale: 0.86, girth: 1.28, legs: 0.8, skin: '#efc29a', hair: '#a04a22', hairStyle: 'swept', beard: '#b0562a', hat: 'leathercap', hatColor: '#6b3f22', goggles: '#9fe7ff', top: '#b5652e', top2: '#9a5226', apron: '#4a2f1c', belt: '#2a1a10', buckle: C.brass, braid: C.gold, toolbelt: '#5a3a1c', gloves: '#6b4426', gauntletGlow: 'rgb(255,150,60)', pack: '#6b4426', packTrim: C.brass, bottom: '#5a3d2a', shoes: '#2a1a10', tool: 'hammer', holdItem: 'scroll', carryColor: '#a8784a', accent: AGENT_COLOR.claude };
+      if (a.id === 'codex') return { skin: '#d9b08e', hair: '#1d1f2a', hat: 'hood', hatColor: '#2c3466', top: '#33416e', top2: '#2c3466', cape: '#232a52', bottom: '#232a52', shoes: '#1a1a22', cyborg: '#9aa3ad', eyeRed: '#ff3b30', chestLight: '#9fe7ff', robe: '#283063', robeLen: 0.85, robeTrim: '#9fe7ff', circuits: '#9fe7ff', pauldron: '#9aa3ad', orb: 'rgb(255,80,60)', orbRing: 'rgba(159,231,255,0.8)', belt: C.brass, tool: 'staff', holdItem: 'lens', accent: '#9fe7ff' };
+      if (a.id === 'chatgpt') return { scale: 1.06, skin: '#c99a76', hair: '#3a2a1c', hairStyle: 'swept', beard: '#4a3424', hat: 'crown', hatColor: C.gold, gem: '#3ddc84', top: '#2e8b57', top2: '#2e8b57', cape: '#1f5e3c', sash: C.gold, ermine: true, robe: '#2e8b57', robeLen: 0.7, robeTrim: C.gold, scepter: C.gold, belt: '#5a3a1c', buckle: C.gold, bottom: '#1f3a2a', shoes: '#2a1a10', holdItem: 'scroll', accent: AGENT_COLOR.chatgpt };
       return { skin: '#e0b896', hair: '#3a2a20', top: '#6b4a2e', bottom: '#3b3f46' };
     },
     ambientLook(i) {
@@ -421,7 +446,7 @@ export function createFantasyStyle({ K, U, model }) {
       return null;
     },
     decorLight(dc) { return dc.type === 'statusScreen' || dc.type === 'codeWall' ? { r: 44, col: '#9fb8ff', i: 0.45 } : dc.type === 'window' ? { r: 30, col: '#ffd27a', i: 0.35 } : null; },
-    extraLight(ex) { if (ex.type === 'lamp') return { r: 60, col: '#ffb347', i: 0.9, h: ex.h }; return null; },
+    extraLight(ex, d) { if (ex.type === 'lamp') return { r: 60, col: '#ffb347', i: 0.9, h: ex.h }; return ext.extraLight(ex, d); },
     meetingMarker(d, x, y) { const ctx = d.ctx; ctx.beginPath(); ctx.roundRect(x - 11, y - 9, 22, 14, 5); ctx.fillStyle = C.crimson; ctx.fill(); ctx.strokeStyle = C.gold; ctx.lineWidth = 0.8; ctx.stroke(); ctx.fillStyle = C.gold; sigil(ctx, x, y - 2, 4); },
     // Selective magic: motes rising in the arcane core, and chimney smoke over the hearth.
     atmosphere(d) {

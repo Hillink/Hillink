@@ -71,6 +71,7 @@ export function drawGround(d, R, o) {
     for (const b of model.buildings) { const m = 5 * d.layout.U; g.fillStyle = o.lawn; g.globalAlpha = 0.55; g.beginPath(); g.roundRect(b.r.x0 - m, b.r.z0 - m, b.r.x1 - b.r.x0 + 2 * m, b.r.z1 - b.r.z0 + 2 * m, m); g.fill(); g.globalAlpha = 1; }
     const e = 2.2 * d.layout.U, gr = g.createLinearGradient(0, R.z0, 0, R.z0 + e); gr.addColorStop(0, o.edge); gr.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = gr; g.fillRect(R.x0, R.z0, R.x1 - R.x0, e);
     const gr2 = g.createLinearGradient(R.x1, 0, R.x1 - e, 0); gr2.addColorStop(0, o.edge); gr2.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = gr2; g.fillRect(R.x1 - e, R.z0, e, R.z1 - R.z0);
+    o.under?.(g);
     g.lineJoin = 'round'; g.lineCap = 'round';
     for (const w of model.ways) {
       if (w.kind === 'road') { stroke(g, w.pts, w.W + 1.2 * d.layout.U, o.roadEdge); stroke(g, w.pts, w.W, o.road(g)); o.roadMarks?.(g, w); }
@@ -244,3 +245,32 @@ export function orientedBox(d, f, cx, cz, L, W, h0, h1, a, col, o = {}) {
   poly(ctx, pts.map(([x, z]) => K.at(x, z, f, h1)), o.top ?? shade(col, 1.05), o.edge, 0.7);
   return pts;
 }
+
+// The lounge's fireplace: a lounge with no counter of its own gets a fireplace on its outer left (or back) wall, at the
+// clear span nearest the wall's middle, in place of any window there. Both styles use the same spot (a look for the
+// room, like its rug), so Modern and Fantasy agree where it is. Returns [{ w, c (centre along the wall), f, room }].
+export function hearthSpots(model, winOf) {
+  const out = [];
+  for (const room of model.rooms) {
+    const r = room.r, inRoom = it => it.f === room.level && it.x > r.x0 && it.x < r.x1 && it.z > r.z0 && it.z < r.z1;
+    if (!/lounge/.test(room.kind) || model.items.some(it => it.type === 'counter' && inRoom(it))) continue;
+    for (const type of ['left', 'back']) {
+      const w = model.walls.find(q => q.f === room.level && q.type === type && q.h0 === 0 && Math.abs(q.at - (type === 'left' ? r.x0 : r.z1)) < 1); if (!w) continue;
+      const a = Math.max(w.s, type === 'left' ? r.z0 : r.x0) + 28, b = Math.min(w.e, type === 'left' ? r.z1 : r.x1) - 28; if (b < a) continue;
+      const near = it => (type === 'left' ? it.x - it.w / 2 < w.at + 34 : it.z + it.d / 2 > w.at - 34);
+      const clear = c => !model.items.some(it => inRoom(it) && near(it) && (type === 'left' ? it.z + it.d / 2 > c - 28 && it.z - it.d / 2 < c + 28 : it.x + it.w / 2 > c - 28 && it.x - it.w / 2 < c + 28))
+        && !(type === 'back' && model.decor.some(q => q.f === w.f && Math.abs(q.z - w.at) < 2 && q.x1 > c - 30 && q.x0 < c + 30));
+      const mid = (a + b) / 2, cs = []; for (let c = a; c <= b; c += 4) cs.push(c);
+      const c = cs.sort((p, q) => Math.abs(p - mid) - Math.abs(q - mid)).find(clear); if (c === undefined) continue;
+      winOf.set(w, (winOf.get(w) ?? []).filter(([s, e]) => e < c - 30 || s > c + 30));
+      out.push({ w, c, f: w.f, room, axis: w.axis, at: w.at }); break;
+    }
+  }
+  return out;
+}
+// A plan box standing against a hearth spot's wall: d0..d1 out from the wall into the room, s0..s1 along it.
+export function spotBox(sp, d0, d1, s0, s1) { return sp.axis === 'x' ? { x0: sp.at + d0, x1: sp.at + d1, z0: sp.c + s0, z1: sp.c + s1 } : { x0: sp.c + s0, x1: sp.c + s1, z0: sp.at - d1, z1: sp.at - d0 }; }
+// The camera-facing face of such a box: [kind, c, a, b] for K.onFace.
+export function spotFace(sp, b) { return sp.axis === 'x' ? ['right', b.x1, b.z0, b.z1] : ['front', b.z0, b.x0, b.x1]; }
+// A plan point d out from the wall at offset s along it.
+export function spotAt(sp, d, s = 0) { return sp.axis === 'x' ? [sp.at + d, sp.c + s] : [sp.c + s, sp.at - d]; }

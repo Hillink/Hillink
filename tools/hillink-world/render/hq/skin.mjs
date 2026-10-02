@@ -63,8 +63,10 @@ export function createHqSkin(layout, skinId = 'real') {
   for (const dc of model.decor) { const b = { x0: dc.x0, x1: dc.x1, z0: dc.z - 3, z1: dc.z - 0.5 }; add(dc.f, { ...b, bias: 2, sb: boundsOf(b, dc.f, dc.h1 + 6), draw: d => style.decor(d, dc) }); }
   for (const sl of model.slots) add(sl.f, { ...sl.r, bias: -1, sb: boundsOf(sl.r, sl.f, HT), draw: d => style.slot(d, sl) });
   for (const site of model.sites) { const b = { x0: site.u.x0 - 6, x1: site.u.x1 + 6, z0: site.u.z0, z1: site.u.z1 }; add(site.f, { ...b, sb: boundsOf({ ...b, x0: b.x0 - 40, x1: b.x1 + 40 }, site.f, HT + 120), draw: d => style.site(d, site) }); }
+  // Exterior dressing by rule from the World's buildings, paths and entrance doors.
+  const extras = exteriorDressing(model, U, inIsland);
   // Vegetation on the island (the World's environment anchors and foundation beds), plus landscaping by rule.
-  for (const pl of [...model.plants, ...landscaping(model, U, R)]) {
+  for (const pl of [...model.plants, ...landscaping(model, U, R, extras)]) {
     if (!inIsland(pl.x, pl.z, 1.2 * U)) continue;
     const H = style.plantHeight(pl), r0 = Math.max(4, H * 0.1), b = { x0: pl.x - r0, x1: pl.x + r0, z0: pl.z - r0, z1: pl.z + r0 };
     const sb = boundsOf({ x0: pl.x - H * 0.6, x1: pl.x + H * 0.6, z0: pl.z - H * 0.3, z1: pl.z + H * 0.3 }, 0, H);
@@ -72,8 +74,6 @@ export function createHqSkin(layout, skinId = 'real') {
     const screens = model.buildings.some(bd => (pl.z < bd.r.z0 || pl.x > bd.r.x1) && H > 60 && overlap(sb, boundsOf(bd.r, 0, HT * bd.levels.length)));
     add(0, { ...b, sb, draw: d => { if (!screens) return style.plant(d, pl); d.ctx.save(); d.ctx.globalAlpha *= 0.42; style.plant(d, pl); d.ctx.restore(); }, plant: pl });
   }
-  // Exterior dressing by rule from the World's paths and entrance doors.
-  const extras = exteriorDressing(model, U, inIsland);
   for (const ex of extras) { const b = { x0: ex.x - ex.w / 2, x1: ex.x + ex.w / 2, z0: ex.z - ex.d / 2, z1: ex.z + ex.d / 2 }; add(0, { ...b, sb: boundsOf(b, 0, ex.h + 30), draw: d => style.extra(d, ex), ex }); }
   // Vehicle routes along the World's built roads (plan units); vehicles are drawn only on the island.
   const routes = Object.values(world.roads).filter(r => r.status === 'built' && r.points.length > 1).map(r => r.points.map(p => { const v = layout.view.toView(p.x, p.y); return [v.x * U, v.z * U]; }))
@@ -129,6 +129,7 @@ export function createHqSkin(layout, skinId = 'real') {
     for (const it of model.items) { const L = style.itemLight?.(it, d); if (L) { const [x, y] = P.at(it.x, it.z, it.f, L.h ?? it.h); out.push({ x, y, r: L.r, col: L.col, i: L.i }); } }
     for (const dc of model.decor) { const L = style.decorLight?.(dc, d); if (L) { const [x, y] = P.at((dc.x0 + dc.x1) / 2, dc.z - 4, dc.f, (dc.h0 + dc.h1) / 2); out.push({ x, y, r: L.r, col: L.col, i: L.i }); } }
     for (const ex of extras) { const L = style.extraLight?.(ex, d); if (L) { const [x, y] = P.at(ex.x, ex.z, 0, L.h ?? ex.h); out.push({ x, y, r: L.r, col: L.col, i: L.i }); } }
+    for (const b of model.buildings) for (const L of style.buildingLights?.(b, d) ?? []) { const [x, y] = P.at(L.x, L.z, L.f, L.h); out.push({ x, y, r: L.r, col: L.col, i: L.i }); }
     for (const e of agents) out.push({ x: e.x, y: e.y - e.h * 0.5, r: e.h * 1.0, col: style.agentColor(e.agent), i: 0.35 });
     for (const site of model.sites) { const [x, y] = P.at((site.u.x0 + site.u.x1) / 2, (site.u.z0 + site.u.z1) / 2, site.f, 40); out.push({ x, y, r: 120, col: style.siteLight ?? '#ffd27a', i: 0.6 }); }
     return out;
@@ -166,10 +167,14 @@ export function createHqSkin(layout, skinId = 'real') {
       for (const fn of flats[f] ?? []) fn(d);
       const items = (staticItems[f] ?? []).filter(onScreen);
       for (const it of items) if (it.it && !it.it.base) style.shadow?.(d, it.it);
+      // Building corners, depth-sorted with everything else: a back corner sorts as a thin box just behind its walls
+      // (so the walls cover its foot and trees behind it stay behind), a front corner as a box just outside it.
+      for (const b of model.buildings) if (b.levels.includes(f)) { const top = f === Math.max(...b.levels); for (const c of cornersOf(b, f, model)) { const o = { ...c, f, top, levels: b.levels.length, b }, sx = c.which[1] === 'l' ? -1 : 1, box = c.back ? { x0: c.x - 40, x1: c.x + 40, z0: c.z + 7, z1: c.z + 8 } : { x0: c.x + (sx < 0 ? -30 : -6), x1: c.x + (sx < 0 ? 6 : 30), z0: c.z - 30, z1: c.z + 6 }; items.push({ ...box, sb: boundsOf({ x0: c.x - 50, x1: c.x + 50, z0: c.z - 50, z1: c.z + 50 }, f, HT + 130), draw: () => style.corner?.(d, o) }); } }
       for (const e of agents) { if (e.ride && ['board', 'ride', 'exit'].includes(e.ride.request?.phase)) continue; const pl = layout.planAt(e.x, e.y); if (!pl || pl.floor !== f) continue; items.push({ ...charBox(e, pl.x, pl.z), draw: () => drawAgent(d, e) }); }
       for (const e of ambient) { const pl = layout.planAt(e.x, e.y); if (!pl || pl.floor !== f) continue; items.push({ ...charBox(e, pl.x, pl.z), draw: () => drawAmbient(d, e) }); }
       if (f === 0) for (const v of cars) { const L = STREET_SCALE.car.length / 2, b = { x0: v.x - L, x1: v.x + L, z0: v.y - L, z1: v.y + L }; items.push({ ...b, sb: boundsOf(b, 0, STREET_SCALE.car.height + 6), draw: () => style.vehicle(d, v) }); }
       for (const it of depthSort(items)) it.draw(d);
+      for (const b of model.buildings) if (b.levels.includes(f)) style.levelTop?.(d, f, b, f === Math.max(...b.levels));
     }
     // Hovered or selected room outline.
     for (const id of [env.hoverId, env.selectedId]) {
@@ -190,12 +195,12 @@ export function createHqSkin(layout, skinId = 'real') {
 
 // Landscaping placed by rule (not World state; it never blocks a way, a door or a building): trees along the far
 // edges of the island, low shrubs and flowers along the near edges, and flower borders on both sides of built paths.
-function landscaping(model, U, R) {
+function landscaping(model, U, R, extras = []) {
   const out = [], seen = [];
   const ok = (x, z, m) => !model.buildings.some(b => x > b.r.x0 - m && x < b.r.x1 + m && z > b.r.z0 - m && z < b.r.z1 + m)
     && !model.forecourts.some(f => x > f.x0 - m && x < f.x1 + m && z > f.z0 - m && z < f.z1 + m)
     && !model.ways.some(w => w.pts.some((p, i) => i && segDist(x, z, w.pts[i - 1], p) < w.W / 2 + m))
-    && !model.plants.some(p => Math.hypot(p.x - x, p.z - z) < 1.2 * U) && !seen.some(([a, b]) => Math.hypot(a - x, b - z) < 1.1 * U);
+    && !model.plants.some(p => Math.hypot(p.x - x, p.z - z) < 1.2 * U) && !extras.some(e => Math.abs(e.x - x) < e.w / 2 + 0.9 * U && Math.abs(e.z - z) < e.d / 2 + 0.9 * U) && !seen.some(([a, b]) => Math.hypot(a - x, b - z) < 1.1 * U);
   const put = (kind, x, z, s, seed, m = 0.6 * U) => { if (!ok(x, z, m)) return; seen.push([x, z]); out.push({ kind, x, z, s, seed }); };
   const hs = (a, b) => { let h = Math.imul(Math.round(a) ^ 0x9e3779b9, 0x85ebca6b) ^ Math.imul(Math.round(b) + 7, 0xc2b2ae35); h ^= h >>> 15; return ((h >>> 0) % 1000) / 1000; };
   const inset = 1.6 * U;
@@ -205,6 +210,12 @@ function landscaping(model, U, R) {
   // Near edges (z0 and x1): low planting only, so nothing hides the HQ.
   for (let x = R.x0 + inset; x < R.x1 - inset; x += 1.9 * U) { const r = hs(x, 3); put(r > 0.6 ? 'flowerShrub' : r > 0.3 ? 'grassClump' : 'shrub', x, R.z0 + 0.9 * U + r * 0.5 * U, 0.6 + r * 0.35, r); }
   for (let z = R.z0 + inset; z < R.z1 - inset; z += 1.9 * U) { const r = hs(z, 4); put(r > 0.6 ? 'flowerShrub' : r > 0.3 ? 'grassClump' : 'shrub', R.x1 - 0.9 * U - r * 0.5 * U, z, 0.6 + r * 0.35, r); }
+  // Meadow: loose clusters of flowers, grasses and the odd young tree in the open lawn.
+  for (let k = 0; k < 26; k++) {
+    const cx = R.x0 + 2 * U + hs(k, 7) * (R.x1 - R.x0 - 4 * U), cz = R.z0 + 2 * U + hs(k, 8) * (R.z1 - R.z0 - 4 * U);
+    if (model.buildings.some(b => cx > b.r.x0 - 4 * U && cx < b.r.x1 + 4 * U && cz > b.r.z0 - 4 * U && cz < b.r.z1 + 4 * U)) continue;
+    for (let i = 0; i < 5; i++) { const r = hs(k * 7 + i, 9), a = r * 6.28, rr = 0.6 * U + hs(i, k) * 1.4 * U; put(i === 0 && r > 0.7 && (cz > R.z0 + (R.z1 - R.z0) * 0.45 || cx < R.x0 + (R.x1 - R.x0) * 0.4) ? 'birch' : r > 0.45 ? 'flowerShrub' : r > 0.2 ? 'grassClump' : 'shrub', cx + Math.cos(a) * rr, cz + Math.sin(a) * rr, 0.45 + r * 0.4, r, 0.4 * U); }
+  }
   // Flower borders along built paths.
   for (const w of model.ways) {
     if (w.kind !== 'path' || !w.built) continue;
@@ -232,6 +243,40 @@ function exteriorDressing(model, U, inIsland) {
     for (const [dx, dz] of [[4.2, -5.2], [-4.2, -5.6], [5.8, -4.5]]) if (put({ type: 'flag', x: x + dx * U, z: z + dz * U, w: 0.3 * U, d: 0.3 * U, h: 3.2 * U })) break;
     for (const [dx, dz] of [[3.6, -2.2], [-3.6, -2.2], [4.6, -3.2]]) if (put({ type: 'bench', x: x + dx * U, z: z + dz * U, w: 1.6 * U, d: 0.6 * U, h: 0.5 * U })) break;
   }
+  // The gateway where a built path enters each forecourt (pylons in Modern, a stone arch in Fantasy).
+  for (const fc of model.forecourts) {
+    // The boundary crossing farthest from the door: where the path arrives, not where it meets the building.
+    let hit = null, best = -1;
+    for (const w of model.ways) { if (!w.built) continue; for (let i = 1; i < w.pts.length; i++) { const [ax, az] = w.pts[i - 1], [bx, bz] = w.pts[i]; let was = null; for (let k = 0; k <= 60; k++) { const t = k / 60, x = ax + (bx - ax) * t, z = az + (bz - az) * t, inside = x > fc.x0 && x < fc.x1 && z > fc.z0 && z < fc.z1; if (was !== null && inside !== was) { const dd = Math.hypot(x - fc.door.x, z - fc.door.z); if (dd > best && dd > 2 * U) { best = dd; hit = { x, z, axis: Math.abs(bx - ax) > Math.abs(bz - az) ? 'z' : 'x', W: w.W }; } } was = inside; } } }
+    if (hit) put({ type: 'gate', x: hit.x, z: hit.z, w: hit.axis === 'z' ? 0.5 * U : hit.W + 1.4 * U, d: hit.axis === 'z' ? hit.W + 1.4 * U : 0.5 * U, h: 2.6 * U, axis: hit.axis }, 0.5 * U, true);
+  }
+  for (const b of model.buildings) {
+    const r = b.r, fc = model.forecourts[0], dx = fc ? fc.door.x : (r.x0 + r.x1) / 2;
+    // A water feature beside the entrance forecourt, a seating spot by it, gardens and a service yard round the sides.
+    for (const [x, z] of [[dx - 6.4 * U, r.z0 - 3.6 * U], [dx + 6.4 * U, r.z0 - 3.6 * U], [r.x0 - 4.5 * U, r.z0 + 3 * U]]) if (put({ type: 'pool', x, z, w: 4.2 * U, d: 2.6 * U, h: 0.4 * U }, 3 * U)) { put({ type: 'bench', x, z: z - 2.2 * U, w: 1.6 * U, d: 0.6 * U, h: 0.5 * U }); break; }
+    for (const [x, z] of [[r.x0 - 4.4 * U, (r.z0 + r.z1) / 2], [r.x1 + 4.6 * U, r.z0 + 5 * U], [r.x0 - 5 * U, r.z1 - 2.5 * U]]) put({ type: 'garden', x, z, w: 3.6 * U, d: 2.8 * U, h: 0.35 * U }, 2.8 * U);
+    for (const [x, z] of [[r.x1 + 3.4 * U, r.z1 - 3.4 * U], [r.x1 + 3.4 * U, (r.z0 + r.z1) / 2 + 2 * U], [r.x0 + 4 * U, r.z1 + 3.4 * U]]) if (put({ type: 'yard', x, z, w: 3.4 * U, d: 4 * U, h: 1.2 * U }, 3 * U)) break;
+    for (const [x, z] of [[dx + 4.4 * U, r.z0 - 1.4 * U], [dx - 4.4 * U, r.z0 - 1.4 * U]]) if (put({ type: 'rack', x, z, w: 2 * U, d: 0.6 * U, h: 0.6 * U })) break;
+    // Hedges (Modern) or dry-stone walls (Fantasy) along the left side, leaving gaps.
+    for (let z = r.z0 + 1.2 * U; z < r.z1 - 1 * U; z += 2.1 * U) put({ type: 'hedge', x: r.x0 - 2.7 * U, z, w: 0.7 * U, d: 1.9 * U, h: 0.7 * U, axis: 'z' }, 0.5 * U);
+  }
+  // Hedges framing each forecourt's sides (gaps where a path comes through).
+  for (const fc of model.forecourts) for (let z = fc.z0 + 0.6 * U; z < fc.z1 - 0.4 * U; z += 1.6 * U) for (const x of [fc.x0 - 0.7 * U, fc.x1 + 0.7 * U]) put({ type: 'hedge', x, z, w: 0.6 * U, d: 1.4 * U, h: 0.55 * U, axis: 'z' }, 0.4 * U);
+  // Parking (cars in Modern, carts in Fantasy): nose-in bays beside the first stretch of each path that leaves a road,
+  // on the side away from the buildings.
+  for (const w of model.ways) {
+    if (w.kind !== 'path' || !w.built || w.pts.length < 2) continue;
+    const roadEnd = model.ways.some(o => o.kind === 'road' && o.built && o.pts.some(p => Math.hypot(p[0] - w.pts[0][0], p[1] - w.pts[0][1]) < 1.5 * U));
+    if (!roadEnd) continue;
+    const [ax, az] = w.pts[0], [bx, bz] = w.pts[1], L = Math.hypot(bx - ax, bz - az); if (L < 3 * U) continue;
+    let nx = -(bz - az) / L, nz = (bx - ax) / L; const b0 = model.buildings[0]?.r;
+    if (b0 && ((ax + bx) / 2 + nx - (b0.x0 + b0.x1) / 2) ** 2 + ((az + bz) / 2 + nz - (b0.z0 + b0.z1) / 2) ** 2 < ((ax + bx) / 2 - (b0.x0 + b0.x1) / 2) ** 2 + ((az + bz) / 2 - (b0.z0 + b0.z1) / 2) ** 2) { nx = -nx; nz = -nz; }
+    const off = w.W / 2 + 1.35 * U, ang = Math.atan2(nz, nx);
+    let n = 0;
+    for (let t = 1.1 * U; t < L - 1.4 * U && n < 3; t += 1.15 * U) { const x = ax + (bx - ax) * t / L + nx * off, z = az + (bz - az) * t / L + nz * off; if (put({ type: 'parked', x, z, w: 0.9 * U, d: 0.9 * U, h: 0.8 * U, angle: ang, seed: n }, 0.9 * U)) n++; }
+  }
+  // An outdoor terrace by each building (tables and parasols in Modern; trestle tables, barrels and a well in Fantasy).
+  for (const b of model.buildings) { const r = b.r; for (const [x, z] of [[r.x1 + 3.6 * U, r.z0 + 1.4 * U], [r.x1 + 3.6 * U, r.z0 + 6 * U], [r.x0 - 4.6 * U, r.z0 + 7 * U]]) if (put({ type: 'terrace', x, z, w: 4.2 * U, d: 3.4 * U, h: 0.2 * U }, 3 * U)) break; }
   for (const w of model.ways) {
     if (!w.built) continue;
     const pts = w.pts, side = w.W / 2 + 0.6 * U, step = (w.kind === 'road' ? 8 : 4.5) * U;
@@ -244,5 +289,12 @@ function exteriorDressing(model, U, inIsland) {
     }
   }
   return out;
+}
+// The four corners of a building's footprint ('bl' back-left, 'br' back-right, 'fl' front-left, 'fr' front-right).
+// Only corners where this storey's outer walls really meet are returned (a stepped or partial storey has fewer).
+function cornersOf(b, f, model) {
+  const r = b.r, all = [{ which: 'bl', x: r.x0, z: r.z1, back: true }, { which: 'br', x: r.x1, z: r.z1, back: true }, { which: 'fl', x: r.x0, z: r.z0, back: false }, { which: 'fr', x: r.x1, z: r.z0, back: false }];
+  const outer = model.walls.filter(w => w.f === f && w.h0 === 0 && (w.far || w.near)), near = (a, v) => Math.abs(a - v) < 2;
+  return all.filter(c => outer.some(w => (w.axis === 'z' ? near(w.at, c.z) && (near(w.s, c.x) || near(w.e, c.x)) : near(w.at, c.x) && (near(w.s, c.z) || near(w.e, c.z)))));
 }
 function segDist(x, z, a, b) { const dx = b[0] - a[0], dz = b[1] - a[1], L2 = dx * dx + dz * dz || 1, t = Math.max(0, Math.min(1, ((x - a[0]) * dx + (z - a[1]) * dz) / L2)); return Math.hypot(x - a[0] - t * dx, z - a[1] - t * dz); }
