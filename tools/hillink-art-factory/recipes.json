@@ -1,0 +1,20 @@
+{
+  "v": 1,
+  "note": "Allowlisted Art Factory recipes. HQ can only run a recipe by id; paths and settings come from this file, never from an objective.",
+  "recipes": {
+    "standin-robot": {
+      "title": "Stand-in proof: CC0 RobotExpressive as claude:fantasy (NOT Hillink art)",
+      "input": { "file": "inputs/standin-robot/RobotExpressive.glb", "sha256": "047f5e5fb3bb6d378bd1df16ca6137f2a596c99b3a1b5690b4020c05aaf6f319", "licence": "CC0-1.0", "author": "Tomas Laulhe (Quaternius); modifications Don McCurdy", "source": "https://github.com/mrdoob/three.js/tree/dev/examples/models/gltf/RobotExpressive" },
+      "agent": "claude",
+      "theme": "fantasy",
+      "status": "candidate",
+      "standIn": true,
+      "bodyPlan": "dwarf",
+      "clips": {
+        "idle": { "action": "Idle", "frames": 4, "fps": 2, "loop": true },
+        "walk": { "action": "Walking", "frames": 6, "fps": 8, "loop": true },
+        "work.hammer": { "action": "Punch", "frames": 4, "fps": 5, "loop": true }
+      }
+    }
+  }
+}

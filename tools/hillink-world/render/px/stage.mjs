@@ -55,7 +55,8 @@ function walkZone(layout, A) {
   return rects;
 }
 
-export function createStage(layout, theme = 'real', { lighting = 'dusk' } = {}) {
+// sprites (Art Factory Step 1): optional provider(actor) -> authored sprite or null; null keeps the procedural character.
+export function createStage(layout, theme = 'real', { lighting = 'dusk', sprites = null } = {}) {
   const scene = composeScene(layout, theme), { region, A } = scene, objects = scene.objects;
   const ordered = paintOrder(objects).map(i => objects[i]);
   ordered.forEach((o, i) => { o.order = i; });
@@ -118,7 +119,7 @@ export function createStage(layout, theme = 'real', { lighting = 'dusk' } = {}) 
     const vb = { l: view.x0 - 8, r: view.x0 + view.w + 8, t: view.y0 - 8, b: view.y0 + view.h + 48 };
     const items = [...dgrid.near(vb)].map(i => dynamic[i]).filter(o => overlaps(o.sb, vb));
     const chars = actors.map(a => {
-      const sp = spriteOf(a.look, a.lookKey, a.facing, a.clip, a.frame), fx = Math.round(a.foot[0]), fy = Math.round(a.foot[1]);
+      const sp = sprites?.(a) ?? spriteOf(a.look, a.lookKey, a.facing, a.clip, a.frame), fx = Math.round(a.foot[0]), fy = Math.round(a.foot[1]);
       const sx = fx - sp.foot[0], sy = fy - sp.foot[1], half = 8;
       return { actor: a, sp, sx, sy, fx, fy, id: `actor:${a.id}`, floor: a.plan.floor, x0: a.plan.x - half, x1: a.plan.x + half, z0: a.plan.z - half * 0.6, z1: a.plan.z + half * 0.6, bias: a.sitting ? 1 : 0, sb: { l: sx, r: sx + sp.buf.w, t: sy, b: sy + sp.buf.h } };
     });

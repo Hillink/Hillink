@@ -3,7 +3,7 @@
 // that stop loops. ChatGPT supplies an objective; HQ decides everything below from it.
 import { checkPath, validateImplementation } from '../implementation-policy.mjs';
 
-export const TASK_TYPES = ['investigate', 'review', 'fix', 'implement'];
+export const TASK_TYPES = ['investigate', 'review', 'fix', 'implement', 'asset'];
 // Actions that always need Kyle. HQ has no operation that performs any of them; approval records Kyle's decision.
 export const APPROVAL_GATES = {
   merge: 'Merging a branch changes the shared code line; only Kyle merges.',
@@ -54,7 +54,7 @@ const paths = (v, name, max, kind) => {
 // The only shape an objective can have. Unknown fields are refused, so nothing unvalidated reaches the planner.
 export function validateObjectiveInput(input) {
   if (!input || typeof input !== 'object' || Array.isArray(input)) throw Error('Objective must be an object');
-  const allowed = ['objective', 'type', 'system', 'scope', 'tests', 'acceptanceCriteria', 'constraints', 'requestedActions', 'title'];
+  const allowed = ['objective', 'type', 'system', 'scope', 'tests', 'acceptanceCriteria', 'constraints', 'requestedActions', 'title', 'asset'];
   for (const k of Object.keys(input)) if (!allowed.includes(k)) throw Error(`Unexpected objective field "${String(k).slice(0, 40)}"`);
   const objective = str(input.objective, 'objective', 2000);
   const type = input.type ?? 'fix';
@@ -71,11 +71,27 @@ export function validateObjectiveInput(input) {
     constraints: str(input.constraints, 'constraints', 1200, { optional: true }),
     requestedActions: [...new Set(requestedActions)],
   };
+  if (type === 'asset') {
+    if (out.scope.length || out.tests.length) throw Error('An asset objective has no scope or tests: HQ fixes both (the asset folder and the World tests)');
+    out.asset = validateAssetRequest(input.asset);
+  } else if (input.asset != null) throw Error('asset is only valid for type "asset"');
   if (type === 'implement') {
     // A direct implementation objective must already be a complete, valid Pass 2.6 contract.
     validateImplementation({ objective, scope: out.scope, tests: out.tests, acceptanceCriteria: out.acceptanceCriteria, constraints: out.constraints });
   }
   return out;
+}
+
+// Step 1 Art Factory: an asset objective names an allowlisted recipe and a presentation scale, nothing else. No
+// path, command, file or setting comes from the submitter; the adapter re-checks the recipe against recipes.json.
+export const ASSET_SCALES = [1, 2, 3, 4];
+export function validateAssetRequest(a) {
+  if (!a || typeof a !== 'object' || Array.isArray(a)) throw Error('asset must be an object { recipe, scale }');
+  for (const k of Object.keys(a)) if (!['recipe', 'scale'].includes(k)) throw Error(`Unexpected asset field "${String(k).slice(0, 40)}"`);
+  if (typeof a.recipe !== 'string' || !/^[a-z0-9][a-z0-9-]{0,39}$/.test(a.recipe)) throw Error('asset.recipe must be a recipe id (lowercase letters, digits, dashes)');
+  const scale = a.scale ?? 1;
+  if (!ASSET_SCALES.includes(scale)) throw Error(`asset.scale must be one of ${ASSET_SCALES.join(', ')}`);
+  return { recipe: a.recipe, scale };
 }
 
 // Gates from declared actions plus text signals in the objective and its acceptance criteria. Constraints are not
@@ -104,6 +120,7 @@ export function riskFor(input, gates) {
   if (/\b(auth|login|payment|stripe|payout|billing|security|permission)\b/i.test(input.objective)) reasons.push('objective touches auth, payments or security');
   if (reasons.length) return { level: 'high', reasons };
   if (input.scope.length && input.scope.every(p => LOW_RISK_AREAS.test(p))) return { level: 'low', reasons: ['scope is limited to low-risk areas (sandbox, docs, World, tests)'] };
+  if (input.type === 'asset') return { level: 'low', reasons: ['asset production writes only generated sprite files under tools/hillink-world/assets/characters/ on a local branch'] };
   if (!input.scope.length && (input.type === 'investigate' || input.type === 'review')) return { level: 'low', reasons: ['read-only work'] };
   return { level: 'medium', reasons: [input.scope.length ? 'application code outside the low-risk areas' : 'no scope yet; set after investigation'] };
 }

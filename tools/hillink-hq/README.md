@@ -134,6 +134,20 @@ Kyle → ChatGPT → HQ → specialist agents → verification → handoff. Chat
 - **Restart:** unresolved runs are parked (Pass 2). HQ then tries to prove each one stopped: the reported pids are gone, and a sandboxed run's instance is unregistered according to a strict WSL listing. It never assumes success. A proven stop becomes one `interrupted` retry in a fresh branch and sandbox; anything unproven stays parked.
 - **World contract (v1):** `GET /api/world?since=<seq>` returns a snapshot of agents (activity, current objective and step), objectives (status, progress, steps, dependencies, whether Kyle is needed) and construction (earned only by completed objectives and HQ-verified commits), plus activity since a journal sequence number. It is a pure function of the journal and carries HQ-authored summaries only, never model text.
 
+## Art Factory asset objectives (Step 1)
+
+Turn on with `HQ_ART_FACTORY=1` and `HQ_ART_PYTHON=<Python 3.11 with tools/hillink-art-factory/requirements.txt>`. The base comes from `HQ_IMPL_BASE`.
+
+```
+POST /api/objectives   { "type": "asset", "objective": "...", "asset": { "recipe": "standin-robot", "scale": 1 } }
+```
+
+The plan has two steps:
+1. **produce**: `produce-asset`, LOCAL, run by `hq-verifier` (`art-factory-adapter.mjs`). It makes a worktree on `hq/asset/<task>-<run>`, renders twice with byte-identical output required, runs `verify.py` and the World tests, and commits only `tools/hillink-world/assets/characters/<agent>/<theme>/x<scale>/sheet.{png,json}`.
+2. **verify**: HQ (`orchestration/asset-verify.mjs`) re-derives the commit, its parent, its files and the sheet sha from git.
+
+The objective ends COMPLETE with candidate art. Nothing is pushed or merged. Proof: `live/art-factory-proof.mjs`.
+
 ## Notifications
 
 Material alerts are durable and deduplicated per episode. They include agent/task, time since meaningful progress, evidence, recovery attempts, runnable count and exact owner action. Ordinary healthy progress does not alert. Acknowledgement and delivery are separate.

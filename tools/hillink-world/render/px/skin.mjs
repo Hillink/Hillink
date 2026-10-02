@@ -23,10 +23,16 @@ const STATE_WORD = { working: 'Working', travelling: 'Walking', waiting: 'Waitin
 // Stages are cached per World (fingerprint) and theme, so switching Real <-> Fantasy back and forth is instant after
 // the first build. Layouts of one World are identical across themes (P1), so a stage depends only on these keys.
 const stages = new Map();
+// Art Factory Step 1: authored sprites (render/px/authored.mjs), set once the page has loaded them. Every stage asks
+// this provider first; null (no sheet for that agent and theme, or not allowed) keeps the procedural character.
+let authored = null;
+export const setAuthoredSprites = registry => { authored = registry; };
+export const authoredSprites = () => authored;
+const authoredSprite = a => authored?.provider(a) ?? null;
 export function stageFor(layout, theme, lighting = DEFAULT_LIGHTING) {
   const key = `${worldFingerprint(layout.world)}|${layout.world.history?.length ?? 0}|${theme}`;
   let s = stages.get(key);
-  if (!s) { if (stages.size > 6) stages.clear(); s = createStage(layout, theme, { lighting }); stages.set(key, s); }
+  if (!s) { if (stages.size > 6) stages.clear(); s = createStage(layout, theme, { lighting, sprites: authoredSprite }); stages.set(key, s); }
   s.setLighting(lighting);
   return s;
 }
@@ -50,8 +56,8 @@ export function actorsOf(entities, layout, theme, { time = 0, reduced = false, h
     const pl = layout.planAt(e.x, e.y) ?? { x: e.x, z: 0, floor: 0 };
     const look = lookFor(e.agent.id, theme, definitionOf(e.agent));
     const clip = clipFor(look, { state: e.anim?.state, moving: e.moving, posture: e.posture });
-    const t = reduced ? 0 : Math.max(0, (time - (e.anim?.since ?? 0)) / 1000);
-    out.push({ id: e.id, look, lookKey: `${e.agent.id}:${theme}`, foot: [e.x / A, e.y / A], plan: pl, facing: facingOf(e.heading, e.dir), clip, frame: frameAt(clip, e.moving ? time / 1000 : t), sitting: e.posture === 'sit', hovered: e.id === hoverId, selected: e.id === selectedId });
+    const t = reduced ? 0 : Math.max(0, (time - (e.anim?.since ?? 0)) / 1000), clipTime = e.moving ? time / 1000 : t;
+    out.push({ clipTime, id: e.id, look, lookKey: `${e.agent.id}:${theme}`, foot: [e.x / A, e.y / A], plan: pl, facing: facingOf(e.heading, e.dir), clip, frame: frameAt(clip, clipTime), sitting: e.posture === 'sit', hovered: e.id === hoverId, selected: e.id === selectedId });
   }
   return out;
 }

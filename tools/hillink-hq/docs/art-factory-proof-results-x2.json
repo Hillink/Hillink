@@ -1,0 +1,332 @@
+{
+  "startedAt": "2026-10-01T06:47:04.601Z",
+  "machine": {
+    "platform": "linux",
+    "node": "v24.21.0",
+    "python": "3.11.15 bpy 5.0.1"
+  },
+  "base": {
+    "ref": "origin/claude/art-factory-step1",
+    "commit": "408f461df24fc8b85eebc9424e9d3c33bad5fa2b"
+  },
+  "health": {
+    "artFactory": "CONFIGURED",
+    "artFactoryBase": {
+      "ref": "origin/claude/art-factory-step1",
+      "commit": "408f461df24fc8b85eebc9424e9d3c33bad5fa2b",
+      "source": "HQ_IMPL_BASE"
+    },
+    "computeMode": "ZERO_CREDIT",
+    "implementation": "DISABLED",
+    "cliAgents": "DISABLED",
+    "orchestrator": "DISABLED"
+  },
+  "request": {
+    "method": "POST",
+    "path": "/api/objectives",
+    "headers": [
+      "X-HQ-Client: command-center",
+      "Authorization: Bearer <HQ session token from GET /api/session>",
+      "Content-Type: application/json"
+    ],
+    "body": {
+      "type": "asset",
+      "title": "Art Factory: standin-robot sheet @2x",
+      "objective": "Produce the Fantasy Claude character sheet from the standin-robot recipe at 2x with the Art Factory, prove it is deterministic, and verify it loads in the World.",
+      "asset": {
+        "recipe": "standin-robot",
+        "scale": 2
+      }
+    }
+  },
+  "submittedAt": "2026-10-01T06:47:05.292Z",
+  "submitResponse": {
+    "id": "9cd28491-b0b3-43ef-9210-107e1624c9ff"
+  },
+  "finishedAt": "2026-10-01T06:48:23.979Z",
+  "seconds": 78.687,
+  "objective": {
+    "id": "9cd28491-b0b3-43ef-9210-107e1624c9ff",
+    "status": "COMPLETE",
+    "reason": "Asset produced deterministically, checked and committed locally by HQ. Not merged; candidate art until Kyle approves it visually.",
+    "history": [
+      "QUEUED: Objective received.",
+      "PLANNING: Planning started.",
+      "IMPLEMENTING: Plan ready: produce (Art Factory, local) → verify (HQ) (risk low).",
+      "VERIFYING: HQ verifying the commit from git and its own evidence.",
+      "COMPLETE: Asset produced deterministically, checked and committed locally by HQ. Not merged; candidate art until Kyle approves it visually."
+    ],
+    "plan": {
+      "steps": [
+        "produce",
+        "verify"
+      ],
+      "risk": "low",
+      "gates": [],
+      "compute": {
+        "mode": "ZERO_CREDIT",
+        "steps": [
+          {
+            "kind": "produce",
+            "agentId": "hq-verifier",
+            "computeClass": "LOCAL",
+            "provider": "local",
+            "backend": "HQ Art Factory: headless Blender (bpy) and a deterministic pixel pass on this machine"
+          },
+          {
+            "kind": "verify",
+            "computeClass": "LOCAL",
+            "provider": "local",
+            "backend": "HQ deterministic checks"
+          }
+        ],
+        "meteredComputeRequired": false,
+        "expectedMeteredSpendUsd": 0,
+        "spendGate": "None: every step runs on local or already-paid subscription compute ($0 metered)."
+      }
+    },
+    "decisions": [],
+    "approvals": []
+  },
+  "steps": [
+    {
+      "kind": "produce",
+      "status": "DONE",
+      "agentId": "hq-verifier",
+      "operation": "produce-asset",
+      "safety": "local-artifact-write",
+      "taskAsset": {
+        "recipe": "standin-robot",
+        "scale": 2
+      },
+      "computeClass": "LOCAL",
+      "meteredCostUsd": 0,
+      "evidence": [
+        "ACK: HQ Art Factory started run e08c4825: recipe standin-robot at 2x.",
+        "PROGRESS: Worktree hq/asset/0b6119b5-e08c48 created from origin/claude/art-factory-step1 (408f461df2).",
+        "PROGRESS: Rendering standin-robot with headless Blender (run 1 of 2).",
+        "PROGRESS: Run 1 done in 10.4s (56 renders). Rendering again to prove determinism.",
+        "PROGRESS: Deterministic (sheet 0886ec08e8ce twice); sheet checks passed (10).",
+        "TEST_STARTED: HQ running the World tests (24 files) in the asset worktree.",
+        "TEST_RESULT: World tests: 233 passed, 0 failed.",
+        "COMMIT: Committed 400a950955 on hq/asset/0b6119b5-e08c48 (local only: not pushed, not merged).",
+        "COMPLETED: Sheet for claude/fantasy committed on hq/asset/0b6119b5-e08c48 (400a950955); deterministic, checked, World tests 233 passed."
+      ]
+    },
+    {
+      "kind": "verify",
+      "status": "DONE",
+      "agentId": "hq",
+      "operation": null,
+      "safety": null,
+      "taskAsset": null,
+      "computeClass": "LOCAL (HQ)",
+      "meteredCostUsd": 0,
+      "evidence": []
+    }
+  ],
+  "asset": {
+    "kind": "asset",
+    "source": "hq-evidence",
+    "recipe": "standin-robot",
+    "scale": 2,
+    "agent": "claude",
+    "theme": "fantasy",
+    "status": "candidate",
+    "standIn": true,
+    "branch": "hq/asset/0b6119b5-e08c48",
+    "base": "408f461df24fc8b85eebc9424e9d3c33bad5fa2b",
+    "commit": "400a9509551c790fe9aba83b613e9829fc02e976",
+    "outDir": "tools/hillink-world/assets/characters/claude/fantasy/x2",
+    "filesChanged": [
+      "tools/hillink-world/assets/characters/claude/fantasy/x2/sheet.json",
+      "tools/hillink-world/assets/characters/claude/fantasy/x2/sheet.png"
+    ],
+    "sheetSha256": "0886ec08e8ce2af308ef573abc4d82d1cb8dd18e2462843b12b8324e9c0a5e49",
+    "input": {
+      "file": "inputs/standin-robot/RobotExpressive.glb",
+      "sha256": "047f5e5fb3bb6d378bd1df16ca6137f2a596c99b3a1b5690b4020c05aaf6f319",
+      "licence": "CC0-1.0",
+      "author": "Tomas Laulhe (Quaternius); modifications Don McCurdy",
+      "source": "https://github.com/mrdoob/three.js/tree/dev/examples/models/gltf/RobotExpressive"
+    },
+    "clips": {
+      "idle": "Idle",
+      "walk": "Walking",
+      "work.hammer": "Punch"
+    },
+    "determinism": {
+      "identical": true,
+      "run1": {
+        "sheet.png": "0886ec08e8ce2af308ef573abc4d82d1cb8dd18e2462843b12b8324e9c0a5e49",
+        "sheet.json": "2a01772b570cf61f1b426d6cef0a1666adf6ad0e3796cb590f4b3c831c82000f"
+      },
+      "run2": {
+        "sheet.png": "0886ec08e8ce2af308ef573abc4d82d1cb8dd18e2462843b12b8324e9c0a5e49",
+        "sheet.json": "2a01772b570cf61f1b426d6cef0a1666adf6ad0e3796cb590f4b3c831c82000f"
+      }
+    },
+    "check": {
+      "anchor": [
+        32,
+        64
+      ],
+      "artHeight": 42,
+      "cell": [
+        64,
+        80
+      ],
+      "checks": {
+        "alpha": true,
+        "anchor": true,
+        "edges": true,
+        "facings": true,
+        "frames": true,
+        "height": true,
+        "meta": true,
+        "palette": true,
+        "sha": true,
+        "size": true
+      },
+      "clips": {
+        "idle": 4,
+        "walk": 6,
+        "work.hammer": 4
+      },
+      "colours": 25,
+      "dir": "/tmp/hq-art-proof-cxy94Z/worktrees/asset-0b6119b5-e08c48/tools/hillink-world/assets/characters/claude/fantasy/x2",
+      "idleHeights": [
+        42,
+        43,
+        44,
+        46
+      ],
+      "ok": true,
+      "problems": [],
+      "scale": 2,
+      "sheetSha256": "0886ec08e8ce2af308ef573abc4d82d1cb8dd18e2462843b12b8324e9c0a5e49"
+    },
+    "results": {
+      "passed": 233,
+      "failed": 0
+    },
+    "testsExecuted": [
+      "tools/hillink-world/tests/animation.test.mjs",
+      "tools/hillink-world/tests/art-factory.test.mjs",
+      "tools/hillink-world/tests/construction.test.mjs",
+      "tools/hillink-world/tests/hq-adapter.test.mjs",
+      "tools/hillink-world/tests/hq-life.test.mjs",
+      "tools/hillink-world/tests/pass1.test.mjs",
+      "tools/hillink-world/tests/pass25.test.mjs",
+      "tools/hillink-world/tests/pass26.test.mjs",
+      "tools/hillink-world/tests/pass5a.test.mjs",
+      "tools/hillink-world/tests/pass5b-correction.test.mjs",
+      "tools/hillink-world/tests/pass5b.test.mjs",
+      "tools/hillink-world/tests/pass5c.test.mjs",
+      "tools/hillink-world/tests/pass5d.test.mjs",
+      "tools/hillink-world/tests/pass5e-correction.test.mjs",
+      "tools/hillink-world/tests/pass5e.test.mjs",
+      "tools/hillink-world/tests/pass5f.test.mjs",
+      "tools/hillink-world/tests/pass5g.test.mjs",
+      "tools/hillink-world/tests/pass5h-p1p2.test.mjs",
+      "tools/hillink-world/tests/pass5h-slice.test.mjs",
+      "tools/hillink-world/tests/pass5h.test.mjs",
+      "tools/hillink-world/tests/readability.test.mjs",
+      "tools/hillink-world/tests/spatial.test.mjs",
+      "tools/hillink-world/tests/truth.test.mjs",
+      "tools/hillink-world/tests/world.test.mjs"
+    ],
+    "evidenceDir": "/tmp/hq-art-proof-cxy94Z/worktrees/asset-0b6119b5-e08c48-evidence",
+    "factory": {
+      "renders": 56,
+      "seconds": 9.78,
+      "blender": "5.0.1",
+      "engine": "CYCLES"
+    }
+  },
+  "verification": [
+    "PASS handoff built by HQ from its own evidence: hq-evidence",
+    "PASS commit id is a full hex sha: 400a9509551c790fe9aba83b613e9829fc02e976",
+    "PASS asset folder is a character sheet folder: tools/hillink-world/assets/characters/claude/fantasy/x2",
+    "PASS commit exists and is the head of the task branch: hq/asset/0b6119b5-e08c48 -> 400a9509551c790fe9aba83b613e9829fc02e976",
+    "PASS commit sits directly on the recorded base: parent 408f461df24fc8b85eebc9424e9d3c33bad5fa2b, base 408f461df24fc8b85eebc9424e9d3c33bad5fa2b",
+    "PASS commit is the one HQ reported (COMMIT evidence): 400a9509551c790fe9aba83b613e9829fc02e976",
+    "PASS commit message carries this task id: HQ-Task trailer",
+    "PASS the commit changes only sheet.png and sheet.json in the asset folder: tools/hillink-world/assets/characters/claude/fantasy/x2/sheet.json, tools/hillink-world/assets/characters/claude/fantasy/x2/sheet.png",
+    "PASS committed sheet.png matches the sha256 in sheet.json: 0886ec08e8ce2af3",
+    "PASS committed sheet.png is the one both renders produced: true",
+    "PASS metadata is a v1 hillink.character-sheet for the recipe's agent and theme: claude/fantasy x2",
+    "PASS a stand-in stays a candidate (never approved art): candidate stand-in",
+    "PASS the sheet checks passed: alpha, anchor, edges, facings, frames, height, meta, palette, sha, size",
+    "PASS HQ ran the World tests (TEST_STARTED then TEST_RESULT): World tests: 233 passed, 0 failed.",
+    "PASS World tests passed with at least one test and none failing: 233 passed, 0 failed"
+  ],
+  "git": {
+    "branch": "hq/asset/0b6119b5-e08c48",
+    "commit": "400a9509551c790fe9aba83b613e9829fc02e976",
+    "parent": "408f461df24fc8b85eebc9424e9d3c33bad5fa2b",
+    "parentIsBase": true,
+    "files": [
+      "A\ttools/hillink-world/assets/characters/claude/fantasy/x2/sheet.json",
+      "A\ttools/hillink-world/assets/characters/claude/fantasy/x2/sheet.png"
+    ],
+    "message": "Art Factory: claude/fantasy sheet from standin-robot at 2x (STAND-IN, not shipping art)\n\nHQ-Task: 0b6119b5-bab0-463a-80ae-031d82057fb1\nHQ-Asset: standin-robot@2x\nInput-Sha256: 047f5e5fb3bb6d378bd1df16ca6137f2a596c99b3a1b5690b4020c05aaf6f319\nSheet-Sha256: 0886ec08e8ce2af308ef573abc4d82d1cb8dd18e2462843b12b8324e9c0a5e49\nVerified-By: HQ (two identical renders; verify.py 10 checks; World tests 233 passed, 0 failed)\nStatus: candidate (stand-in)",
+    "onRemote": "not on any remote branch"
+  },
+  "evidenceCopiedTo": "/mnt/project-files/art-factory/step1/x2",
+  "worldActivity": [
+    "TASK_CREATED",
+    "PLANNING_STARTED",
+    "AGENT_ASSIGNED",
+    "COMPUTE_SELECTED",
+    "AGENT_STARTED",
+    "LOCAL_AGENT_STARTED",
+    "SANDBOX_CREATED",
+    "TESTING",
+    "TEST_RESULT",
+    "COMMIT",
+    "AGENT_FINISHED",
+    "HANDOFF_RECEIVED",
+    "VERIFYING",
+    "COMPLETE"
+  ],
+  "ledger": {
+    "mode": "ZERO_CREDIT",
+    "meteredSpendToday": 0,
+    "meteredSpendThisMonth": 0,
+    "meteredSpendThisTask": null,
+    "unknownCostRunsToday": 0,
+    "meteredSpendUpperBoundToday": 0,
+    "meteredSpendUpperBoundThisMonth": 0,
+    "runsByClass": {
+      "LOCAL": 1,
+      "SUBSCRIPTION": 0,
+      "METERED_API": 0
+    },
+    "rows": [
+      {
+        "task": "0b6119b5-bab0-463a-80ae-031d82057fb1",
+        "run": "e08c4825-a0e4-4798-9bc9-3faf92f8f5ad",
+        "agent": "hq-verifier",
+        "model": null,
+        "backend": "HQ Art Factory: headless Blender (bpy) and a deterministic pixel pass on this machine",
+        "computeClass": "LOCAL",
+        "provider": "local",
+        "start": 1790837226029,
+        "end": 1790837303320,
+        "outcome": "COMPLETED",
+        "meteredCostUsd": 0,
+        "costKnown": true,
+        "spendAuthorized": false,
+        "authorizationId": null,
+        "reservedUsd": 0
+      }
+    ],
+    "authorizations": []
+  },
+  "leaks": {
+    "journal": []
+  },
+  "outboundRequestsFromHQ": 0,
+  "manualStepsAfterSubmission": 0
+}

@@ -11,19 +11,20 @@ import { TERMINAL, canTransition } from './state.mjs';
 import { DEFAULT_LIMITS, validateObjectiveInput, implementationEligibility, APPROVAL_GATES, PRE_WORK_GATES, POST_WORK_GATES } from './policy.mjs';
 import { planObjective, implementationSteps, stepId, REQUIRED_EVIDENCE } from './planner.mjs';
 import { candidates, assertImplementer, ROUTES } from './routing.mjs';
-import { parseHandoff, implementationHandoff, framingFor, hashOf } from './handoff.mjs';
+import { parseHandoff, implementationHandoff, assetHandoff, framingFor, hashOf } from './handoff.mjs';
+import { validateAssetRequest } from './policy.mjs';
 import { classify, retryDecision, loopGuard, repeated } from './retry.mjs';
 import { validateImplementation } from '../implementation-policy.mjs';
 import { decideBest, decideCompute } from '../compute/policy.mjs';
 
-const KIND_STATE = { investigate: 'INVESTIGATING', implement: 'IMPLEMENTING', verify: 'VERIFYING', review: 'REVIEWING', rebuttal: 'REVIEWING', 'local-check': 'INVESTIGATING' };
+const KIND_STATE = { investigate: 'INVESTIGATING', implement: 'IMPLEMENTING', verify: 'VERIFYING', review: 'REVIEWING', rebuttal: 'REVIEWING', 'local-check': 'INVESTIGATING', produce: 'IMPLEMENTING' };
 const HANDOFF_KIND = { investigate: 'investigation', review: 'review', rebuttal: 'rebuttal' };
 const clip = (s, n) => (typeof s === 'string' ? (s.length > n ? `${s.slice(0, n - 1)}…` : s) : '');
 const ENDED = new Set(['DONE', 'BLOCKED', 'CANCELLED']);
 
 export class Conductor {
-  constructor(engine, { verifier = null, limits = {}, recovery = null, orchestratorCallbacks = true } = {}) {
-    Object.assign(this, { engine, verifier, limits: { ...DEFAULT_LIMITS, ...limits }, recovery, orchestratorCallbacks, busy: false });
+  constructor(engine, { verifier = null, assetVerifier = null, limits = {}, recovery = null, orchestratorCallbacks = true } = {}) {
+    Object.assign(this, { engine, verifier, assetVerifier, limits: { ...DEFAULT_LIMITS, ...limits }, recovery, orchestratorCallbacks, busy: false });
   }
   get state() { return this.engine.state; }
   now() { return this.engine.now(); }
@@ -178,7 +179,7 @@ export class Conductor {
     // Pass 4.5: no route variant can run here at all (for example the broker's sandbox is missing): wait, never pay.
     if (!gate.allowed && gate.code === 'UNAVAILABLE') return this.set(o, 'WAITING_FOR_EVIDENCE', `Step ${s.kind} waits: ${gate.reason}`.slice(0, 500));
     if (!gate.allowed) return this.spendGate(o, s, gate);
-    const task = s.kind === 'implement' ? this.implementTask(o, s) : this.readOnlyTask(o, s, pick.agentId);
+    const task = s.kind === 'implement' ? this.implementTask(o, s) : s.kind === 'produce' ? this.assetTask(o, s) : this.readOnlyTask(o, s, pick.agentId);
     this.engine.createTask({ ...task, operation: route.operation, safety: route.safety, priority: 50, preferredAgentId: pick.agentId }, { requestedBy: o.requestedBy?.taskId && this.state.tasks[o.requestedBy.taskId] ? o.requestedBy : null, link: { objectiveId: o.id, stepId: s.id }, internal: true, repair: s.repair ?? null });
     this.set(o, KIND_STATE[s.kind], `${s.kind} assigned to ${agents[pick.agentId].name}${pick.busy ? ' (queued behind its current task)' : ''}.`);
   }
@@ -237,6 +238,11 @@ export class Conductor {
     const c = validateImplementation(s.contract); // re-validated at dispatch, not only when the step was added
     return { title: `Objective ${o.id.slice(0, 8)} → Claude (implement${s.repair ? `, repair ${s.repair.attempt}` : ''}): ${o.input.title}`.slice(0, 200), description: c.objective, implementation: c };
   }
+  // Art Factory step: the recipe and scale HQ validated at submission, re-validated at dispatch. No model, no text brief.
+  assetTask(o, s) {
+    const asset = validateAssetRequest(s.asset);
+    return { title: `Objective ${o.id.slice(0, 8)} → Art Factory: ${asset.recipe} @${asset.scale}x`.slice(0, 200), description: `Produce the character sheet for recipe ${asset.recipe} at scale ${asset.scale}.`, asset };
+  }
   // Evidence from earlier steps, quoted as data for the next agent. Never instructions; bounded.
   quotedEvidence(o, s) {
     const out = [];
@@ -277,6 +283,9 @@ export class Conductor {
       handoff = implementationHandoff(task);
       if (!handoff) return this.failed(o, s, { reason: 'agent_failure', detail: 'The runner reported completion without HQ commit and test evidence.' });
       if (handoff.patchHash && repeated(o, s.id, handoff.patchHash, 'patchHash')) return this.loop(o, s, 'The repair produced exactly the same patch as an earlier attempt.');
+    } else if (s.kind === 'produce') {
+      handoff = assetHandoff(task);
+      if (!handoff) return this.failed(o, s, { reason: 'agent_failure', detail: 'The Art Factory reported completion without HQ commit, determinism, sheet-check and World-test evidence.' });
     } else {
       const text = task.evidence.filter(e => e.kind === 'MODEL_RESULT').at(-1);
       try {
@@ -294,7 +303,7 @@ export class Conductor {
       }
     }
     const hash = hashOf(handoff);
-    if (s.kind !== 'implement' && repeated(o, s.id, hash)) return this.loop(o, s, `The ${s.kind} handoff is identical to an earlier one.`);
+    if (s.kind !== 'implement' && s.kind !== 'produce' && repeated(o, s.id, hash)) return this.loop(o, s, `The ${s.kind} handoff is identical to an earlier one.`);
     // Attribution is HQ's record of which agent ran the task, never a field in the handoff.
     this.engine.emit('HANDOFF_ACCEPTED', { objectiveId: o.id, stepId: s.id, taskId: task.id, agentId: task.agentId, handoff, hash, ...(handoff.patchHash ? { patchHash: handoff.patchHash } : {}) });
     this.step(o, s, 'DONE', `${HANDOFF_KIND[s.kind] ?? s.kind} handoff accepted from ${task.agentId}.`);
@@ -347,7 +356,7 @@ export class Conductor {
       const why = lowConfidence ? 'the investigation\'s confidence is low' : o.plan.risk === 'high' ? 'the objective is high risk' : e.reason;
       return this.requestDecision(o, `scope-${s.id}`, { authority: o.plan.risk === 'high' ? 'kyle' : 'orchestrator', type: 'scope', stepId: s.id, scope: e.scope ?? [], tests: e.tests ?? [] }, `Implement the proposed change? ${why}. Proposed scope: ${(e.scope ?? h.proposedScope).join(', ') || 'none'}; tests: ${(e.tests ?? h.proposedTests).join(', ') || 'none'}.`, [{ id: 'approve_scope', label: 'Implement within the proposed scope' }, { id: 'stop', label: 'Stop and report the investigation' }]);
     }
-    if (s.kind === 'verify') return; // next step (review) runs on the following tick
+    if (s.kind === 'verify' || s.kind === 'produce') return; // the next step (review, or verify) runs on the following tick
     if (s.kind === 'review') {
       if (s.standalone) return this.finish(o);
       if (h.verdict === 'approve') return this.finish(o);
@@ -474,9 +483,10 @@ export class Conductor {
     const task = this.state.tasks[impl.taskId];
     this.set(o, 'VERIFYING', 'HQ verifying the commit from git and its own evidence.');
     this.step(o, s, 'RUNNING', 'HQ deterministic verification.', { agentId: 'hq' });
-    if (!this.verifier) { this.step(o, s, 'FAILED', 'No verifier configured.'); return this.stop(o, 'BLOCKED', 'HQ has no commit verifier configured; nothing can be accepted.'); }
-    const r = await this.verifier.verify(task, impl.handoff);
-    const diff = r.ok ? await this.verifier.diff?.(impl.handoff.commit).catch(() => null) : null;
+    const verifier = impl.kind === 'produce' ? this.assetVerifier : this.verifier;
+    if (!verifier) { this.step(o, s, 'FAILED', 'No verifier configured.'); return this.stop(o, 'BLOCKED', `HQ has no ${impl.kind === 'produce' ? 'asset' : 'commit'} verifier configured; nothing can be accepted.`); }
+    const r = await verifier.verify(task, impl.handoff);
+    const diff = r.ok ? await verifier.diff?.(impl.handoff.commit).catch(() => null) : null;
     const handoff = { kind: 'verification', source: 'hq', ok: r.ok, checks: r.checks, diff: diff ? clip(diff, 6000) : null };
     this.engine.emit('HANDOFF_ACCEPTED', { objectiveId: o.id, stepId: s.id, taskId: task.id, agentId: 'hq', handoff, hash: hashOf(handoff) });
     if (!r.ok) {
@@ -495,12 +505,13 @@ export class Conductor {
       this.engine.emit('OBJECTIVE_RESULT', { objectiveId: o.id, result });
       return this.requestApprovals(o, post, `after verified work (branch ${result.branch}, commit ${String(result.commit).slice(0, 10)})`);
     }
-    this.stop(o, 'COMPLETE', o.input.type === 'investigate' || o.input.type === 'review' ? 'Accepted handoff answers the objective.' : 'Verified, reviewed, committed locally. Not merged: Kyle decides.', { ...result, outcome: 'complete' });
+    const why = o.input.type === 'investigate' || o.input.type === 'review' ? 'Accepted handoff answers the objective.' : o.input.type === 'asset' ? 'Asset produced deterministically, checked and committed locally by HQ. Not merged; candidate art until Kyle approves it visually.' : 'Verified, reviewed, committed locally. Not merged: Kyle decides.';
+    this.stop(o, 'COMPLETE', why, { ...result, outcome: 'complete' });
   }
   summary(o) {
     const byKind = k => Object.values(o.steps).filter(s => s.kind === k && s.handoff).map(s => ({ stepId: s.id, agentId: s.handoffFrom ?? s.agentId, handoff: s.handoff }));
-    const impl = byKind('implement').at(-1)?.handoff;
-    return { investigation: byKind('investigate').at(-1) ?? null, review: byKind('review').at(-1) ?? null, verification: byKind('verify').at(-1)?.handoff ?? null, branch: impl?.branch ?? null, commit: impl?.commit ?? null, files: impl?.filesChanged ?? [], spentUsd: o.spentUsd, disagreement: o.disagreement ?? null, steps: o.order.map(id => ({ id, kind: o.steps[id].kind, status: o.steps[id].status, agentId: o.steps[id].agentId, attempts: o.steps[id].attempts, retries: o.steps[id].retries.length })) };
+    const impl = byKind('implement').at(-1)?.handoff ?? byKind('produce').at(-1)?.handoff;
+    return { investigation: byKind('investigate').at(-1) ?? null, review: byKind('review').at(-1) ?? null, verification: byKind('verify').at(-1)?.handoff ?? null, branch: impl?.branch ?? null, commit: impl?.commit ?? null, files: impl?.filesChanged ?? [], asset: byKind('produce').at(-1)?.handoff ?? null, spentUsd: o.spentUsd, disagreement: o.disagreement ?? null, steps: o.order.map(id => ({ id, kind: o.steps[id].kind, status: o.steps[id].status, agentId: o.steps[id].agentId, attempts: o.steps[id].attempts, retries: o.steps[id].retries.length })) };
   }
   async cancelLive(o, reason) {
     const results = [];

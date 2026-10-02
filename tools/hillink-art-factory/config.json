@@ -1,0 +1,10 @@
+{
+ "v": 1,
+ "comment": "Fixed Hillink camera and pixel rules. Every value is multiplied by --scale where it is a pixel size. cell/anchor are the sheet's frame and foot point; bodyHeights match render/px/character.mjs BODY_PLANS.",
+ "cell": [32, 40],
+ "anchor": [16, 32],
+ "bodyHeights": {"human": 24, "dwarf": 21},
+ "camera": {"elevationDeg": 30, "facings": {"fr": -45, "fl": 45, "br": -135, "bl": 135}},
+ "render": {"engine": "CYCLES", "samples": 16, "supersample": 4, "seed": 0, "threads": 4, "ambient": 0.9, "keyStrength": 3.0},
+ "pixel": {"colours": 24, "alphaThreshold": 0.5, "outline": "#2a1a14"}
+}

@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { initialAgents, operations } from './registry.mjs';
 import { validateImplementation } from './implementation-policy.mjs';
+import { validateAssetRequest } from './orchestration/policy.mjs';
 import { ORCHESTRATION_EVENTS, reduceOrchestration } from './orchestration/state.mjs';
 import { COMPUTE_EVENTS, reduceCompute, emptyCompute, computeLedger } from './compute/state.mjs';
 import { decideVariants, issueGrant, classRank, capacityOf, validateSpendAuthorization, authorizationStatus, DEFAULT_MODE, MODES } from './compute/policy.mjs';
@@ -170,11 +171,17 @@ export class Engine {
     }
     if (repair && (!Number.isInteger(repair.attempt) || repair.attempt < 1 || !text(repair.reason, 3000))) throw Error('Invalid repair record');
     if (!Object.hasOwn(operations, input.operation)) throw Error('Operation is not allowlisted');
-    if (!['local-read-only', 'local-worktree-write', 'owner-required'].includes(input.safety)) throw Error('Explicit safety classification required');
+    if (!['local-read-only', 'local-worktree-write', 'local-artifact-write', 'owner-required'].includes(input.safety)) throw Error('Explicit safety classification required');
     // Implementation (Pass 2.6) is its own operation and safety class, with a validated contract; nothing else may write.
     const implementing = input.operation === 'implement-repo';
     if (implementing !== (input.safety === 'local-worktree-write')) throw Error('implement-repo tasks, and only they, use local-worktree-write');
     const implementation = implementing ? validateImplementation(input.implementation) : null;
+    // Step 1 Art Factory: produce-asset is the only operation with its own write class, and carries only a recipe id
+    // and a scale (validated); the adapter decides every path and command.
+    const producing = input.operation === 'produce-asset';
+    if (producing !== (input.safety === 'local-artifact-write')) throw Error('produce-asset tasks, and only they, use local-artifact-write');
+    const asset = producing ? validateAssetRequest(input.asset) : null;
+    if (producing && input.preferredAgentId !== 'hq-verifier') throw Error('Asset production runs on HQ\'s local verifier process only');
     if (input.safety === 'owner-required' && !text(input.ownerAction)) throw Error('Exact owner action required');
     if (!Number.isInteger(input.priority) || input.priority < 0 || input.priority > 100) throw Error('Priority must be 0–100');
     if (input.preferredAgentId && !this.state.agents[input.preferredAgentId]?.capabilities.includes(operations[input.operation].capability)) throw Error('Selected worker cannot perform this operation');
@@ -184,7 +191,7 @@ export class Engine {
     // Pass 3 role boundary, independent of capability data: implementation is Claude's alone.
     if (implementing && input.preferredAgentId !== 'claude') throw Error('Implementation tasks go to Claude only');
     const id = randomUUID();
-    this.emit('TASK_CREATED', { id, title: input.title, description: input.description, operation: input.operation, capability: operations[input.operation].capability, safety: input.safety, ownerAction: input.ownerAction || null, priority: input.priority, preferredAgentId: input.preferredAgentId || null, ...(implementation ? { implementation } : {}), ...(requestedBy ? { requestedBy: { agentId: requestedBy.agentId, taskId: requestedBy.taskId } } : {}), ...(link ? { link: { objectiveId: link.objectiveId, stepId: link.stepId ?? null, ...(link.decisionId ? { decisionId: link.decisionId } : {}) } } : {}), ...(repair ? { repair: { attempt: repair.attempt, reason: repair.reason, ...(repair.fromReview ? { fromReview: true } : {}) } } : {}) });
+    this.emit('TASK_CREATED', { id, title: input.title, description: input.description, operation: input.operation, capability: operations[input.operation].capability, safety: input.safety, ownerAction: input.ownerAction || null, priority: input.priority, preferredAgentId: input.preferredAgentId || null, ...(implementation ? { implementation } : {}), ...(asset ? { asset } : {}), ...(requestedBy ? { requestedBy: { agentId: requestedBy.agentId, taskId: requestedBy.taskId } } : {}), ...(link ? { link: { objectiveId: link.objectiveId, stepId: link.stepId ?? null, ...(link.decisionId ? { decisionId: link.decisionId } : {}) } } : {}), ...(repair ? { repair: { attempt: repair.attempt, reason: repair.reason, ...(repair.fromReview ? { fromReview: true } : {}) } } : {}) });
     if (this.state.alerts['cycle:complete']?.active) this.emit('ALERT_RESOLVED', { key: 'cycle:complete' });
     return id;
   }
@@ -221,7 +228,7 @@ export class Engine {
       if (st && !st.valid && st.reason === 'exhausted') this.emit('BUDGET_EXHAUSTED', { authorizationId: c.authorizationId, amountUsd: auth.amountUsd, committedUsd: st.committed });
     }
   }
-  runnable() { return Object.values(this.state.tasks).filter(t => t.stage === 'READY' && (t.safety === 'local-read-only' || t.safety === 'local-worktree-write')).sort((a, b) => b.priority - a.priority || a.createdAt - b.createdAt); }
+  runnable() { return Object.values(this.state.tasks).filter(t => t.stage === 'READY' && (t.safety === 'local-read-only' || t.safety === 'local-worktree-write' || t.safety === 'local-artifact-write')).sort((a, b) => b.priority - a.priority || a.createdAt - b.createdAt); }
   snapshot(at = this.now()) {
     const tasks = Object.values(this.state.tasks), agents = Object.values(this.state.agents).map(a => ({ ...a, status: this.status(a, at), adapterAvailable: Boolean(this.adapters[a.executionAdapter]) }));
     const counts = { ready: this.runnable().length, assigned: tasks.filter(t => liveStages.has(t.stage)).length, working: agents.filter(a => a.status === 'RUNNING').length, review: tasks.filter(t => t.stage === 'REVIEW').length, blocked: tasks.filter(t => t.stage === 'BLOCKED').length, done: tasks.filter(t => t.stage === 'DONE').length };

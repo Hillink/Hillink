@@ -6,6 +6,8 @@
 // joined with HQ's task outcome. GET /api/site (Pass 5A) serves the persisted canonical procedural world, read-only.
 // The World server holds the HQ session server-side (the same local handshake
 // HQ's own page uses); the browser never receives the HQ token.
+// GET /assets/characters/index.json (Art Factory Step 1) lists the generated character sheets; only sheet.json and
+// sheet.png under assets/characters/<agent>/<theme>/x<scale>/ are served (data, never code).
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -25,6 +27,15 @@ const allowed = new Set(['index.html', 'style.css', 'main.mjs', 'site.html', 'si
 for (const f of ['procgen/persist.mjs', 'procgen/evidence.mjs', 'render/px/png.mjs']) allowed.delete(f); // server side only (file system)
 const headers = { 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer', 'Content-Security-Policy': "default-src 'self'; style-src 'self'; script-src 'self'; img-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'" };
 
+// Art Factory Step 1: the generated sheets on disk, as { agent, theme, scale }. Folder names are checked; contents are
+// validated by the browser loader (render/px/authored.mjs) before use.
+export function characterSheets(dir = path.join(root, 'assets', 'characters')) {
+  const out = [], ids = d => { try { return fs.readdirSync(d, { withFileTypes: true }).filter(e => e.isDirectory() && /^[a-z0-9-]{1,40}$/.test(e.name)).map(e => e.name).sort(); } catch { return []; } };
+  for (const agent of ids(dir)) for (const theme of ids(path.join(dir, agent))) {
+    for (const s of [1, 2, 3, 4]) if (fs.existsSync(path.join(dir, agent, theme, `x${s}`, 'sheet.json'))) out.push({ agent, theme, scale: s });
+  }
+  return out;
+}
 // Pass 5F: the part of an HQ-created agent's definition the World may see: no instructions, no custom metadata.
 export const publicDefinition = d => (d && typeof d === 'object' ? Object.fromEntries(Object.entries(d).filter(([k]) => k !== 'instructions' && k !== 'meta')) : null);
 // Only what the World draws. Task descriptions, evidence bodies and usage stay in HQ.
@@ -279,6 +290,13 @@ export function createServer({ hq = process.env.WORLD_HQ === '0' ? null : hqClie
       if ((fetchSite && fetchSite !== 'same-origin') || (req.headers.origin && req.headers.origin !== `http://${host}`)) return send(403, '{"error":"Same-origin only"}');
       if (!site) return send(404, '{"error":"Procedural world disabled"}');
       return send(200, JSON.stringify({ world: site.world }));
+    }
+    if (url.pathname === '/assets/characters/index.json') return send(200, JSON.stringify({ sheets: characterSheets() }));
+    const sheet = /^\/assets\/characters\/([a-z0-9-]{1,40})\/([a-z0-9-]{1,40})\/x([1-4])\/(sheet\.json|sheet\.png)$/.exec(url.pathname);
+    if (sheet) {
+      const f = path.join(root, 'assets', 'characters', sheet[1], sheet[2], `x${sheet[3]}`, sheet[4]);
+      if (!fs.existsSync(f) || fs.lstatSync(f).isSymbolicLink()) return send(404, 'Not found', 'text/plain');
+      return send(200, fs.readFileSync(f), sheet[4].endsWith('.png') ? 'image/png' : 'application/json');
     }
     const file = url.pathname === '/' ? 'index.html' : decodeURIComponent(url.pathname.slice(1));
     if (!allowed.has(file)) return send(404, 'Not found', 'text/plain');

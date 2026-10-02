@@ -20,7 +20,7 @@ export const ACTIVITY_TYPES = ['TASK_CREATED', 'PLANNING_STARTED', 'AGENT_ASSIGN
 const STARTED = { LOCAL: 'LOCAL_AGENT_STARTED', SUBSCRIPTION: 'SUBSCRIPTION_AGENT_STARTED', METERED_API: 'METERED_AGENT_STARTED' };
 export const ACTIVITIES = ['idle', 'planning', 'investigating', 'building', 'testing', 'verifying', 'reviewing', 'waiting', 'blocked', 'done'];
 
-const STEP_ACTIVITY = { investigate: 'investigating', implement: 'building', verify: 'verifying', review: 'reviewing', rebuttal: 'reviewing', 'local-check': 'investigating' };
+const STEP_ACTIVITY = { investigate: 'investigating', implement: 'building', verify: 'verifying', review: 'reviewing', rebuttal: 'reviewing', 'local-check': 'investigating', produce: 'building' };
 const STATUS_ACTIVITY = { QUEUED: 'planning', PLANNING: 'planning', INVESTIGATING: 'investigating', WAITING_FOR_EVIDENCE: 'waiting', READY_FOR_IMPLEMENTATION: 'building', IMPLEMENTING: 'building', VERIFYING: 'verifying', REVIEWING: 'reviewing', AWAITING_DECISION: 'waiting', AWAITING_APPROVAL: 'waiting', BLOCKED: 'blocked', COMPLETE: 'done', FAILED: 'blocked', CANCELLED: 'done' };
 const STATUS_TYPE = { PLANNING: 'PLANNING_STARTED', VERIFYING: 'VERIFYING', REVIEWING: 'REVIEWING', AWAITING_APPROVAL: 'APPROVAL_REQUIRED', AWAITING_DECISION: 'DECISION_REQUIRED', WAITING_FOR_EVIDENCE: 'WAITING', BLOCKED: 'BLOCKED', COMPLETE: 'COMPLETE', FAILED: 'FAILED', CANCELLED: 'CANCELLED' };
 const TERMINAL_KINDS = new Set(['COMPLETED', 'FAILED', 'BLOCKED', 'CANCELLED', 'RATE_LIMITED', 'UNCERTAIN']);

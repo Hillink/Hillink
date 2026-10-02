@@ -23,7 +23,7 @@ export const TRANSITIONS = {
   BLOCKED: [], COMPLETE: [], FAILED: [], CANCELLED: [],
 };
 export const STEP_STATES = ['PENDING', 'RUNNING', 'DONE', 'FAILED', 'SKIPPED', 'CANCELLED', 'INTERRUPTED'];
-export const STEP_KINDS = ['investigate', 'implement', 'verify', 'review', 'rebuttal', 'local-check'];
+export const STEP_KINDS = ['investigate', 'implement', 'verify', 'review', 'rebuttal', 'local-check', 'produce'];
 
 export const ORCHESTRATION_EVENTS = new Set(['OBJECTIVE_CREATED', 'OBJECTIVE_PLANNED', 'OBJECTIVE_TRANSITION', 'OBJECTIVE_CANCEL_REQUESTED', 'STEP_ADDED', 'STEP_TRANSITION', 'HANDOFF_ACCEPTED', 'HANDOFF_REJECTED', 'STEP_RETRY', 'APPROVAL_REQUESTED', 'APPROVAL_DECIDED', 'DECISION_REQUESTED', 'DECISION_RECORDED', 'DECISION_APPLIED', 'DISAGREEMENT_RECORDED', 'OBJECTIVE_RESULT', 'TASK_CANCELLED', 'RUN_RECONCILED']);
 
