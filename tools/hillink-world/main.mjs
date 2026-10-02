@@ -21,6 +21,7 @@ import { loadSite, createSiteSync, sourceLabel } from './ui/site-sync.mjs';
 import { worldFingerprint } from './procgen/world.mjs';
 import { setPxLighting, pxLighting } from './render/px/skin.mjs';
 import { LIGHTING_IDS } from './render/px/palette.mjs';
+import { setHqLight } from './render/hq/skin.mjs';
 
 const $ = id => document.getElementById(id);
 const storage = {
@@ -34,6 +35,7 @@ const pxMode = () => theme?.art === 'px';
 // The slice keeps its own saved camera, so a zoom saved by another skin never opens it zoomed out.
 const camKey = () => `hlw:camera:${theme?.id}${siteWorld ? ':gen' : ''}${pxMode() ? ':px' : ''}`;
 if (params.get('light')) setPxLighting(params.get('light'));
+if (params.get('light')) setHqLight(params.get('light')); // ?art=hq: day | dusk | night (default: the viewer's clock)
 const deviceRatio = () => Math.min(2, devicePixelRatio || 1);
 // Source: live HQ when it answers (default), or the dev simulator. `?source=sim` forces the simulator.
 const requested = params.get('source') ?? 'auto';

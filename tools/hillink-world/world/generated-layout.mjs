@@ -28,16 +28,26 @@ const dist = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]);
 // The old World's semantic location ids, so behaviour, props and aliases keep working.
 const SEMANTIC = { lobby: 'queue', development: 'development', testing: 'testing', comms: 'comms', lounge: 'lounge', command: 'command', servers: 'servers', archive: 'archive' };
 
-export function createGeneratedLayout(world, { theme = 'real' } = {}) {
+export function createGeneratedLayout(world, { theme = 'real', projection = 'cutaway' } = {}) {
   const view = viewOf(world), labels = new Map(represent(world, theme === 'blueprint' ? 'real' : theme).items.map(i => [`${i.primitive}:${i.canonicalId}`, i.label]));
   const all = Object.values(world.spaces);
   const levelsOf = [...new Set(all.map(s => s.level))].sort((a, b) => a - b);
   // Exploded pitch: a storey plus the deepest building's receding depth, so storeys do not hide each other.
   const depthU = Math.max(0, ...Object.values(world.buildings).map(b => { const r = view.rectToView(b.footprint); return (r.z1 - r.z0) * U; }));
-  const g = { skx: 0.5, sky: 0.4, height: ARCH.floorHeight, slab: ARCH.slab, base: 560, depth: depthU };
-  const pitch = Math.round(ARCH.floorHeight * 0.5 + ARCH.slab + depthU * g.sky + 10);
+  // Two projections of the same plan, both affine: screen = m · (x, z) + (0, base(f) - h), m = [a, b, c, d] meaning
+  // sx = a·x + c·z, sy = b·x + d·z. 'cutaway' (the default) is the side-on cut-away: x across the screen, depth up and to
+  // the right. 'diamond' (?art=hq) is a classic 2:1 isometric diorama: x down and to the right, depth up and to the right.
+  // In both, a box's visible faces are its front (min z), its top and its right side (max x), so depth order and faces
+  // (engine/iso.mjs) hold unchanged.
+  const diamond = projection === 'diamond';
+  const g = diamond ? { skx: 0.75, sky: 0.375, sxx: 0.75, syx: 0.375, height: ARCH.floorHeight, slab: ARCH.slab, base: 560, depth: depthU, projection }
+    : { skx: 0.5, sky: 0.4, sxx: 1, syx: 0, height: ARCH.floorHeight, slab: ARCH.slab, base: 560, depth: depthU, projection };
+  const pitch = diamond ? Math.round(ARCH.floorHeight + ARCH.slab + depthU * g.sky * 0.5 + 10) : Math.round(ARCH.floorHeight * 0.5 + ARCH.slab + depthU * g.sky + 10);
   const baseOf = f => g.base - f * pitch;
-  const P = { g, pitch, baseOf, at: (x, z, f = 0, h = 0) => [x + z * g.skx, baseOf(f) - z * g.sky - h], plan: (sx, sy, f = 0) => { const z = (baseOf(f) - sy) / g.sky; return [sx - z * g.skx, z]; } };
+  const det = g.sxx * -g.sky - g.skx * g.syx;
+  const P = { g, pitch, baseOf, m: [g.sxx, g.syx, g.skx, -g.sky],
+    at: (x, z, f = 0, h = 0) => [x * g.sxx + z * g.skx, baseOf(f) + x * g.syx - z * g.sky - h],
+    plan: (sx, sy, f = 0) => { const v = sy - baseOf(f); return [(sx * -g.sky - g.skx * v) / det, (g.sxx * v - g.syx * sx) / det]; } };
   const toPlan = (vx, vz) => ({ x: vx * U, z: vz * U });
   const rectPlan = r => ({ x0: r.x0 * U, x1: r.x1 * U, z0: r.z0 * U, z1: r.z1 * U });
 
@@ -384,7 +394,7 @@ export function createGeneratedLayout(world, { theme = 'real' } = {}) {
     const out = shape(pts).slice(1).filter((p, i) => i > 0 || p.lift || dist(p, from) >= 0.5);
     return out.length ? out : [Object.assign([toPoint[0], toPoint[1]], { at: { floor: e.at.floor, x: e.at.x, z: e.at.z, node: null } })];
   }
-  const metric = (a, b) => { const dy = b[1] - a[1], dz = -dy / g.sky, dx = b[0] - a[0] - dz * g.skx; return Math.hypot(dx, dz); };
+  const metric = (a, b) => { const dx = b[0] - a[0], dy = b[1] - a[1], px = (dx * -g.sky - g.skx * dy) / det, pz = (g.sxx * dy - g.syx * dx) / det; return Math.hypot(px, pz); };
   // Pass 5F: standing spots for agents a room's stations cannot seat (more agents than stations). Only cells of the room's
   // walk grid that a door reaches, a body's width apart from every station, doorway and other spot, and attached to the
   // navigation graph by a checked connector: an overflow agent always stands somewhere reachable, never on another

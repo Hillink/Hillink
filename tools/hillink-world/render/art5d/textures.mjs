@@ -15,7 +15,7 @@ export function noise(x, y, s = 0) {
 export const fbm = (x, y, s = 0, oct = 4) => { let v = 0, a = 0.5, f = 1; for (let i = 0; i < oct; i++) { v += a * noise(x * f, y * f, s + i * 13); f *= 2; a *= 0.5; } return v / (1 - 0.5 ** oct); };
 
 // The affine map from plan (x, z) on storey f to the screen (P.at with h = 0 is affine): ctx.transform(...planMatrix).
-export function planMatrix(P, f = 0) { const g = P.g; return [1, 0, g.skx, -g.sky, 0, P.baseOf(f)]; }
+export function planMatrix(P, f = 0) { const g = P.g; return P.m ? [...P.m, 0, P.baseOf(f)] : [1, 0, g.skx, -g.sky, 0, P.baseOf(f)]; }
 
 const cache = new Map();
 function pattern(ctx, key, size, paint, scale = 0.5) {
