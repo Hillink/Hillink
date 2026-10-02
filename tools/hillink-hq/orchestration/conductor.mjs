@@ -14,6 +14,7 @@ import { candidates, assertImplementer, ROUTES } from './routing.mjs';
 import { parseHandoff, implementationHandoff, framingFor, hashOf } from './handoff.mjs';
 import { classify, retryDecision, loopGuard, repeated } from './retry.mjs';
 import { validateImplementation } from '../implementation-policy.mjs';
+import { resolveResume } from '../resume.mjs';
 import { REVIEW_META_DIR } from '../review-snapshot.mjs';
 
 // Linked task briefs are capped at 16,000 characters by the engine; quoted evidence is fitted under this budget.
@@ -51,6 +52,9 @@ export class Conductor {
   submit(raw, { requestedBy = null } = {}) {
     const input = validateObjectiveInput(raw);
     if (input.reviewCommit && !this.verifiedImplementation(input.reviewCommit)) throw Error(`HQ has no record of verifying commit ${input.reviewCommit}; only an HQ-verified commit can be reviewed this way.`);
+    // Resolved now, from HQ's own evidence (or Kyle's stated hash and base on the HTTP API only), and journaled with
+    // the objective; the runner verifies it again on disk before importing anything.
+    if (input.resumeFrom != null) { input.resume = resolveResume(this.state, input.resumeFrom, { scope: input.scope, owner: requestedBy == null }); delete input.resumeFrom; }
     const open = Object.values(this.state.objectives ?? {}).filter(o => !TERMINAL.has(o.status)).length;
     if (open >= this.limits.maxActiveObjectives) throw Error(`HQ already has ${open} open objectives (limit ${this.limits.maxActiveObjectives}); finish or cancel one first.`);
     // taskId null = ChatGPT through the connector ingress (ingress/mcp-ingress.mjs): no HQ orchestration turn is calling.
@@ -75,13 +79,14 @@ export class Conductor {
   }
   // channel: where Kyle decided (e.g. command-center), journaled with the decision for audit. Approval gates are
   // deliberately absent from the ChatGPT connector: HQ cannot tell Kyle's words from the model's there.
-  approve(id, gate, decision, { by, note = null, channel = null } = {}) {
+  // audit: how a phone decision was authenticated and what it was bound to (owner/door.mjs), journaled with it.
+  approve(id, gate, decision, { by, note = null, channel = null, audit = null } = {}) {
     if (by !== 'kyle') throw Error('Only Kyle can decide an approval gate.');
     const o = this.objective(id), a = o.approvals[gate];
     if (!a || a.status !== 'PENDING') throw Error(`No pending ${gate} approval on this objective.`);
     if (o.status !== 'AWAITING_APPROVAL') throw Error(`Objective is ${o.status}, not awaiting approval.`);
     if (!['approve', 'deny'].includes(decision)) throw Error('decision must be approve or deny');
-    this.engine.emit('APPROVAL_DECIDED', { objectiveId: id, gate, decision, by, note: note ? clip(note, 600) : null, ...(channel ? { channel: clip(channel, 40) } : {}) });
+    this.engine.emit('APPROVAL_DECIDED', { objectiveId: id, gate, decision, by, note: note ? clip(note, 600) : null, ...(channel ? { channel: clip(channel, 40) } : {}), ...(audit ? { audit } : {}) });
     return { gate, decision };
   }
   // Observability (attention.mjs): who saw an unresolved outcome and what happens next. Records a fact only.
@@ -111,14 +116,14 @@ export class Conductor {
     this.engine.emit('ORCHESTRATOR_NOTE_ACKNOWLEDGED', { id, by, note: note.trim() });
     return { note_id: id, acknowledged: true };
   }
-  decide(id, decisionId, choice, { by, rationale = '', channel = null } = {}) {
+  decide(id, decisionId, choice, { by, rationale = '', channel = null, audit = null } = {}) {
     const o = this.objective(id), d = o.decisions[decisionId];
     if (!d || d.status !== 'PENDING') throw Error('No pending decision with that id on this objective.');
     if (!['chatgpt', 'kyle'].includes(by)) throw Error('Only the orchestrator or Kyle can decide.');
     if (d.resume.authority === 'kyle' && by !== 'kyle') throw Error('This decision needs Kyle; the orchestrator cannot make it.');
     if (!d.options.some(opt => opt.id === choice)) throw Error(`choice must be one of ${d.options.map(opt => opt.id).join(', ')}`);
     if (typeof rationale !== 'string' || rationale.length > 1200) throw Error('rationale must be text of at most 1200 characters');
-    this.engine.emit('DECISION_RECORDED', { objectiveId: id, decisionId, choice, rationale: clip(rationale, 1200) || null, by, ...(channel ? { channel: clip(channel, 40) } : {}) });
+    this.engine.emit('DECISION_RECORDED', { objectiveId: id, decisionId, choice, rationale: clip(rationale, 1200) || null, by, ...(channel ? { channel: clip(channel, 40) } : {}), ...(audit ? { audit } : {}) });
     return { decisionId, choice };
   }
 

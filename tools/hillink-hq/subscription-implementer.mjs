@@ -75,7 +75,7 @@ export class SubscriptionImplementer extends ClaudeImplementer {
       await whileRunning(emit, 'Sandbox base image check', this.sandbox.verifyBase(), { boundMs: 5 * 60_000 });
       await whileRunning(emit, `Sandbox ${box} creation`, this.sandbox.create(box), { boundMs: 5 * 60_000 }); stop();
       emit({ kind: 'PROGRESS', summary: `Sandbox ${box} created (split broker: no credential inside).` });
-      await whileRunning(emit, `Sandbox ${box} staging`, this.sandbox.stage(box, { repo: dir, commit: where.base, git: this.hardening(), signal: entry.abort.signal }), { boundMs: 5 * 60_000 }); stop();
+      await whileRunning(emit, `Sandbox ${box} staging`, this.sandbox.stage(box, { repo: dir, commit: where.stageCommit ?? where.base, git: this.hardening(), signal: entry.abort.signal }), { boundMs: 5 * 60_000 }); stop();
       // 3. The broker session, bound to this task, run, sandbox and contract. Cancellation closes it at once.
       opened = this.broker.open({ taskId: task.id, runId, objectiveId: task.link?.objectiveId ?? null, sandbox: this.sandbox, box, contract, emit, limits: this.limits });
       entry.abort.signal.addEventListener('abort', () => this.broker.closeSession(opened.session.id, 'cancelled'), { once: true });

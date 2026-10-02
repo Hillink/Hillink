@@ -5,6 +5,7 @@ import { validReviewSource, REVIEW_SNAPSHOT_EVIDENCE } from './review-snapshot.m
 import { ORCHESTRATION_EVENTS, reduceOrchestration } from './orchestration/state.mjs';
 import { needsFollowUp, ATTENTION_LIMITS } from './orchestration/attention.mjs';
 import { COMPUTE_EVENTS, reduceCompute, emptyCompute, computeLedger } from './compute/state.mjs';
+import { OWNER_EVENTS, reduceOwner, deviceView } from './owner/state.mjs';
 import { decideVariants, issueGrant, classRank, capacityOf, validateSpendAuthorization, authorizationStatus, DEFAULT_MODE, MODES } from './compute/policy.mjs';
 import { routeFor } from './compute/registry.mjs';
 import { validateAgentInput, canTransition, isWorking, CHECKS, STAGES, PROVISIONING, bindingFor } from './agents.mjs';
@@ -38,7 +39,7 @@ export function stallReason(run, now, config = defaults) {
 }
 const progressKinds = new Set(['PROGRESS', 'COMMIT', 'TEST_PROGRESS', 'TEST_RESULT', 'PR', 'REVIEW', 'FINDING', 'HANDOFF', 'COMPLETED', 'MODEL_OUTPUT', 'MODEL_RESULT']);
 const liveStages = new Set(['CLAIMED', 'IMPLEMENTING', 'TESTING', 'REVIEW']);
-const eventTypes = new Set(['AGENT_REGISTERED', 'AGENT_CONFIGURED', 'AGENT_OBSERVED', 'TASK_CREATED', 'DISPATCHED', 'WORKER_EVENT', 'RECOVERY', 'TASK_REQUEUED', 'TASK_PARKED', 'ALERT_OPENED', 'ALERT_RESOLVED', 'ALERT_ACKNOWLEDGED', 'NOTIFICATION_DELIVERED', 'NOTIFICATION_FAILED', 'OWNER_CONFIRMED_TERMINATION', 'AGENT_CREATED', 'AGENT_LIFECYCLE', 'AGENT_WAITING_UPDATED', 'HQ_RESTART', ...ORCHESTRATION_EVENTS, ...COMPUTE_EVENTS]);
+const eventTypes = new Set(['AGENT_REGISTERED', 'AGENT_CONFIGURED', 'AGENT_OBSERVED', 'TASK_CREATED', 'DISPATCHED', 'WORKER_EVENT', 'RECOVERY', 'TASK_REQUEUED', 'TASK_PARKED', 'ALERT_OPENED', 'ALERT_RESOLVED', 'ALERT_ACKNOWLEDGED', 'NOTIFICATION_DELIVERED', 'NOTIFICATION_FAILED', 'OWNER_CONFIRMED_TERMINATION', 'AGENT_CREATED', 'AGENT_LIFECYCLE', 'AGENT_WAITING_UPDATED', 'HQ_RESTART', ...ORCHESTRATION_EVENTS, ...COMPUTE_EVENTS, ...OWNER_EVENTS]);
 // Stages after which a task never runs again. CANCELLED (Pass 3) is final: later worker evidence cannot reopen it.
 export const FINAL_STAGES = new Set(['DONE', 'BLOCKED', 'CANCELLED']);
 const text = (value, max = 2000) => typeof value === 'string' && value.trim().length > 0 && value.length <= max;
@@ -126,6 +127,8 @@ export function reduce(state, event) {
   reduceCompute(state, event);
   // Pass 3: objectives, steps, handoffs, approvals and decisions live in the same journal (orchestration/state.mjs).
   reduceOrchestration(state, event);
+  // Phone approvals: paired owner devices (owner/state.mjs).
+  reduceOwner(state, event);
   return state;
 }
 
@@ -287,7 +290,9 @@ export class Engine {
     const counts = { ready: this.runnable().length, assigned: tasks.filter(t => liveStages.has(t.stage)).length, working: agents.filter(a => a.status === 'RUNNING').length, review: tasks.filter(t => t.stage === 'REVIEW').length, blocked: tasks.filter(t => t.stage === 'BLOCKED').length, done: tasks.filter(t => t.stage === 'DONE').length };
     const unresolvedRuns = Object.values(this.state.runs).filter(r => !r.endedAt).length;
     const compute = { mode: this.config.computeMode, ledger: computeLedger(this.state, { now: at }), capacity: Object.fromEntries(agents.map(a => [a.id, capacityOf(a, a.status, { connected: a.adapterAvailable, route: a.executionAdapter ? routeFor(a.executionAdapter, 'review-repo') : null })])) };
-    return { ...this.state, agents, tasks, counts, unresolvedRuns, now: at, compute, cycleComplete: tasks.length > 0 && counts.ready === 0 && counts.assigned === 0 && counts.working === 0 && counts.review === 0 && unresolvedRuns === 0 && tasks.every(t => t.stage === 'DONE' || t.stage === 'CANCELLED' || (t.stage === 'BLOCKED' && !t.recoveryPending && Boolean(t.blocker))) };
+    // Paired phones are listed without their credential hashes.
+    const owner = this.state.owner ? { devices: Object.values(this.state.owner.devices).map(deviceView), refusals: this.state.owner.refusals } : null;
+    return { ...this.state, owner, agents, tasks, counts, unresolvedRuns, now: at, compute, cycleComplete: tasks.length > 0 && counts.ready === 0 && counts.assigned === 0 && counts.working === 0 && counts.review === 0 && unresolvedRuns === 0 && tasks.every(t => t.stage === 'DONE' || t.stage === 'CANCELLED' || (t.stage === 'BLOCKED' && !t.recoveryPending && Boolean(t.blocker))) };
   }
   async tick() {
     if (this.busy) return;

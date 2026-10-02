@@ -29,6 +29,7 @@ import { allRoutes, agentProfiles } from './compute/registry.mjs';
 import { catalog, rebindAdapters } from './agents.mjs';
 import { startIngress, validIngressToken } from './ingress/mcp-ingress.mjs';
 import { requestRestart, ipcSupervisor } from './restart.mjs';
+import { OwnerDoor } from './owner/door.mjs';
 
 // Metered credentials HQ knows about. Only their presence is ever reported, never a value.
 export const METERED_CREDENTIALS = ['OPENAI_API_KEY', 'ANTHROPIC_API_KEY', 'HQ_SANDBOX_ANTHROPIC_API_KEY', 'CODEX_API_KEY', 'ANTHROPIC_AUTH_TOKEN'];
@@ -45,7 +46,7 @@ async function body(req) {
   return JSON.parse(raw);
 }
 
-export async function createHQ({ port = 4312, directory = path.join(here, '.state'), store, adapters, sink, intervalMs = 1000, ollama = false, cliAgents = false, orchestrator = false, implementation = false, env = process.env, request = fetch, sandboxFactory = ({ env: e }) => (process.platform === 'win32' ? new WslSandbox({ home: e.HQ_SANDBOX_HOME || undefined }) : new LinuxSandbox({ home: e.HQ_SANDBOX_HOME || undefined })), brokerOptions = {}, conductorOptions = {}, verifier = null, computeMode = null, nodeVersion = process.versions.node, ingress = false, supervisor = null, gitHead = null } = {}) {
+export async function createHQ({ port = 4312, directory = path.join(here, '.state'), store, adapters, sink, intervalMs = 1000, ollama = false, cliAgents = false, orchestrator = false, implementation = false, env = process.env, request = fetch, sandboxFactory = ({ env: e }) => (process.platform === 'win32' ? new WslSandbox({ home: e.HQ_SANDBOX_HOME || undefined }) : new LinuxSandbox({ home: e.HQ_SANDBOX_HOME || undefined })), brokerOptions = {}, conductorOptions = {}, verifier = null, computeMode = null, nodeVersion = process.versions.node, ingress = false, ownerDoor = false, supervisor = null, gitHead = null } = {}) {
   assertSupportedNode(nodeVersion); // fail closed before any state, sandbox or agent is touched
   const journal = store ?? new FileStore(directory);
   const local = new LocalAdapter();
@@ -141,7 +142,10 @@ export async function createHQ({ port = 4312, directory = path.join(here, '.stat
   engine.conductor = conductor;
   const credentials = Object.fromEntries(METERED_CREDENTIALS.map(k => [k, Boolean(env[k])]));
   const session = randomBytes(32).toString('hex');
-  let origin, timer, closing = false, lastError = null, ticking = Promise.resolve(), ingressServer = null, ingressStatus = 'DISABLED', ingressTokenFile = null;
+  let origin, timer, closing = false, lastError = null, ticking = Promise.resolve(), ingressServer = null, ingressStatus = 'DISABLED', ingressTokenFile = null, ownerServer = null, ownerStatus = 'DISABLED';
+  // Phone approvals (owner/door.mjs). The door object exists whenever HQ runs, so the queue and devices are readable
+  // here; its loopback listener starts only when enabled.
+  const owner = new OwnerDoor(engine, { conductor });
   const server = http.createServer(async (req, res) => {
     res.setHeader('Cache-Control', 'no-store');
     res.setHeader('X-Content-Type-Options', 'nosniff');
@@ -185,6 +189,11 @@ export async function createHQ({ port = 4312, directory = path.join(here, '.stat
       if (req.method === 'POST' && url.pathname === '/api/objectives/acknowledge') { const b = await body(req); return json(200, conductor.acknowledgeOutcome(String(b.id), { by: 'kyle', note: typeof b.note === 'string' ? b.note : '' })); }
       if (req.method === 'POST' && url.pathname === '/api/orchestrator/notes') { const b = await body(req); return json(201, { id: conductor.postNote({ title: b.title, body: b.body }, { by: 'kyle' }) }); }
       if (req.method === 'POST' && url.pathname === '/api/orchestrator/notes/ack') { const b = await body(req); return json(200, conductor.acknowledgeNote(String(b.id), { by: 'kyle', note: typeof b.note === 'string' ? b.note : '' })); }
+      // Phone approvals: the same "Waiting for Kyle" queue the phone sees, and pairing/revoking phones (owner API only).
+      if (req.method === 'GET' && url.pathname === '/api/owner/waiting') return json(200, { items: owner.waiting(), door: ownerStatus });
+      if (req.method === 'GET' && url.pathname === '/api/owner/devices') return json(200, { devices: owner.devices(), door: ownerStatus });
+      if (req.method === 'POST' && url.pathname === '/api/owner/pair') { if (!ownerServer) throw Error(`Phone approvals are not enabled (${ownerStatus}).`); return json(201, owner.startPairing(await body(req), { by: 'kyle' })); }
+      if (req.method === 'POST' && url.pathname === '/api/owner/revoke') { const b = await body(req); return json(200, owner.revokeDevice(String(b.id), { by: 'kyle', reason: typeof b.reason === 'string' ? b.reason : null })); }
       if (req.method === 'POST' && url.pathname === '/api/objectives/decide') { const b = await body(req); return json(200, conductor.decide(String(b.id), String(b.decisionId), String(b.choice), { by: 'kyle', rationale: typeof b.rationale === 'string' ? b.rationale : '', channel: 'command-center' })); }
       // The World contract: a truthful snapshot plus activity since a journal sequence number.
       if (req.method === 'GET' && url.pathname === '/api/world') {
@@ -229,6 +238,15 @@ export async function createHQ({ port = 4312, directory = path.join(here, '.stat
       ingressTokenFile = tokenFile;
     } catch (error) { ingressStatus = `UNAVAILABLE: ${String(error.message).slice(0, 160)}`; }
   }
+  // The owner door listens on loopback only; the phone reaches it through the Cloudflare tunnel (HQ_OWNER_HOST).
+  if (ownerDoor) {
+    try {
+      const publicHost = env.HQ_OWNER_HOST || null;
+      if (publicHost && !/^[a-z0-9.-]{1,253}$/i.test(publicHost)) throw Error('HQ_OWNER_HOST must be a bare hostname such as approve.hillink.io');
+      ownerServer = await owner.listen({ port: Number(env.HQ_OWNER_PORT || 4314), publicHost });
+      ownerStatus = `ENABLED on ${ownerServer.base}/owner/${publicHost ? ` (public host ${publicHost})` : ' (no public host set: loopback only)'}`;
+    } catch (error) { ownerStatus = `UNAVAILABLE: ${String(error.message).slice(0, 160)}`; }
+  }
   const tick = () => {
     if (closing) return;
     ticking = (async () => {
@@ -245,12 +263,13 @@ export async function createHQ({ port = 4312, directory = path.join(here, '.stat
     if (!record || !['completed', 'failed', 'started'].includes(record.phase) || record.phase === 'started') return;
     engine.emit('HQ_RESTART', { id: s(record.id, 80) ?? `supervisor-${engine.now()}`, phase: record.phase, by: s(record.by, 40), reason: s(record.reason, 300), oldPid: n(record.oldPid), newPid: n(record.newPid), attempts: n(record.attempts), forced: Boolean(record.forced), durationMs: n(record.durationMs), gitHeadBefore: s(record.gitHeadBefore, 40), gitHeadAfter: s(record.gitHeadAfter, 40), diagnostic: s(record.diagnostic, 600) });
   };
-  return { engine, origin, recordRestart, ingress: () => ({ status: ingressStatus, base: ingressServer?.base ?? null, port: ingressServer?.port ?? null, tokenFile: ingressTokenFile }), close: async () => {
+  return { engine, origin, recordRestart, owner, ownerDoor: () => ({ status: ownerStatus, base: ownerServer?.base ?? null, port: ownerServer?.port ?? null }), ingress: () => ({ status: ingressStatus, base: ingressServer?.base ?? null, port: ingressServer?.port ?? null, tokenFile: ingressTokenFile }), close: async () => {
     closing = true; clearTimeout(timer);
     await ticking;
     await Promise.allSettled([...new Set(Object.values(engine.adapters))].map(adapter => adapter.close?.()));
     await brokerServer?.close();
     await ingressServer?.close();
+    await ownerServer?.close();
     await new Promise(resolve => server.close(resolve));
     journal.close();
   } };
@@ -262,7 +281,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
   // restart_hq then refuses instead of trying to restart itself.
   const supervised = typeof process.send === 'function';
   let gitHead = null; try { gitHead = execFileSync('git', ['rev-parse', '--short', 'HEAD'], { cwd: here, encoding: 'utf8', windowsHide: true }).trim(); } catch { /* not a checkout */ }
-  const hq = await createHQ({ port: Number(process.env.HQ_PORT || 4312), directory: process.env.HQ_STATE_DIR || path.join(here, '.state'), sink, ollama: process.env.HQ_OLLAMA_ENABLED === '1', cliAgents: process.env.HQ_AGENTS_ENABLED === '1', orchestrator: process.env.HQ_ORCHESTRATOR_ENABLED === '1', implementation: (process.env.HQ_IMPLEMENTATION_ENABLED ?? process.env.HQ_AGENTS_ENABLED) === '1', ingress: process.env.HQ_INGRESS_ENABLED === '1', supervisor: supervised ? ipcSupervisor(process) : null, gitHead });
+  const hq = await createHQ({ port: Number(process.env.HQ_PORT || 4312), directory: process.env.HQ_STATE_DIR || path.join(here, '.state'), sink, ollama: process.env.HQ_OLLAMA_ENABLED === '1', cliAgents: process.env.HQ_AGENTS_ENABLED === '1', orchestrator: process.env.HQ_ORCHESTRATOR_ENABLED === '1', implementation: (process.env.HQ_IMPLEMENTATION_ENABLED ?? process.env.HQ_AGENTS_ENABLED) === '1', ingress: process.env.HQ_INGRESS_ENABLED === '1', ownerDoor: process.env.HQ_OWNER_DOOR_ENABLED === '1', supervisor: supervised ? ipcSupervisor(process) : null, gitHead });
   if (supervised) {
     let closing = false;
     process.on('message', async m => {
@@ -277,6 +296,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
   console.log(`Hillink HQ: ${hq.origin} (local control service; compute mode ${hq.engine.config.computeMode})`);
   const ing = hq.ingress();
   if (ing.status !== 'DISABLED') console.log(`ChatGPT ingress: ${ing.status}${ing.tokenFile ? ` (token in ${ing.tokenFile})` : ' (token from HQ_INGRESS_TOKEN)'}`);
+  if (hq.ownerDoor().status !== 'DISABLED') console.log(`Phone approvals: ${hq.ownerDoor().status}`);
   if (!sink) console.log('External notifications unconfigured. Enable browser notifications or configure HQ_NOTIFICATION_WEBHOOK for delivery when the browser is closed.');
   for (const signal of ['SIGINT', 'SIGTERM']) process.once(signal, async () => { await hq.close(); process.exit(0); });
 }

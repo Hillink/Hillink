@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="referrer" content="no-referrer">
+<title>HQ · Waiting for Kyle</title>
+<link rel="stylesheet" href="/owner/owner.css">
+<script type="module" src="/owner/owner.mjs"></script>
+</head>
+<body>
+<main>
+  <header><p class="eyebrow">HILLINK HQ</p><h1>Waiting for Kyle</h1><p id="status" role="status">Connecting…</p></header>
+  <section id="pair" hidden>
+    <h2>Pair this phone</h2>
+    <p>In the HQ Command Center on the laptop, choose <strong>Pair a phone</strong> and type the code it shows. It works once, for 10 minutes.</p>
+    <form id="pair-form"><label>Pairing code<input id="pair-code" autocomplete="one-time-code" autocapitalize="characters" spellcheck="false" maxlength="48" required></label><button type="submit">Pair</button></form>
+  </section>
+  <section id="queue" hidden><div id="items"></div><p id="empty" class="muted" hidden>Nothing is waiting for you.</p></section>
+  <footer id="footer" hidden><span id="device" class="muted"></span> <button id="refresh" type="button">Refresh</button> <button id="logout" type="button">Lock</button></footer>
+</main>
+</body>
+</html>
