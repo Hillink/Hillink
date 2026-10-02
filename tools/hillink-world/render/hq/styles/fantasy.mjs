@@ -487,7 +487,7 @@ export function createFantasyStyle({ K, U, model }) {
       // Chandeliers: an iron ring of candles hung on a chain in the lounge, command room and hall (top storey only).
       for (const room of model.rooms) {
         if (room.level !== top || !['lounge', 'command', 'lobby'].includes(room.kind)) continue;
-        const r = room.r, cx = (r.x0 + r.x1) / 2, cz = (r.z0 + r.z1) / 2, hc = HT - 26, [x, y] = K.at(cx, cz, room.level, hc), [, yt] = K.at(cx, cz, room.level, HT + 4), rx = 13 * (d.P.g?.sxx || 1), ry = 6.5;
+        const r = room.r, tb = model.items.find(it => it.room === room.id && /table/i.test(it.type)), cx = tb ? tb.x : (r.x0 + r.x1) / 2, cz = tb ? tb.z : (r.z0 + r.z1) / 2, hc = HT - 26, [x, y] = K.at(cx, cz, room.level, hc), [, yt] = K.at(cx, cz, room.level, HT + 4), rx = 13 * (d.P.g?.sxx || 1), ry = 6.5;
         ctx.strokeStyle = C.iron; ctx.lineWidth = 0.8; ctx.beginPath(); ctx.moveTo(x, yt); ctx.lineTo(x, y - 6); ctx.moveTo(x, y - 6); ctx.lineTo(x - rx, y); ctx.moveTo(x, y - 6); ctx.lineTo(x + rx, y); ctx.stroke();
         ctx.lineWidth = 1.6; ctx.beginPath(); ctx.ellipse(x, y, rx, ry, 0, 0, TAU); ctx.stroke(); ctx.strokeStyle = C.brass; ctx.lineWidth = 0.5; ctx.stroke();
         glow(ctx, x, y - 3, 40, '#ffb347', 0.18 + 0.3 * d.night);
