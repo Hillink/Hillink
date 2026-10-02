@@ -99,6 +99,17 @@ To connect ChatGPT:
    - Authentication: none (the secret URL is the credential)
 4. Anyone with the full URL can submit objectives, so treat it like a password. To revoke it, delete `ingress-token` (or change `HQ_INGRESS_TOKEN`) and restart HQ.
 
+## Phone approvals (owner door)
+
+Kyle can decide HQ's owner-gated actions (approval gates such as merge, deploy, production-change, and decisions HQ assigned to Kyle) from his phone. Enable with `HQ_OWNER_DOOR_ENABLED=1`. HQ opens a second listener on **loopback only** (`HQ_OWNER_PORT`, default 4314) serving `/owner/` and `/owner/api/*`. The laptop is not exposed: the phone reaches it through the Cloudflare named tunnel (an outbound connection) on its own hostname, set in `HQ_OWNER_HOST` (for example `approve.hillink.io`); any other Host header is refused. Put that hostname behind Cloudflare Access (Kyle's email) as an outer layer.
+
+- Pairing: Command Center → Phone approvals → Pair a phone shows a one-time code (10 minutes, five wrong tries, one open pairing). The phone enters it at `https://<HQ_OWNER_HOST>/owner/` and receives a 256-bit device secret as an HttpOnly, Secure, SameSite=Strict cookie. HQ journals only the secret's sha256. Devices expire after 30 days; revoke one in the Command Center (it ends its sessions immediately).
+- Session: the device cookie opens a short session (15 minutes idle, 12 hours at most) sent as a bearer header, so cross-site requests cannot act.
+- Queue: `GET /owner/api/waiting` lists each item with the objective, requesting agent, exact action, reason, evidence (risk, branch, commit, files, HQ checks, review), gate type, request time, a fingerprint of the exact request, and a one-time decision token valid for 10 minutes for this session and item. The Command Center reads the same queue at `GET /api/owner/waiting`.
+- Decide: `POST /owner/api/decide { itemId, fingerprint, token, choice, note }`. HQ consumes the token first, then refuses if it belongs to another session, expired, was issued for another item or fingerprint, the item is no longer pending (decided, cancelled, superseded), the request changed since it was shown (objective, gate, stage, branch, commit or files), or the choice is not offered. Otherwise it calls the same Conductor `approve`/`decide` the Command Center uses (by kyle, channel `phone`) with an audit record (device, session, token id, fingerprint, IP, user agent); refusals from a session are journaled as `OWNER_DECISION_REFUSED`. The Conductor continues the objective on its next tick; a denial follows existing policy (cancelled, or the verified branch stays unmerged).
+- Pairing codes, sessions and decision tokens live in memory: a restart invalidates all of them (fail closed); paired devices survive.
+- Not covered: owner-required tasks from `request_kyle_approval` and spend authorizations stay in the Command Center.
+
 ## Supervised restarts (`restart_hq`)
 
 HQ runs under a small external supervisor: `start-hillink-hq.ps1` runs `node supervisor.mjs`, which launches `server.mjs` as a child with an IPC channel and stays alive while HQ restarts. (Started directly with `node server.mjs`, HQ has no supervisor and `restart_hq` refuses.)
@@ -127,6 +138,15 @@ With `HQ_AGENTS_ENABLED=1` (or `HQ_IMPLEMENTATION_ENABLED=1`), Claude can take b
 - **Evidence:** ACK (Claude's session and its tools), Claude's steps and answer, FINDING (changed files), TEST_STARTED and TEST_RESULT (HQ's counts), COMMIT (SHA), and COMPLETED with `implementation: { branch, base, worktree, commit, files, tests }`.
 - **Blocked outcomes:** failed tests, a scope violation, missing test files or no changes end BLOCKED with the reason and an owner action. Nothing is committed, and the worktree is kept for inspection.
 - **Permissions:** chosen per task by `ClaudeRouter`. Review tasks use the unchanged read-only adapter in the repository, so nothing carries over from one task to the next.
+
+## Resuming preserved implementation work
+
+A run that ends BLOCKED after HQ applied Claude's work (failing acceptance tests, for example) keeps its worktree with the changes staged and journals HQ's own fingerprint of them: `implementation.patchHash` (sha256 of `git diff --cached --binary --full-index`), `base`, `branch` and `files`. An `implement` objective can continue that work instead of starting over:
+
+- Kyle (Command Center API, `POST /api/objectives`): `"resumeFrom": "6c5a1401-a81811"`, or, for a worktree HQ has no record of, `"resumeFrom": { "worktree": "6c5a1401-a81811", "patchHash": "<sha256>", "base": "<40-hex commit>" }`. A stated hash or base that differs from HQ's record is refused, not used.
+- ChatGPT (connector `submit_objective`): `resume_from: "6c5a1401-a81811"`, only for a worktree HQ has evidence for.
+
+HQ then, before anything runs, reads the preserved worktree without writing to it (`GIT_OPTIONAL_LOCKS=0`): it must be a plain directory under HQ's worktree root (no symlink), a registered worktree of this repository on `hq/impl/<name>` at exactly the recorded base, and its staged patch must hash to the recorded value and touch only files inside the new objective's scope (and the recorded files). An owner-stated base must also be an ancestor of the implementation base. HQ then creates a fresh worktree and branch at that base, applies the patch (`git apply --check` first), re-hashes it, and stages the sandbox from a local import commit, so Claude continues from the imported work. The final commit is one commit on the base containing the import plus Claude's changes, with a `Resumed-From:` trailer, checked for scope and tested by HQ like any other. Any mismatch (worktree, branch, base, hash, scope, apply) ends the objective BLOCKED with "Resume refused" and nothing runs. The preserved worktree is never reset, cleaned, removed or used as a working directory.
 
 ## Subscription implementation through the split broker (Pass 4.5)
 

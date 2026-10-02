@@ -164,6 +164,23 @@ $('replay-play').onclick = () => {
   replayTimer = setInterval(async () => { if (seq >= (liveSnapshot?.seq ?? 0)) { clearInterval(replayTimer); return; } seq = Math.min(seq + 4, liveSnapshot.seq); $('replay-seq').value = seq; try { await replay(seq); } catch { clearInterval(replayTimer); } }, 1000);
 };
 $('live').onclick = () => { clearInterval(replayTimer); replayMode(false); $('notice').textContent = ''; refresh(); };
+// Phone approvals (owner/door.mjs): pair a phone with a one-time code shown here, list paired phones, revoke one.
+async function phones() {
+  try {
+    const r = await api('/api/owner/devices');
+    $('phones-door').textContent = `Phone approvals: ${r.door}`;
+    replace('phones', r.devices.map(d => `<div class="alert"><strong>${escape(d.label)}</strong> <small>paired ${escape(new Date(d.pairedAt).toLocaleString())} · ${d.revokedAt ? `revoked ${escape(new Date(d.revokedAt).toLocaleString())}` : `expires ${escape(new Date(d.expiresAt).toLocaleString())}`}</small>${d.revokedAt ? '' : ` <button data-revoke-phone="${escape(d.id)}">Revoke</button>`}</div>`).join(''));
+  } catch { /* shown on the next refresh */ }
+}
+$('phone-form').onsubmit = async event => {
+  event.preventDefault();
+  try { const r = await api('/api/owner/pair', { label: $('phone-label').value }); $('phone-code').textContent = `On the phone, open the HQ approvals page and enter ${r.code} (one use, until ${new Date(r.expiresAt).toLocaleTimeString()}).`; phones(); }
+  catch (e) { $('phone-code').textContent = e.message; }
+};
+$('phones').addEventListener('click', async event => {
+  const id = event.target.closest('[data-revoke-phone]')?.dataset.revokePhone; if (!id) return;
+  try { await api('/api/owner/revoke', { id, reason: 'Revoked in the Command Center.' }); phones(); } catch (e) { $('phone-code').textContent = e.message; }
+});
 async function refresh() {
   try {
     if (!token) token = (await api('/api/session')).token;
@@ -179,3 +196,4 @@ async function refresh() {
   }
 }
 await refresh(); setInterval(refresh, 2000);
+phones(); setInterval(phones, 15000);

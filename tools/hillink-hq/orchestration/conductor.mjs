@@ -79,13 +79,14 @@ export class Conductor {
   }
   // channel: where Kyle decided (e.g. command-center), journaled with the decision for audit. Approval gates are
   // deliberately absent from the ChatGPT connector: HQ cannot tell Kyle's words from the model's there.
-  approve(id, gate, decision, { by, note = null, channel = null } = {}) {
+  // audit: how a phone decision was authenticated and what it was bound to (owner/door.mjs), journaled with it.
+  approve(id, gate, decision, { by, note = null, channel = null, audit = null } = {}) {
     if (by !== 'kyle') throw Error('Only Kyle can decide an approval gate.');
     const o = this.objective(id), a = o.approvals[gate];
     if (!a || a.status !== 'PENDING') throw Error(`No pending ${gate} approval on this objective.`);
     if (o.status !== 'AWAITING_APPROVAL') throw Error(`Objective is ${o.status}, not awaiting approval.`);
     if (!['approve', 'deny'].includes(decision)) throw Error('decision must be approve or deny');
-    this.engine.emit('APPROVAL_DECIDED', { objectiveId: id, gate, decision, by, note: note ? clip(note, 600) : null, ...(channel ? { channel: clip(channel, 40) } : {}) });
+    this.engine.emit('APPROVAL_DECIDED', { objectiveId: id, gate, decision, by, note: note ? clip(note, 600) : null, ...(channel ? { channel: clip(channel, 40) } : {}), ...(audit ? { audit } : {}) });
     return { gate, decision };
   }
   // Observability (attention.mjs): who saw an unresolved outcome and what happens next. Records a fact only.
@@ -115,14 +116,14 @@ export class Conductor {
     this.engine.emit('ORCHESTRATOR_NOTE_ACKNOWLEDGED', { id, by, note: note.trim() });
     return { note_id: id, acknowledged: true };
   }
-  decide(id, decisionId, choice, { by, rationale = '', channel = null } = {}) {
+  decide(id, decisionId, choice, { by, rationale = '', channel = null, audit = null } = {}) {
     const o = this.objective(id), d = o.decisions[decisionId];
     if (!d || d.status !== 'PENDING') throw Error('No pending decision with that id on this objective.');
     if (!['chatgpt', 'kyle'].includes(by)) throw Error('Only the orchestrator or Kyle can decide.');
     if (d.resume.authority === 'kyle' && by !== 'kyle') throw Error('This decision needs Kyle; the orchestrator cannot make it.');
     if (!d.options.some(opt => opt.id === choice)) throw Error(`choice must be one of ${d.options.map(opt => opt.id).join(', ')}`);
     if (typeof rationale !== 'string' || rationale.length > 1200) throw Error('rationale must be text of at most 1200 characters');
-    this.engine.emit('DECISION_RECORDED', { objectiveId: id, decisionId, choice, rationale: clip(rationale, 1200) || null, by, ...(channel ? { channel: clip(channel, 40) } : {}) });
+    this.engine.emit('DECISION_RECORDED', { objectiveId: id, decisionId, choice, rationale: clip(rationale, 1200) || null, by, ...(channel ? { channel: clip(channel, 40) } : {}), ...(audit ? { audit } : {}) });
     return { decisionId, choice };
   }
 
