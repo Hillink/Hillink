@@ -87,6 +87,16 @@ export function crc32(buf) {
 }
 
 // ---------------------------------------------------------------- names
+/**
+ * True if Win32 would map this path segment to a device. Win32 matches the part
+ * before the first dot after dropping trailing spaces and dots, so "nul .png",
+ * "com1 .png", "CON..png" and "lpt1 . .txt" are all devices, as well as "con".
+ */
+export function isWindowsReservedSegment(segment) {
+  const stem = segment.split('.')[0].replace(/[ .]+$/, '');
+  return WINDOWS_RESERVED_RE.test(stem);
+}
+
 /** Problems with a member name as a safe relative POSIX path (empty array = ok). */
 export function memberNameProblems(name, limits = DEFAULT_LIMITS) {
   const p = [];
@@ -106,7 +116,7 @@ export function memberNameProblems(name, limits = DEFAULT_LIMITS) {
     else if (s === '.') p.push('current-directory segment (.)');
     else if (/[. ]$/.test(s)) p.push(`segment "${s}" ends with a dot or space`);
     else if (/^ /.test(s)) p.push(`segment "${s}" starts with a space`);
-    if (WINDOWS_RESERVED_RE.test(s.split('.')[0])) p.push(`Windows reserved device name "${s}"`);
+    if (isWindowsReservedSegment(s)) p.push(`Windows reserved device name "${s}"`);
   }
   return [...new Set(p)];
 }

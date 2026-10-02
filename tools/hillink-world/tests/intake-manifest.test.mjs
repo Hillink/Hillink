@@ -70,6 +70,13 @@ test('inspectedMembers must be non-empty, allowlisted, safe and unique', () => {
   assert.match(errs({ ...good(), inspectedMembers: ['a.png'] }), /must be an object/);
 });
 
+test('inspectedMembers reject Windows device names, including trailing space/dot variants', () => {
+  for (const name of ['nul .png', 'com1 .png', 'CON..png', 'pack/lpt9 .png', 'aux  .png', 'conout$ .png']) {
+    assert.match(errs({ ...good(), inspectedMembers: [{ name, size: 1 }] }), /reserved device name/, name);
+  }
+  assert.equal(validateManifest({ ...good(), inspectedMembers: [{ name: 'console.png', size: 1 }, { name: 'com10.png', size: 1 }] }).ok, true);
+});
+
 test('Kyle acceptance is required and explicit', () => {
   assert.match(errs({ ...good(), kyleAcceptance: { ...good().kyleAcceptance, accepted: 'yes' } }), /accepted must be true/);
   assert.match(errs({ ...good(), kyleAcceptance: { ...good().kyleAcceptance, accepted: false } }), /accepted must be true/);

@@ -14,9 +14,9 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import zlib from 'node:zlib';
 import { fileURLToPath } from 'node:url';
-import { inspectZip, readMember, isAllowlistedFile, ZipIntakeError, crc32 } from '../intake/zip.mjs';
+import { inspectZip, readMember, isAllowlistedFile, ZipIntakeError, crc32, memberNameProblems, isWindowsReservedSegment } from '../intake/zip.mjs';
 import { stageZip, extractZip, resolveQuarantineDir, assertOutsideRepo, isInside, IntakeError, RECEIPT_NAME, findGitRoot } from '../intake/host.mjs';
-import { run, parseArgs } from '../intake/cli.mjs';
+import { run, parseArgs, stripUtf8Bom } from '../intake/cli.mjs';
 import { buildZip, samplePack, png } from '../intake/test-zip-builder.mjs';
 import { createMemFs } from '../intake/test-memfs.mjs';
 
@@ -75,6 +75,21 @@ test('rejects absolute paths, traversal, backslashes, drive paths and unsafe nam
   rejects([{ name: 'dir./x.png', data: png() }], /ends with a dot or space/);
   rejects([{ name: 'a\u0000.png', data: png() }], /control character/);
   rejects([{ name: 'caf\u00e9.png', data: png() }], /non-ASCII/);
+});
+
+test('rejects Windows device names robustly (trailing spaces/dots, any case, any depth)', () => {
+  const devices = ['nul .png', 'com1 .png', 'COM1 .PNG', 'lpt1 . .png', 'con..png', 'Con .  .png', 'aux.tar.png', 'prn   .png',
+    'conin$ .png', 'pack/nul .png', 'nul ./x.png', 'com9/a.png', 'LICENSE/con .txt', 'nul .txt'];
+  for (const name of devices) {
+    assert.ok(name.split('/').some(isWindowsReservedSegment), name);
+    assert.ok(memberNameProblems(name).some((p) => /reserved device name/.test(p)), name);
+    rejects([{ name, data: png() }], /reserved device name/);
+  }
+  // Ordinary names that merely start with a device word stay accepted.
+  for (const name of ['console.png', 'com10.png', 'nully.png', 'auxiliary.png', 'pack/lpt.png', 'con-tile.png', 'nul_1.png', 'com.png']) {
+    assert.equal(isWindowsReservedSegment(name.slice(name.lastIndexOf('/') + 1)), false, name);
+    assert.equal(inspectZip(buildZip([{ name, data: png() }])).files.length, 1, name);
+  }
 });
 
 test('rejects symlinks, executables, special files and reparse points', () => {
@@ -374,6 +389,43 @@ diskTest('CLI inspect / validate-manifest / stage / extract end to end on disk',
   assert.equal(run(['inspect', 'evil.zip'], s), 1);
   assert.match(s.stderr.text, /allowlist/);
   fs.chmodSync(staged, 0o644);
+});
+
+test('stripUtf8Bom removes exactly one leading BOM and nothing else', () => {
+  assert.equal(stripUtf8Bom('﻿{"a":1}'), '{"a":1}');
+  assert.equal(stripUtf8Bom('{"a":1}'), '{"a":1}');
+  assert.equal(stripUtf8Bom('﻿﻿{}'), '﻿{}', 'a second BOM is left for JSON.parse to reject');
+  assert.equal(stripUtf8Bom('{"a":"﻿"}'), '{"a":"﻿"}', 'BOMs inside the text are untouched');
+  assert.equal(stripUtf8Bom(''), '');
+});
+
+diskTest('CLI accepts a manifest saved with a UTF-8 BOM (Windows PowerShell 5.1), fails closed otherwise', (t) => {
+  const root = tmpRoot(t);
+  const buf = buildZip(samplePack());
+  fs.writeFileSync(path.join(root, 'pack.zip'), buf);
+  const io = () => ({ stdout: sink(), stderr: sink(), cwd: root, env: {}, repoRoot: REPO_ROOT, detectGitAncestors: false, fs });
+  const json = JSON.stringify(manifestFor(buf, inspectZip(buf)), null, 2).replace(/\n/g, '\r\n');
+  const BOM = Buffer.from([0xef, 0xbb, 0xbf]);
+  fs.writeFileSync(path.join(root, 'bom.json'), Buffer.concat([BOM, Buffer.from(json, 'utf8')]));
+
+  let s = io();
+  assert.equal(run(['validate-manifest', 'bom.json', '--zip', 'pack.zip'], s), 0, s.stdout.text + s.stderr.text);
+  s = io();
+  assert.equal(run(['stage', 'pack.zip', '--manifest', 'bom.json', '--quarantine', path.join(root, 'q')], s), 0, s.stderr.text);
+  const staged = JSON.parse(s.stdout.text).path;
+  s = io();
+  assert.equal(run(['extract', staged, '--manifest', 'bom.json', '--out', 'out'], s), 0, s.stderr.text);
+  assert.ok(fs.existsSync(path.join(root, 'out', 'pack', 'tile_0001.png')));
+  fs.chmodSync(staged, 0o644);
+
+  // Still fail closed: two BOMs, or UTF-16 (PowerShell's "Unicode"), are not JSON.
+  fs.writeFileSync(path.join(root, 'bom2.json'), Buffer.concat([BOM, BOM, Buffer.from(json, 'utf8')]));
+  s = io();
+  assert.equal(run(['validate-manifest', 'bom2.json'], s), 1);
+  assert.match(s.stderr.text, /validate-manifest failed/);
+  fs.writeFileSync(path.join(root, 'utf16.json'), Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from(json, 'utf16le')]));
+  s = io();
+  assert.equal(run(['validate-manifest', 'utf16.json'], s), 1);
 });
 
 test('intake sources use no network, process or dependency modules', { skip: READ_OK ? false : 'fs read of the intake dir not permitted here' }, () => {

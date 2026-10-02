@@ -71,7 +71,13 @@ function readJsonFile(fs, p) {
   const st = fs.lstatSync(p);
   if (!st.isFile()) throw new Error(`not a regular file: ${p}`);
   if (st.size > MAX_MANIFEST_BYTES) throw new Error(`manifest larger than ${MAX_MANIFEST_BYTES} bytes: ${p}`);
-  return JSON.parse(fs.readFileSync(p, 'utf8'));
+  // Windows PowerShell 5.1 writes UTF-8 with a byte-order mark; JSON.parse rejects it.
+  return JSON.parse(stripUtf8Bom(fs.readFileSync(p, 'utf8')));
+}
+
+/** Drop one leading U+FEFF (a UTF-8 BOM decoded as utf8). Nothing else is altered. */
+export function stripUtf8Bom(text) {
+  return text.charCodeAt(0) === 0xfeff ? text.slice(1) : text;
 }
 
 function inspectFile(fs, p) {

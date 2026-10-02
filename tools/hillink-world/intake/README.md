@@ -27,6 +27,28 @@ Exit codes: `0` ok, `1` rejected/failed, `2` usage error. Unknown, repeated or
 value-less flags (e.g. a typo like `--quarantin`) are usage errors, so they can
 never silently fall back to a default.
 
+### Required setup: a quarantine outside every repository
+
+Staging refuses any quarantine folder that sits inside a git repository,
+checking every parent folder (see [Stage](#stage)). **The default,
+`~/.hillink/intake-quarantine`, does not work on a machine whose home folder
+is itself a git repository**, as on Kyle's Windows PC (`C:\Users\kahil` is a
+repo). Stage then fails with "inside the repository" and writes nothing.
+
+Before the first `stage`, point `HILLINK_INTAKE_QUARANTINE` at a dedicated
+folder outside your home folder and outside every repository. On Kyle's PC this
+is `C:\HillinkIntake\quarantine`, set as a user environment variable:
+
+```powershell
+New-Item -ItemType Directory -Force C:\HillinkIntake\quarantine
+[Environment]::SetEnvironmentVariable('HILLINK_INTAKE_QUARANTINE', 'C:\HillinkIntake\quarantine', 'User')
+# open a new terminal so the variable is picked up, then check:
+git -C C:\HillinkIntake\quarantine rev-parse --show-toplevel   # must say "not a git repository"
+```
+
+`--quarantine <dir>` overrides the variable for a single run. The ancestor
+check cannot be turned off from the CLI.
+
 Typical flow:
 
 1. `inspect` the downloaded ZIP. Nothing is written. It prints the SHA-256, the
@@ -36,7 +58,8 @@ Typical flow:
    and get Kyle's acceptance.
 3. Run `validate-manifest manifest.json --zip pack.zip`.
 4. Run `stage pack.zip --manifest manifest.json`. This copies the file to
-   `<quarantine>/<sha256>.zip` and marks it read-only.
+   `<quarantine>/<sha256>.zip` (the folder from `HILLINK_INTAKE_QUARANTINE`, see
+   above) and marks it read-only.
 5. Run `extract <quarantine>/<sha256>.zip --manifest manifest.json --out <new-dir>`.
 
 ## ZIP inspection (fail closed)
@@ -53,8 +76,11 @@ The archive is rejected, with every problem listed, if any of these hold:
 * **Names.** Absolute paths. `..` or `.` segments. Backslashes. Drive letters or
   any `:` (this covers NTFS alternate data streams). Empty segments. Control
   characters or non-ASCII. Characters outside `A-Z a-z 0-9 space . _ - ( ) + , @ /`.
-  Segments that end in a dot or space. Windows device names (`CON`, `NUL`,
-  `COM1`…). Names deeper than 8 segments or longer than 200 bytes.
+  Segments that end in a dot or space. Windows device names (`CON`, `PRN`,
+  `AUX`, `NUL`, `COM0`-`COM9`, `LPT0`-`LPT9`, `CONIN$`, `CONOUT$`) in any
+  segment and any case, including the forms Win32 still maps to a device: with
+  an extension (`nul.png`, `aux.tar.png`) and with spaces or dots before it
+  (`com1 .png`, `CON..png`, `lpt1 . .png`). Names deeper than 8 segments or longer than 200 bytes.
 * **Duplicates.** Names that collide case-insensitively, or a file that is also
   used as a directory prefix.
 * **Attributes.** Symlinks. Device, FIFO or socket types. Any executable bit.
@@ -96,6 +122,10 @@ signature, and text must be valid UTF-8 with no NUL bytes.
 }
 ```
 
+* The file must be UTF-8 JSON. One leading UTF-8 byte-order mark is accepted,
+  because Windows PowerShell 5.1 writes one (`Out-File -Encoding UTF8`,
+  `Set-Content -Encoding UTF8`). UTF-16 (PowerShell's `-Encoding Unicode`) is
+  rejected.
 * Every field shown is required except `sha256` on members and `note`.
 * `schema` (`"hillink-intake-manifest/1"`), `title` and `notes` are the only
   other top-level keys allowed. Any unknown key is rejected.
@@ -111,7 +141,9 @@ signature, and text must be valid UTF-8 with no NUL bytes.
 * **Quarantine location.** `--quarantine <dir>`, otherwise
   `$HILLINK_INTAKE_QUARANTINE`, otherwise `~/.hillink/intake-quarantine`. A
   leading `~` is expanded. The path must be absolute. If the variable is set but
-  empty, staging is refused.
+  empty, staging is refused. Set the variable as described in
+  [Required setup](#required-setup-a-quarantine-outside-every-repository); the
+  default fails whenever the home folder is inside a repository.
 * **Must be outside any repository.** The quarantine is refused if it is inside
   this repository, or inside any directory that has a `.git` directory or `.git`
   file (git worktrees use a file). The comparison is case-insensitive on Windows
