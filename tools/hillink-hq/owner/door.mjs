@@ -7,7 +7,8 @@
 //   pairing    Kyle starts a pairing in the Command Center (loopback owner API). HQ shows a one-time code (10 minutes,
 //              5 wrong tries, one pairing open at a time). The phone exchanges it for a device secret (256 bits) that
 //              lives only in an HttpOnly, SameSite=Strict cookie. HQ journals the device with the secret's sha256.
-//              Devices expire (30 days) and Kyle can revoke one in the Command Center.
+//              Devices expire 30 days after their last use (each session renews them) and Kyle can revoke one in the
+//              Command Center.
 //   session    The phone trades its device cookie for a short session token (15 minutes idle, 12 hours at most), sent
 //              as a bearer header, so a cross-site request can never act. Revoking the device ends its sessions.
 //   decisions  Listing "Waiting for Kyle" gives each item a one-time decision token (10 minutes) bound to that session,
@@ -26,7 +27,7 @@ import { findItem, waitingForKyle } from './queue.mjs';
 import { deviceView } from './state.mjs';
 
 const here = fileURLToPath(new URL('.', import.meta.url));
-export const OWNER_LIMITS = { pairingMs: 10 * 60_000, pairFailures: 5, deviceMs: 30 * 86_400_000, sessionIdleMs: 15 * 60_000, sessionMaxMs: 12 * 3_600_000, tokenMs: 10 * 60_000, refusalsPerSession: 10, failuresPerMinute: 30, labelMax: 60, noteMax: 600, bodyMax: 8_192 };
+export const OWNER_LIMITS = { pairingMs: 10 * 60_000, pairFailures: 5, deviceMs: 30 * 86_400_000, renewEveryMs: 86_400_000, sessionIdleMs: 15 * 60_000, sessionMaxMs: 12 * 3_600_000, tokenMs: 10 * 60_000, refusalsPerSession: 10, failuresPerMinute: 30, labelMax: 60, noteMax: 600, bodyMax: 8_192 };
 const COOKIE = 'hq_owner_device';
 const sha = v => createHash('sha256').update(String(v)).digest('hex');
 const same = (a, b) => typeof a === 'string' && typeof b === 'string' && a.length === b.length && timingSafeEqual(Buffer.from(a), Buffer.from(b));
@@ -110,8 +111,11 @@ export class OwnerDoor {
     const d = this.device(secret);
     if (!d) throw this.fail(401, 'device_invalid', 'This phone is not paired with HQ (or its pairing was revoked or expired).');
     const token = randomBytes(32).toString('base64url'), id = randomUUID(), t = this.now();
+    // Auto-renew (Kyle, 2026-10-02): a phone that opens the door gets a fresh device lifetime, journaled at most once a
+    // day. Only a valid, unrevoked, unexpired device reaches here, so a lapsed or revoked phone still has to re-pair.
+    if (d.expiresAt - t < this.limits.deviceMs - this.limits.renewEveryMs) this.engine.emit('OWNER_DEVICE_RENEWED', { deviceId: d.id, expiresAt: t + this.limits.deviceMs });
     this.sessions.set(sha(token), { id, deviceId: d.id, createdAt: t, lastAt: t, refusals: 0 });
-    return { token, expiresAt: t + this.limits.sessionIdleMs, device: { id: d.id, label: d.label } };
+    return { token, expiresAt: t + this.limits.sessionIdleMs, device: { id: d.id, label: d.label, expiresAt: d.expiresAt } };
   }
   session(token) {
     this.limited();
@@ -203,13 +207,14 @@ export class OwnerDoor {
       if (req.headers['x-hq-client'] !== 'owner-phone' || (req.headers.origin && req.headers.origin !== origin) || (req.headers['sec-fetch-site'] && req.headers['sec-fetch-site'] !== 'same-origin')) return json(403, { error: 'Same-origin HQ owner page required' });
       const meta = { ip: req.headers['cf-connecting-ip'] ?? req.socket.remoteAddress, userAgent: req.headers['user-agent'] };
       const bearer = String(req.headers.authorization ?? '').match(/^Bearer (\S{20,100})$/)?.[1] ?? null;
+      const deviceCookie = secret => `${COOKIE}=${secret}; HttpOnly; SameSite=Strict; Path=/owner/api/; Max-Age=${Math.floor(this.limits.deviceMs / 1000)}${secure ? '; Secure' : ''}`;
       if (req.method === 'POST' && url.pathname === '/owner/api/pair') {
         const b = await this.body(req);
         const out = this.pair(b?.code, meta);
-        const cookie = `${COOKIE}=${out.secret}; HttpOnly; SameSite=Strict; Path=/owner/api/; Max-Age=${Math.floor(this.limits.deviceMs / 1000)}${secure ? '; Secure' : ''}`;
-        return json(201, { deviceId: out.deviceId, label: out.label, expiresAt: out.expiresAt }, { 'Set-Cookie': cookie });
+        return json(201, { deviceId: out.deviceId, label: out.label, expiresAt: out.expiresAt }, { 'Set-Cookie': deviceCookie(out.secret) });
       }
-      if (req.method === 'POST' && url.pathname === '/owner/api/session') return json(201, this.openSession(this.cookie(req)));
+      // A session renews the device (openSession), so the browser's cookie is renewed with it: same secret, fresh Max-Age.
+      if (req.method === 'POST' && url.pathname === '/owner/api/session') { const secret = this.cookie(req); return json(201, this.openSession(secret), { 'Set-Cookie': deviceCookie(secret) }); }
       const s = this.session(bearer);
       if (req.method === 'GET' && url.pathname === '/owner/api/waiting') return json(200, { now: this.now(), items: this.list(s) });
       if (req.method === 'POST' && url.pathname === '/owner/api/decide') return json(200, this.decide(s, await this.body(req), meta));

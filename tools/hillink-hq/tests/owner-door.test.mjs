@@ -328,3 +328,40 @@ test('the door is off unless enabled, listens on loopback only, refuses a bad pu
   } finally { await t.hq.close(); }
   assert.ok(new OwnerDoor({ state: {}, now: () => 0, emit() {} }).limits.tokenMs > 0);
 });
+
+test('auto-renew: opening the door renews a paired phone (journaled at most once a day) and its cookie; a lapsed or revoked phone must re-pair', async () => {
+  const t = await start();
+  try {
+    const door = t.hq.owner, day = 86_400_000, realNow = door.now;
+    const { p } = await paired(t);
+    const dev = () => t.hq.engine.state.owner.devices[Object.keys(t.hq.engine.state.owner.devices)[0]];
+    const renewals = () => t.hq.engine.state.events.filter(e => e.type === 'OWNER_DEVICE_RENEWED').length;
+    const first = dev().expiresAt;
+    assert.equal(renewals(), 0, 'a fresh pairing is not renewed again the same day');
+    let r = await p.open();
+    assert.match(r.setCookie, /HttpOnly; SameSite=Strict; Path=\/owner\/api\/; Max-Age=2592000/, 'the session refreshes the cookie lifetime');
+    assert.equal(renewals(), 0);
+    // 20 days later the phone opens the door: the device lives 30 days from now.
+    door.now = () => realNow() + 20 * day;
+    r = await p.open();
+    assert.equal(r.status, 201); assert.equal(renewals(), 1);
+    assert.ok(dev().expiresAt >= first + 20 * day - 1000, 'renewed to 30 days from this use');
+    assert.equal(r.body.device.expiresAt, dev().expiresAt);
+    // Day 45 is past the original 30 days but inside the renewed lifetime.
+    door.now = () => realNow() + 45 * day;
+    assert.equal((await p.open()).status, 201);
+    assert.equal(renewals(), 2);
+    // 31 days without use: the device lapsed, and opening does not revive it.
+    door.now = () => realNow() + 77 * day;
+    r = await p.open();
+    assert.equal(r.status, 401); assert.equal(r.body.code, 'device_invalid'); assert.equal(renewals(), 2);
+    // A revoked phone cannot renew, even inside its lifetime, and a stray renewal event cannot revive it.
+    door.now = realNow;
+    const q = await paired(t, 'Second phone');
+    const second = Object.values(t.hq.engine.state.owner.devices).find(d => d.label === 'Second phone');
+    assert.equal((await t.cc('/api/owner/revoke', { id: second.id, reason: 'Lost phone.' })).status, 200);
+    assert.equal((await q.p.open()).status, 401);
+    t.hq.engine.emit('OWNER_DEVICE_RENEWED', { deviceId: second.id, expiresAt: realNow() + 90 * day });
+    assert.ok(second.revokedAt && second.expiresAt < realNow() + 31 * day);
+  } finally { await t.hq.close(); }
+});
