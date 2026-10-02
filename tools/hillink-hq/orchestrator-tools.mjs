@@ -76,7 +76,7 @@ const objectiveView = o => ({
   id: o.id, title: clip(o.input.title, 160), type: o.input.type, status: o.status, why: clip(o.statusReason, 400),
   plan: o.plan ? { risk: o.plan.risk, risk_reasons: o.plan.riskReasons, gates: o.plan.gates, expected_path: o.plan.expectedPath, review_rule: o.plan.reviewRule, completion_criteria: o.plan.completionCriteria } : null,
   steps: o.order.map(id => { const s = o.steps[id]; return { id: s.id, kind: s.kind, status: s.status, agent: s.agentId, attempts: s.attempts, retries: s.retries.map(r => `${r.reason} ${r.count}/${r.max}`), handoff: s.handoff ? clip(JSON.stringify(s.handoff), HANDOFF_LIMITS.block + 6_000) : null }; }),
-  approvals_pending_for_kyle: Object.values(o.approvals).filter(a => a.status === 'PENDING').map(a => ({ gate: a.gate, why: a.reason })),
+  approvals_pending_for_kyle: Object.values(o.approvals).filter(a => a.status === 'PENDING').map(a => ({ gate: a.gate, why: a.reason, how: 'Only Kyle decides this, in the HQ Command Center ("Waiting for Kyle"). No connector tool can approve it: tell Kyle the objective and gate.' })),
   decisions_pending: Object.values(o.decisions).filter(d => d.status === 'PENDING').map(d => ({ decision_id: d.id, for: d.resume?.authority === 'kyle' ? 'kyle' : 'orchestrator', question: clip(d.question, 600), options: d.options })),
   disagreement: o.disagreement ? clip(JSON.stringify(o.disagreement), 1500) : null,
   result: o.result ? { outcome: o.result.outcome, reason: clip(o.result.reason, 600), branch: o.result.branch ?? null, commit: o.result.commit ?? null, files: o.result.files ?? [], owner_action: o.result.ownerAction ?? null } : null,

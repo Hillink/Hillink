@@ -55,12 +55,15 @@ export class Conductor {
     this.requestCancel(id, { by, reason });
     return this.finishCancel(o, reason);
   }
-  approve(id, gate, decision, { by, note = null } = {}) {
+  // channel: where Kyle decided (e.g. command-center), journaled with the decision for audit. Approval gates are
+  // deliberately absent from the ChatGPT connector: HQ cannot tell Kyle's words from the model's there.
+  approve(id, gate, decision, { by, note = null, channel = null } = {}) {
     if (by !== 'kyle') throw Error('Only Kyle can decide an approval gate.');
     const o = this.objective(id), a = o.approvals[gate];
     if (!a || a.status !== 'PENDING') throw Error(`No pending ${gate} approval on this objective.`);
+    if (o.status !== 'AWAITING_APPROVAL') throw Error(`Objective is ${o.status}, not awaiting approval.`);
     if (!['approve', 'deny'].includes(decision)) throw Error('decision must be approve or deny');
-    this.engine.emit('APPROVAL_DECIDED', { objectiveId: id, gate, decision, by, note: note ? clip(note, 600) : null });
+    this.engine.emit('APPROVAL_DECIDED', { objectiveId: id, gate, decision, by, note: note ? clip(note, 600) : null, ...(channel ? { channel: clip(channel, 40) } : {}) });
     return { gate, decision };
   }
   // Observability (attention.mjs): who saw an unresolved outcome and what happens next. Records a fact only.

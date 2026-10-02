@@ -1,6 +1,6 @@
 const $ = id => document.getElementById(id);
 const escape = value => String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
-let token, snapshot, liveSnapshot, replaying = false, skin = 'real', selected = null, replayTimer;
+let token, snapshot, liveSnapshot, replaying = false, skin = 'real', selected = null, replayTimer, armedGate = null;
 const notified = new Set();
 const ago = (at, now) => at == null ? 'No evidence' : `${Math.max(0, Math.floor((now - at) / 1000))}s ago`;
 const badge = status => `<span class="badge ${escape(status)}">${escape(status)}</span>`;
@@ -36,6 +36,9 @@ function render(state) {
     return `<button class="agent" data-agent="${escape(agent.id)}"><div class="agent-top"><span class="avatar">${escape(agent.name[0])}</span><div><h3>${escape(agent.name)}</h3><span class="role">${escape(agent.role)}</span></div>${agent.lifecycle ? badge(agent.lifecycle.state) : ''}${statusBadge(agent)}</div><p>${agent.lifecycle && agent.lifecycle.state !== 'ACTIVE' ? escape(agent.lifecycle.detail || agent.lifecycle.state) : task ? escape(task.title) : agent.adapterAvailable ? escape(agent.status === 'IDLE' ? 'Available for allowlisted local work' : agent.detail || agent.status) : viaConnector(agent) ? escape(connectorLine(agent, state.now)) : 'Execution adapter not connected'}</p><p>Progress: ${ago(agent.lastMeaningfulAt, state.now)} · Credits: UNKNOWN</p></button>`;
   }).join('');
   $('queue').innerHTML = state.tasks.length ? [...state.tasks].reverse().map(task => `<div class="queue-row"><button data-task="${escape(task.id)}"><b>${escape(task.title)}</b><small>${escape(task.description)}</small></button><span>${badge(task.stage)}${task.verificationResult ? `<small>Tests: ${escape(task.verificationResult)}</small>` : ''}</span><span>${escape(state.agents.find(a => a.id === task.agentId)?.name || 'Unassigned')}<small>Priority ${task.priority} · Attempt ${task.attempts}</small></span><span>${task.claimedAt ? ago(task.claimedAt, task.endedAt ?? state.now).replace(' ago', ' elapsed') : 'Not started'}</span></div>`).join('') : '<p class="empty">No tasks yet. Queue a safe check to observe actual execution.</p>';
+  const gates = Object.values(state.objectives ?? {}).filter(o => o.status === 'AWAITING_APPROVAL').flatMap(o => Object.values(o.approvals).filter(a => a.status === 'PENDING').map(a => ({ o, a })));
+  $('approvals-panel').hidden = !gates.length;
+  replace('approvals', gates.map(({ o, a }) => `<div class="alert"><strong>${escape(a.gate)}</strong> · ${escape(o.input.title)} <small>objective ${escape(o.id.slice(0, 8))}${o.plan ? ` · risk ${escape(o.plan.risk)}` : ''}</small><p>${escape(a.reason)}</p><p class="muted">${escape(a.stage || '')}${o.result?.branch ? ` · branch ${escape(o.result.branch)}` : ''}${o.result?.commit ? ` · commit ${escape(String(o.result.commit).slice(0, 10))}` : ''}</p>${['approve', 'deny'].map(d => { const key = `${o.id}:${a.gate}:${d}`; return `<button data-gate-decision="${d}" data-objective="${escape(o.id)}" data-gate="${escape(a.gate)}" ${replaying ? 'disabled' : ''}>${armedGate === key ? 'Confirm: ' : ''}${d === 'approve' ? 'Approve' : 'Deny'} ${escape(a.gate)}</button>`; }).join(' ')}</div>`).join(''));
   const alerts = Object.values(state.alerts).filter(a => a.active);
   $('alerts').innerHTML = alerts.length ? alerts.map(a => `<div class="alert"><strong>${escape(a.kind)}</strong><p>${escape(a.detail)}</p><p>Agent: ${escape(a.agentId || 'System')} · Task: ${escape(a.taskId || 'Queue')} · Ready: ${a.runnableQueueCount}</p><p>Since progress at alert creation: ${a.sinceProgressMs == null ? 'UNKNOWN' : `${Math.floor(a.sinceProgressMs / 1000)}s`} · Recovery: ${escape(a.recoveryAttempted?.step || 'None')}</p>${a.ownerAction ? `<p><b>Kyle:</b> ${escape(a.ownerAction)}</p>` : ''}<p>External delivery: ${a.deliveredAt ? 'Delivered' : a.deliveryError ? escape(a.deliveryError) : 'Pending / unconfigured'}</p><button data-ack="${escape(a.key)}" ${a.acknowledgedAt || replaying ? 'disabled' : ''}>${a.acknowledgedAt ? 'Acknowledged' : 'Acknowledge'}</button></div>`).join('') : '<p class="empty">No material alerts.</p>';
   const meaningful = state.events.filter(e => !(e.type === 'AGENT_OBSERVED' && e.data.status === 'IDLE') && !(e.type === 'WORKER_EVENT' && e.data.kind === 'HEARTBEAT'));
@@ -77,6 +80,15 @@ function inspect(type, id, focus = true) {
 document.addEventListener('click', async event => {
   const lifecycle = event.target.closest('[data-lifecycle]');
   if (lifecycle && !replaying) { try { await api(`/api/agents/${lifecycle.dataset.lifecycle}`, { id: lifecycle.dataset.id }); $('notice').textContent = ''; await refresh(); } catch (e) { $('notice').textContent = e.message; } return; }
+  // Two clicks: the first arms the button, the second records Kyle's decision through the owner API.
+  const gate = event.target.closest('[data-gate-decision]');
+  if (gate && !replaying) {
+    const key = `${gate.dataset.objective}:${gate.dataset.gate}:${gate.dataset.gateDecision}`;
+    if (armedGate !== key) { armedGate = key; render(snapshot); return; }
+    armedGate = null;
+    try { await api('/api/objectives/approve', { id: gate.dataset.objective, gate: gate.dataset.gate, decision: gate.dataset.gateDecision }); $('notice').textContent = ''; await refresh(); } catch (e) { $('notice').textContent = e.message; }
+    return;
+  }
   const agent = event.target.closest('[data-agent]'), task = event.target.closest('[data-task]'), ack = event.target.closest('[data-ack]');
   if (agent) inspect('agent', agent.dataset.agent);
   if (task) inspect('task', task.dataset.task);

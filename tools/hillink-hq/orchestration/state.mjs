@@ -92,7 +92,7 @@ export function reduceOrchestration(state, event) {
       break;
     }
     case 'APPROVAL_REQUESTED': o.approvals[d.gate] = { gate: d.gate, reason: d.reason, stage: d.stage, status: 'PENDING', requestedAt: at }; o.updatedAt = at; break;
-    case 'APPROVAL_DECIDED': Object.assign(o.approvals[d.gate], { status: d.decision === 'approve' ? 'APPROVED' : 'DENIED', decidedAt: at, by: d.by, note: d.note ?? null }); o.updatedAt = at; break;
+    case 'APPROVAL_DECIDED': Object.assign(o.approvals[d.gate], { status: d.decision === 'approve' ? 'APPROVED' : 'DENIED', decidedAt: at, by: d.by, note: d.note ?? null, channel: d.channel ?? null }); o.updatedAt = at; break;
     case 'DECISION_REQUESTED': o.decisions[d.decisionId] = { id: d.decisionId, question: d.question, options: d.options, context: d.context ?? null, status: 'PENDING', requestedAt: at, resume: d.resume }; o.updatedAt = at; break;
     case 'DECISION_APPLIED': o.decisions[d.decisionId].applied = true; o.updatedAt = at; break;
     case 'DECISION_RECORDED': Object.assign(o.decisions[d.decisionId], { status: 'DECIDED', choice: d.choice, rationale: d.rationale, by: d.by, decidedAt: at }); o.updatedAt = at; break;
