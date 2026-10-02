@@ -194,6 +194,8 @@ export function drawSite(d, site, m) {
     for (const [cx, cz] of [[u.x0 - 3, u.z0 - 3], [u.x1 + 3, u.z0 - 3]]) m.cone(ctx, K.at(cx, cz, f, 0));
   }
   // Inspection: a checked flag on the slab.
+  // The style's own vocabulary for this stage (its crews, machines and materials) over the shared geometry.
+  m.stage?.(d, site, si, { top, W, D });
   if (si === stageIndex('inspection')) { const [px, py] = K.at(u.x1 - 4, u.z0 + 4, f, 0); ctx.strokeStyle = '#444'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(px, py - 26); ctx.stroke(); ctx.fillStyle = m.accent; ctx.beginPath(); ctx.moveTo(px, py - 26); ctx.lineTo(px + 10 + Math.sin(T * 3) * 1.5, py - 22); ctx.lineTo(px, py - 18); ctx.fill(); }
 }
 // A small refit inside a working room: barrier, a crate and the thing being fitted (outline).
@@ -274,3 +276,24 @@ export function spotBox(sp, d0, d1, s0, s1) { return sp.axis === 'x' ? { x0: sp.
 export function spotFace(sp, b) { return sp.axis === 'x' ? ['right', b.x1, b.z0, b.z1] : ['front', b.z0, b.x0, b.x1]; }
 // A plan point d out from the wall at offset s along it.
 export function spotAt(sp, d, s = 0) { return sp.axis === 'x' ? [sp.at + d, sp.c + s] : [sp.c + s, sp.at - d]; }
+
+// Ambient life shared by both styles (each passes its own palette): a small flock wheeling over the island by day
+// and butterflies around flowering shrubs. Quiet, few and slow, so they never read as activity.
+export function ambientLife(d, model, o = {}) {
+  const { ctx, K } = d, T = d.reduced ? 0 : d.T, day = 1 - (d.night ?? 0);
+  if (day < 0.2) return;
+  const b = model.buildings[0]?.r; if (!b) return;
+  const cx = (b.x0 + b.x1) / 2, cz = (b.z0 + b.z1) / 2, R = Math.max(b.x1 - b.x0, b.z1 - b.z0) * 0.7;
+  ctx.strokeStyle = o.bird ?? '#2a2d33'; ctx.lineWidth = 1.1; ctx.globalAlpha = day;
+  for (let i = 0; i < 5; i++) {
+    const a = T * 0.12 + i * 0.22, r = R + (i % 2) * 24, [x, y] = K.at(cx + Math.cos(a) * r, cz + Math.sin(a) * r, 0, HT + 150 + i * 6 + Math.sin(T * 0.7 + i) * 6), fl = Math.sin(T * 7 + i * 1.7) * 2.5;
+    ctx.beginPath(); ctx.moveTo(x - 4, y - fl); ctx.quadraticCurveTo(x - 2, y - 1.5, x, y); ctx.quadraticCurveTo(x + 2, y - 1.5, x + 4, y - fl); ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+  const shrubs = model.plants.filter(p => p.kind === 'flowerShrub').slice(0, 8);
+  shrubs.forEach((p, i) => {
+    const ph = T * 0.8 + i * 2.1, [x, y] = K.at(p.x + Math.sin(ph) * 12, p.z + Math.cos(ph * 0.7) * 10, 0, 14 + Math.sin(ph * 2.3) * 5), w = 2.2 * Math.abs(Math.sin(T * 9 + i));
+    ctx.fillStyle = (o.butterflies ?? ['#f2d24b', '#ffffff', '#ef8fb0'])[i % 3]; ctx.globalAlpha = day;
+    ctx.beginPath(); ctx.ellipse(x - w * 0.6, y, w, 1.6, 0, 0, TAU); ctx.ellipse(x + w * 0.6, y, w, 1.6, 0, 0, TAU); ctx.fill(); ctx.globalAlpha = 1;
+  });
+}

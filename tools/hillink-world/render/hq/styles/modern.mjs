@@ -5,7 +5,8 @@
 import { drawPlant, plantHeight } from '../../art5d/ground.mjs';
 import { skyColors } from '../sky.mjs';
 import { css } from '../color.mjs';
-import { TAU, HT, LOW, shade, mix, poly, glow, h1, pattern, TEX, fillPlan, inPlan, drawGround, ib, baseH, frontFace, paintFront, table, chair, screen, glyphRows, drawSite, drawRefit, decorSpans, tallSpans, windowsOf, wallOfDoor, wallFace, orientedBox, hearthSpots as hearthSpotsOf, spotBox, spotFace, spotAt } from './common.mjs';
+import { TAU, HT, LOW, shade, mix, poly, glow, h1, pattern, TEX, fillPlan, inPlan, drawGround, ib, baseH, frontFace, paintFront, table, chair, screen, glyphRows, drawSite, drawRefit, decorSpans, tallSpans, windowsOf, wallOfDoor, wallFace, orientedBox, hearthSpots as hearthSpotsOf, spotBox, spotFace, spotAt, ambientLife } from './common.mjs';
+import { modernStage } from './build-stages.mjs';
 import { modernSite } from './modern-site.mjs';
 
 const C = {
@@ -26,6 +27,7 @@ export function createModernStyle({ K, U, model }) {
   const doorWall = new Map(model.doors.map(dr => [dr, wallOfDoor(model, dr)]));
   // The lounge's fireplace spot (shared with Fantasy): a walnut feature wall with a linear fireplace and a canvas.
   const hearthSpots = hearthSpotsOf(model, winOf);
+  const buildStage = modernStage();
   const ext = modernSite({ K, U, model, C, hearthSpots });
   function fireplace(d, sp) {
     const { ctx, K } = d, f = sp.f, T = d.reduced ? 0 : d.T, face = (b, h0, h1, fn) => { const [kind, c, a, e] = spotFace(sp, b); K.onFace(ctx, f, kind, c, a, e, h0, h1, e - a, h1 - h0, g => fn(g, e - a, h1 - h0)); };
@@ -322,10 +324,11 @@ export function createModernStyle({ K, U, model }) {
     site(d, site) {
       const cone = (ctx, [x, y]) => { ctx.fillStyle = '#ff7a2f'; ctx.beginPath(); ctx.moveTo(x - 2.5, y); ctx.lineTo(x + 2.5, y); ctx.lineTo(x, y - 7); ctx.closePath(); ctx.fill(); ctx.fillStyle = '#fff'; ctx.fillRect(x - 1.2, y - 4, 2.4, 0.9); };
       if (site.kind === 'refit') drawRefit(d, site, { tape: '#f2b630', stake: '#ff7a2f', crate: '#c8a26a' });
-      else drawSite(d, site, { stake: '#ff7a2f', string: '#f2b630', dirt: '#a88b67', slab: '#b9bcc1', rebar: '#7a4a32', frame: '#5e6672', scaffold: '#d9a33a', plank: '#b58a55', wall: '#cfcac0', crate: '#c8a26a', accent: '#f2b630', cone });
+      else drawSite(d, site, { stake: '#ff7a2f', string: '#f2b630', dirt: '#a88b67', slab: '#b9bcc1', rebar: '#7a4a32', frame: '#5e6672', scaffold: '#d9a33a', plank: '#b58a55', wall: '#cfcac0', crate: '#c8a26a', accent: '#f2b630', cone, stage: buildStage });
     },
     plantHeight: pl => plantHeight(pl, U),
     plant(d, pl) { drawPlant(d, pl, U); },
+    atmosphere(d) { ambientLife(d, model, { bird: '#2a2d33' }); },
     corner: ext.corner,
     levelTop: ext.levelTop,
     buildingLights: ext.buildingLights,

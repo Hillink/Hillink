@@ -8,7 +8,8 @@
 import { plantHeight } from '../../art5d/ground.mjs';
 import { skyColors } from '../sky.mjs';
 import { css } from '../color.mjs';
-import { TAU, HT, LOW, shade, mix, poly, glow, h1, texture, pattern, TEX, fillPlan, inPlan, drawGround, ib, baseH, frontFace, paintFront, table, chair, screen, glyphRows, drawSite, drawRefit, decorSpans, tallSpans, windowsOf, wallOfDoor, wallFace, orientedBox, hearthSpots as hearthSpotsOf, spotBox, spotFace, spotAt } from './common.mjs';
+import { TAU, HT, LOW, shade, mix, poly, glow, h1, texture, pattern, TEX, fillPlan, inPlan, drawGround, ib, baseH, frontFace, paintFront, table, chair, screen, glyphRows, drawSite, drawRefit, decorSpans, tallSpans, windowsOf, wallOfDoor, wallFace, orientedBox, hearthSpots as hearthSpotsOf, spotBox, spotFace, spotAt, ambientLife } from './common.mjs';
+import { fantasyStage } from './build-stages.mjs';
 import { fantasySite } from './fantasy-site.mjs';
 
 const C = {
@@ -78,6 +79,7 @@ export function createFantasyStyle({ K, U, model }) {
     for (const k of [-18, 18]) { const [cx, cz] = spotAt(sp, 6, k); candle(d, f, cx, cz, 42, T, k); }
     const [kx, kz] = spotAt(sp, 6, -6); K.cylinder(ctx, f, kx, kz, 42, 47, 2.2, '#b8693a', { top: '#d08a50' });
   }
+  const buildStage = fantasyStage({ C, flame, crystal });
   const ext = fantasySite({ K, U, model, C, flame, candle, crystal, hearthSpots });
   const items = {
     desk(d, it) {
@@ -134,6 +136,15 @@ export function createFantasyStyle({ K, U, model }) {
       screen(d, f, it.x + it.w * 0.22, it.z + it.d * 0.18, it.w * 0.22, h, h + it.w * 0.16, C.brass, runes(st, it.id, T));
       const [cx, cy] = K.at(b.x0 + 6, it.z - 2, f, h); crystal(ctx, cx, cy, 2.2, '#9fe7ff', T, 1); crystal(ctx, cx + 4, cy + 1, 1.6, '#c9a7ff', T, 2);
       book(d, f, it.x + 2, b.z0 + 4, h, '#4a2f5e', false);
+      // Alchemy: three flasks on a brass stand; they bubble harder while inspection runs here.
+      for (let i = 0; i < 3; i++) {
+        const fx = it.x + it.w * (0.02 + i * 0.09), fz = b.z1 - 5, col = ['#3ddc84', '#c9a7ff', '#ff7a5a'][i], [x, y] = K.at(fx, fz, f, h), r = 2.4 + (i % 2) * 0.8;
+        ctx.fillStyle = 'rgba(220,240,255,0.35)'; ctx.fillRect(x - 0.7, y - r * 2 - 5, 1.4, 5);
+        ctx.fillStyle = col; ctx.globalAlpha = 0.85; ctx.beginPath(); ctx.arc(x, y - r, r, 0, TAU); ctx.fill(); ctx.globalAlpha = 1;
+        ctx.strokeStyle = 'rgba(255,255,255,0.6)'; ctx.lineWidth = 0.5; ctx.beginPath(); ctx.arc(x, y - r, r, 0, TAU); ctx.stroke(); ctx.fillStyle = 'rgba(255,255,255,0.7)'; ctx.fillRect(x - r * 0.5, y - r * 1.5, 0.8, 0.8);
+        glow(ctx, x, y - r, 7, col, st ? 0.45 : 0.2);
+        for (let k = 0; k < (st ? 4 : 2); k++) { const q = (T * (st ? 0.9 : 0.4) + k / 4 + i * 0.3) % 1; ctx.fillStyle = `rgba(255,255,255,${0.8 * (1 - q)})`; ctx.beginPath(); ctx.arc(x + Math.sin(q * 9 + k) * 0.8, y - r * 2 - 5 - q * 9, 0.6 + q * 0.5, 0, TAU); ctx.fill(); }
+      }
     },
     // Crystal vault (server rack): a dark carved cabinet of glowing crystal cells, pulsing with the World's clock.
     serverRack(d, it) {
@@ -387,7 +398,7 @@ export function createFantasyStyle({ K, U, model }) {
     site(d, site) {
       const cone = (ctx, [x, y]) => { ctx.strokeStyle = C.timber; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x, y - 9); ctx.stroke(); ctx.fillStyle = C.crimson; ctx.beginPath(); ctx.moveTo(x, y - 9); ctx.lineTo(x + 5, y - 7.5); ctx.lineTo(x, y - 6); ctx.fill(); };
       if (site.kind === 'refit') drawRefit(d, site, { tape: C.gold, stake: C.timber, crate: '#a8784a' });
-      else drawSite(d, site, { stake: C.timber, string: '#e8d9a8', dirt: '#9a7a52', slab: '#a99d86', rebar: C.timber, frame: C.timber, scaffold: '#8a5a34', plank: '#b58a55', wall: C.stone, crate: '#a8784a', accent: C.gold, cone });
+      else drawSite(d, site, { stake: C.timber, string: '#e8d9a8', dirt: '#9a7a52', slab: '#a99d86', rebar: C.timber, frame: C.timber, scaffold: '#8a5a34', plank: '#b58a55', wall: C.stone, crate: '#a8784a', accent: C.gold, cone, stage: buildStage });
     },
     plantHeight: pl => plantHeight(pl, U) * 0.85,
     plant(d, pl) { fantasyPlant(d, pl); },
@@ -450,7 +461,38 @@ export function createFantasyStyle({ K, U, model }) {
     meetingMarker(d, x, y) { const ctx = d.ctx; ctx.beginPath(); ctx.roundRect(x - 11, y - 9, 22, 14, 5); ctx.fillStyle = C.crimson; ctx.fill(); ctx.strokeStyle = C.gold; ctx.lineWidth = 0.8; ctx.stroke(); ctx.fillStyle = C.gold; sigil(ctx, x, y - 2, 4); },
     // Selective magic: motes rising in the arcane core, and chimney smoke over the hearth.
     atmosphere(d) {
-      const { ctx, K } = d, T = d.reduced ? 0 : d.T;
+      ambientLife(d, model, { bird: '#3a2a20', butterflies: ['#f2d24b', '#c9a7ff', '#9fe7ff'] });
+      const { ctx, K } = d, T = d.reduced ? 0 : d.T, busy = (d.counts?.working ?? 0) > 0, top = Math.max(...model.levels);
+      // Crystal memory: light threads between the vault crystals, a pulse running along them (faster while work runs).
+      const racks = model.items.filter(it => it.type === 'serverRack');
+      for (const room of new Set(racks.map(it => it.room))) {
+        const rs = racks.filter(it => it.room === room).sort((a, b) => a.x - b.x || a.z - b.z);
+        for (let i = 1; i < rs.length; i++) {
+          const a = rs[i - 1], b = rs[i], pa = K.at(a.x, a.z, a.f, a.h + 8), pb = K.at(b.x, b.z, b.f, b.h + 8), mx = (pa[0] + pb[0]) / 2, my = Math.min(pa[1], pb[1]) - 8;
+          ctx.strokeStyle = `rgba(159,231,255,${busy ? 0.55 : 0.3})`; ctx.lineWidth = 0.9; ctx.beginPath(); ctx.moveTo(...pa); ctx.quadraticCurveTo(mx, my, ...pb); ctx.stroke();
+          const q = (T * (busy ? 0.7 : 0.25) + i * 0.37) % 1, x = (1 - q) * (1 - q) * pa[0] + 2 * q * (1 - q) * mx + q * q * pb[0], y = (1 - q) * (1 - q) * pa[1] + 2 * q * (1 - q) * my + q * q * pb[1];
+          glow(ctx, x, y, 7, '#c9a7ff', 0.8); ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(x, y, 1, 0, TAU); ctx.fill();
+        }
+      }
+      // Floating pages: a couple of loose leaves drifting in front of each bookcase.
+      for (const it of model.items) {
+        if (it.type !== 'bookshelf') continue;
+        const fr = frontFace(it) === 'front', b = ib(it);
+        for (let k = 0; k < 2; k++) {
+          const ph = T * 0.5 + h1(it.id, k) * 9, x = fr ? it.x + (h1(it.id, k, 'x') - 0.5) * it.w * 0.8 + Math.sin(ph) * 3 : b.x1 + 6 + Math.sin(ph) * 2, z = fr ? b.z0 - 6 - Math.cos(ph) * 2 : it.z + (h1(it.id, k, 'z') - 0.5) * it.d * 0.8 + Math.sin(ph) * 3, [px, py] = K.at(x, z, it.f, it.h * 0.55 + k * 10 + Math.sin(ph * 1.3) * 4), w = 4 * Math.abs(Math.cos(ph * 0.8)) + 1;
+          ctx.save(); ctx.translate(px, py); ctx.rotate(Math.sin(ph) * 0.4); ctx.fillStyle = C.parchment; ctx.fillRect(-w / 2, -2.6, w, 5.2); ctx.fillStyle = 'rgba(80,60,40,0.5)'; for (let l = 0; l < 3; l++) ctx.fillRect(-w / 2 + 0.6, -1.6 + l * 1.4, w - 1.2, 0.4); ctx.restore();
+          glow(ctx, px, py, 6, '#ffd27a', 0.18);
+        }
+      }
+      // Chandeliers: an iron ring of candles hung on a chain in the lounge, command room and hall (top storey only).
+      for (const room of model.rooms) {
+        if (room.level !== top || !['lounge', 'command', 'lobby'].includes(room.kind)) continue;
+        const r = room.r, cx = (r.x0 + r.x1) / 2, cz = (r.z0 + r.z1) / 2, hc = HT - 26, [x, y] = K.at(cx, cz, room.level, hc), [, yt] = K.at(cx, cz, room.level, HT + 4), rx = 13 * (d.P.g?.sxx || 1), ry = 6.5;
+        ctx.strokeStyle = C.iron; ctx.lineWidth = 0.8; ctx.beginPath(); ctx.moveTo(x, yt); ctx.lineTo(x, y - 6); ctx.moveTo(x, y - 6); ctx.lineTo(x - rx, y); ctx.moveTo(x, y - 6); ctx.lineTo(x + rx, y); ctx.stroke();
+        ctx.lineWidth = 1.6; ctx.beginPath(); ctx.ellipse(x, y, rx, ry, 0, 0, TAU); ctx.stroke(); ctx.strokeStyle = C.brass; ctx.lineWidth = 0.5; ctx.stroke();
+        glow(ctx, x, y - 3, 40, '#ffb347', 0.18 + 0.3 * d.night);
+        for (let i = 0; i < 6; i++) { const a = (i / 6) * TAU, cx2 = x + Math.cos(a) * rx, cy2 = y + Math.sin(a) * ry; ctx.fillStyle = '#f3ead2'; ctx.fillRect(cx2 - 0.8, cy2 - 4, 1.6, 4); flame(ctx, cx2, cy2 - 4, 1.1, T, i + room.level); }
+      }
       for (const room of model.rooms) {
         if (room.kind !== 'servers' && room.kind !== 'servers-like') continue;
         const r = room.r;
