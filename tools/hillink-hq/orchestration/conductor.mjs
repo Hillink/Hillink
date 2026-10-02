@@ -15,6 +15,22 @@ import { parseHandoff, implementationHandoff, framingFor, hashOf } from './hando
 import { classify, retryDecision, loopGuard, repeated } from './retry.mjs';
 import { validateImplementation } from '../implementation-policy.mjs';
 import { REVIEW_META_DIR } from '../review-snapshot.mjs';
+
+// Linked task briefs are capped at 16,000 characters by the engine; quoted evidence is fitted under this budget.
+const QUOTE_BUDGET = 15_000;
+export function fitQuoted(quoted, budget) {
+  const out = quoted.map(q => ({ ...q }));
+  let total = out.reduce((n, q) => n + q.text.length, 0);
+  while (total > Math.max(budget, 0)) {
+    const big = out.reduce((a, b) => (b.text.length > a.text.length ? b : a));
+    if (big.text.length <= 200) break;
+    const keep = Math.max(200, big.text.length - (total - budget) - 40);
+    total -= big.text.length;
+    big.text = clip(big.text, keep);
+    total += big.text.length;
+  }
+  return out;
+}
 import { decideBest, decideCompute } from '../compute/policy.mjs';
 import { UNRESOLVED, ATTENTION_LIMITS } from './attention.mjs';
 
@@ -34,6 +50,7 @@ export class Conductor {
   // ---- public API (HTTP for Kyle, tools for ChatGPT) ----
   submit(raw, { requestedBy = null } = {}) {
     const input = validateObjectiveInput(raw);
+    if (input.reviewCommit && !this.verifiedImplementation(input.reviewCommit)) throw Error(`HQ has no record of verifying commit ${input.reviewCommit}; only an HQ-verified commit can be reviewed this way.`);
     const open = Object.values(this.state.objectives ?? {}).filter(o => !TERMINAL.has(o.status)).length;
     if (open >= this.limits.maxActiveObjectives) throw Error(`HQ already has ${open} open objectives (limit ${this.limits.maxActiveObjectives}); finish or cancel one first.`);
     // taskId null = ChatGPT through the connector ingress (ingress/mcp-ingress.mjs): no HQ orchestration turn is calling.
@@ -257,16 +274,36 @@ export class Conductor {
   // The commit a review step must read: the implementation its verify step checked, and only if HQ's verification of
   // that exact commit passed. null for steps that read the live repository (investigation, standalone review).
   reviewSourceFor(o, s) {
-    if (s.kind !== 'review' || s.standalone) return null;
-    const verify = s.dependsOn.map(id => o.steps[id]).find(x => x?.kind === 'verify');
-    const impl = verify && o.steps[verify.dependsOn[0]];
-    if (!verify || impl?.kind !== 'implement') return { error: 'The review step is not tied to an HQ-verified implementation; nothing is reviewed.' };
+    if (s.kind !== 'review' || (s.standalone && !s.reviewCommit)) return null;
+    const pair = this.reviewedPair(o, s);
+    if (!pair) return { error: s.reviewCommit ? `HQ has no record of verifying commit ${s.reviewCommit}; nothing is reviewed.` : 'The review step is not tied to an HQ-verified implementation; nothing is reviewed.' };
+    const { verify, impl } = pair;
     const h = impl.handoff, v = verify.handoff;
     if (verify.status !== 'DONE' || v?.source !== 'hq' || v.ok !== true) return { error: 'The implementation commit has not passed HQ verification; HQ will not send it for review.' };
     // Verification handoffs written before this change carry no commit; theirs is the implementation step's own.
     if (v.commit != null && v.commit !== h?.commit) return { error: `HQ verified commit ${String(v.commit).slice(0, 12)} but the implementation reports ${String(h?.commit).slice(0, 12)}; nothing is reviewed.` };
     if (!/^[0-9a-f]{40}$/.test(h?.commit ?? '') || !/^[0-9a-f]{40}$/.test(h?.base ?? '')) return { error: 'The verified implementation has no full commit and base sha; nothing is reviewed.' };
     return { commit: h.commit, base: h.base, branch: h.branch ?? null };
+  }
+  // The implement step and HQ verify step a review covers: its own dependency chain, or for a review-a-commit objective
+  // (reviewCommit) the latest HQ verification of that commit anywhere in the journal. Only passed verifications count.
+  reviewedPair(o, s) {
+    if (s.reviewCommit) return this.verifiedImplementation(s.reviewCommit);
+    const verify = s.dependsOn.map(id => o.steps[id]).find(x => x?.kind === 'verify');
+    const impl = verify && o.steps[verify.dependsOn[0]];
+    return verify && impl?.kind === 'implement' ? { verify, impl, objective: o } : null;
+  }
+  verifiedImplementation(sha) {
+    let found = null;
+    for (const other of Object.values(this.state.objectives ?? {})) {
+      for (const verify of Object.values(other.steps)) {
+        if (verify.kind !== 'verify' || verify.status !== 'DONE' || verify.handoff?.source !== 'hq' || verify.handoff.ok !== true) continue;
+        const impl = other.steps[verify.dependsOn[0]];
+        if (impl?.kind !== 'implement' || impl.handoff?.commit !== sha || (verify.handoff.commit != null && verify.handoff.commit !== sha)) continue;
+        found = { verify, impl, objective: other };
+      }
+    }
+    return found;
   }
   readOnlyTask(o, s, agentId, source = null) {
     const prior = this.quotedEvidence(o, s);
@@ -282,10 +319,12 @@ export class Conductor {
     ].filter(Boolean).join('\n');
     const extra = {
       investigate: `You are the investigator. Read the repository; do not modify anything. Find the cause with file:line evidence. If a code change is warranted, propose the narrowest scope (files or directories at least two levels deep) and 1 to 3 test files (*.test.mjs) HQ can run with node --test to prove the fix. New files may be proposed where they do not exist yet.\n${bounds}`,
-      review: s.standalone ? 'You are the reviewer. Read the repository; do not modify anything. Review what the objective asks and report findings with severity and evidence.' : !source ? '' : `You are the independent reviewer. Do not modify anything. Your current directory is HQ's read-only snapshot of exactly commit ${source.commit}${source.branch ? ` (branch ${source.branch})` : ''}, the commit HQ verified: every file of that commit, not the live checkout. The full diff against its base ${source.base} is in ${REVIEW_META_DIR}/diff.patch and the snapshot manifest (including any large files left out) in ${REVIEW_META_DIR}/manifest.json. Read the full changed files and whatever they touch; the excerpt quoted below is clipped. Approve only if the change meets the objective without regressions.`,
+      review: !source ? (s.standalone ? 'You are the reviewer. Read the repository; do not modify anything. Review what the objective asks and report findings with severity and evidence.' : '') : `You are the independent reviewer. Do not modify anything. Your current directory is HQ's read-only snapshot of exactly commit ${source.commit}${source.branch ? ` (branch ${source.branch})` : ''}, the commit HQ verified: every file of that commit, not the live checkout. The full diff against its base ${source.base} is in ${REVIEW_META_DIR}/diff.patch and the snapshot manifest (including any large files left out) in ${REVIEW_META_DIR}/manifest.json. Read the full changed files and whatever they touch; the excerpt quoted below is clipped. Approve only if the change meets the objective without regressions.`,
       rebuttal: 'Another agent disagrees with a position. Answer its evidence with your own evidence, once. Say whether you concede.',
     }[s.kind];
-    return { title: `Objective ${o.id.slice(0, 8)} → ${this.state.agents[agentId].name} (${s.kind}): ${o.input.title}`.slice(0, 200), description: framingFor(kind, { objective: o.input.objective, quoted: prior, extra }) };
+    // The brief always fits HQ's task limit: quoted evidence (data, not instructions) is trimmed, largest first.
+    const fixed = framingFor(kind, { objective: o.input.objective, quoted: prior.map(q => ({ ...q, text: '' })), extra }).length;
+    return { title: `Objective ${o.id.slice(0, 8)} → ${this.state.agents[agentId].name} (${s.kind}): ${o.input.title}`.slice(0, 200), description: framingFor(kind, { objective: o.input.objective, quoted: fitQuoted(prior, QUOTE_BUDGET - fixed), extra }) };
   }
   implementTask(o, s) {
     const c = validateImplementation(s.contract); // re-validated at dispatch, not only when the step was added
@@ -294,14 +333,20 @@ export class Conductor {
   // Evidence from earlier steps, quoted as data for the next agent. Never instructions; bounded.
   quotedEvidence(o, s) {
     const out = [];
+    // A review quotes only the change it reviews (the commit its HQ verification checked), never earlier attempts: an
+    // objective with a repair cycle quoted both, overflowed the task limit, and its review could never start. The
+    // reviewer reads the full files of that commit from its snapshot; this excerpt is orientation.
+    const pair = s.kind === 'review' ? this.reviewedPair(o, s) : null;
+    if (pair) {
+      const h = pair.impl.handoff, verify = pair.verify;
+      if (pair.objective !== o) out.push({ label: 'Objective the reviewed change was made for', text: clip(pair.objective.input.objective, 1500) });
+      out.push({ label: 'Change to review (HQ evidence)', text: clip(JSON.stringify({ branch: h.branch, commit: h.commit, base: h.base, filesChanged: h.filesChanged, tests: h.testsExecuted, results: h.results, hqVerification: verify.handoff?.checks?.map(c => `${c.ok ? 'PASS' : 'FAIL'} ${c.name}`) ?? null, diff: verify.handoff?.diff ?? null }, null, 1), 9000) });
+      if (h.agentNotes) out.push({ label: 'Implementer notes (model text)', text: clip(h.agentNotes, 1200) });
+    }
     for (const id of o.order) {
       const p = o.steps[id];
       if (p.id === s.id || !p.handoff) continue;
-      if (s.kind === 'review' && p.kind === 'implement') {
-        const h = p.handoff, verify = Object.values(o.steps).find(v => v.kind === 'verify' && v.dependsOn.includes(p.id));
-        out.push({ label: 'Change to review (HQ evidence)', text: clip(JSON.stringify({ branch: h.branch, commit: h.commit, base: h.base, filesChanged: h.filesChanged, tests: h.testsExecuted, results: h.results, hqVerification: verify?.handoff?.checks?.map(c => `${c.ok ? 'PASS' : 'FAIL'} ${c.name}`) ?? null, diff: verify?.handoff?.diff ?? null }, null, 1), 9000) });
-        if (h.agentNotes) out.push({ label: 'Implementer notes (model text)', text: clip(h.agentNotes, 1200) });
-      } else if (p.kind === 'investigate' && ['investigate', 'review'].includes(s.kind)) out.push({ label: 'Earlier investigation handoff', text: clip(JSON.stringify(p.handoff), 4000) });
+      if (p.kind === 'investigate' && ['investigate', 'review'].includes(s.kind)) out.push({ label: 'Earlier investigation handoff', text: clip(JSON.stringify(p.handoff), 4000) });
     }
     if (s.kind === 'rebuttal' && s.against) out.push({ label: `Position you are answering (from ${s.against.agentId})`, text: clip(JSON.stringify(s.against.position), 4000) });
     const rejected = s.rejections.at(-1);
@@ -336,7 +381,7 @@ export class Conductor {
       try {
         handoff = parseHandoff(text?.fullText ?? text?.summary, HANDOFF_KIND[s.kind]);
         // A review of an implementation counts only with HQ's record that the reviewer read the verified commit.
-        if (s.kind === 'review' && !s.standalone) {
+        if (s.kind === 'review' && (!s.standalone || s.reviewCommit)) {
           const want = this.reviewSourceFor(o, s), seen = task.evidence.filter(e => e.kind === 'PROGRESS' && e.reviewSource).at(-1)?.reviewSource;
           if (want?.error || task.reviewSource?.commit !== want.commit || seen?.commit !== want.commit || seen.verified !== true) {
             this.engine.emit('HANDOFF_REJECTED', { objectiveId: o.id, stepId: s.id, taskId: task.id, reason: 'No HQ evidence that the reviewer read the verified commit.' });

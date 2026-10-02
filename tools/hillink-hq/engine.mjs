@@ -198,7 +198,9 @@ export class Engine {
   // performs, and HQ's own record of why a previous implementation attempt was not accepted.
   createTask(input, { requestedBy = null, link = null, repair = null } = {}) {
     // A conductor step carries HQ-quoted evidence (a verified diff for a reviewer), so its brief may be longer.
-    if (!text(input.title, 200) || !text(input.description, link ? 16_000 : 2000)) throw Error('Title and description required');
+    const maxDescription = link ? 16_000 : 2000;
+    if (!text(input.title, 200) || !text(input.description, Number.MAX_SAFE_INTEGER)) throw Error('Title and description required');
+    if (input.description.length > maxDescription) throw Error(`Task description is ${input.description.length} characters, above HQ's ${maxDescription}-character limit`);
     if (requestedBy && (!this.state.agents[requestedBy.agentId] || !this.state.tasks[requestedBy.taskId])) throw Error('Unknown requesting agent or task');
     if (link) {
       const o = this.state.objectives[link.objectiveId];
