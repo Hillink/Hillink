@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { initialAgents, operations } from './registry.mjs';
 import { validateImplementation } from './implementation-policy.mjs';
+import { reduceOrchestration, ORCHESTRATION_EVENTS } from './orchestration/state.mjs';
 
 export const defaults = { heartbeatMs: 15_000, progressMs: 120_000, adapterTimeoutMs: 3000, quarantineMs: 60_000, observationJournalMs: 300_000, maxAttempts: 2, maxLocalWorkers: 1 };
 async function bounded(call, timeoutMs) {
@@ -10,9 +11,10 @@ async function bounded(call, timeoutMs) {
 }
 const progressKinds = new Set(['COMMIT', 'TEST_PROGRESS', 'TEST_RESULT', 'PR', 'REVIEW', 'FINDING', 'HANDOFF', 'COMPLETED', 'MODEL_OUTPUT', 'MODEL_RESULT']);
 const liveStages = new Set(['CLAIMED', 'IMPLEMENTING', 'TESTING', 'REVIEW']);
-const eventTypes = new Set(['AGENT_REGISTERED', 'AGENT_CONFIGURED', 'AGENT_OBSERVED', 'TASK_CREATED', 'DISPATCHED', 'WORKER_EVENT', 'RECOVERY', 'TASK_REQUEUED', 'TASK_PARKED', 'ALERT_OPENED', 'ALERT_RESOLVED', 'ALERT_ACKNOWLEDGED', 'NOTIFICATION_DELIVERED', 'NOTIFICATION_FAILED', 'OWNER_CONFIRMED_TERMINATION']);
+const ENGINE_EVENT_TYPES = new Set(['AGENT_REGISTERED', 'AGENT_CONFIGURED', 'AGENT_OBSERVED', 'TASK_CREATED', 'DISPATCHED', 'WORKER_EVENT', 'RECOVERY', 'TASK_REQUEUED', 'TASK_PARKED', 'ALERT_OPENED', 'ALERT_RESOLVED', 'ALERT_ACKNOWLEDGED', 'NOTIFICATION_DELIVERED', 'NOTIFICATION_FAILED', 'OWNER_CONFIRMED_TERMINATION']);
+const eventTypes = new Set([...ENGINE_EVENT_TYPES, ...ORCHESTRATION_EVENTS]);
 const text = (value, max = 2000) => typeof value === 'string' && value.trim().length > 0 && value.length <= max;
-export function emptyState() { return { version: 1, seq: 0, agents: {}, tasks: {}, runs: {}, alerts: {}, events: [], meeting: null }; }
+export function emptyState() { return { version: 1, seq: 0, agents: {}, tasks: {}, runs: {}, alerts: {}, events: [], meeting: null, objectives: {} }; }
 
 // A pure reducer: replay and live state take exactly the same path.
 export function reduce(state, event) {
@@ -24,7 +26,7 @@ export function reduce(state, event) {
   if (type === 'AGENT_CONFIGURED') Object.assign(state.agents[d.agentId], d.configuration);
   if (type === 'AGENT_OBSERVED') Object.assign(state.agents[d.agentId], { observedStatus: d.status, observedAt: at, detail: d.detail, retryAt: d.retryAt ?? null });
   if (type === 'AGENT_OBSERVED' && d.quarantineUntil) state.agents[d.agentId].quarantineUntil = d.quarantineUntil;
-  if (type === 'TASK_CREATED') state.tasks[d.id] = { ...d, stage: d.safety === 'owner-required' ? 'BLOCKED' : 'READY', createdAt: at, attempts: 0, runId: null, evidence: [], handoffs: [], blocker: d.ownerAction || null };
+  if (type === 'TASK_CREATED') state.tasks[d.id] = { ...d, stage: d.safety === 'owner-required' ? 'BLOCKED' : 'READY', createdAt: at, createdSeq: event.seq, attempts: 0, runId: null, evidence: [], handoffs: [], blocker: d.ownerAction || null };
   if (type === 'DISPATCHED') {
     const task = state.tasks[d.taskId];
     Object.assign(task, { stage: 'CLAIMED', runId: d.runId, agentId: d.agentId, claimedAt: at, attempts: task.attempts + 1, blocker: null, endedAt: null, recoveryPending: false, notBefore: null });
@@ -67,6 +69,7 @@ export function reduce(state, event) {
   if (type === 'ALERT_ACKNOWLEDGED') state.alerts[d.key].acknowledgedAt = at;
   if (type === 'NOTIFICATION_DELIVERED') Object.assign(state.alerts[d.key], { deliveredAt: at, deliveryError: null });
   if (type === 'NOTIFICATION_FAILED') Object.assign(state.alerts[d.key], { deliveryError: d.reason, deliveryAttemptAt: at });
+  reduceOrchestration(state, event);
   return state;
 }
 
@@ -121,7 +124,7 @@ export class Engine {
   }
   // requestedBy is internal only (the orchestrator's tools set it; the HTTP API cannot): which agent and
   // task asked for this one, so delegations are traceable and the requester can be shown waiting on it.
-  createTask(input, { requestedBy = null } = {}) {
+  createTask(input, { requestedBy = null, link = null } = {}) {
     if (!text(input.title, 200) || !text(input.description, 2000)) throw Error('Title and description required');
     if (requestedBy && (!this.state.agents[requestedBy.agentId] || !this.state.tasks[requestedBy.taskId])) throw Error('Unknown requesting agent or task');
     if (!Object.hasOwn(operations, input.operation)) throw Error('Operation is not allowlisted');
@@ -134,7 +137,7 @@ export class Engine {
     if (!Number.isInteger(input.priority) || input.priority < 0 || input.priority > 100) throw Error('Priority must be 0–100');
     if (input.preferredAgentId && !this.state.agents[input.preferredAgentId]?.capabilities.includes(operations[input.operation].capability)) throw Error('Selected worker cannot perform this operation');
     const id = randomUUID();
-    this.emit('TASK_CREATED', { id, title: input.title, description: input.description, operation: input.operation, capability: operations[input.operation].capability, safety: input.safety, ownerAction: input.ownerAction || null, priority: input.priority, preferredAgentId: input.preferredAgentId || null, ...(implementation ? { implementation } : {}), ...(requestedBy ? { requestedBy: { agentId: requestedBy.agentId, taskId: requestedBy.taskId } } : {}) });
+    this.emit('TASK_CREATED', { id, title: input.title, description: input.description, operation: input.operation, capability: operations[input.operation].capability, safety: input.safety, ownerAction: input.ownerAction || null, priority: input.priority, preferredAgentId: input.preferredAgentId || null, ...(implementation ? { implementation } : {}), ...(requestedBy ? { requestedBy: { agentId: requestedBy.agentId, taskId: requestedBy.taskId } } : {}), ...(link ? { link: { objectiveId: link.objectiveId, stepId: link.stepId ?? null, ...(link.decisionId ? { decisionId: link.decisionId } : {}) } } : {}) });
     if (this.state.alerts['cycle:complete']?.active) this.emit('ALERT_RESOLVED', { key: 'cycle:complete' });
     return id;
   }
@@ -277,5 +280,21 @@ export class Engine {
     this.workerEvent(runId, { kind: 'CANCELLED', summary: `Owner confirmed worker stopped: ${evidence}` });
     this.emit('TASK_PARKED', { taskId: task.id, reason: 'Previous run reconciled as stopped; task remains incomplete.', ownerAction: 'Repair or split the original task and create a new scoped follow-up when ready.' });
     this.adapters[this.state.agents[run.agentId].executionAdapter]?.reconcile?.(runId);
+  }
+  // Unconfirmed termination keeps the run's lease (confirmed: false) exactly like recovery does.
+  async cancelTask(taskId, { by = 'hq', reason = '' } = {}) {
+    const task = this.state.tasks[taskId];
+    if (!task) throw Error('Unknown task');
+    if (['DONE', 'CANCELLED'].includes(task.stage)) return { taskId, confirmed: true };
+    const run = task.runId ? this.state.runs[task.runId] : null;
+    if (run && !run.endedAt) {
+      const agent = this.state.agents[run.agentId];
+      let stopped = false;
+      try { stopped = await bounded(() => this.adapters[agent?.executionAdapter]?.cancel(task.runId), this.config.adapterTimeoutMs); } catch { /* retain lease */ }
+      if (stopped === true && !this.state.runs[task.runId].endedAt) this.workerEvent(task.runId, { kind: 'CANCELLED', summary: `Cancelled by ${by}: ${String(reason).slice(0, 200) || 'no reason given'}` });
+    }
+    const confirmed = !run || Boolean(this.state.runs[task.runId].endedAt);
+    this.emit('TASK_CANCELLED', { taskId, by, reason: String(reason).slice(0, 300), confirmed });
+    return { taskId, confirmed };
   }
 }

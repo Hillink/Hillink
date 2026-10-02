@@ -25,7 +25,7 @@ export const TRANSITIONS = {
 export const STEP_STATES = ['PENDING', 'RUNNING', 'DONE', 'FAILED', 'SKIPPED', 'CANCELLED', 'INTERRUPTED'];
 export const STEP_KINDS = ['investigate', 'implement', 'verify', 'review', 'rebuttal', 'local-check'];
 
-export const ORCHESTRATION_EVENTS = new Set(['OBJECTIVE_CREATED', 'OBJECTIVE_PLANNED', 'OBJECTIVE_TRANSITION', 'OBJECTIVE_CANCEL_REQUESTED', 'STEP_ADDED', 'STEP_TRANSITION', 'HANDOFF_ACCEPTED', 'HANDOFF_REJECTED', 'STEP_RETRY', 'APPROVAL_REQUESTED', 'APPROVAL_DECIDED', 'DECISION_REQUESTED', 'DECISION_RECORDED', 'DISAGREEMENT_RECORDED', 'OBJECTIVE_RESULT', 'TASK_CANCELLED', 'RUN_RECONCILED']);
+export const ORCHESTRATION_EVENTS = new Set(['OBJECTIVE_CREATED', 'OBJECTIVE_PLANNED', 'OBJECTIVE_TRANSITION', 'OBJECTIVE_CANCEL_REQUESTED', 'STEP_ADDED', 'STEP_TRANSITION', 'HANDOFF_ACCEPTED', 'HANDOFF_REJECTED', 'STEP_RETRY', 'APPROVAL_REQUESTED', 'APPROVAL_DECIDED', 'DECISION_REQUESTED', 'DECISION_RECORDED', 'DECISION_APPLIED', 'DISAGREEMENT_RECORDED', 'OBJECTIVE_RESULT', 'TASK_CANCELLED', 'RUN_RECONCILED']);
 
 export function canTransition(from, to) { return (TRANSITIONS[from] ?? []).includes(to); }
 
@@ -61,29 +61,40 @@ export function reduceOrchestration(state, event) {
     }
     case 'TASK_CREATED':
       // The link is part of the task's own creation event, so a crash can never leave a task without its step.
+      // Creating a step's task also starts the step, in the same event: a crash between "task created" and
+      // "step running" is impossible, so a restart can never dispatch the same step twice.
       if (d.link && state.objectives[d.link.objectiveId]) {
-        const obj = state.objectives[d.link.objectiveId], s = obj.steps[d.link.stepId];
-        s.taskIds.push(d.id); s.taskId = d.id; obj.counters.agentCalls += 1; obj.updatedAt = at;
+        const obj = state.objectives[d.link.objectiveId];
+        obj.counters.agentCalls += 1; obj.updatedAt = at;
+        const s = d.link.stepId ? obj.steps[d.link.stepId] : null;
+        if (s) {
+          s.history.push({ at, from: s.status, to: 'RUNNING', reason: `task ${d.id} for ${d.preferredAgentId}` });
+          Object.assign(s, { status: 'RUNNING', taskId: d.id, agentId: d.preferredAgentId, updatedAt: at });
+          s.taskIds.push(d.id); s.attempts += 1; obj.counters.steps += 1;
+        } else (obj.callbacks ??= []).push({ taskId: d.id, decisionId: d.link.decisionId ?? null, at });
+        if (s == null && d.link.decisionId && obj.decisions[d.link.decisionId]) obj.decisions[d.link.decisionId].callbackTaskId = d.id;
       }
       break;
     case 'HANDOFF_ACCEPTED': {
       const s = o.steps[d.stepId];
-      Object.assign(s, { handoff: d.handoff, handoffHash: d.hash, handoffFrom: d.agentId ?? null });
+      Object.assign(s, { handoff: d.handoff, handoffHash: d.hash, handoffFrom: d.agentId ?? null, patchHash: d.patchHash ?? s.patchHash ?? null });
       o.updatedAt = at;
       break;
     }
     case 'HANDOFF_REJECTED': o.steps[d.stepId].rejections.push({ at, taskId: d.taskId, reason: d.reason }); o.updatedAt = at; break;
     case 'STEP_RETRY': {
       const s = o.steps[d.stepId];
-      s.retries.push({ at, reason: d.reason, count: d.count, max: d.max, strategy: d.strategy, detail: d.detail ?? null });
+      s.retries.push({ at, reason: d.reason, count: d.count, max: d.max, strategy: d.strategy, detail: d.detail ?? null, patchHash: d.patchHash ?? null });
+      if (d.allowSameProvider) s.allowSameProvider = true;
       s.status = 'PENDING'; s.agentId = null; s.notBefore = d.notBefore ?? null; s.excludeAgents = d.excludeAgents ?? s.excludeAgents ?? [];
       if (d.repair) s.repair = d.repair;
       o.counters.retries += 1; o.updatedAt = at;
       break;
     }
-    case 'APPROVAL_REQUESTED': o.approvals[d.gate] = { gate: d.gate, reason: d.reason, stage: d.stage, status: 'PENDING', requestedAt: at }; o.updatedAt = at; break;
-    case 'APPROVAL_DECIDED': Object.assign(o.approvals[d.gate], { status: d.decision === 'approve' ? 'APPROVED' : 'DENIED', decidedAt: at, by: d.by, note: d.note ?? null }); o.updatedAt = at; break;
+    case 'APPROVAL_REQUESTED': o.approvals[d.gate] = { gate: d.gate, reason: d.reason, stage: d.stage, status: 'PENDING', requestedAt: at, requestedSeq: event.seq }; o.updatedAt = at; break;
+    case 'APPROVAL_DECIDED': Object.assign(o.approvals[d.gate], { status: d.decision === 'approve' ? 'APPROVED' : 'DENIED', decidedAt: at, by: d.by, note: d.note ?? null, evidence: d.evidence ?? null }); o.updatedAt = at; break;
     case 'DECISION_REQUESTED': o.decisions[d.decisionId] = { id: d.decisionId, question: d.question, options: d.options, context: d.context ?? null, status: 'PENDING', requestedAt: at, resume: d.resume }; o.updatedAt = at; break;
+    case 'DECISION_APPLIED': o.decisions[d.decisionId].applied = true; o.updatedAt = at; break;
     case 'DECISION_RECORDED': Object.assign(o.decisions[d.decisionId], { status: 'DECIDED', choice: d.choice, rationale: d.rationale, by: d.by, decidedAt: at }); o.updatedAt = at; break;
     case 'DISAGREEMENT_RECORDED': o.disagreement = { ...d.disagreement, at }; o.updatedAt = at; break;
     case 'OBJECTIVE_RESULT': o.result = { ...d.result, at }; o.updatedAt = at; break;

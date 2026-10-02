@@ -35,6 +35,9 @@ const GATE_SIGNALS = [
 ];
 const HIGH_RISK_AREAS = /^(app\/api\/|lib\/(supabase|stripe|auth|payments?)|middleware|supabase\/|scripts\/)/i;
 const LOW_RISK_AREAS = /^(sandbox\/|docs\/|tools\/hillink-world\/|tests\/)/i;
+// Narrower than LOW_RISK_AREAS on purpose: only the World tree is exempt from the breadth heuristic, so broad
+// docs/ or tests/ scopes keep raising architecture-change.
+const ISOLATED_STAGING = /^tools\/hillink-world\//i;
 
 export const DEFAULT_LIMITS = { maxSteps: 12, maxAgentCalls: 10, maxRetries: 4, maxRepairs: 1, maxRebuttals: 1, maxSpendUsd: 2, deadlineMs: 3 * 60 * 60_000, maxActiveObjectives: 3, evidenceWaitMs: 2 * 60 * 60_000 };
 
@@ -82,7 +85,10 @@ export function gatesFor(input) {
   const text = [input.objective, input.acceptanceCriteria, input.constraints].filter(Boolean).join('\n');
   const gates = new Set(input.requestedActions);
   for (const [gate, re] of GATE_SIGNALS) if (re.test(text)) gates.add(gate);
-  if (input.scope.length > 3 || new Set(input.scope.map(p => p.split('/')[0])).size > 2) gates.add('architecture-change');
+  // Breadth alone is not architecture when every path is staging inside the isolated World tree; text signals
+  // above and the protected-path checks in implementation-policy still apply to it.
+  const isolatedWorldStaging = input.scope.length > 0 && input.scope.every(p => ISOLATED_STAGING.test(p));
+  if (!isolatedWorldStaging && (input.scope.length > 3 || new Set(input.scope.map(p => p.split('/')[0])).size > 2)) gates.add('architecture-change');
   return [...gates].sort();
 }
 

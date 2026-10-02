@@ -11,6 +11,7 @@ import { operations } from './registry.mjs';
 import { connectOllama } from './ollama-adapter.mjs';
 import { connectCliAgents } from './cli-agent-adapter.mjs';
 import { connectOrchestrator } from './orchestrator-adapter.mjs';
+import { Conductor } from './orchestration/conductor.mjs';
 import { ClaudeImplementer, ClaudeRouter, findClaudeBinary } from './implementation-runner.mjs';
 import { WslSandbox } from './sandbox.mjs';
 import { execFileSync } from 'node:child_process';
@@ -60,9 +61,10 @@ export async function createHQ({ port = 4312, directory = path.join(here, '.stat
     engine.configureAgent('claude', { capabilities: engine.state.agents.claude.capabilities.filter(c => c !== 'implement-repo') });
   }
   // ChatGPT orchestrator: connected only when HQ's environment has OPENAI_API_KEY (never read from requests).
-  let orchestratorStatus = 'DISABLED';
+  let orchestratorStatus = 'DISABLED', conductor = null;
   if (orchestrator) {
-    try { orchestratorStatus = connectOrchestrator(engine, { env, request, stateDir: store ? null : directory }); }
+    conductor = new Conductor(engine);
+    try { orchestratorStatus = connectOrchestrator(engine, { env, request, stateDir: store ? null : directory, conductor }); }
     catch (error) { orchestratorStatus = `UNAVAILABLE: ${String(error.message).slice(0, 120)}`; }
   }
   let ollamaStatus = 'DISABLED';
@@ -113,14 +115,14 @@ export async function createHQ({ port = 4312, directory = path.join(here, '.stat
   const tick = () => {
     if (closing) return;
     ticking = (async () => {
-      try { await engine.tick(); await deliverNotifications(engine, sink); lastError = null; }
+      try { await engine.tick(); if (conductor) await conductor.tick(); await deliverNotifications(engine, sink); lastError = null; }
       catch (error) { lastError = error.message; }
       if (!closing) timer = setTimeout(tick, intervalMs);
     })();
     return ticking;
   };
   await tick();
-  return { engine, origin, close: async () => {
+  return { engine, conductor, origin, close: async () => {
     closing = true; clearTimeout(timer);
     await ticking;
     await Promise.allSettled([...new Set(Object.values(engine.adapters))].map(adapter => adapter.close?.()));
