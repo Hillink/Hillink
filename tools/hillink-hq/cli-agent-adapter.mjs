@@ -1,6 +1,7 @@
 import { spawn as nodeSpawn } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { validReviewSource, REVIEW_META_DIR, REVIEW_SNAPSHOT_EVIDENCE } from './review-snapshot.mjs';
 
 // Opt-in bridge to the owner's locally installed, already signed-in agent CLIs.
 // Read-only by construction: Claude gets only Read/Grep/Glob; Codex runs in its read-only sandbox
@@ -155,7 +156,10 @@ export const cliAgents = {
     // Pass 4: no OPENAI_API_KEY/CODEX_API_KEY (proven live: with CODEX_API_KEY set, codex exec sends a metered API
     // request). forced_login_method=chatgpt makes Codex itself refuse any API key before a request is made.
     env: ['CODEX_HOME'],
-    args: () => ['exec', '--json', '--sandbox', 'read-only', '-c', 'approval_policy=never', '-c', 'forced_login_method=chatgpt', '--ephemeral', '-'],
+    // A review of an implementation commit runs in HQ's snapshot directory, which is deliberately not a git repository
+    // (no link to any worktree); Codex's "inside a git repo" startup check is skipped for it. The read-only sandbox,
+    // approval policy and sign-in rules are unchanged.
+    args: ({ snapshot = false } = {}) => ['exec', '--json', '--sandbox', 'read-only', '-c', 'approval_policy=never', '-c', 'forced_login_method=chatgpt', '--ephemeral', ...(snapshot ? ['--skip-git-repo-check'] : []), '-'],
     authCheck: { args: ['login', 'status'], parse(out) {
       if (/logged in using chatgpt/i.test(out)) return { ok: true, detail: 'signed in with ChatGPT (subscription)' };
       if (/api key/i.test(out)) return { ok: false, detail: 'AUTH_REQUIRED: Codex is signed in with an API key (metered). HQ refuses it. Run `codex login` and choose Sign in with ChatGPT.' };
@@ -194,15 +198,19 @@ export class CliAgentAdapter {
   // per-task instance with its own operation, framing, working directory and a direct binary (no shell).
   // billing: 'subscription' (reviews: sign-in verified first, any API key refused) or 'metered' (the Pass 2.7 sandbox
   // runner, which the engine only starts with a Kyle spend authorization and which authenticates with its own key).
-  constructor(spec, { spawn = nodeSpawn, platform = process.platform, env = process.env, cwd = repoRoot, graceMs = 2000, maxRunMs = 20 * 60_000, healthCacheMs = 60_000, operation = 'review-repo', safety = 'local-read-only', framing: taskFraming = framing, command = null, shell = null, billing = 'subscription', now = Date.now } = {}) {
-    Object.assign(this, { spec, spawn, platform, sourceEnv: env, cwd, graceMs, maxRunMs, healthCacheMs, operation, safety, framing: taskFraming, command, shell, billing, now });
+  // reviewSnapshots (review-snapshot.mjs): how a review of an implementation commit gets that exact commit to read. A task
+  // carrying reviewSource runs in a fresh read-only snapshot of that SHA, never in the live checkout; without the
+  // service, or if the snapshot cannot be made within prepareMs (below the engine's 90 s acknowledgement bound), the
+  // review fails closed.
+  constructor(spec, { spawn = nodeSpawn, platform = process.platform, env = process.env, cwd = repoRoot, graceMs = 2000, maxRunMs = 20 * 60_000, healthCacheMs = 60_000, operation = 'review-repo', safety = 'local-read-only', framing: taskFraming = framing, command = null, shell = null, billing = 'subscription', now = Date.now, reviewSnapshots = null, prepareMs = 60_000 } = {}) {
+    Object.assign(this, { spec, spawn, platform, sourceEnv: env, cwd, graceMs, maxRunMs, healthCacheMs, operation, safety, framing: taskFraming, command, shell, billing, now, reviewSnapshots, prepareMs });
     this.runs = new Map(); this.healthCache = null;
   }
   env() { return Object.fromEntries([...baseEnv, ...this.spec.env].filter(k => this.sourceEnv[k] && !METERED_ENV.has(k)).map(k => [k, this.sourceEnv[k]])); }
-  launch(args) {
+  launch(args, cwd = this.cwd) {
     // Windows npm shims are .cmd files, which Node only starts through a shell. Arguments are fixed constants;
     // owner text travels over stdin.
-    return this.spawn(this.command ?? this.spec.command, args, { cwd: this.cwd, env: this.env(), windowsHide: true, shell: this.shell ?? this.platform === 'win32', stdio: ['pipe', 'pipe', 'pipe'] });
+    return this.spawn(this.command ?? this.spec.command, args, { cwd, env: this.env(), windowsHide: true, shell: this.shell ?? this.platform === 'win32', stdio: ['pipe', 'pipe', 'pipe'] });
   }
   // Runs one CLI subcommand with no stdin and a hard timeout (a login prompt can never hang HQ). Both streams kept.
   probe(args, timeoutMs = 20_000) {
@@ -248,8 +256,48 @@ export class CliAgentAdapter {
     // Pass 4: never start a subscription agent whose sign-in HQ has not just verified (the engine only dispatches to an
     // agent whose health is IDLE, which for these CLIs includes the subscription check).
     if (this.billing === 'subscription' && this.spec.authCheck && this.healthCache?.result?.auth !== 'subscription') throw Error(`${this.spec.label} subscription sign-in not verified; refusing to start (no metered fallback).`);
+    if (task.reviewSource != null) return this.startOnSnapshot({ task, runId, emit });
+    return this.spawnRun({ task, runId, emit, cwd: this.cwd });
+  }
+  // A review of an implementation commit. start() returns at once (the engine bounds it at 3 s); the snapshot is made
+  // in the background and the reviewer is launched inside it. The run is registered from the first moment, so a cancel
+  // (or the engine's acknowledgement watchdog) during preparation stops it before any reviewer process exists.
+  startOnSnapshot({ task, runId, emit }) {
+    if (this.operation !== 'review-repo') throw Error(`${this.spec.label} runner does not take a review source`);
+    if (!this.reviewSnapshots) throw Error(`${this.spec.label} has no review snapshot service; HQ will not review the live checkout in place of the assigned commit.`);
+    const source = validReviewSource(task.reviewSource);
+    const controller = new AbortController();
+    const prep = { preparing: true, cancelled: false, closed: false, controller };
+    let resolveClosed;
+    prep.closedPromise = new Promise(resolve => { resolveClosed = resolve; });
+    this.runs.set(runId, prep);
+    const finish = event => {
+      prep.closed = true;
+      if (this.runs.get(runId) === prep) this.runs.delete(runId);
+      if (event) { try { emit(event); } catch { /* run already ended */ } }
+      resolveClosed(true);
+    };
+    const short = source.commit.slice(0, 12);
+    void (async () => {
+      let snapshot;
+      const timer = setTimeout(() => controller.abort(Error(`not ready within ${Math.round(this.prepareMs / 1000)} s`)), this.prepareMs);
+      timer.unref?.();
+      try { snapshot = await this.reviewSnapshots.create(source, { label: String(task.id ?? runId).slice(0, 8), signal: controller.signal }); }
+      catch (error) {
+        return finish(prep.cancelled ? { kind: 'CANCELLED', summary: `Cancelled while HQ prepared the snapshot of commit ${short}; no reviewer was started.` } : { kind: 'FAILED', summary: `HQ could not prepare a read-only snapshot of commit ${short}: ${String(error.message).slice(0, 400)} The review did not start; HQ never substitutes the live checkout.` });
+      }
+      finally { clearTimeout(timer); }
+      const removal = () => this.reviewSnapshots.remove(snapshot.dir).catch(() => false);
+      if (prep.cancelled) { const removed = await removal(); return finish({ kind: 'CANCELLED', summary: `Cancelled before the reviewer started; the snapshot of ${short} was ${removed ? 'removed' : 'left for the startup sweep'}.` }); }
+      if (this.runs.get(runId) === prep) this.runs.delete(runId);
+      try { this.spawnRun({ task, runId, emit, cwd: snapshot.dir, snapshot, cleanup: removal }); }
+      catch (error) { const removed = await removal(); return finish({ kind: 'FAILED', summary: `${this.spec.label} could not start in the snapshot of ${short}: ${String(error.message).slice(0, 300)} (snapshot ${removed ? 'removed' : 'left for the startup sweep'}).` }); }
+      this.runs.get(runId)?.closedPromise.then(() => resolveClosed(true));
+    })();
+  }
+  spawnRun({ task, runId, emit, cwd, snapshot = null, cleanup = null }) {
     const started = Date.now();
-    const child = this.launch(this.spec.args());
+    const child = this.launch(this.spec.args({ snapshot: Boolean(snapshot) }), cwd);
     // Pass 4.5 repair: a host process HQ must be able to find after a crash reports its pid at once, not at its ACK.
     if (this.announcePid && Number.isInteger(child.pid)) { try { emit({ kind: 'PROGRESS', summary: `${this.spec.label} process started on the host (pid ${child.pid}).`, pid: child.pid, hostProcess: 'claude' }); } catch { /* run closed */ } }
     const run = { now: this.now, billing: this.billing, expectTools: this.spec.expectTools ?? null, expectServer: this.spec.expectServer ?? null, child, closed: false, cancelled: false, timedOut: false, acknowledged: false, steps: 0, finished: null, usage: null, lastMessage: '', rateLimitedUntil: null };
@@ -264,6 +312,8 @@ export class CliAgentAdapter {
         if (event.kind === 'ACK') { if (run.acknowledged) continue; run.acknowledged = true; if (Number.isInteger(child.pid)) { event.pid = child.pid; if (this.announcePid) event.hostProcess = 'claude'; } }
         else if (!run.acknowledged) continue;
         if (!safeEmit(event)) void this.cancel(runId);
+        // HQ's record of what this reviewer was given: the exact commit, its tree, and that the files were re-hashed.
+        if (event.kind === 'ACK' && snapshot && !safeEmit({ kind: 'PROGRESS', summary: `Reviewing a read-only snapshot of commit ${snapshot.commit} (tree ${snapshot.tree.slice(0, 12)}, ${snapshot.files} files); full diff against ${snapshot.base.slice(0, 12)} in ${REVIEW_META_DIR}/diff.patch.`, reviewSource: { source: REVIEW_SNAPSHOT_EVIDENCE, commit: snapshot.commit, base: snapshot.base, branch: snapshot.branch, tree: snapshot.tree, files: snapshot.files, bytes: snapshot.bytes, diffBytes: snapshot.diffBytes, omittedLargeFiles: snapshot.omitted, verified: true } })) void this.cancel(runId);
       }
       // Pass 4.5 repair: a policy violation revokes the run's authority (onPolicyViolation, e.g. the broker session) at
       // once, synchronously, before termination is even requested. Revocation is not proof the process stopped: the
@@ -286,10 +336,15 @@ export class CliAgentAdapter {
     const deadline = setTimeout(() => { run.timedOut = true; void this.cancel(runId); }, this.maxRunMs);
     deadline.unref?.();
     run.emit = safeEmit;
-    run.closedPromise = new Promise(resolve => child.once('close', (code, signal) => {
+    // exitedPromise: the process closed (what cancellation must prove); closedPromise: the run is fully reported.
+    let exited;
+    run.exitedPromise = new Promise(resolve => { exited = resolve; });
+    run.closedPromise = new Promise(resolve => child.once('close', async (code, signal) => {
       clearInterval(pulse); clearTimeout(deadline);
       if (pending) consume(pending);
-      run.closed = true; this.runs.delete(runId);
+      run.closed = true; this.runs.delete(runId); exited(true);
+      // The reviewer is gone: its snapshot goes too, before the run is reported finished (success, failure or cancel).
+      const snapshotRemoved = cleanup ? await cleanup() : null;
       const elapsedMs = Date.now() - started;
       // fullText (bounded) is what HQ validates a structured handoff from (Pass 3); summary is the display text.
       if (run.acknowledged && run.finished?.text) safeEmit({ kind: 'MODEL_RESULT', summary: run.finished.text.slice(0, 1900) || 'Empty response.', truncated: run.finished.text.length > 1900, outputCharacters: run.finished.text.length, fullText: run.finished.text.slice(-30_000) });
@@ -307,6 +362,7 @@ export class CliAgentAdapter {
       else if (run.timedOut) terminal = { kind: 'FAILED', summary: `${this.spec.label} exceeded the ${Math.round(this.maxRunMs / 60_000)} minute run limit and was stopped.` };
       else if (code === 0 && run.acknowledged && run.finished?.ok && run.finished.text.trim()) terminal = { kind: 'COMPLETED', summary: `${this.spec.label} finished the review. The answer is model output, not verified implementation.` };
       else terminal = { kind: 'FAILED', summary: `${this.spec.label} exited ${code ?? signal}${run.acknowledged ? '' : ' before starting a session (is it signed in?)'}: ${failureText.trim().slice(0, 600) || 'no result'}` };
+      if (snapshot) terminal.reviewSnapshot = { commit: snapshot.commit, removed: snapshotRemoved === true };
       safeEmit(terminal);
       resolve(true);
     }));
@@ -322,6 +378,9 @@ export class CliAgentAdapter {
   async cancel(runId) {
     const run = this.runs.get(runId);
     if (!run) return false; // Absence is not proof a pre-restart process stopped.
+    // Still preparing a snapshot: no reviewer process exists, and none will be started once this is set (the launch
+    // checks it synchronously). The background preparation removes what it made.
+    if (run.preparing) { run.cancelled = true; run.controller.abort(Error('cancelled')); this.runs.delete(runId); return true; }
     if (run.cancellation) return run.cancellation;
     run.cancelled = true;
     run.cancellation = (async () => {
@@ -333,17 +392,20 @@ export class CliAgentAdapter {
           else run.child.kill(force ? 'SIGKILL' : 'SIGTERM');
         } catch { /* Still require close evidence. */ }
         let timer;
-        try { if (await Promise.race([run.closedPromise, new Promise(resolve => { timer = setTimeout(() => resolve(false), this.graceMs); })])) return true; }
+        try { if (await Promise.race([run.exitedPromise ?? run.closedPromise, new Promise(resolve => { timer = setTimeout(() => resolve(false), this.graceMs); })])) return true; }
         finally { clearTimeout(timer); }
       }
       return false;
     })();
     return run.cancellation;
   }
+  // Whether this adapter can run a review of an exact implementation commit (the engine never dispatches one otherwise).
+  acceptsReviewSource() { return this.operation === 'review-repo' && Boolean(this.reviewSnapshots); }
   async close() { await Promise.all([...this.runs.keys()].map(id => this.cancel(id))); }
 }
 
 export function connectCliAgents(engine, options = {}) {
+  void options.reviewSnapshots?.sweep().catch(() => {}); // snapshots a crashed HQ left behind
   for (const spec of Object.values(cliAgents)) {
     const agent = engine.state.agents[spec.agentId];
     if (!agent || agent.assignment) continue;

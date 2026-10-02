@@ -20,6 +20,7 @@ import { execFileSync } from 'node:child_process';
 import { assertSupportedNode } from './node-version.mjs';
 import { Conductor } from './orchestration/conductor.mjs';
 import { CommitVerifier } from './orchestration/verify.mjs';
+import { ReviewSnapshots } from './review-snapshot.mjs';
 import { reconcileInterrupted } from './orchestration/recovery.mjs';
 import { worldActivity, worldSnapshot, WORLD_CONTRACT_VERSION } from './orchestration/activity.mjs';
 import { resolveMode } from './compute/policy.mjs';
@@ -54,7 +55,9 @@ export async function createHQ({ port = 4312, directory = path.join(here, '.stat
   engine.initialize({ modeSource: computeMode ? 'createHQ option' : env.HQ_COMPUTE_MODE ? 'HQ_COMPUTE_MODE' : 'default', modeWarning: mode.warning });
   let agentsStatus = 'DISABLED';
   if (cliAgents) {
-    try { connectCliAgents(engine); agentsStatus = 'CONFIGURED'; }
+    // Reviews of an implementation commit read a read-only snapshot of exactly that commit (review-snapshot.mjs),
+    // made outside the repository and removed after each review.
+    try { connectCliAgents(engine, { reviewSnapshots: new ReviewSnapshots({ repoRoot: path.resolve(here, '../..'), ...(env.HQ_REVIEW_SNAPSHOT_DIR ? { root: env.HQ_REVIEW_SNAPSHOT_DIR } : {}) }) }); agentsStatus = 'CONFIGURED'; }
     catch (error) { agentsStatus = `UNAVAILABLE: ${error.message}`; }
   }
   // Pass 2.6: Claude may take bounded implementation tasks (implement-repo) through a separate runtime with

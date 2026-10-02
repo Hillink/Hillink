@@ -296,6 +296,7 @@ export class ClaudeRouter {
   // the real cause instead of a generic "not configured".
   constructor(review, implement, broker = null, brokerProblem = null) { Object.assign(this, { review, implement, broker, brokerProblem, owner: new Map() }); }
   health() { return this.review.health(); }
+  acceptsReviewSource() { return Boolean(this.review.acceptsReviewSource?.()); }
   supports(operation, variant) {
     if (operation !== 'implement-repo') return variant === 'default';
     if (variant === 'split-broker') return this.broker ? this.broker.available() : { ok: false, reason: this.brokerProblem ? String(this.brokerProblem).slice(0, 300) : 'the subscription split broker is not configured in this HQ' };

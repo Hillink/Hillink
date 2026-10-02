@@ -14,6 +14,7 @@ import { candidates, assertImplementer, ROUTES } from './routing.mjs';
 import { parseHandoff, implementationHandoff, framingFor, hashOf } from './handoff.mjs';
 import { classify, retryDecision, loopGuard, repeated } from './retry.mjs';
 import { validateImplementation } from '../implementation-policy.mjs';
+import { REVIEW_META_DIR } from '../review-snapshot.mjs';
 import { decideBest, decideCompute } from '../compute/policy.mjs';
 import { UNRESOLVED, ATTENTION_LIMITS } from './attention.mjs';
 
@@ -210,8 +211,11 @@ export class Conductor {
     // Pass 4.5: no route variant can run here at all (for example the broker's sandbox is missing): wait, never pay.
     if (!gate.allowed && gate.code === 'UNAVAILABLE') return this.set(o, 'WAITING_FOR_EVIDENCE', `Step ${s.kind} waits: ${gate.reason}`.slice(0, 500));
     if (!gate.allowed) return this.spendGate(o, s, gate);
-    const task = s.kind === 'implement' ? this.implementTask(o, s) : this.readOnlyTask(o, s, pick.agentId);
-    this.engine.createTask({ ...task, operation: route.operation, safety: route.safety, priority: 50, preferredAgentId: pick.agentId }, { requestedBy: o.requestedBy?.taskId && this.state.tasks[o.requestedBy.taskId] ? o.requestedBy : null, link: { objectiveId: o.id, stepId: s.id }, internal: true, repair: s.repair ?? null });
+    // A review of an implementation reads exactly the commit HQ verified, or does not run.
+    const source = this.reviewSourceFor(o, s);
+    if (source?.error) { this.step(o, s, 'FAILED', source.error); return this.stop(o, 'BLOCKED', source.error, { ownerAction: 'Inspect the implementation and its HQ verification; HQ reviews only a verified commit.' }); }
+    const task = s.kind === 'implement' ? this.implementTask(o, s) : this.readOnlyTask(o, s, pick.agentId, source);
+    this.engine.createTask({ ...task, ...(source ? { reviewSource: source } : {}), operation: route.operation, safety: route.safety, priority: 50, preferredAgentId: pick.agentId }, { requestedBy: o.requestedBy?.taskId && this.state.tasks[o.requestedBy.taskId] ? o.requestedBy : null, link: { objectiveId: o.id, stepId: s.id }, internal: true, repair: s.repair ?? null });
     this.set(o, KIND_STATE[s.kind], `${s.kind} assigned to ${agents[pick.agentId].name}${pick.busy ? ' (queued behind its current task)' : ''}.`);
   }
   // Whether the wired adapter can serve a route variant now (Pass 4.5). An adapter without supports() serves all.
@@ -250,7 +254,21 @@ export class Conductor {
     if (this.now() - waitingSince > o.limits.evidenceWaitMs) return this.stop(o, 'BLOCKED', `No approved agent became available for ${s.kind} within ${Math.round(o.limits.evidenceWaitMs / 60_000)} minutes (${why}).`, { ownerAction: 'Reconnect or wait for the agent, then submit the objective again.' });
     this.set(o, 'WAITING_FOR_EVIDENCE', `No approved agent available for ${s.kind} right now (${why}).${limited.length ? ` Earliest reset ${new Date(Math.min(...limited)).toISOString()}.` : ''}`);
   }
-  readOnlyTask(o, s, agentId) {
+  // The commit a review step must read: the implementation its verify step checked, and only if HQ's verification of
+  // that exact commit passed. null for steps that read the live repository (investigation, standalone review).
+  reviewSourceFor(o, s) {
+    if (s.kind !== 'review' || s.standalone) return null;
+    const verify = s.dependsOn.map(id => o.steps[id]).find(x => x?.kind === 'verify');
+    const impl = verify && o.steps[verify.dependsOn[0]];
+    if (!verify || impl?.kind !== 'implement') return { error: 'The review step is not tied to an HQ-verified implementation; nothing is reviewed.' };
+    const h = impl.handoff, v = verify.handoff;
+    if (verify.status !== 'DONE' || v?.source !== 'hq' || v.ok !== true) return { error: 'The implementation commit has not passed HQ verification; HQ will not send it for review.' };
+    // Verification handoffs written before this change carry no commit; theirs is the implementation step's own.
+    if (v.commit != null && v.commit !== h?.commit) return { error: `HQ verified commit ${String(v.commit).slice(0, 12)} but the implementation reports ${String(h?.commit).slice(0, 12)}; nothing is reviewed.` };
+    if (!/^[0-9a-f]{40}$/.test(h?.commit ?? '') || !/^[0-9a-f]{40}$/.test(h?.base ?? '')) return { error: 'The verified implementation has no full commit and base sha; nothing is reviewed.' };
+    return { commit: h.commit, base: h.base, branch: h.branch ?? null };
+  }
+  readOnlyTask(o, s, agentId, source = null) {
     const prior = this.quotedEvidence(o, s);
     const kind = HANDOFF_KIND[s.kind];
     // What the submitter already fixed (HQ-validated input, not agent text): the investigator proposes within it.
@@ -264,7 +282,7 @@ export class Conductor {
     ].filter(Boolean).join('\n');
     const extra = {
       investigate: `You are the investigator. Read the repository; do not modify anything. Find the cause with file:line evidence. If a code change is warranted, propose the narrowest scope (files or directories at least two levels deep) and 1 to 3 test files (*.test.mjs) HQ can run with node --test to prove the fix. New files may be proposed where they do not exist yet.\n${bounds}`,
-      review: s.standalone ? 'You are the reviewer. Read the repository; do not modify anything. Review what the objective asks and report findings with severity and evidence.' : 'You are the independent reviewer. Read the repository; do not modify anything. Review the committed change quoted below (HQ verified it: scope, tests, commit). Approve only if it meets the objective without regressions.',
+      review: s.standalone ? 'You are the reviewer. Read the repository; do not modify anything. Review what the objective asks and report findings with severity and evidence.' : !source ? '' : `You are the independent reviewer. Do not modify anything. Your current directory is HQ's read-only snapshot of exactly commit ${source.commit}${source.branch ? ` (branch ${source.branch})` : ''}, the commit HQ verified: every file of that commit, not the live checkout. The full diff against its base ${source.base} is in ${REVIEW_META_DIR}/diff.patch and the snapshot manifest (including any large files left out) in ${REVIEW_META_DIR}/manifest.json. Read the full changed files and whatever they touch; the excerpt quoted below is clipped. Approve only if the change meets the objective without regressions.`,
       rebuttal: 'Another agent disagrees with a position. Answer its evidence with your own evidence, once. Say whether you concede.',
     }[s.kind];
     return { title: `Objective ${o.id.slice(0, 8)} → ${this.state.agents[agentId].name} (${s.kind}): ${o.input.title}`.slice(0, 200), description: framingFor(kind, { objective: o.input.objective, quoted: prior, extra }) };
@@ -317,6 +335,15 @@ export class Conductor {
       const text = task.evidence.filter(e => e.kind === 'MODEL_RESULT').at(-1);
       try {
         handoff = parseHandoff(text?.fullText ?? text?.summary, HANDOFF_KIND[s.kind]);
+        // A review of an implementation counts only with HQ's record that the reviewer read the verified commit.
+        if (s.kind === 'review' && !s.standalone) {
+          const want = this.reviewSourceFor(o, s), seen = task.evidence.filter(e => e.kind === 'PROGRESS' && e.reviewSource).at(-1)?.reviewSource;
+          if (want?.error || task.reviewSource?.commit !== want.commit || seen?.commit !== want.commit || seen.verified !== true) {
+            this.engine.emit('HANDOFF_REJECTED', { objectiveId: o.id, stepId: s.id, taskId: task.id, reason: 'No HQ evidence that the reviewer read the verified commit.' });
+            return this.failed(o, s, { reason: 'agent_failure', detail: `The review ran without HQ evidence that it read verified commit ${String(want?.commit).slice(0, 12)} (task source ${String(task.reviewSource?.commit).slice(0, 12)}, snapshot ${String(seen?.commit).slice(0, 12)}).` });
+          }
+          handoff = { ...handoff, reviewedSource: { commit: seen.commit, base: seen.base, branch: seen.branch ?? null, tree: seen.tree, files: seen.files, snapshot: seen.source, verifiedCommit: want.commit, matchesVerified: true } };
+        }
         // A proposal HQ policy would refuse is not accepted: the investigator gets one bounded retry with the
         // refusal quoted (first real run: Codex proposed tools/hillink-hq/, outside the approved scope).
         if (s.kind === 'investigate' && handoff.recommendedAction === 'implement' && o.input.type === 'fix') {
@@ -513,7 +540,7 @@ export class Conductor {
     if (!this.verifier) { this.step(o, s, 'FAILED', 'No verifier configured.'); return this.stop(o, 'BLOCKED', 'HQ has no commit verifier configured; nothing can be accepted.'); }
     const r = await this.verifier.verify(task, impl.handoff);
     const diff = r.ok ? await this.verifier.diff?.(impl.handoff.commit).catch(() => null) : null;
-    const handoff = { kind: 'verification', source: 'hq', ok: r.ok, checks: r.checks, diff: diff ? clip(diff, 6000) : null };
+    const handoff = { kind: 'verification', source: 'hq', commit: impl.handoff?.commit ?? null, ok: r.ok, checks: r.checks, diff: diff ? clip(diff, 6000) : null };
     this.engine.emit('HANDOFF_ACCEPTED', { objectiveId: o.id, stepId: s.id, taskId: task.id, agentId: 'hq', handoff, hash: hashOf(handoff) });
     if (!r.ok) {
       const failedChecks = r.checks.filter(c => !c.ok).map(c => `${c.name} (${c.detail})`).join('; ');

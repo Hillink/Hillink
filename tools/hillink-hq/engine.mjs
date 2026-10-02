@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { initialAgents, operations } from './registry.mjs';
 import { validateImplementation } from './implementation-policy.mjs';
+import { validReviewSource, REVIEW_SNAPSHOT_EVIDENCE } from './review-snapshot.mjs';
 import { ORCHESTRATION_EVENTS, reduceOrchestration } from './orchestration/state.mjs';
 import { needsFollowUp, ATTENTION_LIMITS } from './orchestration/attention.mjs';
 import { COMPUTE_EVENTS, reduceCompute, emptyCompute, computeLedger } from './compute/state.mjs';
@@ -211,6 +212,9 @@ export class Engine {
     const implementing = input.operation === 'implement-repo';
     if (implementing !== (input.safety === 'local-worktree-write')) throw Error('implement-repo tasks, and only they, use local-worktree-write');
     const implementation = implementing ? validateImplementation(input.implementation) : null;
+    // The exact HQ-verified commit a linked review must read (conductor only). Read-only reviews alone carry one.
+    const reviewSource = input.reviewSource == null ? null : validReviewSource(input.reviewSource);
+    if (reviewSource && (input.operation !== 'review-repo' || input.safety !== 'local-read-only' || !link)) throw Error('A review source belongs only to an HQ-linked read-only review');
     if (input.safety === 'owner-required' && !text(input.ownerAction)) throw Error('Exact owner action required');
     if (!Number.isInteger(input.priority) || input.priority < 0 || input.priority > 100) throw Error('Priority must be 0–100');
     if (input.preferredAgentId && !this.state.agents[input.preferredAgentId]?.capabilities.includes(operations[input.operation].capability)) throw Error('Selected worker cannot perform this operation');
@@ -220,7 +224,7 @@ export class Engine {
     // Pass 3 role boundary, independent of capability data: implementation is Claude's alone.
     if (implementing && input.preferredAgentId !== 'claude') throw Error('Implementation tasks go to Claude only');
     const id = randomUUID();
-    this.emit('TASK_CREATED', { id, title: input.title, description: input.description, operation: input.operation, capability: operations[input.operation].capability, safety: input.safety, ownerAction: input.ownerAction || null, priority: input.priority, preferredAgentId: input.preferredAgentId || null, ...(implementation ? { implementation } : {}), ...(requestedBy ? { requestedBy: { agentId: requestedBy.agentId, taskId: requestedBy.taskId } } : {}), ...(link ? { link: { objectiveId: link.objectiveId, stepId: link.stepId ?? null, ...(link.decisionId ? { decisionId: link.decisionId } : {}) } } : {}), ...(repair ? { repair: { attempt: repair.attempt, reason: repair.reason, ...(repair.fromReview ? { fromReview: true } : {}) } } : {}) });
+    this.emit('TASK_CREATED', { id, title: input.title, description: input.description, operation: input.operation, capability: operations[input.operation].capability, safety: input.safety, ownerAction: input.ownerAction || null, priority: input.priority, preferredAgentId: input.preferredAgentId || null, ...(implementation ? { implementation } : {}), ...(reviewSource ? { reviewSource } : {}), ...(requestedBy ? { requestedBy: { agentId: requestedBy.agentId, taskId: requestedBy.taskId } } : {}), ...(link ? { link: { objectiveId: link.objectiveId, stepId: link.stepId ?? null, ...(link.decisionId ? { decisionId: link.decisionId } : {}) } } : {}), ...(repair ? { repair: { attempt: repair.attempt, reason: repair.reason, ...(repair.fromReview ? { fromReview: true } : {}) } } : {}) });
     if (this.state.alerts['cycle:complete']?.active) this.emit('ALERT_RESOLVED', { key: 'cycle:complete' });
     return id;
   }
@@ -258,6 +262,11 @@ export class Engine {
     // The full answer (bounded) is kept for HQ's handoff validation; summary stays the short display text.
     if (payload.fullText != null && (payload.kind !== 'MODEL_RESULT' || typeof payload.fullText !== 'string' || payload.fullText.length > 30_000)) throw Error('Invalid full model text');
     if (payload.files && (!Array.isArray(payload.files) || payload.files.some(f => !text(f, 500)))) throw Error('Invalid files');
+    // What a reviewer was given to read: only for a task that has a review source, and only that exact commit.
+    if (payload.reviewSource != null) {
+      const want = this.state.tasks[run.taskId].reviewSource, r = payload.reviewSource;
+      if (payload.kind !== 'PROGRESS' || !want || !r || typeof r !== 'object' || r.source !== REVIEW_SNAPSHOT_EVIDENCE || r.commit !== want.commit || r.base !== want.base || r.verified !== true || !/^[0-9a-f]{40}$/.test(String(r.tree)) || JSON.stringify(r).length > 1000) throw Error('Invalid review source evidence');
+    }
     if (payload.kind === 'RATE_LIMITED' && payload.retryAt != null && (!Number.isFinite(payload.retryAt) || payload.retryAt <= this.now())) throw Error('Future retry time required');
     // Pass 5F (B1): the adapter's own terminal CANCELLED for a run HQ is stopping because Kyle disabled or retired its
     // agent is that stop, not a failure. Only CANCELLED is tagged; a COMPLETED or FAILED that wins the race stays itself.
@@ -309,6 +318,12 @@ export class Engine {
         const pick = this.selectCompute(task);
         if (!pick) continue;
         const { agent, decision } = pick;
+        // A review of an implementation commit runs only where that exact commit can be given to the reviewer; never
+        // in the live checkout instead.
+        if (task.reviewSource && !this.adapters[agent.executionAdapter]?.acceptsReviewSource?.()) {
+          this.emit('TASK_PARKED', { taskId: task.id, reason: `${agent.name} cannot be given a read-only snapshot of commit ${task.reviewSource.commit.slice(0, 12)}; HQ will not review the live checkout instead.`, ownerAction: 'Start HQ with CLI agents (review snapshots are wired with them), then retry the review.' });
+          continue;
+        }
         if (task.operation === 'implement-repo' && agent.id !== 'claude') throw Error(`Refusing to dispatch implementation to ${agent.id}`);
         const runId = randomUUID(), route = decision.route;
         const compute = { operation: task.operation, adapterId: agent.executionAdapter, variant: route.variant ?? 'default', routeId: route.routeId ?? null, security: route.security ?? null, computeClass: route.computeClass, provider: route.provider, backend: route.backend, model: agent.model ?? null, authorizationId: decision.authorizationId ?? null, reservedUsd: decision.reservedUsd ?? 0, mode: this.config.computeMode };
