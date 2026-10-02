@@ -99,11 +99,13 @@ test('D. Codex usage limit: HQ records Codex unavailable, reroutes investigation
   const reviewStep = Object.values(o.steps).find(s => s.kind === 'review');
   assert.equal(reviewStep.status, 'PENDING');
   const pending = Object.values(o.decisions).find(d => d.status === 'PENDING');
-  assert.equal(pending.resume.authority, 'kyle'); assert.equal(pending.resume.type, 'review-fallback');
+  assert.equal(pending.resume.authority, 'orchestrator'); assert.equal(pending.resume.type, 'review-fallback');
   assert.equal(h.claude.calls.filter(c => /independent reviewer/.test(c.task.description)).length, 0, 'no same-provider review ran');
-  // ChatGPT cannot lower the review standard; Kyle can.
-  assert.throws(() => h.conductor.decide(id, pending.id, 'accept_same_provider_review', { by: 'chatgpt' }), /needs Kyle/);
-  h.conductor.decide(id, pending.id, 'accept_same_provider_review', { by: 'kyle', rationale: 'Codex is out until tomorrow.' });
+  // The option label must make clear this is NOT independent; merge gate still requires Kyle.
+  const opt = pending.options.find(o => o.id === 'accept_same_provider_review');
+  assert.ok(opt && /NOT independent/i.test(opt.label), 'option label warns NOT independent');
+  // Orchestrator (ChatGPT) owns this decision — it can accept the same-provider review.
+  h.conductor.decide(id, pending.id, 'accept_same_provider_review', { by: 'chatgpt', rationale: 'Codex is out until tomorrow.' });
   await h.drive(h.settled(id));
   o = h.objective(id);
   assert.equal(o.status, 'COMPLETE', o.statusReason);

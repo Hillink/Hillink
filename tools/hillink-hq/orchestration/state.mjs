@@ -29,6 +29,20 @@ export const ORCHESTRATION_EVENTS = new Set(['OBJECTIVE_CREATED', 'OBJECTIVE_PLA
 
 export function canTransition(from, to) { return (TRANSITIONS[from] ?? []).includes(to); }
 
+// Decision authority policy: derived from the decision type, applied at replay and live creation.
+// review-fallback is an operational orchestration choice (which provider reviews?); it belongs to ChatGPT.
+// Consequential owner decisions (spend, high-risk scope, explicit escalation) stay Kyle-only.
+// Unknown/unrecognized types fail safe to kyle so old or unexpected decisions never route to the orchestrator.
+export function deriveDecisionAuthority(resume) {
+  if (!resume) return 'kyle';
+  // Explicit escalation always goes to Kyle regardless of the base decision type.
+  if (resume.escalated) return 'kyle';
+  // review-fallback is an orchestrator routing choice (which provider reviews?).
+  // Only explicit escalation can make it Kyle's; everything else routes to the orchestrator.
+  if (resume.type === 'review-fallback') return 'orchestrator';
+  return resume.authority ?? 'kyle';
+}
+
 // Applied after the engine's own reducer, for every journal event (replay and live take the same path).
 export function reduceOrchestration(state, event) {
   const { type, data: d, at } = event;
@@ -93,9 +107,9 @@ export function reduceOrchestration(state, event) {
     }
     case 'APPROVAL_REQUESTED': o.approvals[d.gate] = { gate: d.gate, reason: d.reason, stage: d.stage, status: 'PENDING', requestedAt: at }; o.updatedAt = at; break;
     case 'APPROVAL_DECIDED': Object.assign(o.approvals[d.gate], { status: d.decision === 'approve' ? 'APPROVED' : 'DENIED', decidedAt: at, by: d.by, note: d.note ?? null, channel: d.channel ?? null }); o.updatedAt = at; break;
-    case 'DECISION_REQUESTED': o.decisions[d.decisionId] = { id: d.decisionId, question: d.question, options: d.options, context: d.context ?? null, status: 'PENDING', requestedAt: at, resume: d.resume }; o.updatedAt = at; break;
+    case 'DECISION_REQUESTED': o.decisions[d.decisionId] = { id: d.decisionId, question: d.question, options: d.options, context: d.context ?? null, status: 'PENDING', requestedAt: at, resume: { ...d.resume, authority: deriveDecisionAuthority(d.resume) } }; o.updatedAt = at; break;
     case 'DECISION_APPLIED': o.decisions[d.decisionId].applied = true; o.updatedAt = at; break;
-    case 'DECISION_RECORDED': Object.assign(o.decisions[d.decisionId], { status: 'DECIDED', choice: d.choice, rationale: d.rationale, by: d.by, decidedAt: at }); o.updatedAt = at; break;
+    case 'DECISION_RECORDED': Object.assign(o.decisions[d.decisionId], { status: 'DECIDED', choice: d.choice, rationale: d.rationale, by: d.by, decidedAt: at, ...(d.channel ? { channel: d.channel } : {}) }); o.updatedAt = at; break;
     case 'DISAGREEMENT_RECORDED': o.disagreement = { ...d.disagreement, at }; o.updatedAt = at; break;
     case 'OBJECTIVE_RESULT': o.result = { ...d.result, at }; o.updatedAt = at; break;
     case 'TASK_CANCELLED': {

@@ -93,14 +93,14 @@ export class Conductor {
     this.engine.emit('ORCHESTRATOR_NOTE_ACKNOWLEDGED', { id, by, note: note.trim() });
     return { note_id: id, acknowledged: true };
   }
-  decide(id, decisionId, choice, { by, rationale = '' } = {}) {
+  decide(id, decisionId, choice, { by, rationale = '', channel = null } = {}) {
     const o = this.objective(id), d = o.decisions[decisionId];
     if (!d || d.status !== 'PENDING') throw Error('No pending decision with that id on this objective.');
     if (!['chatgpt', 'kyle'].includes(by)) throw Error('Only the orchestrator or Kyle can decide.');
     if (d.resume.authority === 'kyle' && by !== 'kyle') throw Error('This decision needs Kyle; the orchestrator cannot make it.');
     if (!d.options.some(opt => opt.id === choice)) throw Error(`choice must be one of ${d.options.map(opt => opt.id).join(', ')}`);
     if (typeof rationale !== 'string' || rationale.length > 1200) throw Error('rationale must be text of at most 1200 characters');
-    this.engine.emit('DECISION_RECORDED', { objectiveId: id, decisionId, choice, rationale: clip(rationale, 1200) || null, by });
+    this.engine.emit('DECISION_RECORDED', { objectiveId: id, decisionId, choice, rationale: clip(rationale, 1200) || null, by, ...(channel ? { channel: clip(channel, 40) } : {}) });
     return { decisionId, choice };
   }
 
@@ -240,9 +240,10 @@ export class Conductor {
     // Review of medium/high risk work needs an independent provider. If it is out, HQ does not quietly substitute
     // a same-provider review: that is a lowering of the review standard, so Kyle decides.
     if (s.kind === 'review' && s.reviewRule?.independentProvider && !s.allowSameProvider && !o.decisions[`review-fallback-${s.id}`]) {
-      return this.requestDecision(o, `review-fallback-${s.id}`, { authority: 'kyle', type: 'review-fallback', stepId: s.id }, `The independent reviewer is unavailable (${why}). Wait for it, or accept a separate read-only Claude review (same provider as the implementer, so not independent)?`, [
+      return this.requestDecision(o, `review-fallback-${s.id}`, { authority: 'orchestrator', type: 'review-fallback', stepId: s.id }, `The independent reviewer is unavailable (${why}). Wait for it, accept a separate read-only Claude review (same provider as the implementer — NOT independent; merge gate still requires Kyle), escalate to Kyle, or stop?`, [
         { id: 'wait', label: `Wait for Codex${limited.length ? ` (reset ${new Date(Math.min(...limited)).toISOString()})` : ''}` },
-        { id: 'accept_same_provider_review', label: 'Accept a same-provider read-only review for this objective' },
+        { id: 'accept_same_provider_review', label: 'Accept a same-provider read-only review (NOT independent; merge gate still requires Kyle)' },
+        { id: 'escalate_to_kyle', label: 'Escalate to Kyle — this objective needs owner judgment on the review' },
         { id: 'stop', label: 'Stop the objective (the verified branch stays unmerged)' },
       ]);
     }
@@ -479,14 +480,14 @@ export class Conductor {
   }
   async applyDecision(o, last, type, choice, by) {
     if (choice === 'stop') return this.stop(o, 'CANCELLED', `Stopped by ${by}'s decision: ${clip(last.rationale, 300)}`);
-    if (choice === 'escalate_to_kyle') return this.requestDecision(o, `${last.id}-kyle`, { ...last.resume, authority: 'kyle' }, `Escalated ${by === 'hq' ? 'by HQ (the orchestrator did not answer)' : 'by the orchestrator'}: ${last.question}`, last.options.filter(x => x.id !== 'escalate_to_kyle'));
+    if (choice === 'escalate_to_kyle') return this.requestDecision(o, `${last.id}-kyle`, { ...last.resume, authority: 'kyle', escalated: true }, `Escalated ${by === 'hq' ? 'by HQ (the orchestrator did not answer)' : 'by the orchestrator'}: ${last.question}`, last.options.filter(x => x.id !== 'escalate_to_kyle'));
     if (type === 'scope' && choice === 'approve_scope') {
       const s = o.steps[last.resume.stepId];
       return this.addImplementation(o, s, { scope: last.resume.scope, tests: last.resume.tests }, last.id);
     }
     if (type === 'review-fallback') {
       const s = o.steps[last.resume.stepId];
-      if (choice === 'accept_same_provider_review') { if (!s.allowSameProvider) this.engine.emit('STEP_RETRY', { objectiveId: o.id, stepId: s.id, reason: 'reviewer_unavailable', count: 1, max: 1, strategy: `Kyle accepted a same-provider read-only review: ${clip(last.rationale, 200)}`, excludeAgents: [], notBefore: null, allowSameProvider: true }); return this.set(o, 'REVIEWING', 'Kyle accepted a same-provider review.'); }
+      if (choice === 'accept_same_provider_review') { if (!s.allowSameProvider) this.engine.emit('STEP_RETRY', { objectiveId: o.id, stepId: s.id, reason: 'reviewer_unavailable', count: 1, max: 1, strategy: `Orchestrator accepted a same-provider read-only review (NOT independent; merge gate still requires Kyle): ${clip(last.rationale, 200)}`, excludeAgents: [], notBefore: null, allowSameProvider: true }); return this.set(o, 'REVIEWING', 'Orchestrator accepted a same-provider review (NOT independent; merge gate still requires Kyle).'); }
       const codex = this.state.agents.codex;
       this.engine.emit('STEP_RETRY', { objectiveId: o.id, stepId: s.id, reason: 'reviewer_unavailable', count: 1, max: 1, strategy: 'Wait for the independent reviewer.', excludeAgents: [], notBefore: codex?.retryAt ?? null });
       return this.set(o, 'WAITING_FOR_EVIDENCE', 'Waiting for the independent reviewer (decision: wait).');
