@@ -1,0 +1,118 @@
+{
+  "base": "http://127.0.0.1:4332",
+  "width": 1280,
+  "height": 800,
+  "fps": 25,
+  "clips": [
+    {
+      "name": "1-office-activity",
+      "path": "/?source=sim&theme=real&play=office",
+      "seconds": 75,
+      "actions": [
+        {
+          "at": 0.5,
+          "eval": "(() => { const b = hillinkWorld.theme.layout.home; hillinkWorld.camera.focusRect(b, { maxZoom: 1.25 }); return true; })()"
+        }
+      ],
+      "expect": "[...hillinkWorld.scene.entities.values()].filter(e => e.kind === 'ambient' && e.alpha > 0.5).length >= 1 && hillinkWorld.worldInfo.source === 'generated'",
+      "note": "'agents: ' + [...hillinkWorld.scene.entities.values()].filter(e => e.kind === 'agent').map(e => e.ref.id + ' ' + e.anim.intent).join(', ') + ' | ambient: ' + [...hillinkWorld.scene.entities.values()].filter(e => e.kind === 'ambient').map(e => e.phase).join(', ')"
+    },
+    {
+      "name": "2-workstation-lifecycle",
+      "path": "/?source=sim&theme=real&play=workstation",
+      "seconds": 78,
+      "actions": [
+        {
+          "at": 0.3,
+          "eval": "hillinkWorld.focus('agent:claude'); true"
+        },
+        {
+          "at": 38,
+          "eval": "window.__typed = ['type', 'work'].includes(hillinkWorld.scene.get('agent:claude').anim.state) && hillinkWorld.scene.get('agent:claude').spot === hillinkWorld.scene.get('agent:claude').placeKey; true"
+        }
+      ],
+      "expect": "window.__typed === true",
+      "note": "(() => { const e = hillinkWorld.scene.get('agent:claude'); return 'typed at the desk: ' + window.__typed + '; now ' + e.anim.state + ' / ' + e.anim.intent + ' at ' + (e.spot || 'moving'); })()"
+    },
+    {
+      "name": "3-construction-activity",
+      "path": "/?demo=construction&step=1&autoplay=7&theme=real",
+      "seconds": 118,
+      "actions": [
+        {
+          "at": 0.3,
+          "eval": "hillinkWorld.focus('room:site:meeting-room'); true"
+        },
+        {
+          "at": 20,
+          "eval": "window.__built = ['dig', 'assemble', 'measure'].includes(hillinkWorld.scene.get('agent:claude').anim.state) || !!hillinkWorld.scene.get('agent:claude').loop; true"
+        }
+      ],
+      "expect": "hillinkWorld.siteWorld.projects['meeting-room'].stage === 'operational'",
+      "note": "'stage at the end: ' + hillinkWorld.siteWorld.projects['meeting-room'].stage + '; builder working at 20 s: ' + window.__built"
+    },
+    {
+      "name": "4-blocked-construction",
+      "path": "/?demo=construction&step=3&autoplay=14&theme=real",
+      "seconds": 44,
+      "actions": [
+        {
+          "at": 0.3,
+          "eval": "hillinkWorld.focus('room:site:meeting-room'); true"
+        },
+        {
+          "at": 10,
+          "eval": "window.__working = (hillinkWorld.scene.get('agent:claude').spot || '').startsWith('site:'); true"
+        },
+        {
+          "at": 38,
+          "eval": "window.__stopped = !!hillinkWorld.siteWorld.projects['meeting-room'].blocked && !(hillinkWorld.scene.get('agent:claude').spot || '').startsWith('site:'); true"
+        }
+      ],
+      "expect": "window.__working === true && window.__stopped === true",
+      "note": "'working before the block: ' + window.__working + '; stopped while blocked: ' + window.__stopped + ' (' + hillinkWorld.siteWorld.projects['meeting-room'].blocked + ')'"
+    },
+    {
+      "name": "5-vehicles-and-environment",
+      "path": "/?source=sim&theme=real",
+      "seconds": 40,
+      "actions": [
+        {
+          "at": 0.3,
+          "eval": "(() => { const L = hillinkWorld.theme.layout, ids = Object.keys(L.navNodes).filter(k => /^road-\\d+#/.test(k)), p = L.navNodes[ids[Math.floor(ids.length * 0.45)]]; hillinkWorld.camera.focusPoint(p[0], p[1] - 80, { zoom: 0.9, duration: 0 }); return true; })()"
+        }
+      ],
+      "expect": "hillinkWorld.worldInfo.source === 'generated'"
+    },
+    {
+      "name": "6-fantasy-construction",
+      "path": "/?demo=construction&step=2&autoplay=7&theme=fantasy",
+      "seconds": 60,
+      "actions": [
+        {
+          "at": 0.3,
+          "eval": "hillinkWorld.focus('room:site:meeting-room'); true"
+        }
+      ],
+      "expect": "hillinkWorld.theme.id === 'fantasy'",
+      "note": "hillinkWorld.siteWorld.projects['meeting-room'].stage"
+    },
+    {
+      "name": "7-meeting",
+      "path": "/?source=sim&theme=real&play=meeting",
+      "seconds": 45,
+      "actions": [
+        {
+          "at": 0.3,
+          "eval": "hillinkWorld.focus('room:comms'); true"
+        },
+        {
+          "at": 26,
+          "eval": "window.__met = ['claude', 'codex'].every(id => hillinkWorld.scene.get('agent:' + id).anim.state === 'meeting'); true"
+        }
+      ],
+      "expect": "window.__met === true",
+      "note": "'both in the meeting at 26 s: ' + window.__met"
+    }
+  ]
+}

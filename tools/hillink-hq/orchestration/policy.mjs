@@ -30,14 +30,12 @@ const GATE_SIGNALS = [
   ['database-change', /\b(migration|migrate|drop table|alter table|truncate|supabase db|database schema|prod(uction)? (db|database))\b/i],
   ['destructive', /\b(delete|remove|wipe|purge|drop|force[- ]push|reset --hard|rm -rf|erase)\b.*\b(data|history|branch|table|records?|files?|users?|repo)\b/i],
   ['credential-change', /\b(api[_ -]?key|secret|credential|password|token|oauth|ssh key|rotate)\b/i],
-  ['security-policy-change', /\b(sandbox|permission model|allowlist|security policy|disable (the )?(check|guard|scope|sandbox)|bypass)\b/i],
+  // "sandbox" alone is a common directory name; the gate is about HQ's own isolation and permission policy.
+  ['security-policy-change', /\b(sandbox (policy|security|isolation|boundary|config(uration)?|permissions?|escape|network)|(disable|weaken|turn off|remove|loosen) (the |hq'?s? )?(sandbox|check|guard|scope|approval|review)|permission model|allowlist|security policy|bypass)\b/i],
   ['architecture-change', /\b(rewrite|re-architect|rearchitect|migrate (the )?(framework|stack)|replace (the )?(framework|database|auth))\b/i],
 ];
 const HIGH_RISK_AREAS = /^(app\/api\/|lib\/(supabase|stripe|auth|payments?)|middleware|supabase\/|scripts\/)/i;
 const LOW_RISK_AREAS = /^(sandbox\/|docs\/|tools\/hillink-world\/|tests\/)/i;
-// Narrower than LOW_RISK_AREAS on purpose: only the World tree is exempt from the breadth heuristic, so broad
-// docs/ or tests/ scopes keep raising architecture-change.
-const ISOLATED_STAGING = /^tools\/hillink-world\//i;
 
 export const DEFAULT_LIMITS = { maxSteps: 12, maxAgentCalls: 10, maxRetries: 4, maxRepairs: 1, maxRebuttals: 1, maxSpendUsd: 2, deadlineMs: 3 * 60 * 60_000, maxActiveObjectives: 3, evidenceWaitMs: 2 * 60 * 60_000 };
 
@@ -80,15 +78,21 @@ export function validateObjectiveInput(input) {
   return out;
 }
 
-// Gates from declared actions plus text signals in the objective, criteria and constraints.
+// Gates from declared actions plus text signals in the objective and its acceptance criteria. Constraints are not
+// scanned: they list what must NOT happen ("no deploy, no production changes"), and HQ has no operation that performs
+// a gated action anyway. A mention negated in the same clause ("do not deploy") is a prohibition, not a request;
+// every other mention raises the gate (over-triggering stays the safe direction). Found in the first real run.
+const NEGATED = /\b(no|not|never|nor|without|don'?t|do not|must not|mustn'?t|avoid|except)\b[^.;:!?\n]*$/i;
+const mentions = (re, text) => {
+  const g = new RegExp(re.source, re.flags.includes('g') ? re.flags : `${re.flags}g`);
+  for (const m of text.matchAll(g)) if (!NEGATED.test(text.slice(Math.max(0, m.index - 60), m.index))) return true;
+  return false;
+};
 export function gatesFor(input) {
-  const text = [input.objective, input.acceptanceCriteria, input.constraints].filter(Boolean).join('\n');
+  const text = [input.objective, input.acceptanceCriteria].filter(Boolean).join('\n');
   const gates = new Set(input.requestedActions);
-  for (const [gate, re] of GATE_SIGNALS) if (re.test(text)) gates.add(gate);
-  // Breadth alone is not architecture when every path is staging inside the isolated World tree; text signals
-  // above and the protected-path checks in implementation-policy still apply to it.
-  const isolatedWorldStaging = input.scope.length > 0 && input.scope.every(p => ISOLATED_STAGING.test(p));
-  if (!isolatedWorldStaging && (input.scope.length > 3 || new Set(input.scope.map(p => p.split('/')[0])).size > 2)) gates.add('architecture-change');
+  for (const [gate, re] of GATE_SIGNALS) if (mentions(re, text)) gates.add(gate);
+  if (input.scope.length > 3 || new Set(input.scope.map(p => p.split('/')[0])).size > 2) gates.add('architecture-change');
   return [...gates].sort();
 }
 

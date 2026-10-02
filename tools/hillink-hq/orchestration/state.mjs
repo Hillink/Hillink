@@ -10,7 +10,7 @@ const STOP = ['WAITING_FOR_EVIDENCE', 'AWAITING_DECISION', 'AWAITING_APPROVAL', 
 // from -> allowed next states. BLOCKED, FAILED, COMPLETE and CANCELLED are final for an objective: a new attempt
 // is a new objective, so history is never rewritten.
 export const TRANSITIONS = {
-  QUEUED: ['PLANNING', 'CANCELLED', 'FAILED'],
+  QUEUED: ['PLANNING', 'BLOCKED', 'CANCELLED', 'FAILED'],
   PLANNING: [...ACTIVE, 'COMPLETE', ...STOP],
   INVESTIGATING: [...ACTIVE, 'COMPLETE', ...STOP],
   WAITING_FOR_EVIDENCE: [...ACTIVE, 'COMPLETE', ...STOP],
@@ -25,7 +25,7 @@ export const TRANSITIONS = {
 export const STEP_STATES = ['PENDING', 'RUNNING', 'DONE', 'FAILED', 'SKIPPED', 'CANCELLED', 'INTERRUPTED'];
 export const STEP_KINDS = ['investigate', 'implement', 'verify', 'review', 'rebuttal', 'local-check'];
 
-export const ORCHESTRATION_EVENTS = new Set(['OBJECTIVE_CREATED', 'OBJECTIVE_PLANNED', 'OBJECTIVE_TRANSITION', 'OBJECTIVE_CANCEL_REQUESTED', 'STEP_ADDED', 'STEP_TRANSITION', 'HANDOFF_ACCEPTED', 'HANDOFF_REJECTED', 'STEP_RETRY', 'APPROVAL_REQUESTED', 'APPROVAL_DECIDED', 'DECISION_REQUESTED', 'DECISION_RECORDED', 'DECISION_APPLIED', 'DISAGREEMENT_RECORDED', 'OBJECTIVE_RESULT', 'TASK_CANCELLED', 'RUN_RECONCILED']);
+export const ORCHESTRATION_EVENTS = new Set(['OBJECTIVE_CREATED', 'OBJECTIVE_PLANNED', 'OBJECTIVE_TRANSITION', 'OBJECTIVE_CANCEL_REQUESTED', 'STEP_ADDED', 'STEP_TRANSITION', 'HANDOFF_ACCEPTED', 'HANDOFF_REJECTED', 'STEP_RETRY', 'APPROVAL_REQUESTED', 'APPROVAL_DECIDED', 'DECISION_REQUESTED', 'DECISION_RECORDED', 'DECISION_APPLIED', 'DISAGREEMENT_RECORDED', 'OBJECTIVE_RESULT', 'TASK_CANCELLED', 'RUN_RECONCILED', 'OBJECTIVE_OUTCOME_ACKNOWLEDGED', 'ORCHESTRATOR_NOTE_POSTED', 'ORCHESTRATOR_NOTE_ACKNOWLEDGED']);
 
 export function canTransition(from, to) { return (TRANSITIONS[from] ?? []).includes(to); }
 
@@ -91,8 +91,8 @@ export function reduceOrchestration(state, event) {
       o.counters.retries += 1; o.updatedAt = at;
       break;
     }
-    case 'APPROVAL_REQUESTED': o.approvals[d.gate] = { gate: d.gate, reason: d.reason, stage: d.stage, status: 'PENDING', requestedAt: at, requestedSeq: event.seq }; o.updatedAt = at; break;
-    case 'APPROVAL_DECIDED': Object.assign(o.approvals[d.gate], { status: d.decision === 'approve' ? 'APPROVED' : 'DENIED', decidedAt: at, by: d.by, note: d.note ?? null, evidence: d.evidence ?? null }); o.updatedAt = at; break;
+    case 'APPROVAL_REQUESTED': o.approvals[d.gate] = { gate: d.gate, reason: d.reason, stage: d.stage, status: 'PENDING', requestedAt: at }; o.updatedAt = at; break;
+    case 'APPROVAL_DECIDED': Object.assign(o.approvals[d.gate], { status: d.decision === 'approve' ? 'APPROVED' : 'DENIED', decidedAt: at, by: d.by, note: d.note ?? null }); o.updatedAt = at; break;
     case 'DECISION_REQUESTED': o.decisions[d.decisionId] = { id: d.decisionId, question: d.question, options: d.options, context: d.context ?? null, status: 'PENDING', requestedAt: at, resume: d.resume }; o.updatedAt = at; break;
     case 'DECISION_APPLIED': o.decisions[d.decisionId].applied = true; o.updatedAt = at; break;
     case 'DECISION_RECORDED': Object.assign(o.decisions[d.decisionId], { status: 'DECIDED', choice: d.choice, rationale: d.rationale, by: d.by, decidedAt: at }); o.updatedAt = at; break;
@@ -103,11 +103,20 @@ export function reduceOrchestration(state, event) {
       Object.assign(t, { stage: 'CANCELLED', cancelled: { at, by: d.by, reason: d.reason, confirmed: d.confirmed }, blocker: d.reason, ownerAction: d.confirmed ? null : t.ownerAction, recoveryPending: false, endedAt: t.endedAt ?? at });
       break;
     }
+    // Observability: an objective that ended without completing stays "needs follow-up" until the orchestrator (or
+    // Kyle) records that it saw the outcome and what happens next. Notes are standing guidance Kyle posts for the
+    // orchestrator (e.g. how to resume a sequence); they stay open until acknowledged.
+    case 'OBJECTIVE_OUTCOME_ACKNOWLEDGED': o.outcomeAck = { by: d.by, note: d.note, at }; o.updatedAt = at; break;
+    case 'ORCHESTRATOR_NOTE_POSTED': (state.orchestratorNotes ??= {})[d.id] = { id: d.id, title: d.title, body: d.body, by: d.by, postedAt: at, ack: null }; break;
+    case 'ORCHESTRATOR_NOTE_ACKNOWLEDGED': if (state.orchestratorNotes?.[d.id]) state.orchestratorNotes[d.id].ack = { by: d.by, note: d.note, at }; break;
     case 'RUN_RECONCILED': { const t = state.tasks[d.taskId]; if (t) t.interrupted = { at, evidence: d.evidence }; break; }
     case 'WORKER_EVENT': {
       // Measured spend attaches to the objective that owns the task (reported cost from the CLI's own counters).
+      // Pass 4: only a METERED_API run spends money. A subscription CLI's "cost" is its estimate of API-equivalent
+      // value, not a charge, so it never counts (and never trips the objective's spend gate).
       const run = state.runs[d.runId], t = run && state.tasks[run.taskId];
-      if (d.kind === 'USAGE' && t?.link && Number.isFinite(d.usage?.reportedCostUsd)) {
+      const metered = state.compute?.runs?.[d.runId] ? state.compute.runs[d.runId].computeClass === 'METERED_API' : true;
+      if (d.kind === 'USAGE' && t?.link && metered && Number.isFinite(d.usage?.reportedCostUsd) && d.usage.reportedCostUsd >= 0) {
         const obj = state.objectives[t.link.objectiveId];
         if (obj) obj.spentUsd = Math.round((obj.spentUsd + d.usage.reportedCostUsd) * 1e6) / 1e6;
       }

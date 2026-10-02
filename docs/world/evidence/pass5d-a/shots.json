@@ -1,0 +1,76 @@
+{
+  "base": "http://127.0.0.1:4332",
+  "width": 1600,
+  "height": 1000,
+  "shots": [
+    {
+      "name": "01-overview",
+      "path": "/?source=sim&theme=real&art=5d",
+      "waitMs": 2200,
+      "after": "hillinkWorld.shot(\"overview\"); true",
+      "expect": "hillinkWorld.theme.art === '5d'"
+    },
+    {
+      "name": "02-entrance",
+      "path": "/?source=sim&theme=real&art=5d",
+      "waitMs": 2200,
+      "after": "hillinkWorld.shot(\"entrance\"); true",
+      "expect": "hillinkWorld.theme.art === '5d'"
+    },
+    {
+      "name": "03-workspace-claude-typing",
+      "path": "/?source=sim&theme=real&art=5d",
+      "waitMs": 2200,
+      "after": "hillinkWorld.shot(\"workspace\"); true",
+      "expect": "hillinkWorld.theme.art === '5d'",
+      "eval": "hillinkWorld.sim.run(\"claudeCodes\"); true",
+      "until": "hillinkWorld.scene.get(\"agent:claude\")?.anim?.state === \"type\"",
+      "untilMs": 60000,
+      "note": "\"claude \" + hillinkWorld.scene.get(\"agent:claude\").anim.state"
+    },
+    {
+      "name": "04-lounge-break",
+      "path": "/?source=sim&theme=real&art=5d",
+      "waitMs": 9000,
+      "after": "hillinkWorld.shot(\"lounge\"); true",
+      "expect": "hillinkWorld.theme.art === '5d'"
+    },
+    {
+      "name": "05-street-and-landscape",
+      "path": "/?source=sim&theme=real&art=5d",
+      "waitMs": 2200,
+      "after": "hillinkWorld.shot(\"street\"); true",
+      "expect": "hillinkWorld.theme.art === '5d'"
+    },
+    {
+      "name": "06-corner-structure",
+      "path": "/?source=sim&theme=real&art=5d",
+      "waitMs": 2200,
+      "after": "hillinkWorld.shot(\"corner\"); true",
+      "expect": "hillinkWorld.theme.art === '5d'"
+    },
+    {
+      "name": "07-characters-closeup",
+      "path": "/?source=sim&theme=real&art=5d",
+      "waitMs": 2500,
+      "after": "(() => { const e = hillinkWorld.scene.get(\"agent:claude\"); hillinkWorld.camera.focusPoint(e.x, e.y - 30, { zoom: 3.8, duration: 0 }); return true; })()",
+      "expect": "hillinkWorld.theme.art === '5d'"
+    },
+    {
+      "name": "08-seed-alpha-overview",
+      "base": "http://127.0.0.1:4336",
+      "path": "/?source=sim&theme=real&art=5d",
+      "waitMs": 2500,
+      "after": "hillinkWorld.shot(\"overview\"); true",
+      "expect": "hillinkWorld.theme.art === '5d' && hillinkWorld.worldInfo.seed === \"alpha\"",
+      "note": "\"seed \" + hillinkWorld.worldInfo.seed"
+    },
+    {
+      "name": "09-for-comparison-pass5c-art",
+      "path": "/?source=sim&theme=real",
+      "waitMs": 2200,
+      "after": "hillinkWorld.shot(\"overview\"); true",
+      "expect": "!hillinkWorld.theme.art"
+    }
+  ]
+}

@@ -9,6 +9,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { WslSandbox, INSTANCE_PREFIX, checkPatch } from '../sandbox.mjs';
+import { newRunKey } from '../test-verdict.mjs';
 
 const FAKE_KEY = ['sk', 'ant', 'fake'].join('-') + '-' + 'H'.repeat(48); // not a real key
 const sbx = new WslSandbox({ home: process.env.HQ_SANDBOX_HOME || undefined });
@@ -155,7 +156,10 @@ async function main() {
     check('patch contains only task-tree changes', touched.length > 0 && touched.every(p => p.startsWith('sandbox/hq-implementation/')), touched.join(','));
     check('patch does not contain the key', !patch.includes(FAKE_KEY));
     check('key deleted after Claude', (await root('test -e /run/hq/anthropic.key && echo present || echo gone')).stdout.trim() === 'gone');
-    const t = await sbx.exec(name, 'hq-test.sh', ['sandbox/hq-implementation/hostile.test.mjs'], { timeoutMs: 120_000 }).catch(e => ({ stdout: e.stdout ?? '' }));
+    const runKey = newRunKey();
+    const t = await sbx.exec(name, 'hq-test.sh', ['sandbox/hq-implementation/hostile.test.mjs'], { input: `${runKey}\n`, timeoutMs: 120_000 }).catch(e => ({ stdout: e.stdout ?? '' }));
+    check('HQ runner issued an authenticated result', /^HQ-RESULT \{.*\} [0-9a-f]{64}$/m.test(t.stdout), t.stdout.slice(-200));
+    check('test output cannot reveal the run key', !t.stdout.includes(runKey));
     const line = t.stdout.split('\n').find(l => l.includes('HQTEST '));
     const r = line ? JSON.parse(line.slice(line.indexOf('HQTEST ') + 7)) : {};
     fs.writeFileSync(path.join(os.tmpdir(), 'hq-attack-test.json'), JSON.stringify(r, null, 2));

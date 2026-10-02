@@ -44,3 +44,16 @@ Codex addressed Claude's PR #31 review: local cancellation now escalates SIGTERM
 ## HQ blocking-review fixes — 2026-09-29
 
 Merged main 4623c54 into the HQ branch, preserving both decision-log sections. Addressed B1/B2 with diagnosed terminal-failure recovery and queued capacity retries; B3 with measured monotonic test progress and completed-but-failing verification evidence; N2 with persisted 60-second quarantine. HQ suite: 41 tests passing. Merged repository: 71 unit tests, 66-route auth scan, TypeScript and production build (89 generated pages) passed. Final independent review remains required; no merge to main or DB action performed here.
+
+## 2026-10-01: HQ/World consolidation (Claude)
+
+**Development baseline:** `claude/dev-baseline`, created from `claude/world-5h` @ `52d1516`. It contains every HQ and World branch, including HQ Pass 4.5 (`505971f`). Draft tracking PR to `main`; not for merging without Kyle.
+
+This pass adds three things:
+- **Configurable implementation base.** `HQ_IMPL_BASE=origin/<branch>`. The default is still `origin/main`. An invalid or unresolvable value disables implementation.
+- **Node ≥24 enforcement.** It covers HQ start, the Linux sandbox's Node, and the guest test controller and child. The per-file test process counts only passes attributed to the launched file, so an empty acceptance file is never green on any Node version.
+- **Art status.** `docs/world/ART_STATUS.md`: the current 5H art is EXPERIMENTAL and NOT STYLE-LOCKED.
+
+**Superseded by this branch:** draft PRs #31, #33, #37, #38 (stacked HQ) and #35 (world-engine). #34 is obsolete. None of them were closed by Claude.
+
+**WSL users:** the guest scripts changed, so rebuild the WSL base image with `node tools/hillink-hq/sandbox/build-base.mjs`.

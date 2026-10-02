@@ -13,6 +13,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { TOOL_DEFINITIONS, createToolbox } from './orchestrator-tools.mjs';
+import { redeemGrant } from './compute/policy.mjs';
 
 const API = 'https://api.openai.com/v1';
 export const DEFAULT_MODEL = 'gpt-6.1-sol'; // OpenAI's balance of capability and cost (docs, 2026-09); OPENAI_ORCHESTRATOR_MODEL overrides.
@@ -55,12 +56,12 @@ export async function readStream(r, { onCreated, onEvent }) {
 const textOf = output => output.filter(i => i.type === 'message').flatMap(i => i.content ?? []).filter(c => c.type === 'output_text' && typeof c.text === 'string').map(c => c.text).join('\n').trim();
 
 export class OrchestratorAdapter {
-  constructor(engine, { apiKey, model = DEFAULT_MODEL, request = fetch, stateFile = null, instructions = null, now = Date.now, pulseMs = 5000, conductor = null } = {}) {
+  constructor(engine, { apiKey, model = DEFAULT_MODEL, request = fetch, stateFile = null, instructions = null, now = Date.now, pulseMs = 5000 } = {}) {
     if (!apiKey) throw Error('OpenAI runtime not configured');
     // The key lives only in this closure; it is not a property anyone can serialize.
     const key = apiKey;
     this.call = (method, route, body, signal) => request(`${API}${route}`, { method, signal, redirect: 'error', headers: { Authorization: `Bearer ${key}`, ...(body ? { 'Content-Type': 'application/json' } : {}) }, body: body ? JSON.stringify(body) : undefined });
-    Object.assign(this, { engine, model, stateFile, now, pulseMs, conductor, remote: true, runs: new Map(), healthCache: null });
+    Object.assign(this, { engine, model, stateFile, now, pulseMs, remote: true, runs: new Map(), healthCache: null });
     this.instructions = instructions ?? fs.readFileSync(INSTRUCTIONS_FILE, 'utf8');
   }
   // Connection health: can this key see the configured model? Cached; a failure says why, never the key.
@@ -91,8 +92,10 @@ export class OrchestratorAdapter {
     if (this.stateFile) { try { fs.mkdirSync(path.dirname(this.stateFile), { recursive: true }); fs.writeFileSync(this.stateFile, JSON.stringify({ conversationId: body.id, model: this.model, createdAt: new Date(this.now()).toISOString() }, null, 2)); } catch { /* context is a convenience */ } }
     return body.id;
   }
-  async start({ task, runId, emit }) {
+  async start({ task, runId, emit, compute }) {
     if (task.operation !== 'orchestrate' || task.safety !== 'local-read-only') throw Error('Orchestrator adapter accepts orchestration requests only');
+    // Pass 4: every turn is a metered OpenAI request. No engine-issued grant (backed by a Kyle authorization) = no request.
+    redeemGrant(compute, { taskId: task.id, runId });
     if (this.runs.size) throw Error('Orchestrator already has an unresolved request');
     const entry = { abort: new AbortController(), inFlight: false, done: false };
     this.runs.set(runId, entry);
@@ -112,7 +115,7 @@ export class OrchestratorAdapter {
   }
   async execute(task, runId, entry, emit) {
     const started = this.now(), signal = () => AbortSignal.any([entry.abort.signal, AbortSignal.timeout(LIMITS.requestTimeoutMs)]);
-    const toolbox = createToolbox(this.engine, { taskId: task.id, now: this.now, conductor: this.conductor });
+    const toolbox = createToolbox(this.engine, { taskId: task.id, now: this.now });
     const usage = { inputTokens: 0, outputTokens: 0, rounds: 0, toolCalls: 0 };
     const conversation = await this.conversation(signal());
     let input = [{ role: 'user', content: task.description }];
@@ -160,7 +163,7 @@ export class OrchestratorAdapter {
 }
 
 // Connects ChatGPT to HQ when a key is configured; otherwise records why it is not connected.
-export function connectOrchestrator(engine, { env = process.env, request = fetch, stateDir = null, conductor = null } = {}) {
+export function connectOrchestrator(engine, { env = process.env, request = fetch, stateDir = null } = {}) {
   const agent = engine.state.agents.chatgpt;
   if (!agent) return 'UNAVAILABLE: no chatgpt agent';
   if (!env.OPENAI_API_KEY) {
@@ -170,7 +173,7 @@ export function connectOrchestrator(engine, { env = process.env, request = fetch
   }
   if (agent.assignment) return 'UNAVAILABLE: chatgpt has an unresolved run';
   const model = env.OPENAI_ORCHESTRATOR_MODEL || DEFAULT_MODEL;
-  engine.adapters['openai-orchestrator'] = new OrchestratorAdapter(engine, { apiKey: env.OPENAI_API_KEY, model, request, now: () => engine.now(), conductor, stateFile: stateDir ? path.join(stateDir, 'orchestrator.json') : null });
+  engine.adapters['openai-orchestrator'] = new OrchestratorAdapter(engine, { apiKey: env.OPENAI_API_KEY, model, request, now: () => engine.now(), stateFile: stateDir ? path.join(stateDir, 'orchestrator.json') : null });
   engine.configureAgent('chatgpt', { model, capabilities: [...new Set([...agent.capabilities, 'coordinate'])], executionAdapter: 'openai-orchestrator', telemetryAdapter: 'openai-responses', usageSource: 'openai-responses', ackTimeoutMs: 90_000 });
   return 'CONFIGURED';
 }

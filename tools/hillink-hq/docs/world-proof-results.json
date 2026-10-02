@@ -1,0 +1,655 @@
+{
+  "startedAt": "2026-10-01T05:50:36.598Z",
+  "machine": {
+    "platform": "linux",
+    "node": "v24.21.0",
+    "claude": "2.1.286 (Claude Code)"
+  },
+  "base": {
+    "ref": "origin/claude/dev-baseline",
+    "commit": "7432f5f4be8df535c00674fd5c7ce4e57325bbc8",
+    "originMain": "4623c54bf11b1e6b5b2898d383c3f6e72a161771"
+  },
+  "health": {
+    "controller": "ONLINE",
+    "lastError": null,
+    "externalNotifications": "UNCONFIGURED",
+    "ollama": "DISABLED",
+    "cliAgents": "CONFIGURED",
+    "orchestrator": "DISABLED",
+    "implementation": "CONFIGURED",
+    "implementationRoutes": {
+      "base": {
+        "ref": "origin/claude/dev-baseline",
+        "commit": "7432f5f4be8df535c00674fd5c7ce4e57325bbc8",
+        "source": "HQ_IMPL_BASE"
+      },
+      "subscriptionSplitBroker": "READY",
+      "apiKeySandbox": "AVAILABLE (METERED: BUDGETED mode + Kyle authorization only)"
+    },
+    "localOnly": true,
+    "computeMode": "ZERO_CREDIT",
+    "meteredCredentialsPresent": {
+      "OPENAI_API_KEY": true,
+      "ANTHROPIC_API_KEY": true,
+      "HQ_SANDBOX_ANTHROPIC_API_KEY": true,
+      "CODEX_API_KEY": true,
+      "ANTHROPIC_AUTH_TOKEN": false
+    }
+  },
+  "objectiveSubmitted": {
+    "type": "implement",
+    "title": "World: agent name initials helper",
+    "objective": "Add a tiny pure helper tools/hillink-world/core/initials.mjs exporting initials(name) that returns the uppercase first letter of each whitespace-separated word, at most 2 letters (initials(\"hillink world\") === \"HW\", initials(\"claude\") === \"C\", initials(\"  \") === \"\"), with a node:test file tools/hillink-world/tests/initials.test.mjs that imports it from ../core/initials.mjs.",
+    "scope": [
+      "tools/hillink-world/core/initials.mjs",
+      "tools/hillink-world/tests/initials.test.mjs"
+    ],
+    "tests": [
+      "tools/hillink-world/tests/initials.test.mjs"
+    ],
+    "acceptanceCriteria": "initials(\"hillink world\") is \"HW\", initials(\"claude\") is \"C\", initials(\"a b c\") is \"AB\", initials(\"  \") is \"\", and the test file passes.",
+    "constraints": "Only these two new files. No dependencies. Do not modify any existing file."
+  },
+  "submittedAt": "2026-10-01T05:50:36.936Z",
+  "submitResponse": {
+    "id": "80bc35bf-a9af-4a71-b3ee-cda159bb5900",
+    "status": null,
+    "error": null
+  },
+  "finishedAt": "2026-10-01T05:51:24.529Z",
+  "objective": {
+    "id": "80bc35bf-a9af-4a71-b3ee-cda159bb5900",
+    "status": "COMPLETE",
+    "reason": "Verified, reviewed, committed locally. Not merged: Kyle decides.",
+    "plan": {
+      "version": 1,
+      "objective": "Add a tiny pure helper tools/hillink-world/core/initials.mjs exporting initials(name) that returns the uppercase first letter of each whitespace-separated word, at most 2 letters (initials(\"hillink world\") === \"HW\", initials(\"claude\") === \"C\", initials(\"  \") === \"\"), with a node:test file tools/hillink-world/tests/initials.test.mjs that imports it from ../core/initials.mjs.",
+      "taskType": "implement",
+      "affectedSystem": "unspecified",
+      "permittedScope": [
+        "tools/hillink-world/core/initials.mjs",
+        "tools/hillink-world/tests/initials.test.mjs"
+      ],
+      "tests": [
+        "tools/hillink-world/tests/initials.test.mjs"
+      ],
+      "risk": "low",
+      "riskReasons": [
+        "scope is limited to low-risk areas (sandbox, docs, World, tests)"
+      ],
+      "gates": [],
+      "preWorkGates": [],
+      "postWorkGates": [],
+      "agentsNeeded": [
+        "implementer",
+        "hq",
+        "reviewer"
+      ],
+      "expectedPath": [
+        "implement",
+        "verify (HQ)",
+        "review (independent)"
+      ],
+      "implementationEligible": "yes: a complete contract was submitted",
+      "reviewRule": {
+        "required": true,
+        "independentProvider": false,
+        "preferred": "codex"
+      },
+      "verification": [
+        "HQ-run tests inside the sandbox must pass",
+        "HQ verifies the commit, scope and test evidence from git",
+        "review by a read-only reviewer other than the implementing session"
+      ],
+      "completionCriteria": [
+        "an accepted investigation (fix) or a submitted contract (implement)",
+        "a verified local commit on an hq/impl branch",
+        "an approving review, or a recorded decision on a disagreement"
+      ],
+      "steps": [
+        {
+          "id": "implement-mup488dj-1",
+          "kind": "implement",
+          "role": "implementer",
+          "dependsOn": [],
+          "contract": {
+            "objective": "Add a tiny pure helper tools/hillink-world/core/initials.mjs exporting initials(name) that returns the uppercase first letter of each whitespace-separated word, at most 2 letters (initials(\"hillink world\") === \"HW\", initials(\"claude\") === \"C\", initials(\"  \") === \"\"), with a node:test file tools/hillink-world/tests/initials.test.mjs that imports it from ../core/initials.mjs.",
+            "scope": [
+              "tools/hillink-world/core/initials.mjs",
+              "tools/hillink-world/tests/initials.test.mjs"
+            ],
+            "tests": [
+              "tools/hillink-world/tests/initials.test.mjs"
+            ],
+            "acceptanceCriteria": "initials(\"hillink world\") is \"HW\", initials(\"claude\") is \"C\", initials(\"a b c\") is \"AB\", initials(\"  \") is \"\", and the test file passes.",
+            "constraints": "Only these two new files. No dependencies. Do not modify any existing file."
+          },
+          "repair": null,
+          "requiredEvidence": "HQ evidence from the sandboxed runner: git's changed files inside scope, HQ-run tests passing, a local commit on the task branch, the sandbox destroyed."
+        },
+        {
+          "id": "verify-mup488dj-2",
+          "kind": "verify",
+          "role": "hq",
+          "dependsOn": [
+            "implement-mup488dj-1"
+          ],
+          "requiredEvidence": "HQ's own deterministic checks of the commit against git and the runner evidence."
+        },
+        {
+          "id": "review-mup488dj-3",
+          "kind": "review",
+          "role": "reviewer",
+          "dependsOn": [
+            "verify-mup488dj-2"
+          ],
+          "reviewRule": {
+            "required": true,
+            "independentProvider": false,
+            "preferred": "codex"
+          },
+          "requireAgent": null,
+          "requiredEvidence": "A validated review handoff from a reviewer who is not the implementer: verdict, findings with severity, regression risks, recommendation."
+        }
+      ],
+      "compute": {
+        "mode": "ZERO_CREDIT",
+        "steps": [
+          {
+            "kind": "implement",
+            "agentId": "claude",
+            "computeClass": "SUBSCRIPTION",
+            "provider": "anthropic",
+            "backend": "Claude Code on the host (subscription, HQ broker tools only); files and tests inside a disposable sandbox"
+          },
+          {
+            "kind": "verify",
+            "computeClass": "LOCAL",
+            "provider": "local",
+            "backend": "HQ deterministic checks"
+          },
+          {
+            "kind": "review",
+            "agentId": "codex",
+            "computeClass": "SUBSCRIPTION",
+            "provider": "openai",
+            "backend": "Codex CLI, read-only sandbox"
+          }
+        ],
+        "meteredComputeRequired": false,
+        "expectedMeteredSpendUsd": 0,
+        "spendGate": "None: every step runs on local or already-paid subscription compute ($0 metered)."
+      }
+    },
+    "result": {
+      "outcome": "complete",
+      "reason": "Verified, reviewed, committed locally. Not merged: Kyle decides.",
+      "investigation": null,
+      "review": {
+        "stepId": "review-mup488dj-3",
+        "agentId": "claude",
+        "handoff": {
+          "kind": "review",
+          "verdict": "approve",
+          "findings": [
+            {
+              "severity": "info",
+              "detail": "Implementation meets all three acceptance cases and caps at 2 words via slice(0, 2); filter(Boolean) handles leading/trailing/repeated whitespace; String(name ?? \"\") handles null/undefined; Array.from handles 4-byte (surrogate-pair) first characters.",
+              "file": "tools/hillink-world/core/initials.mjs",
+              "evidence": "diff lines 1-8: split(/\\s+/).filter(Boolean).slice(0, 2).map((w) => Array.from(w)[0].toUpperCase()).join(\"\")"
+            },
+            {
+              "severity": "info",
+              "detail": "Test follows the existing node:test / node:assert/strict / relative ../core import pattern and covers the three required cases plus a 3-word cap case.",
+              "file": "tools/hillink-world/tests/initials.test.mjs",
+              "evidence": "tools/hillink-world/tests/truth.test.mjs:2-4 uses the same import pattern"
+            },
+            {
+              "severity": "low",
+              "detail": "Style nit: new files use double quotes while existing tests use single quotes.",
+              "file": "tools/hillink-world/tests/initials.test.mjs",
+              "evidence": "tools/hillink-world/tests/truth.test.mjs:2 uses 'node:test'"
+            },
+            {
+              "severity": "info",
+              "detail": "Edge case: toUpperCase can turn one letter into two (e.g. 'ß' becomes 'SS'), so the result can exceed 2 characters even though it comes from at most 2 words. Not covered by the objective.",
+              "file": "tools/hillink-world/core/initials.mjs",
+              "evidence": null
+            }
+          ],
+          "regressionRisks": [
+            "Negligible: only two new files were added, neither exists at the base, and nothing else references initials."
+          ],
+          "recommendation": "Approve and merge. Optionally switch the new files to single quotes to match the existing tests."
+        }
+      },
+      "verification": {
+        "kind": "verification",
+        "source": "hq",
+        "ok": true,
+        "checks": [
+          {
+            "name": "handoff built by HQ from its own evidence",
+            "ok": true,
+            "detail": "hq-evidence"
+          },
+          {
+            "name": "commit id is a full hex sha",
+            "ok": true,
+            "detail": "bece62c21ed9d267cac644d64b16901fc879a1f8"
+          },
+          {
+            "name": "commit exists and is the head of the task branch",
+            "ok": true,
+            "detail": "hq/impl/e73d1b60-252a57 -> bece62c21ed9d267cac644d64b16901fc879a1f8"
+          },
+          {
+            "name": "commit sits directly on the recorded base",
+            "ok": true,
+            "detail": "parent 7432f5f4be8df535c00674fd5c7ce4e57325bbc8, base 7432f5f4be8df535c00674fd5c7ce4e57325bbc8"
+          },
+          {
+            "name": "commit is the one HQ reported (COMMIT evidence)",
+            "ok": true,
+            "detail": "bece62c21ed9d267cac644d64b16901fc879a1f8"
+          },
+          {
+            "name": "commit message carries this task id",
+            "ok": true,
+            "detail": "HQ-Task trailer"
+          },
+          {
+            "name": "every changed file is inside the approved scope",
+            "ok": true,
+            "detail": "tools/hillink-world/core/initials.mjs, tools/hillink-world/tests/initials.test.mjs"
+          },
+          {
+            "name": "git's changed files match the runner's evidence",
+            "ok": true,
+            "detail": "2 vs 2"
+          },
+          {
+            "name": "every acceptance test file is in the committed tree",
+            "ok": true,
+            "detail": "tools/hillink-world/tests/initials.test.mjs"
+          },
+          {
+            "name": "HQ ran the tests (TEST_STARTED then TEST_RESULT from the runner)",
+            "ok": true,
+            "detail": "1 passed; 0 failed."
+          },
+          {
+            "name": "tests passed with at least one test and none failing",
+            "ok": true,
+            "detail": "1 passed, 0 failed"
+          },
+          {
+            "name": "the sandbox was confirmed destroyed",
+            "ok": true,
+            "detail": "hq-sbx-e73d1b60-252a57"
+          }
+        ],
+        "diff": "bece62c21ed9d267cac644d64b16901fc879a1f8\nHQ implementation e73d1b60: Add a tiny pure helper tools/hillink-world/core/initials.mjs exporting i\n\ndiff --git a/tools/hillink-world/core/initials.mjs b/tools/hillink-world/core/initials.mjs\nnew file mode 100644\nindex 0000000..69db203\n--- /dev/null\n+++ b/tools/hillink-world/core/initials.mjs\n@@ -0,0 +1,8 @@\n+export function initials(name) {\n+  return String(name ?? \"\")\n+    .split(/\\s+/)\n+    .filter(Boolean)\n+    .slice(0, 2)\n+    .map((w) => Array.from(w)[0].toUpperCase())\n+    .join(\"\");\n+}\ndiff --git a/tools/hillink-world/tests/initials.test.mjs b/tools/hillink-world/tests/initials.test.mjs\nnew file mode 100644\nindex 0000000..f39acc6\n--- /dev/null\n+++ b/tools/hillink-world/tests/initials.test.mjs\n@@ -0,0 +1,10 @@\n+import test from \"node:test\";\n+import assert from \"node:assert/strict\";\n+import { initials } from \"../core/initials.mjs\";\n+\n+test(\"initials\", () => {\n+  assert.equal(initials(\"hillink world\"), \"HW\");\n+  assert.equal(initials(\"claude\"), \"C\");\n+  assert.equal(initials(\"a b c\"), \"AB\");\n+  assert.equal(initials(\"  \"), \"\");\n+});\n"
+      },
+      "branch": "hq/impl/e73d1b60-252a57",
+      "commit": "bece62c21ed9d267cac644d64b16901fc879a1f8",
+      "files": [
+        "tools/hillink-world/core/initials.mjs",
+        "tools/hillink-world/tests/initials.test.mjs"
+      ],
+      "spentUsd": 0,
+      "disagreement": null,
+      "steps": [
+        {
+          "id": "implement-mup488dj-1",
+          "kind": "implement",
+          "status": "DONE",
+          "agentId": "claude",
+          "attempts": 1,
+          "retries": 0
+        },
+        {
+          "id": "verify-mup488dj-2",
+          "kind": "verify",
+          "status": "DONE",
+          "agentId": "hq",
+          "attempts": 1,
+          "retries": 0
+        },
+        {
+          "id": "review-mup488dj-3",
+          "kind": "review",
+          "status": "DONE",
+          "agentId": "claude",
+          "attempts": 1,
+          "retries": 0
+        }
+      ],
+      "at": 1790833884138
+    },
+    "decisions": []
+  },
+  "steps": [
+    {
+      "kind": "implement",
+      "status": "DONE",
+      "agentId": "claude",
+      "taskStage": "DONE",
+      "operation": "implement-repo",
+      "computeClass": "SUBSCRIPTION",
+      "variant": "split-broker",
+      "routeId": "claude-subscription-implementation",
+      "meteredCostUsd": 0,
+      "evidence": [
+        "ACK: HQ implementation runner started run 252a577e (sandbox hq-sbx-e73d1b60-252a57).",
+        "PROGRESS: Sandbox hq-sbx-e73d1b60-252a57 created (split broker: no credential inside).",
+        "PROGRESS: Claude Code about to start on the host.",
+        "PROGRESS: Claude Code starting on the host with Kyle's subscription and HQ broker tools only (no shell, no file or web tools).",
+        "PROGRESS: Claude Code process started on the host (pid 11962).",
+        "MODEL_OUTPUT: Claude Code session started with tools: mcp__hq__repo_changes, mcp__hq__repo_edit, mcp__hq__repo_list, mcp__hq__repo_read, mcp__hq__repo_search, mcp__hq__repo_write, mcp__hq__run_tests (subscription sign-in). Broker session dbaf3649.",
+        "MODEL_OUTPUT: Claude step 1: used mcp__hq__repo_write.",
+        "MODEL_OUTPUT: Claude step 2: used mcp__hq__repo_write.",
+        "MODEL_OUTPUT: Claude step 3: used mcp__hq__run_tests.",
+        "MODEL_OUTPUT: Claude step 4: wrote a response.",
+        "MODEL_RESULT: I added the `initials(name)` helper and its test file. The test passes when run in the sandbox (1 passed, 0 failed).\n\n- **`tools/hillink-world/core/initials.mjs`:** `initials(name)` splits on whitespace, takes the first letter of each word, uppercases it, and keeps at most 2 letters.\n- **`tools/hill",
+        "USAGE: Counters reported by Claude Code. Subscription credits remaining are UNKNOWN; reported cost is the CLI's own estimate.",
+        "FINDING: Changed 2 file(s): tools/hillink-world/core/initials.mjs, tools/hillink-world/tests/initials.test.mjs",
+        "TEST_STARTED: HQ running hq-test-runner (node --frozen-intrinsics --permission, read-only tree; authenticated result) tools/hillink-world/tests/initials.test.mjs inside sandbox hq-sbx-e73d1b60-252a57 (no network, no key, read-only tree, separate user).",
+        "TEST_RESULT: 1 passed; 0 failed.",
+        "COMMIT: Committed bece62c21e on hq/impl/e73d1b60-252a57 (local only: not pushed, not merged).",
+        "PROGRESS: Sandbox hq-sbx-e73d1b60-252a57 destroyed.",
+        "COMPLETED: Implementation committed on hq/impl/e73d1b60-252a57 (bece62c21e); acceptance tests passed (1/1). Not merged: Kyle decides."
+      ]
+    },
+    {
+      "kind": "verify",
+      "status": "DONE",
+      "agentId": "hq",
+      "taskStage": null,
+      "operation": null,
+      "computeClass": null,
+      "variant": null,
+      "routeId": null,
+      "meteredCostUsd": 0,
+      "evidence": []
+    },
+    {
+      "kind": "review",
+      "status": "DONE",
+      "agentId": "claude",
+      "taskStage": "DONE",
+      "operation": "review-repo",
+      "computeClass": "SUBSCRIPTION",
+      "variant": "default",
+      "routeId": null,
+      "meteredCostUsd": 0,
+      "evidence": [
+        "ACK: Claude Code session started with tools: Glob, Grep, Read (subscription sign-in).",
+        "MODEL_OUTPUT: Claude step 1: wrote a response.",
+        "MODEL_OUTPUT: Claude step 2: used Glob.",
+        "MODEL_OUTPUT: Claude step 3: used Glob.",
+        "MODEL_OUTPUT: Claude step 4: wrote a response.",
+        "MODEL_OUTPUT: Claude step 5: used Grep.",
+        "MODEL_OUTPUT: Claude step 6: wrote a response.",
+        "MODEL_OUTPUT: Claude step 7: wrote a response.",
+        "MODEL_RESULT: I recommend approving this change. It meets the objective and I found no blocking issues. I read the diff HQ quoted and the base checkout (`claude/dev-baseline`). I did not check out the task branch or re-run its tests.\n\n**Correctness, worked through by hand:**\n- `initials(\"hillink world\")`: splitti",
+        "USAGE: Counters reported by Claude Code. Subscription credits remaining are UNKNOWN; reported cost is the CLI's own estimate.",
+        "COMPLETED: Claude Code finished the review. The answer is model output, not verified implementation."
+      ]
+    }
+  ],
+  "broker": {
+    "events": [
+      "BROKER_CREATED",
+      "SUBSCRIPTION_IMPLEMENTER_STARTED",
+      "BROKER_WRITE_REQUESTED",
+      "BROKER_WRITE_ALLOWED",
+      "SANDBOX_TEST_STARTED",
+      "SANDBOX_TEST_COMPLETED",
+      "SUBSCRIPTION_IMPLEMENTATION_COMPLETED",
+      "BROKER_CLOSED"
+    ],
+    "allowedWrites": [
+      "tools/hillink-world/core/initials.mjs",
+      "tools/hillink-world/tests/initials.test.mjs"
+    ],
+    "refusals": [],
+    "testRuns": 1
+  },
+  "implementationWhere": {
+    "repository": "Hillink/Hillink",
+    "branch": "hq/impl/e73d1b60-252a57",
+    "base": "7432f5f4be8df535c00674fd5c7ce4e57325bbc8",
+    "baseRef": "origin/claude/dev-baseline",
+    "worktree": "/tmp/hq-world-proof-HpiAp0/worktrees/e73d1b60-252a57",
+    "commit": "bece62c21ed9d267cac644d64b16901fc879a1f8",
+    "files": [
+      "tools/hillink-world/core/initials.mjs",
+      "tools/hillink-world/tests/initials.test.mjs"
+    ],
+    "patchHash": "6b5f375780a7c573383813d7e0890aca20d202638f57ed7529bb8972cad70afc",
+    "tests": {
+      "files": [
+        "tools/hillink-world/tests/initials.test.mjs"
+      ],
+      "passed": 1,
+      "failed": 0
+    }
+  },
+  "journal": [
+    {
+      "at": 1790833836942,
+      "type": "OBJECTIVE_CREATED",
+      "summary": ""
+    },
+    {
+      "at": 1790833837156,
+      "type": "OBJECTIVE_TRANSITION",
+      "summary": ""
+    },
+    {
+      "at": 1790833837175,
+      "type": "OBJECTIVE_PLANNED",
+      "summary": ""
+    },
+    {
+      "at": 1790833837176,
+      "type": "OBJECTIVE_TRANSITION",
+      "summary": ""
+    },
+    {
+      "at": 1790833837445,
+      "type": "TASK_CREATED",
+      "summary": ""
+    },
+    {
+      "at": 1790833860770,
+      "type": "WORKER_EVENT",
+      "summary": "Committed bece62c21e on hq/impl/e73d1b60-252a57 (local only: not pushed, not merged)."
+    },
+    {
+      "at": 1790833860981,
+      "type": "WORKER_EVENT",
+      "summary": "Implementation committed on hq/impl/e73d1b60-252a57 (bece62c21e); acceptance tests passed (1/1). Not merged: Kyle decides."
+    },
+    {
+      "at": 1790833860984,
+      "type": "HANDOFF_ACCEPTED",
+      "summary": ""
+    },
+    {
+      "at": 1790833860985,
+      "type": "STEP_TRANSITION",
+      "summary": ""
+    },
+    {
+      "at": 1790833860986,
+      "type": "OBJECTIVE_TRANSITION",
+      "summary": ""
+    },
+    {
+      "at": 1790833860987,
+      "type": "STEP_TRANSITION",
+      "summary": ""
+    },
+    {
+      "at": 1790833861045,
+      "type": "HANDOFF_ACCEPTED",
+      "summary": ""
+    },
+    {
+      "at": 1790833861046,
+      "type": "STEP_TRANSITION",
+      "summary": ""
+    },
+    {
+      "at": 1790833861300,
+      "type": "TASK_CREATED",
+      "summary": ""
+    },
+    {
+      "at": 1790833861304,
+      "type": "OBJECTIVE_TRANSITION",
+      "summary": ""
+    },
+    {
+      "at": 1790833884137,
+      "type": "HANDOFF_ACCEPTED",
+      "summary": ""
+    },
+    {
+      "at": 1790833884137,
+      "type": "STEP_TRANSITION",
+      "summary": ""
+    },
+    {
+      "at": 1790833884138,
+      "type": "OBJECTIVE_RESULT",
+      "summary": ""
+    },
+    {
+      "at": 1790833884139,
+      "type": "OBJECTIVE_TRANSITION",
+      "summary": ""
+    }
+  ],
+  "git": {
+    "branch": "hq/impl/e73d1b60-252a57",
+    "commit": "bece62c21ed9d267cac644d64b16901fc879a1f8",
+    "parent": "7432f5f4be8df535c00674fd5c7ce4e57325bbc8",
+    "parentIsDevBaseline": true,
+    "descendsFromDevBaseline": true,
+    "parentIsOriginMain": false,
+    "files": [
+      "A\ttools/hillink-world/core/initials.mjs",
+      "A\ttools/hillink-world/tests/initials.test.mjs"
+    ],
+    "message": "HQ implementation e73d1b60: Add a tiny pure helper tools/hillink-world/core/initials.mjs exporting i\n\nHQ-Task: e73d1b60-2528-4db8-b8fd-100c00014668\nRequested-By: kyle\nScope: tools/hillink-world/core/initials.mjs, tools/hillink-world/tests/initials.test.mjs\nVerified-By: HQ hq-test-runner (node --frozen-intrinsics --permission, read-only tree; authenticated result) tools/hillink-world/tests/initials.test.mjs (1 passed, 0 failed)\n\nCo-Authored-By: Claude Code <noreply@anthropic.com>",
+    "onRemote": "not on any remote branch",
+    "branchTip": "bece62c21ed9d267cac644d64b16901fc879a1f8",
+    "content": "diff --git a/tools/hillink-world/core/initials.mjs b/tools/hillink-world/core/initials.mjs\nnew file mode 100644\nindex 0000000..69db203\n--- /dev/null\n+++ b/tools/hillink-world/core/initials.mjs\n@@ -0,0 +1,8 @@\n+export function initials(name) {\n+  return String(name ?? \"\")\n+    .split(/\\s+/)\n+    .filter(Boolean)\n+    .slice(0, 2)\n+    .map((w) => Array.from(w)[0].toUpperCase())\n+    .join(\"\");\n+}\ndiff --git a/tools/hillink-world/tests/initials.test.mjs b/tools/hillink-world/tests/initials.test.mjs\nnew file mode 100644\nindex 0000000..f39acc6\n--- /dev/null\n+++ b/tools/hillink-world/tests/initials.test.mjs\n@@ -0,0 +1,10 @@\n+import test from \"node:test\";\n+import assert from \"node:assert/strict\";\n+import { initials } from \"../core/initials.mjs\";\n+\n+test(\"initials\", () => {\n+  assert.equal(initials(\"hillink world\"), \"HW\");\n+  assert.equal(initials(\"claude\"), \"C\");\n+  assert.equal(initials(\"a b c\"), \"AB\");\n+  assert.equal(initials(\"  \"), \"\");\n+});\n"
+  },
+  "worldActivity": [
+    "TASK_CREATED",
+    "PLANNING_STARTED",
+    "AGENT_ASSIGNED",
+    "COMPUTE_SELECTED",
+    "AGENT_STARTED",
+    "SUBSCRIPTION_AGENT_STARTED",
+    "IMPLEMENTATION_STARTED",
+    "SANDBOX_CREATED",
+    "AGENT_WORKING",
+    "FILE_EDITING",
+    "TESTING",
+    "TEST_RESULT",
+    "COMMIT",
+    "SANDBOX_DESTROYED",
+    "IMPLEMENTATION_FINISHED",
+    "AGENT_FINISHED",
+    "HANDOFF_RECEIVED",
+    "VERIFYING",
+    "REVIEWING",
+    "COMPLETE"
+  ],
+  "claudeSessions": [
+    {
+      "apiKeySource": "none",
+      "tools": [
+        "mcp__hq__repo_changes",
+        "mcp__hq__repo_edit",
+        "mcp__hq__repo_list",
+        "mcp__hq__repo_read",
+        "mcp__hq__repo_search",
+        "mcp__hq__repo_write",
+        "mcp__hq__run_tests"
+      ],
+      "mcp": [
+        "hq:connected"
+      ]
+    }
+  ],
+  "leaks": {
+    "journal": [],
+    "claudeStream": []
+  },
+  "ledger": {
+    "mode": "ZERO_CREDIT",
+    "meteredSpendToday": 0,
+    "meteredSpendThisMonth": 0,
+    "meteredSpendThisTask": null,
+    "unknownCostRunsToday": 0,
+    "meteredSpendUpperBoundToday": 0,
+    "meteredSpendUpperBoundThisMonth": 0,
+    "runsByClass": {
+      "LOCAL": 0,
+      "SUBSCRIPTION": 2,
+      "METERED_API": 0
+    },
+    "rows": [
+      {
+        "task": "e73d1b60-2528-4db8-b8fd-100c00014668",
+        "run": "252a577e-43e5-419d-9f71-7095a1335ceb",
+        "agent": "claude",
+        "model": null,
+        "backend": "Claude Code on the host (subscription, HQ broker tools only); files and tests inside a disposable sandbox",
+        "computeClass": "SUBSCRIPTION",
+        "provider": "anthropic",
+        "start": 1790833837714,
+        "end": 1790833860981,
+        "outcome": "COMPLETED",
+        "meteredCostUsd": 0,
+        "costKnown": true,
+        "spendAuthorized": false,
+        "authorizationId": null,
+        "reservedUsd": 0
+      },
+      {
+        "task": "257cfbbf-1563-44bf-943e-a547dddde283",
+        "run": "d118fd33-6049-4d57-adcc-6a3cc316d377",
+        "agent": "claude",
+        "model": null,
+        "backend": "Claude Code CLI on the host, read-only tools",
+        "computeClass": "SUBSCRIPTION",
+        "provider": "anthropic",
+        "start": 1790833861557,
+        "end": 1790833884110,
+        "outcome": "COMPLETED",
+        "meteredCostUsd": 0,
+        "costKnown": true,
+        "spendAuthorized": false,
+        "authorizationId": null,
+        "reservedUsd": 0
+      }
+    ],
+    "authorizations": []
+  },
+  "computeModeAfter": "ZERO_CREDIT",
+  "openAiRequests": 0,
+  "sandboxes": {
+    "created": 1,
+    "destroyed": 1
+  },
+  "sandboxLeftovers": [],
+  "manualStepsAfterSubmission": 0
+}

@@ -1,0 +1,183 @@
+{
+  "base": "http://127.0.0.1:4332",
+  "at": "2026-09-30T19:13:39.811Z",
+  "shots": [
+    {
+      "name": "01-zoomed-out-state-pips",
+      "path": "/?source=sim&theme=real&art=5d",
+      "world": {
+        "source": "generated",
+        "simulated": false,
+        "generator": "5a.1",
+        "seed": "hillink",
+        "schema": 1,
+        "fingerprint": "d205978be510b24b217f936fefb87454",
+        "historyLength": 1,
+        "layout": "generated",
+        "error": null
+      },
+      "note": null
+    },
+    {
+      "name": "02-working-at-desk-ring-and-screen",
+      "path": "/?source=sim&theme=real&art=5d",
+      "world": {
+        "source": "generated",
+        "simulated": false,
+        "generator": "5a.1",
+        "seed": "hillink",
+        "schema": 1,
+        "fingerprint": "d205978be510b24b217f936fefb87454",
+        "historyLength": 1,
+        "layout": "generated",
+        "error": null
+      },
+      "note": null
+    },
+    {
+      "name": "03-picking-up-task-at-board",
+      "path": "/?source=sim&theme=real&art=5d",
+      "world": {
+        "source": "generated",
+        "simulated": false,
+        "generator": "5a.1",
+        "seed": "hillink",
+        "schema": 1,
+        "fingerprint": "d205978be510b24b217f936fefb87454",
+        "historyLength": 1,
+        "layout": "generated",
+        "error": null
+      },
+      "note": null
+    },
+    {
+      "name": "04-carrying-task-to-desk",
+      "path": "/?source=sim&theme=real&art=5d",
+      "world": {
+        "source": "generated",
+        "simulated": false,
+        "generator": "5a.1",
+        "seed": "hillink",
+        "schema": 1,
+        "fingerprint": "d205978be510b24b217f936fefb87454",
+        "historyLength": 1,
+        "layout": "generated",
+        "error": null
+      },
+      "note": null
+    },
+    {
+      "name": "05-blocked-frustrated-red-screen",
+      "path": "/?source=sim&theme=real&art=5d",
+      "world": {
+        "source": "generated",
+        "simulated": false,
+        "generator": "5a.1",
+        "seed": "hillink",
+        "schema": 1,
+        "fingerprint": "d205978be510b24b217f936fefb87454",
+        "historyLength": 1,
+        "layout": "generated",
+        "error": null
+      },
+      "note": null
+    },
+    {
+      "name": "06-filing-finished-task-at-archive",
+      "path": "/?source=sim&theme=real&art=5d",
+      "world": {
+        "source": "generated",
+        "simulated": false,
+        "generator": "5a.1",
+        "seed": "hillink",
+        "schema": 1,
+        "fingerprint": "d205978be510b24b217f936fefb87454",
+        "historyLength": 1,
+        "layout": "generated",
+        "error": null
+      },
+      "note": null
+    },
+    {
+      "name": "07-idle-life-lounge",
+      "path": "/?source=sim&theme=real&art=5d",
+      "world": {
+        "source": "generated",
+        "simulated": false,
+        "generator": "5a.1",
+        "seed": "hillink",
+        "schema": 1,
+        "fingerprint": "d205978be510b24b217f936fefb87454",
+        "historyLength": 1,
+        "layout": "generated",
+        "error": null
+      },
+      "note": null
+    },
+    {
+      "name": "08-refit-structure-inside-room",
+      "path": "/?source=sim&theme=real&art=5d&demo=refit&step=6",
+      "world": {
+        "source": "generated",
+        "simulated": true,
+        "generator": "5a.1",
+        "seed": "hillink",
+        "schema": 1,
+        "fingerprint": "0089aa8d93abefe7fd2831456ac7a3a1",
+        "historyLength": 11,
+        "layout": "generated",
+        "error": null
+      },
+      "note": null
+    },
+    {
+      "name": "09-refit-blocked-barrier",
+      "path": "/?source=sim&theme=real&art=5d&demo=refit&step=5",
+      "world": {
+        "source": "generated",
+        "simulated": true,
+        "generator": "5a.1",
+        "seed": "hillink",
+        "schema": 1,
+        "fingerprint": "3eb704a5b0862800b9fad648157371e0",
+        "historyLength": 9,
+        "layout": "generated",
+        "error": null
+      },
+      "note": null
+    },
+    {
+      "name": "10-refit-inspection-furnished",
+      "path": "/?source=sim&theme=real&art=5d&demo=refit&step=14",
+      "world": {
+        "source": "generated",
+        "simulated": true,
+        "generator": "5a.1",
+        "seed": "hillink",
+        "schema": 1,
+        "fingerprint": "8b9c0ac085b5a2fedfcc353f89a393f7",
+        "historyLength": 19,
+        "layout": "generated",
+        "error": null
+      },
+      "note": null
+    },
+    {
+      "name": "11-room-identity-overview",
+      "path": "/?source=sim&theme=real&art=5d&play=office&shot=overview",
+      "world": {
+        "source": "generated",
+        "simulated": false,
+        "generator": "5a.1",
+        "seed": "hillink",
+        "schema": 1,
+        "fingerprint": "d205978be510b24b217f936fefb87454",
+        "historyLength": 1,
+        "layout": "generated",
+        "error": null
+      },
+      "note": null
+    }
+  ],
+  "failures": []
+}

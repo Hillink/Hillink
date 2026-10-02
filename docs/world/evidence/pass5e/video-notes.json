@@ -1,0 +1,103 @@
+{
+  "base": "http://127.0.0.1:4332",
+  "at": "2026-09-30T20:02:05.544Z",
+  "clips": [
+    {
+      "name": "A-claude-living-hq-lifecycle-after-migration",
+      "path": "/?source=sim&theme=real&art=5d",
+      "seconds": 79.64,
+      "frames": 2983,
+      "capturedFps": 37.5,
+      "world": {
+        "source": "generated",
+        "simulated": false,
+        "generator": "5a.1",
+        "seed": "hillink",
+        "schema": 1,
+        "fingerprint": "d205978be510b24b217f936fefb87454",
+        "historyLength": 1,
+        "layout": "generated",
+        "error": null
+      },
+      "note": null
+    },
+    {
+      "name": "B-D-unknown-agent-onboarding-then-working-DEV-HARNESS",
+      "path": "/?source=sim&theme=real&art=5d",
+      "seconds": 74.9,
+      "frames": 2629,
+      "capturedFps": 35.1,
+      "world": {
+        "source": "generated",
+        "simulated": false,
+        "generator": "5a.1",
+        "seed": "hillink",
+        "schema": 1,
+        "fingerprint": "d205978be510b24b217f936fefb87454",
+        "historyLength": 1,
+        "layout": "generated",
+        "error": null
+      },
+      "note": null
+    },
+    {
+      "name": "C-two-dynamic-agents-DEV-HARNESS",
+      "path": "/?source=sim&theme=real&art=5d",
+      "seconds": 44.83,
+      "frames": 1375,
+      "capturedFps": 30.7,
+      "world": {
+        "source": "generated",
+        "simulated": false,
+        "generator": "5a.1",
+        "seed": "hillink",
+        "schema": 1,
+        "fingerprint": "d205978be510b24b217f936fefb87454",
+        "historyLength": 1,
+        "layout": "generated",
+        "error": null
+      },
+      "note": null
+    },
+    {
+      "name": "D-provisioning-fails-DEV-HARNESS",
+      "path": "/?source=sim&theme=real&art=5d",
+      "seconds": 29.87,
+      "frames": 1042,
+      "capturedFps": 34.9,
+      "world": {
+        "source": "generated",
+        "simulated": false,
+        "generator": "5a.1",
+        "seed": "hillink",
+        "schema": 1,
+        "fingerprint": "d205978be510b24b217f936fefb87454",
+        "historyLength": 1,
+        "layout": "generated",
+        "error": null
+      },
+      "note": null
+    },
+    {
+      "name": "E-disable-dynamic-agent-world-stays-coherent-DEV-HARNESS",
+      "path": "/?source=sim&theme=real&art=5d",
+      "seconds": 74.94,
+      "frames": 2147,
+      "capturedFps": 28.7,
+      "world": {
+        "source": "generated",
+        "simulated": false,
+        "generator": "5a.1",
+        "seed": "hillink",
+        "schema": 1,
+        "fingerprint": "d205978be510b24b217f936fefb87454",
+        "historyLength": 1,
+        "layout": "generated",
+        "error": null
+      },
+      "note": null
+    }
+  ],
+  "failures": [],
+  "note": "Clip E was re-recorded separately (same spec, clips.json) after tightening its expectation; merged here."
+}

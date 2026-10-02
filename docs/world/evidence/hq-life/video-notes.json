@@ -1,0 +1,83 @@
+{
+  "base": "http://127.0.0.1:4332",
+  "at": "2026-09-30T19:20:20.181Z",
+  "clips": [
+    {
+      "name": "1-task-lifecycle-board-desk-archive",
+      "path": "/?source=sim&theme=real&art=5d",
+      "seconds": 79.97,
+      "frames": 2962,
+      "capturedFps": 37,
+      "world": {
+        "source": "generated",
+        "simulated": false,
+        "generator": "5a.1",
+        "seed": "hillink",
+        "schema": 1,
+        "fingerprint": "d205978be510b24b217f936fefb87454",
+        "historyLength": 1,
+        "layout": "generated",
+        "error": null
+      },
+      "note": null
+    },
+    {
+      "name": "2-blocked-task-frustrated-then-waiting",
+      "path": "/?source=sim&theme=real&art=5d",
+      "seconds": 59.99,
+      "frames": 2037,
+      "capturedFps": 34,
+      "world": {
+        "source": "generated",
+        "simulated": false,
+        "generator": "5a.1",
+        "seed": "hillink",
+        "schema": 1,
+        "fingerprint": "d205978be510b24b217f936fefb87454",
+        "historyLength": 1,
+        "layout": "generated",
+        "error": null
+      },
+      "note": null
+    },
+    {
+      "name": "3-idle-life-and-ambient",
+      "path": "/?source=sim&theme=real&art=5d",
+      "seconds": 39.96,
+      "frames": 1421,
+      "capturedFps": 35.6,
+      "world": {
+        "source": "generated",
+        "simulated": false,
+        "generator": "5a.1",
+        "seed": "hillink",
+        "schema": 1,
+        "fingerprint": "d205978be510b24b217f936fefb87454",
+        "historyLength": 1,
+        "layout": "generated",
+        "error": null
+      },
+      "note": null
+    },
+    {
+      "name": "4-refit-construction-inside-room",
+      "path": "/?source=sim&theme=real&art=5d&demo=refit&autoplay=5",
+      "seconds": 87.99,
+      "frames": 1927,
+      "capturedFps": 21.9,
+      "world": {
+        "source": "generated",
+        "simulated": true,
+        "generator": "5a.1",
+        "seed": "hillink",
+        "schema": 1,
+        "fingerprint": "3beede7a64e4598f7b34a03a0774565b",
+        "historyLength": 22,
+        "layout": "generated",
+        "error": null
+      },
+      "note": null
+    }
+  ],
+  "failures": []
+}

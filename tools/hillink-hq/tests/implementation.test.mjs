@@ -13,6 +13,7 @@ import { CliAgentAdapter, cliAgents } from '../cli-agent-adapter.mjs';
 import { ClaudeImplementer, ClaudeRouter, implementationArgs, changedFiles, testCounts } from '../implementation-runner.mjs';
 import { validateImplementation, checkPath, inScope } from '../implementation-policy.mjs';
 import { TOOL_NAMES, TOOL_DEFINITIONS, createToolbox } from '../orchestrator-tools.mjs';
+import { allowMetered, testGrant, subscriptionProbe } from './compute-helpers.mjs';
 
 const git = (cwd, ...args) => execFileSync('git', args, { cwd, encoding: 'utf8', windowsHide: true });
 function tempRepo() {
@@ -52,10 +53,12 @@ function setup({ files = GREETING, claude = {}, contract = CONTRACT, implementer
   const repo = tempRepo(), worktreeRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'hq-impl-wt-'));
   const fake = fakeClaude(files, claude);
   const review = new CliAgentAdapter(cliAgents.claude, { spawn: fake.spawn, env: { PATH: process.env.PATH }, cwd: repo, graceMs: 10 });
+  review.healthCache = { at: Date.now(), result: { status: 'IDLE', detail: 'fake Claude', auth: 'subscription' } }; // Pass 4: sign-in verified
   const implementer = new ClaudeImplementer({ repoRoot: repo, worktreeRoot, claudeBin: 'claude-test.exe', spawn: fake.spawn, env: { PATH: process.env.PATH, SystemRoot: process.env.SystemRoot, TEMP: os.tmpdir() }, pulseMs: 50, unsandboxed: true, ...opts });
   const engine = new Engine({ store: new MemoryStore(), adapters: { 'local-checks': { health: async () => ({ status: 'IDLE' }), start: async () => {}, cancel: async () => true }, 'cli-claude': new ClaudeRouter({ ...review, health: async () => ({ status: 'IDLE', detail: 'fake Claude' }), start: r => review.start(r), cancel: id => review.cancel(id), close: () => {} }, implementer) }, now: () => clock, config: { heartbeatMs: 600_000, progressMs: 600_000 } });
   engine.initialize();
   engine.configureAgent('claude', { capabilities: ['implement', 'review', 'review-repo', 'implement-repo'], executionAdapter: 'cli-claude' });
+  allowMetered(engine); // Pass 4: sandboxed implementation is metered; these tests run with Kyle's authorization
   const orchestration = () => engine.createTask({ title: 'Kyle asks ChatGPT', description: 'x', operation: 'review-repo', safety: 'local-read-only', priority: 10 });
   const done = async id => { for (let i = 0; i < 400; i++) { await new Promise(r => setTimeout(r, 25)); if (['DONE', 'BLOCKED'].includes(engine.state.tasks[id].stage)) return engine.state.tasks[id]; } throw Error(`task stuck at ${engine.state.tasks[id].stage}`); };
   return { engine, repo, worktreeRoot, fake, implementer, orchestration, done, contract, tick: () => engine.tick() };
@@ -114,8 +117,9 @@ test('7-9, 13. a valid implementation: one task, linked, real worktree branch, H
   assert.equal(run.command, 'claude-test.exe'); assert.equal(run.opts.shell, false, 'no shell between HQ and Claude');
   assert.match(run.opts.cwd, /hq-impl-wt-/, 'Claude worked in the task worktree');
   assert.match(run.child.stdin.written, /Scope \(the only paths you may create or change\):\n- sandbox\/hq-implementation\//);
-  const kinds = t.evidence.map(e => e.kind).filter(k => k !== 'HEARTBEAT');
-  assert.deepEqual(kinds, ['ACK', 'MODEL_OUTPUT', 'MODEL_RESULT', 'USAGE', 'FINDING', 'TEST_STARTED', 'TEST_RESULT', 'COMMIT', 'COMPLETED']);
+  const kinds = t.evidence.map(e => e.kind).filter(k => k !== 'HEARTBEAT' && k !== 'PROGRESS') // PROGRESS: quiet-phase markers, checked in the watchdog suites;
+  // Pass 3: HQ's runner acknowledges first (it is HQ code and has started); Claude's session start follows as output.
+  assert.deepEqual(kinds, ['ACK', 'MODEL_OUTPUT', 'MODEL_OUTPUT', 'MODEL_RESULT', 'USAGE', 'FINDING', 'TEST_STARTED', 'TEST_RESULT', 'COMMIT', 'COMPLETED']);
   const result = t.evidence.find(e => e.kind === 'COMPLETED').implementation;
   assert.match(result.branch, new RegExp(`^hq/impl/${id.slice(0, 8)}-[0-9a-f]{6}$`), 'a per-run branch');
   assert.deepEqual(result.files, ['sandbox/hq-implementation/greeting.mjs', 'sandbox/hq-implementation/greeting.test.mjs']);
@@ -132,7 +136,7 @@ test('14. failing acceptance tests are not success: BLOCKED, nothing committed',
   const s = setup({ files: broken }); await s.tick();
   const id = implTask(s); await s.tick();
   const t = await s.done(id);
-  assert.equal(t.stage, 'BLOCKED'); assert.match(t.blocker, /Acceptance tests failed \(0 passed, 1 failed\)/);
+  assert.equal(t.stage, 'BLOCKED'); assert.match(t.blocker, /Acceptance tests failed \(0 passed, 1 failed/);
   assert.equal(t.evidence.find(e => e.kind === 'TEST_RESULT').result, 'failed');
   assert.ok(!t.evidence.some(e => e.kind === 'COMMIT'));
   const branch = git(s.repo, 'branch', '--list', `hq/impl/${id.slice(0, 8)}-*`, '--format=%(refname:short)').trim();

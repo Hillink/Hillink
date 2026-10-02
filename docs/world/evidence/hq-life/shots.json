@@ -1,0 +1,109 @@
+{
+  "base": "http://127.0.0.1:4332",
+  "width": 1280,
+  "height": 800,
+  "shots": [
+    {
+      "name": "01-zoomed-out-state-pips",
+      "path": "/?source=sim&theme=real&art=5d",
+      "eval": "setTimeout(() => hillinkWorld.sim.run('claudeCodes'), 300); setTimeout(() => hillinkWorld.sim.run('codexTests'), 900); true",
+      "until": "hillinkWorld.scene.get('agent:claude')?.anim?.state === 'type'",
+      "untilMs": 60000,
+      "after": "{ const h = hillinkWorld.theme.layout.home; hillinkWorld.camera.focusPoint(h.x + h.w / 2, h.y + h.h / 2, { zoom: 0.8, duration: 0 }); } true",
+      "waitMs": 400,
+      "expect": "hillinkWorld.camera.zoom < 0.95"
+    },
+    {
+      "name": "02-working-at-desk-ring-and-screen",
+      "path": "/?source=sim&theme=real&art=5d",
+      "eval": "setTimeout(() => hillinkWorld.sim.run('claudeCodes'), 300); true",
+      "until": "hillinkWorld.scene.get('agent:claude')?.anim?.state === 'type'",
+      "untilMs": 60000,
+      "after": "hillinkWorld.shot('workspace'); true",
+      "waitMs": 1200,
+      "expect": "hillinkWorld.scene.get('agent:claude').anim.state === 'type' && !hillinkWorld.scene.get('agent:claude').carrying"
+    },
+    {
+      "name": "03-picking-up-task-at-board",
+      "path": "/?source=sim&theme=real&art=5d",
+      "eval": "setTimeout(() => hillinkWorld.sim.run('claudeCodes'), 300); true",
+      "until": "hillinkWorld.scene.get('agent:claude')?.anim?.state === 'pickup' && hillinkWorld.scene.get('agent:claude').journey?.kind === 'start'",
+      "untilMs": 60000,
+      "after": "{ const e = hillinkWorld.scene.get('agent:claude'); hillinkWorld.camera.focusPoint(e.x, e.y - e.h / 2, { zoom: 2.6, duration: 0 }); } true",
+      "waitMs": 150,
+      "expect": "hillinkWorld.scene.get('agent:claude').journey?.kind === 'start'"
+    },
+    {
+      "name": "04-carrying-task-to-desk",
+      "path": "/?source=sim&theme=real&art=5d",
+      "eval": "setTimeout(() => hillinkWorld.sim.run('claudeCodes'), 300); true",
+      "until": "{ const e = hillinkWorld.scene.get('agent:claude'); !!(e?.carrying && e.moving && !e.journey && e.agent.activity === 'coding') }",
+      "untilMs": 60000,
+      "after": "{ const e = hillinkWorld.scene.get('agent:claude'); hillinkWorld.camera.focusPoint(e.x, e.y - e.h / 2, { zoom: 2.6, duration: 0 }); } true",
+      "waitMs": 150,
+      "expect": "hillinkWorld.scene.get('agent:claude').carrying === true"
+    },
+    {
+      "name": "05-blocked-frustrated-red-screen",
+      "path": "/?source=sim&theme=real&art=5d",
+      "eval": "setTimeout(() => hillinkWorld.sim.run('claudeCodes'), 300); window.__blk = setInterval(() => { const e = hillinkWorld.scene.get('agent:claude'); if (e?.anim?.state === 'type' && !window.__blocked) { window.__blocked = true; setTimeout(() => hillinkWorld.sim.emit('TASK_BLOCKED', { taskId: hillinkWorld.store.world.agents.claude.taskId ?? e.agent.taskId, detail: 'Needs Kyle: production SQL approval (simulated)' }), 2500); } }, 100); true",
+      "until": "hillinkWorld.scene.get('agent:claude')?.anim?.state === 'frustrated'",
+      "untilMs": 70000,
+      "after": "hillinkWorld.shot('workspace'); true",
+      "waitMs": 350,
+      "expect": "hillinkWorld.store.world.agents.claude.activity === 'waiting'"
+    },
+    {
+      "name": "06-filing-finished-task-at-archive",
+      "path": "/?source=sim&theme=real&art=5d",
+      "eval": "setTimeout(() => hillinkWorld.sim.run('claudeCodes'), 300); window.__fin = setInterval(() => { const e = hillinkWorld.scene.get('agent:claude'); if (e?.anim?.state === 'type' && !window.__done) { window.__done = true; setTimeout(() => { hillinkWorld.sim.run('taskCompletes'); setTimeout(() => hillinkWorld.sim.allIdle(), 3000); }, 2000); } }, 100); true",
+      "until": "hillinkWorld.scene.get('agent:claude')?.anim?.state === 'file'",
+      "untilMs": 90000,
+      "after": "{ const e = hillinkWorld.scene.get('agent:claude'); hillinkWorld.camera.focusPoint(e.x, e.y - e.h / 2, { zoom: 2.6, duration: 0 }); } true",
+      "waitMs": 150,
+      "expect": "hillinkWorld.scene.get('agent:claude').journey?.kind === 'finish'"
+    },
+    {
+      "name": "07-idle-life-lounge",
+      "path": "/?source=sim&theme=real&art=5d",
+      "until": "[...hillinkWorld.scene.entities.values()].some(e => e.kind === 'agent' && ['phone', 'stretch', 'chat'].includes(e.anim?.state))",
+      "untilMs": 60000,
+      "after": "hillinkWorld.shot('lounge'); true",
+      "waitMs": 900,
+      "expect": "[...hillinkWorld.scene.entities.values()].filter(e => e.kind === 'agent').every(e => e.agent.activity === 'idle')"
+    },
+    {
+      "name": "08-refit-structure-inside-room",
+      "path": "/?source=sim&theme=real&art=5d&demo=refit&step=6",
+      "until": "!!hillinkWorld.theme.layout.locationById['site:focus-booth']",
+      "untilMs": 20000,
+      "after": "{ const l = hillinkWorld.theme.layout.locationById['site:focus-booth']; hillinkWorld.camera.focusPoint(l.x + l.w * 0.4, l.y + l.h * 0.55, { zoom: 2.1, duration: 0 }); } true",
+      "waitMs": 900,
+      "expect": "hillinkWorld.demo.project.stage === 'exterior' && hillinkWorld.theme.layout.locationById['site:focus-booth'].refit === true"
+    },
+    {
+      "name": "09-refit-blocked-barrier",
+      "path": "/?source=sim&theme=real&art=5d&demo=refit&step=5",
+      "until": "!!hillinkWorld.theme.layout.locationById['site:focus-booth']",
+      "untilMs": 20000,
+      "after": "{ const l = hillinkWorld.theme.layout.locationById['site:focus-booth']; hillinkWorld.camera.focusPoint(l.x + l.w * 0.4, l.y + l.h * 0.55, { zoom: 2.1, duration: 0 }); } true",
+      "waitMs": 900,
+      "expect": "!!hillinkWorld.demo.project.blocked"
+    },
+    {
+      "name": "10-refit-inspection-furnished",
+      "path": "/?source=sim&theme=real&art=5d&demo=refit&step=14",
+      "until": "!!hillinkWorld.theme.layout.locationById['site:focus-booth']",
+      "untilMs": 20000,
+      "after": "{ const l = hillinkWorld.theme.layout.locationById['site:focus-booth']; hillinkWorld.camera.focusPoint(l.x + l.w * 0.4, l.y + l.h * 0.55, { zoom: 2.1, duration: 0 }); } true",
+      "waitMs": 900,
+      "expect": "hillinkWorld.demo.project.stage === 'inspection'"
+    },
+    {
+      "name": "11-room-identity-overview",
+      "path": "/?source=sim&theme=real&art=5d&play=office&shot=overview",
+      "waitMs": 12000,
+      "expect": "hillinkWorld.theme.art === '5d'"
+    }
+  ]
+}

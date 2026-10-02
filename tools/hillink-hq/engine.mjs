@@ -1,20 +1,47 @@
 import { randomUUID } from 'node:crypto';
 import { initialAgents, operations } from './registry.mjs';
 import { validateImplementation } from './implementation-policy.mjs';
-import { reduceOrchestration, ORCHESTRATION_EVENTS } from './orchestration/state.mjs';
+import { ORCHESTRATION_EVENTS, reduceOrchestration } from './orchestration/state.mjs';
+import { needsFollowUp, ATTENTION_LIMITS } from './orchestration/attention.mjs';
+import { COMPUTE_EVENTS, reduceCompute, emptyCompute, computeLedger } from './compute/state.mjs';
+import { decideVariants, issueGrant, classRank, capacityOf, validateSpendAuthorization, authorizationStatus, DEFAULT_MODE, MODES } from './compute/policy.mjs';
+import { routeFor } from './compute/registry.mjs';
+import { validateAgentInput, canTransition, isWorking, CHECKS, STAGES, PROVISIONING, bindingFor } from './agents.mjs';
 
-export const defaults = { heartbeatMs: 15_000, progressMs: 120_000, adapterTimeoutMs: 3000, quarantineMs: 60_000, observationJournalMs: 300_000, maxAttempts: 2, maxLocalWorkers: 1 };
+export const defaults = { provisionRecheckMs: 15_000, provisionTimeoutMs: 30_000, trialTimeoutMs: 60_000, maxProvisioningAttempts: 20, computeMode: DEFAULT_MODE, heartbeatMs: 15_000, progressMs: 120_000, adapterTimeoutMs: 3000, quarantineMs: 60_000, observationJournalMs: 300_000, maxAttempts: 2, maxLocalWorkers: 1 };
 async function bounded(call, timeoutMs) {
   let timer;
   try { return await Promise.race([Promise.resolve().then(call), new Promise((_, reject) => { timer = setTimeout(() => reject(Error('Adapter response timed out')), timeoutMs); })]); }
   finally { clearTimeout(timer); }
 }
-const progressKinds = new Set(['COMMIT', 'TEST_PROGRESS', 'TEST_RESULT', 'PR', 'REVIEW', 'FINDING', 'HANDOFF', 'COMPLETED', 'MODEL_OUTPUT', 'MODEL_RESULT']);
+// Quiet phases (watchdog model). Progress normally means fresh evidence within progressMs. Some legitimate work is
+// silent by nature: a tool call Claude is waiting on, the model preparing its first token, a context compaction, an
+// HQ-owned sandbox step, a test run. The component that KNOWS such a phase has begun (HQ code: an adapter parsing the
+// worker's protocol, or HQ's own runner) declares it with a reason and a hard bound, and ends it. While a declared
+// phase is within its bound, and liveness (heartbeats from a live process) continues, the run is RUNNING; a phase past
+// its bound is STALLED; with no phase open the ordinary progress rule applies. Heartbeats never count as progress, so
+// a live but silent worker with nothing declared is still STALLED, and a dead one is OFFLINE or ends on close.
+export const PHASE_LIMITS = Object.freeze({ maxBoundMs: 15 * 60_000, maxOpen: 16, maxPerEvent: 8 });
+export function quietState(run, now) {
+  const open = Object.entries(run?.phases ?? {});
+  const overdue = open.filter(([, p]) => now - p.since > p.boundMs);
+  return { active: open.length > 0, overdue: overdue.length > 0, open: open.map(([id, p]) => ({ id, ...p, elapsedMs: now - p.since })), overdueList: overdue.map(([id, p]) => ({ id, ...p, elapsedMs: now - p.since })) };
+}
+// Why a run is not RUNNING, in words, for the recovery record and the owner.
+export function stallReason(run, now, config = defaults) {
+  if (!run) return 'unknown run';
+  if (now - run.heartbeatAt > config.heartbeatMs) return `no liveness heartbeat for ${Math.round((now - run.heartbeatAt) / 1000)} s (process gone or unreachable)`;
+  const q = quietState(run, now);
+  if (q.overdue) return q.overdueList.map(p => `${p.reason} ran ${Math.round(p.elapsedMs / 1000)} s, past its ${Math.round(p.boundMs / 1000)} s bound`).join('; ');
+  return `no progress evidence for ${Math.round((now - run.lastMeaningfulAt) / 1000)} s and no declared quiet phase (process alive but silent)`;
+}
+const progressKinds = new Set(['PROGRESS', 'COMMIT', 'TEST_PROGRESS', 'TEST_RESULT', 'PR', 'REVIEW', 'FINDING', 'HANDOFF', 'COMPLETED', 'MODEL_OUTPUT', 'MODEL_RESULT']);
 const liveStages = new Set(['CLAIMED', 'IMPLEMENTING', 'TESTING', 'REVIEW']);
-const ENGINE_EVENT_TYPES = new Set(['AGENT_REGISTERED', 'AGENT_CONFIGURED', 'AGENT_OBSERVED', 'TASK_CREATED', 'DISPATCHED', 'WORKER_EVENT', 'RECOVERY', 'TASK_REQUEUED', 'TASK_PARKED', 'ALERT_OPENED', 'ALERT_RESOLVED', 'ALERT_ACKNOWLEDGED', 'NOTIFICATION_DELIVERED', 'NOTIFICATION_FAILED', 'OWNER_CONFIRMED_TERMINATION']);
-const eventTypes = new Set([...ENGINE_EVENT_TYPES, ...ORCHESTRATION_EVENTS]);
+const eventTypes = new Set(['AGENT_REGISTERED', 'AGENT_CONFIGURED', 'AGENT_OBSERVED', 'TASK_CREATED', 'DISPATCHED', 'WORKER_EVENT', 'RECOVERY', 'TASK_REQUEUED', 'TASK_PARKED', 'ALERT_OPENED', 'ALERT_RESOLVED', 'ALERT_ACKNOWLEDGED', 'NOTIFICATION_DELIVERED', 'NOTIFICATION_FAILED', 'OWNER_CONFIRMED_TERMINATION', 'AGENT_CREATED', 'AGENT_LIFECYCLE', 'AGENT_WAITING_UPDATED', 'HQ_RESTART', ...ORCHESTRATION_EVENTS, ...COMPUTE_EVENTS]);
+// Stages after which a task never runs again. CANCELLED (Pass 3) is final: later worker evidence cannot reopen it.
+export const FINAL_STAGES = new Set(['DONE', 'BLOCKED', 'CANCELLED']);
 const text = (value, max = 2000) => typeof value === 'string' && value.trim().length > 0 && value.length <= max;
-export function emptyState() { return { version: 1, seq: 0, agents: {}, tasks: {}, runs: {}, alerts: {}, events: [], meeting: null, objectives: {} }; }
+export function emptyState() { return { version: 1, seq: 0, agents: {}, tasks: {}, runs: {}, alerts: {}, events: [], meeting: null, objectives: {}, compute: emptyCompute() }; }
 
 // A pure reducer: replay and live state take exactly the same path.
 export function reduce(state, event) {
@@ -22,11 +49,28 @@ export function reduce(state, event) {
   if (!eventTypes.has(type)) throw Error(`Unsupported event type ${type}; refusing partial replay`);
   state.seq = event.seq;
   state.events.push(event);
+  // restart_hq (restart.mjs / supervisor.mjs): a record only. It changes no task, objective, decision or gate.
+  if (type === 'HQ_RESTART') state.restart = { ...(state.restart?.id === d.id ? state.restart : {}), ...d, at };
   if (type === 'AGENT_REGISTERED') state.agents[d.id] = { ...d, observedStatus: 'UNKNOWN', observedAt: null, lastMeaningfulAt: null, assignment: null, usage: null };
   if (type === 'AGENT_CONFIGURED') Object.assign(state.agents[d.agentId], d.configuration);
+  // Pass 5F: an agent Kyle created in HQ (agents.mjs). It starts REQUESTED and gets an execution binding only at READY.
+  if (type === 'AGENT_CREATED') {
+    const def = d.definition;
+    state.agents[d.id] = { id: d.id, name: def.name, provider: def.provider, model: def.model ?? null, role: def.role, description: def.description ?? null, team: def.team ?? null, capabilities: [...def.capabilities], tools: [...def.tools], permissions: [...def.permissions], ...(def.attribution ? { attribution: def.attribution } : {}), workstation: 'Assigned by the World layout', real: 'New team member', fantasy: 'Adventurer', executionAdapter: null, telemetryAdapter: null, usageSource: null, definition: def, createdBy: d.by, createdAt: at, lifecycle: { state: 'REQUESTED', since: at, detail: d.detail ?? null, ownerAction: null, stage: null, history: [{ state: 'REQUESTED', at, detail: d.detail ?? null }], readied: false, attempts: 1 }, observedStatus: 'UNKNOWN', observedAt: null, lastMeaningfulAt: null, assignment: null, usage: null };
+  }
+  // A waiting agent whose reason changed (the daemon came up but the model is still missing): same state, new reason.
+  if (type === 'AGENT_WAITING_UPDATED') Object.assign(state.agents[d.agentId].lifecycle, { detail: d.detail ?? null, ownerAction: d.ownerAction ?? null });
+  if (type === 'AGENT_LIFECYCLE') {
+    const a = state.agents[d.agentId], lc = a.lifecycle;
+    lc.history.push({ state: d.to, at, detail: d.detail ?? null, ...(d.stage ? { stage: d.stage } : {}), ...(d.by ? { by: d.by } : {}) });
+    Object.assign(lc, { state: d.to, since: at, detail: d.detail ?? null, ownerAction: d.ownerAction ?? null, stage: d.stage ?? null, readied: lc.readied || d.to === 'READY' });
+    if (d.bindings) a.bindings = d.bindings;
+    if (d.binding) Object.assign(a, d.binding);
+    if (d.to === 'REQUESTED') { lc.attempts += 1; Object.assign(a, { executionAdapter: null, telemetryAdapter: null, usageSource: null, bindings: null }); }
+  }
   if (type === 'AGENT_OBSERVED') Object.assign(state.agents[d.agentId], { observedStatus: d.status, observedAt: at, detail: d.detail, retryAt: d.retryAt ?? null });
   if (type === 'AGENT_OBSERVED' && d.quarantineUntil) state.agents[d.agentId].quarantineUntil = d.quarantineUntil;
-  if (type === 'TASK_CREATED') state.tasks[d.id] = { ...d, stage: d.safety === 'owner-required' ? 'BLOCKED' : 'READY', createdAt: at, createdSeq: event.seq, attempts: 0, runId: null, evidence: [], handoffs: [], blocker: d.ownerAction || null };
+  if (type === 'TASK_CREATED') state.tasks[d.id] = { ...d, stage: d.safety === 'owner-required' ? 'BLOCKED' : 'READY', createdAt: at, attempts: 0, runId: null, evidence: [], handoffs: [], blocker: d.ownerAction || null };
   if (type === 'DISPATCHED') {
     const task = state.tasks[d.taskId];
     Object.assign(task, { stage: 'CLAIMED', runId: d.runId, agentId: d.agentId, claimedAt: at, attempts: task.attempts + 1, blocker: null, endedAt: null, recoveryPending: false, notBefore: null });
@@ -41,24 +85,31 @@ export function reduce(state, event) {
     if (d.kind === 'TEST_STARTED') task.stage = 'TESTING';
     if (d.kind === 'TEST_RESULT') task.verificationResult = d.result;
     if (d.kind === 'REVIEW') task.stage = 'REVIEW';
-    if (progressKinds.has(d.kind)) { run.lastMeaningfulAt = at; agent.lastMeaningfulAt = at; task.lastMeaningfulAt = at; }
+    if (progressKinds.has(d.kind) || d.phases) { run.lastMeaningfulAt = at; agent.lastMeaningfulAt = at; task.lastMeaningfulAt = at; }
+    if (d.phases) {
+      run.phases ??= {};
+      // Re-declaring an open phase keeps its original start: a phase cannot be extended by announcing it again.
+      for (const p of d.phases) { if (p.state === 'begin') run.phases[p.id] ??= { reason: p.reason, since: at, boundMs: p.boundMs }; else delete run.phases[p.id]; }
+    }
     if (d.kind === 'HANDOFF') task.handoffs.push({ ...d, at });
     if (d.kind === 'USAGE') agent.usage = { ...d.usage, at };
     if (d.kind === 'UNCERTAIN') Object.assign(task, { stage: 'BLOCKED', blocker: d.summary, ownerAction: d.ownerAction || 'Verify the remote worker stopped before releasing this run.' });
     if (['COMPLETED', 'FAILED', 'BLOCKED', 'CANCELLED', 'RATE_LIMITED'].includes(d.kind)) {
-      run.endedAt = at; run.terminal = d.kind; agent.assignment = null;
-      task.stage = d.kind === 'COMPLETED' ? 'DONE' : 'BLOCKED';
+      run.endedAt = at; run.terminal = d.kind; agent.assignment = null; run.phases = {};
+      // A cancelled task stays CANCELLED: the run's own terminal evidence is recorded, the stage is not reopened.
+      if (task.stage !== 'CANCELLED') task.stage = d.kind === 'COMPLETED' ? 'DONE' : 'BLOCKED';
       task.endedAt = at;
       task.blocker = d.kind === 'COMPLETED' ? null : d.summary;
       task.ownerAction = d.ownerAction ?? null;
-      task.recoveryPending = d.kind === 'FAILED' || d.kind === 'RATE_LIMITED';
+      task.recoveryPending = task.stage !== 'CANCELLED' && (d.kind === 'FAILED' || d.kind === 'RATE_LIMITED');
       if (d.kind === 'RATE_LIMITED') task.notBefore = d.retryAt ?? null;
       agent.observedStatus = d.kind === 'RATE_LIMITED' ? 'RATE_LIMITED' : 'IDLE';
+      agent.capacityState = d.kind === 'RATE_LIMITED' ? (d.capacity === 'SUBSCRIPTION_LIMIT_REACHED' ? 'SUBSCRIPTION_LIMIT_REACHED' : 'RATE_LIMITED') : null;
       agent.retryAt = d.retryAt ?? null; agent.observedAt = at;
     }
   }
   if (type === 'RECOVERY') state.tasks[d.taskId].recovery = { ...d, at };
-  if (type === 'TASK_REQUEUED') Object.assign(state.tasks[d.taskId], { stage: 'READY', runId: null, agentId: null, blocker: null, ownerAction: null, recoveryPending: false, notBefore: d.notBefore ?? null });
+  if (type === 'TASK_REQUEUED') Object.assign(state.tasks[d.taskId], { stage: 'READY', runId: null, agentId: null, blocker: null, ownerAction: null, recoveryPending: false, notBefore: d.notBefore ?? null, spendBlocked: false }, d.releasePreference ? { preferredAgentId: null } : {});
   if (type === 'TASK_PARKED') {
     const task = state.tasks[d.taskId];
     Object.assign(task, { stage: 'BLOCKED', blocker: d.reason, ownerAction: d.ownerAction ?? null, recoveryPending: false });
@@ -69,6 +120,10 @@ export function reduce(state, event) {
   if (type === 'ALERT_ACKNOWLEDGED') state.alerts[d.key].acknowledgedAt = at;
   if (type === 'NOTIFICATION_DELIVERED') Object.assign(state.alerts[d.key], { deliveredAt: at, deliveryError: null });
   if (type === 'NOTIFICATION_FAILED') Object.assign(state.alerts[d.key], { deliveryError: d.reason, deliveryAttemptAt: at });
+  // Pass 4: compute selections, spend authorizations and the cost ledger (compute/state.mjs). Before Pass 3's reducer,
+  // which reads a run's compute class to decide whether its reported cost is spend.
+  reduceCompute(state, event);
+  // Pass 3: objectives, steps, handoffs, approvals and decisions live in the same journal (orchestration/state.mjs).
   reduceOrchestration(state, event);
   return state;
 }
@@ -80,6 +135,9 @@ export function agentStatus(state, agent, now, config = defaults, seenAt = null)
     if (task.stage === 'BLOCKED') return 'BLOCKED';
     if (!run.acknowledgedAt) return 'UNKNOWN';
     if (now - run.heartbeatAt > config.heartbeatMs) return 'OFFLINE';
+    const quiet = quietState(run, now);
+    if (quiet.overdue) return 'STALLED'; // a declared quiet phase ran past its own hard bound: hung
+    if (quiet.active) return 'RUNNING'; // legitimately quiet, live, and within bound
     if (now - run.lastMeaningfulAt > config.progressMs) return 'STALLED';
     return 'RUNNING';
   }
@@ -91,9 +149,15 @@ export function agentStatus(state, agent, now, config = defaults, seenAt = null)
 
 export class Engine {
   constructor({ store, adapters = {}, now = Date.now, config = {} }) {
-    this.store = store; this.adapters = adapters; this.now = now; this.config = { ...defaults, ...config }; this.busy = false; this.seen = {};
+    this.store = store; this.adapters = adapters; this.now = now; this.config = { ...defaults, ...config }; this.busy = false; this.seen = {}; this.jobs = new Map(); this.checkedAt = {}; this.leaving = new Set(); this.provisioning = {}; this.connectors = {};
+    // Fail closed: an unknown mode is ZERO_CREDIT, never something more permissive.
+    if (!MODES.includes(this.config.computeMode)) this.config.computeMode = DEFAULT_MODE;
     this.state = store.read().reduce(reduce, emptyState());
   }
+  // An agent that reaches HQ from outside (ChatGPT through the MCP ingress) rather than being launched by an adapter.
+  // Display only: kept in memory, never journaled, and never used for routing or dispatch.
+  connectorOpened(agentId, via) { this.connectors[agentId] = { via, openedAt: this.now(), lastCallAt: null, calls: 0 }; }
+  connectorCall(agentId) { const c = this.connectors[agentId]; if (c) { c.lastCallAt = this.now(); c.calls += 1; } }
   status(agent, at = this.now()) { return agentStatus(this.state, agent, at, this.config, this.seen[agent.id]); }
   emit(type, data) {
     const event = { seq: this.state.seq + 1, id: randomUUID(), at: this.now(), type, data };
@@ -101,13 +165,18 @@ export class Engine {
     reduce(this.state, event);
     return event;
   }
-  initialize() {
+  initialize({ modeSource = 'default', modeWarning = null } = {}) {
+    // The operating mode is HQ configuration (environment), journaled on every change so the ledger shows which mode
+    // every run was selected under. No API, agent or task can change it.
+    if (this.state.compute.mode !== this.config.computeMode) this.emit('COMPUTE_MODE', { mode: this.config.computeMode, source: String(modeSource).slice(0, 60), warning: modeWarning });
     for (const agent of initialAgents) if (!this.state.agents[agent.id]) this.register(agent);
+    // Pass 3 roles: only Claude implements. A journal from before Pass 3 may still list 'implement' for others.
+    for (const agent of Object.values(this.state.agents)) if (agent.id !== 'claude' && !agent.assignment && agent.capabilities.some(c => c === 'implement' || c === 'implement-repo')) this.configureAgent(agent.id, { capabilities: agent.capabilities.filter(c => c !== 'implement' && c !== 'implement-repo') });
     for (const task of Object.values(this.state.tasks)) {
       const run = this.state.runs[task.runId];
       if (run && !run.endedAt) this.emit('TASK_PARKED', { taskId: task.id, reason: 'Controller restarted; previous worker termination is unconfirmed.', ownerAction: 'Confirm the previous process has stopped before resolving this run. It will not be dispatched twice.' });
     }
-    for (const agent of Object.values(this.state.agents)) if (!this.adapters[agent.executionAdapter] && agent.observedStatus !== 'UNKNOWN') this.emit('AGENT_OBSERVED', { agentId: agent.id, status: 'UNKNOWN', detail: 'Execution adapter is not connected in this controller.' });
+    for (const agent of Object.values(this.state.agents)) if (isWorking(agent) && !this.adapters[agent.executionAdapter] && agent.observedStatus !== 'UNKNOWN') this.emit('AGENT_OBSERVED', { agentId: agent.id, status: 'UNKNOWN', detail: 'Execution adapter is not connected in this controller.' });
   }
   configureAgent(agentId, configuration) {
     const agent = this.state.agents[agentId];
@@ -124,9 +193,18 @@ export class Engine {
   }
   // requestedBy is internal only (the orchestrator's tools set it; the HTTP API cannot): which agent and
   // task asked for this one, so delegations are traceable and the requester can be shown waiting on it.
-  createTask(input, { requestedBy = null, link = null } = {}) {
-    if (!text(input.title, 200) || !text(input.description, 2000)) throw Error('Title and description required');
+  // link and repair are internal too (Pass 3: only the conductor sets them): the objective step this task
+  // performs, and HQ's own record of why a previous implementation attempt was not accepted.
+  createTask(input, { requestedBy = null, link = null, repair = null } = {}) {
+    // A conductor step carries HQ-quoted evidence (a verified diff for a reviewer), so its brief may be longer.
+    if (!text(input.title, 200) || !text(input.description, link ? 16_000 : 2000)) throw Error('Title and description required');
     if (requestedBy && (!this.state.agents[requestedBy.agentId] || !this.state.tasks[requestedBy.taskId])) throw Error('Unknown requesting agent or task');
+    if (link) {
+      const o = this.state.objectives[link.objectiveId];
+      if (!o || (link.stepId != null && !o.steps[link.stepId])) throw Error('Unknown objective step');
+      if (link.stepId != null && o.steps[link.stepId].status !== 'PENDING') throw Error('Objective step is not pending; refusing to start it twice');
+    }
+    if (repair && (!Number.isInteger(repair.attempt) || repair.attempt < 1 || !text(repair.reason, 3000))) throw Error('Invalid repair record');
     if (!Object.hasOwn(operations, input.operation)) throw Error('Operation is not allowlisted');
     if (!['local-read-only', 'local-worktree-write', 'owner-required'].includes(input.safety)) throw Error('Explicit safety classification required');
     // Implementation (Pass 2.6) is its own operation and safety class, with a validated contract; nothing else may write.
@@ -136,8 +214,13 @@ export class Engine {
     if (input.safety === 'owner-required' && !text(input.ownerAction)) throw Error('Exact owner action required');
     if (!Number.isInteger(input.priority) || input.priority < 0 || input.priority > 100) throw Error('Priority must be 0–100');
     if (input.preferredAgentId && !this.state.agents[input.preferredAgentId]?.capabilities.includes(operations[input.operation].capability)) throw Error('Selected worker cannot perform this operation');
+    // Pass 5F: only a working member takes work. An agent still provisioning, READY but not activated, disabled or
+    // retired is refused here, so no task can wait on it looking accepted.
+    if (input.preferredAgentId && !isWorking(this.state.agents[input.preferredAgentId])) { const a = this.state.agents[input.preferredAgentId]; throw Error(`${a.name} is not an active agent (${a.lifecycle.state}); it cannot take work`); }
+    // Pass 3 role boundary, independent of capability data: implementation is Claude's alone.
+    if (implementing && input.preferredAgentId !== 'claude') throw Error('Implementation tasks go to Claude only');
     const id = randomUUID();
-    this.emit('TASK_CREATED', { id, title: input.title, description: input.description, operation: input.operation, capability: operations[input.operation].capability, safety: input.safety, ownerAction: input.ownerAction || null, priority: input.priority, preferredAgentId: input.preferredAgentId || null, ...(implementation ? { implementation } : {}), ...(requestedBy ? { requestedBy: { agentId: requestedBy.agentId, taskId: requestedBy.taskId } } : {}), ...(link ? { link: { objectiveId: link.objectiveId, stepId: link.stepId ?? null, ...(link.decisionId ? { decisionId: link.decisionId } : {}) } } : {}) });
+    this.emit('TASK_CREATED', { id, title: input.title, description: input.description, operation: input.operation, capability: operations[input.operation].capability, safety: input.safety, ownerAction: input.ownerAction || null, priority: input.priority, preferredAgentId: input.preferredAgentId || null, ...(implementation ? { implementation } : {}), ...(requestedBy ? { requestedBy: { agentId: requestedBy.agentId, taskId: requestedBy.taskId } } : {}), ...(link ? { link: { objectiveId: link.objectiveId, stepId: link.stepId ?? null, ...(link.decisionId ? { decisionId: link.decisionId } : {}) } } : {}), ...(repair ? { repair: { attempt: repair.attempt, reason: repair.reason, ...(repair.fromReview ? { fromReview: true } : {}) } } : {}) });
     if (this.state.alerts['cycle:complete']?.active) this.emit('ALERT_RESOLVED', { key: 'cycle:complete' });
     return id;
   }
@@ -145,8 +228,23 @@ export class Engine {
     const run = this.state.runs[runId];
     if (!run || run.endedAt || this.state.tasks[run.taskId].runId !== runId) throw Error('Stale or unknown run');
     if (!payload || !text(payload.summary)) throw Error('Evidence summary required');
-    const kinds = ['ACK', 'HEARTBEAT', 'TEST_STARTED', 'TEST_PROGRESS', 'TEST_RESULT', 'COMMIT', 'PR', 'REVIEW', 'FINDING', 'HANDOFF', 'COMPLETED', 'FAILED', 'BLOCKED', 'CANCELLED', 'RATE_LIMITED', 'USAGE', 'MODEL_OUTPUT', 'MODEL_RESULT', 'UNCERTAIN'];
+    const kinds = ['ACK', 'HEARTBEAT', 'PROGRESS', 'TEST_STARTED', 'TEST_PROGRESS', 'TEST_RESULT', 'COMMIT', 'PR', 'REVIEW', 'FINDING', 'HANDOFF', 'COMPLETED', 'FAILED', 'BLOCKED', 'CANCELLED', 'RATE_LIMITED', 'USAGE', 'MODEL_OUTPUT', 'MODEL_RESULT', 'UNCERTAIN', 'BROKER'];
     if (!kinds.includes(payload.kind)) throw Error('Unknown evidence kind');
+    // Pass 4.5 broker audit: HQ-authored metadata (operation, logical path, outcome, sizes), never file contents.
+    if (payload.kind === 'BROKER' && (!payload.broker || typeof payload.broker !== 'object' || !/^[A-Z_]{3,40}$/.test(String(payload.broker.event)) || JSON.stringify(payload.broker).length > 2000)) throw Error('Invalid broker audit record');
+    if (payload.phases != null) {
+      const ps = payload.phases;
+      if (!Array.isArray(ps) || !ps.length || ps.length > PHASE_LIMITS.maxPerEvent) throw Error('Invalid quiet phases');
+      if (['ACK', 'HEARTBEAT', 'COMPLETED', 'FAILED', 'BLOCKED', 'CANCELLED', 'RATE_LIMITED', 'UNCERTAIN', 'USAGE'].includes(payload.kind)) throw Error('Quiet phases ride on progress evidence only');
+      for (const p of ps) {
+        if (!p || typeof p !== 'object' || !/^[A-Za-z0-9:_.\-]{1,100}$/.test(String(p.id)) || !['begin', 'end'].includes(p.state)) throw Error('Invalid quiet phase');
+        if (p.state === 'begin' && (!text(p.reason, 160) || !Number.isInteger(p.boundMs) || p.boundMs < 1000 || p.boundMs > PHASE_LIMITS.maxBoundMs)) throw Error(`A quiet phase needs a reason and a hard bound of at most ${PHASE_LIMITS.maxBoundMs / 60_000} minutes`);
+      }
+      const open = new Set(Object.keys(run.phases ?? {}));
+      for (const p of ps) { if (p.state === 'begin') open.add(p.id); else open.delete(p.id); }
+      if (open.size > PHASE_LIMITS.maxOpen) throw Error('Too many open quiet phases');
+      payload = { ...payload, phases: ps.map(p => (p.state === 'begin' ? { id: p.id, state: 'begin', reason: p.reason, boundMs: p.boundMs } : { id: p.id, state: 'end' })) };
+    }
     if (payload.kind === 'ACK' && run.acknowledgedAt) throw Error('Run already acknowledged');
     if (!run.acknowledgedAt && !['ACK', 'FAILED', 'CANCELLED', 'BLOCKED', 'UNCERTAIN', 'RATE_LIMITED'].includes(payload.kind)) throw Error('Worker acknowledgement required');
     if (payload.kind === 'TEST_RESULT' && !['passed', 'failed'].includes(payload.result)) throw Error('Test result required');
@@ -156,16 +254,29 @@ export class Engine {
     }
     if (payload.kind === 'USAGE' && (!payload.usage || !text(payload.usage.source) || !Number.isFinite(payload.usage.elapsedMs) || payload.usage.elapsedMs < 0)) throw Error('Measured usage source required');
     if (payload.url && !/^https:\/\//.test(payload.url)) throw Error('Evidence links must use HTTPS');
+    if (payload.hostMarker != null && (typeof payload.hostMarker !== 'string' || payload.hostMarker.length > 500)) throw Error('Invalid host process marker');
+    // The full answer (bounded) is kept for HQ's handoff validation; summary stays the short display text.
+    if (payload.fullText != null && (payload.kind !== 'MODEL_RESULT' || typeof payload.fullText !== 'string' || payload.fullText.length > 30_000)) throw Error('Invalid full model text');
     if (payload.files && (!Array.isArray(payload.files) || payload.files.some(f => !text(f, 500)))) throw Error('Invalid files');
     if (payload.kind === 'RATE_LIMITED' && payload.retryAt != null && (!Number.isFinite(payload.retryAt) || payload.retryAt <= this.now())) throw Error('Future retry time required');
+    // Pass 5F (B1): the adapter's own terminal CANCELLED for a run HQ is stopping because Kyle disabled or retired its
+    // agent is that stop, not a failure. Only CANCELLED is tagged; a COMPLETED or FAILED that wins the race stays itself.
+    if (payload.kind === 'CANCELLED' && this.leaving.has(runId)) payload = { ...payload, requeue: true };
     this.emit('WORKER_EVENT', { ...payload, runId });
+    // A metered run that used up its authorization is recorded once, so Kyle and the World see it.
+    const c = this.state.compute.runs[runId];
+    if (c?.authorizationId && c.endedAt != null && !this.state.compute.exhausted[c.authorizationId]) {
+      const auth = this.state.compute.authorizations[c.authorizationId], st = auth && authorizationStatus(this.state, auth, this.now());
+      if (st && !st.valid && st.reason === 'exhausted') this.emit('BUDGET_EXHAUSTED', { authorizationId: c.authorizationId, amountUsd: auth.amountUsd, committedUsd: st.committed });
+    }
   }
   runnable() { return Object.values(this.state.tasks).filter(t => t.stage === 'READY' && (t.safety === 'local-read-only' || t.safety === 'local-worktree-write')).sort((a, b) => b.priority - a.priority || a.createdAt - b.createdAt); }
   snapshot(at = this.now()) {
-    const tasks = Object.values(this.state.tasks), agents = Object.values(this.state.agents).map(a => ({ ...a, status: this.status(a, at), adapterAvailable: Boolean(this.adapters[a.executionAdapter]) }));
+    const tasks = Object.values(this.state.tasks), agents = Object.values(this.state.agents).map(a => ({ ...a, status: this.status(a, at), adapterAvailable: Boolean(this.adapters[a.executionAdapter]), connector: this.connectors[a.id] ? { ...this.connectors[a.id] } : null }));
     const counts = { ready: this.runnable().length, assigned: tasks.filter(t => liveStages.has(t.stage)).length, working: agents.filter(a => a.status === 'RUNNING').length, review: tasks.filter(t => t.stage === 'REVIEW').length, blocked: tasks.filter(t => t.stage === 'BLOCKED').length, done: tasks.filter(t => t.stage === 'DONE').length };
     const unresolvedRuns = Object.values(this.state.runs).filter(r => !r.endedAt).length;
-    return { ...this.state, agents, tasks, counts, unresolvedRuns, now: at, cycleComplete: tasks.length > 0 && counts.ready === 0 && counts.assigned === 0 && counts.working === 0 && counts.review === 0 && unresolvedRuns === 0 && tasks.every(t => t.stage === 'DONE' || (t.stage === 'BLOCKED' && !t.recoveryPending && Boolean(t.blocker))) };
+    const compute = { mode: this.config.computeMode, ledger: computeLedger(this.state, { now: at }), capacity: Object.fromEntries(agents.map(a => [a.id, capacityOf(a, a.status, { connected: a.adapterAvailable, route: a.executionAdapter ? routeFor(a.executionAdapter, 'review-repo') : null })])) };
+    return { ...this.state, agents, tasks, counts, unresolvedRuns, now: at, compute, cycleComplete: tasks.length > 0 && counts.ready === 0 && counts.assigned === 0 && counts.working === 0 && counts.review === 0 && unresolvedRuns === 0 && tasks.every(t => t.stage === 'DONE' || t.stage === 'CANCELLED' || (t.stage === 'BLOCKED' && !t.recoveryPending && Boolean(t.blocker))) };
   }
   async tick() {
     if (this.busy) return;
@@ -174,7 +285,7 @@ export class Engine {
       // Only a connected adapter can supply an availability observation.
       for (const agent of Object.values(this.state.agents)) {
         const adapter = this.adapters[agent.executionAdapter];
-        if (!adapter || agent.assignment || agent.quarantineUntil > this.now() || (agent.observedStatus === 'RATE_LIMITED' && (!agent.retryAt || this.now() < agent.retryAt))) continue;
+        if (!adapter || !isWorking(agent) || agent.assignment || agent.quarantineUntil > this.now() || (agent.observedStatus === 'RATE_LIMITED' && (!agent.retryAt || this.now() < agent.retryAt))) continue;
         let observation;
         try {
           observation = await bounded(() => adapter.health(), this.config.adapterTimeoutMs);
@@ -183,22 +294,30 @@ export class Engine {
         if (agent.observedStatus !== observation.status || agent.detail !== observation.detail || !agent.observedAt || this.now() - agent.observedAt > this.config.observationJournalMs) this.emit('AGENT_OBSERVED', { agentId: agent.id, ...observation });
         this.seen[agent.id] = this.now();
       }
+      this.provision(); // Pass 5F: real provisioning checks run beside the queue, never blocking it
       await this.recover();
-      for (const task of this.runnable()) {
-        if (task.notBefore > this.now()) continue;
+      // An accepted restart drains HQ: nothing new starts while the supervisor shuts it down.
+      for (const task of this.draining ? [] : this.runnable()) {
         // The local concurrency limit is for local processes. A remote API adapter (the orchestrator) takes no
         // local slot, so a question to ChatGPT never queues behind a long local run, nor blocks one.
         const local = r => !this.adapters[this.state.agents[r.agentId]?.executionAdapter]?.remote;
         const active = Object.values(this.state.runs).filter(r => !r.endedAt && local(r));
         const remoteTask = Object.values(this.state.agents).some(a => a.capabilities.includes(task.capability) && this.adapters[a.executionAdapter]?.remote);
         if (!remoteTask && active.length >= this.config.maxLocalWorkers) continue;
-        const agent = Object.values(this.state.agents).sort((a, b) => (a.routingPriority ?? 0) - (b.routingPriority ?? 0)).find(a => (!task.preferredAgentId || a.id === task.preferredAgentId) && a.capabilities.includes(task.capability) && !a.assignment && this.status(a) === 'IDLE' && this.adapters[a.executionAdapter]);
-        if (!agent) continue;
-        const runId = randomUUID();
-        this.emit('DISPATCHED', { taskId: task.id, agentId: agent.id, runId });
+        // Pass 4 compute gate: capability first (who can do it), then security (the route table), then authorization
+        // and cost, then availability. Deterministic; decided before anything starts.
+        const pick = this.selectCompute(task);
+        if (!pick) continue;
+        const { agent, decision } = pick;
+        if (task.operation === 'implement-repo' && agent.id !== 'claude') throw Error(`Refusing to dispatch implementation to ${agent.id}`);
+        const runId = randomUUID(), route = decision.route;
+        const compute = { operation: task.operation, adapterId: agent.executionAdapter, variant: route.variant ?? 'default', routeId: route.routeId ?? null, security: route.security ?? null, computeClass: route.computeClass, provider: route.provider, backend: route.backend, model: agent.model ?? null, authorizationId: decision.authorizationId ?? null, reservedUsd: decision.reservedUsd ?? 0, mode: this.config.computeMode };
+        this.emit('DISPATCHED', { taskId: task.id, agentId: agent.id, runId, compute });
+        // A one-shot grant for exactly this run. Metered adapters refuse to send anything without redeeming one.
+        const grant = issueGrant({ taskId: task.id, runId, route, authorizationId: compute.authorizationId, reservedUsd: compute.reservedUsd });
         try {
           // start returns after spawn, not task completion. ACK comes from the worker.
-          await bounded(() => this.adapters[agent.executionAdapter].start({ task, runId, emit: event => this.workerEvent(runId, event) }), this.config.adapterTimeoutMs);
+          await bounded(() => this.adapters[agent.executionAdapter].start({ task, runId, emit: event => this.workerEvent(runId, event), compute: grant }), this.config.adapterTimeoutMs);
         } catch (error) {
           // A rejected start might have partially launched a worker. Fence it until
           // the adapter confirms termination, just like a lost heartbeat.
@@ -211,10 +330,101 @@ export class Engine {
       this.watchdog();
     } finally { this.busy = false; }
   }
+  // Chooses the agent and compute route for one READY task, or records why it cannot run for free now.
+  selectCompute(task) {
+    const now = this.now(), mode = this.config.computeMode;
+    const capable = Object.values(this.state.agents).filter(a => isWorking(a) && (!task.preferredAgentId || a.id === task.preferredAgentId) && a.capabilities.includes(task.capability) && this.adapters[a.executionAdapter]);
+    if (!capable.length) return null; // no connected worker: the watchdog reports it
+    // Pass 3 role boundary before any cost reasoning: implementation is Claude's alone, whatever the journal says.
+    const intruder = task.operation === 'implement-repo' && capable.find(a => a.id !== 'claude');
+    if (intruder) throw Error(`Refusing to dispatch implementation to ${intruder.id}`);
+    // Pass 4.5: each agent may serve the operation through several route variants; the adapter says which it can run
+    // here now. A free variant that exists but is unavailable is remembered for the report, never replaced by paying.
+    const unsupported = [];
+    const decided = capable.flatMap(agent => {
+      const adapter = this.adapters[agent.executionAdapter];
+      const v = decideVariants({ state: this.state, task, agentId: agent.id, adapterId: agent.executionAdapter, mode, now, supports: (op, variant) => adapter.supports?.(op, variant) });
+      unsupported.push(...v.unsupported.filter(u => u.route.computeClass !== 'METERED_API').map(u => ({ agent, ...u })));
+      return v.decided.map(decision => ({ agent, decision }));
+    });
+    if (!decided.length) {
+      // Only free variants exist and none can run here now: wait (recorded once), never pay.
+      const u = unsupported[0];
+      if (u && !(task.waitingFor?.agentId === u.agent.id && task.waitingFor?.capacity === 'UNAVAILABLE')) this.emit('WAITING_FOR_CAPACITY', { taskId: task.id, agentId: u.agent.id, capacity: 'UNAVAILABLE', computeClass: u.route.computeClass, reason: String(u.reason).slice(0, 300), retryAt: null, paidAlternativeUsed: false });
+      return null;
+    }
+    const allowed = decided.filter(x => x.decision.allowed);
+    const free = allowed.filter(x => x.decision.route.computeClass !== 'METERED_API');
+    // Metered compute is considered only when no LOCAL or SUBSCRIPTION route can do this task at all. A free agent that
+    // is busy or out of capacity means wait, never "pay instead".
+    const pool = (free.length ? free : allowed).sort((x, y) => classRank(x.decision.route.computeClass) - classRank(y.decision.route.computeClass) || (x.agent.routingPriority ?? 0) - (y.agent.routingPriority ?? 0));
+    // A task told to wait (capacity reset time) is not dispatched early, but its wait is still recorded below.
+    // Pass 5F: agents may share one backend adapter (an HQ-created reviewer on the same signed-in CLI); a busy adapter
+    // is busy for all of them.
+    const adapterBusy = agent => Object.values(this.state.agents).some(b => b.id !== agent.id && b.assignment && b.executionAdapter === agent.executionAdapter);
+    const ready = task.notBefore > now ? null : pool.find(x => !x.agent.assignment && !adapterBusy(x.agent) && this.status(x.agent) === 'IDLE');
+    if (ready) return ready;
+    if (!pool.length) {
+      let blocked = decided.find(x => !x.decision.allowed).decision;
+      if (unsupported.length) blocked = { ...blocked, reason: `${blocked.reason} The $0 route is not available here (${unsupported.map(u => `${u.route.routeId ?? u.route.variant}: ${u.reason}`).join('; ')}).`.slice(0, 900) };
+      const ownerAction = mode === 'BUDGETED'
+        ? `Authorize up to $${(blocked.maxCostUsd ?? 0).toFixed(2)} for this task in HQ (Spend), then retry it; or use a $0 alternative: ${blocked.alternatives.join(' ')}`.slice(0, 1900)
+        : unsupported.some(u => u.route.computeClass !== 'METERED_API')
+          ? `The $0 route cannot run here: ${unsupported.filter(u => u.route.computeClass !== 'METERED_API').map(u => `${u.route.routeId ?? u.route.variant}: ${u.reason}`).join('; ')}. Fix that and retry; no spend is needed. HQ will not use the metered route in ZERO_CREDIT mode.`.slice(0, 1900)
+          : unsupported.length
+          ? `The $0 route cannot run here: ${unsupported.map(u => `${u.route.routeId ?? u.route.variant}: ${u.reason}`).join('; ')}. Fix that and retry; no spend is needed. HQ will not use the metered route in ZERO_CREDIT mode.`.slice(0, 1900)
+          : `This needs metered ${blocked.provider} API compute, which ZERO_CREDIT mode forbids. $0 alternatives: ${blocked.alternatives.join(' ')} To pay for it: start HQ with HQ_COMPUTE_MODE=BUDGETED and authorize a bounded amount for this task.`.slice(0, 1900);
+      this.emit('SPEND_APPROVAL_REQUIRED', { taskId: task.id, code: blocked.code, provider: blocked.provider, agentId: blocked.agentId, backend: blocked.backend, why: blocked.why, reason: blocked.reason, estimatedCostUsd: blocked.estimatedCostUsd, maxCostUsd: blocked.maxCostUsd, alternatives: blocked.alternatives, waitingWouldHelp: blocked.waitingWouldHelp, mode, ownerAction });
+      return null;
+    }
+    // Free agents exist but none can take it now. Ordinary queueing is silent; a capacity problem is recorded once.
+    for (const { agent, decision } of pool) {
+      if (agent.assignment) continue;
+      const capacity = capacityOf(agent, this.status(agent), { route: decision.route });
+      if (!['RATE_LIMITED', 'SUBSCRIPTION_LIMIT_REACHED', 'AUTH_REQUIRED'].includes(capacity)) continue;
+      if (task.waitingFor?.agentId === agent.id && task.waitingFor?.capacity === capacity) break;
+      this.emit('WAITING_FOR_CAPACITY', { taskId: task.id, agentId: agent.id, capacity, computeClass: decision.route.computeClass, retryAt: agent.retryAt ?? null, paidAlternativeUsed: false });
+      break;
+    }
+    return null;
+  }
+  // Pass 4 spend authorization. Kyle only (the owner HTTP API passes by: 'kyle'; nothing that reads agent or model
+  // output calls this). Explicit, bounded (amount, expiry, scope), journaled, and revocable.
+  authorizeSpend(input, { by } = {}) {
+    if (by !== 'kyle') throw Error('Only Kyle can authorize spending.');
+    const v = validateSpendAuthorization(input, this.now());
+    if (v.scope.taskId && !this.state.tasks[v.scope.taskId]) throw Error('Unknown task for this authorization.');
+    if (v.scope.objectiveId && !this.state.objectives[v.scope.objectiveId]) throw Error('Unknown objective for this authorization.');
+    if (v.scope.agentId && !this.state.agents[v.scope.agentId]) throw Error('Unknown agent for this authorization.');
+    const id = randomUUID();
+    this.emit('SPEND_AUTHORIZED', { id, by: 'kyle', ...v });
+    return id;
+  }
+  revokeSpend(id, { by, reason = null } = {}) {
+    if (by !== 'kyle') throw Error('Only Kyle can revoke a spend authorization.');
+    const auth = this.state.compute.authorizations[id];
+    if (!auth) throw Error('Unknown spend authorization.');
+    if (!auth.revokedAt) this.emit('SPEND_REVOKED', { id, by: 'kyle', reason: typeof reason === 'string' ? reason.slice(0, 300) : null });
+    return { revoked: true };
+  }
+  // A task stopped at the spend gate runs again only when Kyle asks (after authorizing, or to retry for free).
+  retrySpendBlocked(taskId, { by } = {}) {
+    if (by !== 'kyle') throw Error('Only Kyle can retry a task stopped at the spend gate.');
+    const task = this.state.tasks[taskId];
+    if (!task?.spendBlocked || task.stage !== 'BLOCKED') throw Error('That task is not waiting at the spend gate.');
+    this.emit('TASK_REQUEUED', { taskId });
+    return { requeued: true };
+  }
   async recover() {
     for (const task of Object.values(this.state.tasks)) {
       const run = this.state.runs[task.runId];
       if (!run) continue;
+      // Pass 3: a task that performs an objective step is never retried or rerouted here. The conductor owns its
+      // retries (bounded, classified, and within the routing and review-independence rules); the engine only parks it.
+      if (task.link && task.recoveryPending && ['RATE_LIMITED', 'FAILED'].includes(run.terminal)) {
+        this.emit('TASK_PARKED', { taskId: task.id, reason: task.blocker ?? `${run.terminal} run.`, ownerAction: null });
+        continue;
+      }
       if (run.terminal === 'RATE_LIMITED' && task.recoveryPending) {
         this.emit('RECOVERY', { taskId: task.id, step: 'capacity-wait', reason: task.blocker, runId: run.runId });
         if (task.notBefore && task.attempts < this.config.maxAttempts) this.emit('TASK_REQUEUED', { taskId: task.id, notBefore: task.notBefore });
@@ -226,7 +436,8 @@ export class Engine {
       const agent = this.state.agents[run.agentId], status = this.status(agent);
       const ackExpired = !run.acknowledgedAt && this.now() - run.dispatchedAt > (agent.ackTimeoutMs ?? this.config.heartbeatMs);
       if (!failed && !ackExpired && !['OFFLINE', 'STALLED'].includes(status)) continue;
-      this.emit('RECOVERY', { taskId: task.id, step: 'diagnose', reason: failed ? task.blocker : ackExpired ? 'No worker acknowledgement' : status, runId: run.runId });
+      const why = failed ? task.blocker : ackExpired ? 'No worker acknowledgement' : `${status}: ${stallReason(run, this.now(), this.config)}`;
+      this.emit('RECOVERY', { taskId: task.id, step: 'diagnose', reason: why, runId: run.runId });
       let stopped = failed; // FAILED is terminal evidence from the adapter, not a lost response.
       if (!stopped) try { stopped = await bounded(() => this.adapters[agent.executionAdapter]?.cancel(run.runId), this.config.adapterTimeoutMs); } catch { /* Uncertain cancellation retains lease. */ }
       if (stopped !== true) {
@@ -234,9 +445,12 @@ export class Engine {
         continue;
       }
       if (!run.endedAt) this.workerEvent(run.runId, { kind: 'CANCELLED', summary: 'Watchdog confirmed worker stopped before recovery.' });
+      // A task already cancelled is never requeued: record the now-proven stop and move on.
+      if (task.stage === 'CANCELLED') { if (!task.cancelled?.confirmed) this.emit('TASK_CANCELLED', { taskId: task.id, by: 'hq-watchdog', reason: task.cancelled?.reason ?? 'Cancelled.', confirmed: true }); continue; }
       this.emit('AGENT_OBSERVED', { agentId: agent.id, status: 'OFFLINE', detail: 'Recovery quarantine; awaiting cooldown and fresh health check', quarantineUntil: this.now() + this.config.quarantineMs });
       // Different worker handoff is preferred; no blind repetition or arbitrary shell retries.
-      const alternate = Object.values(this.state.agents).find(a => a.id !== agent.id && (!task.preferredAgentId || a.id === task.preferredAgentId) && a.capabilities.includes(task.capability) && !a.assignment && this.adapters[a.executionAdapter] && this.status(a) === 'IDLE');
+      if (task.link) { this.emit('TASK_PARKED', { taskId: task.id, reason: `Watchdog: the worker was ${ackExpired ? 'not acknowledged in time' : `${status} (${why.replace(/^[A-Z]+: /, '')})`} and was stopped.`.slice(0, 1900), ownerAction: null }); continue; }
+      const alternate = Object.values(this.state.agents).find(a => a.id !== agent.id && isWorking(a) && (!task.preferredAgentId || a.id === task.preferredAgentId) && a.capabilities.includes(task.capability) && !a.assignment && this.adapters[a.executionAdapter] && this.status(a) === 'IDLE');
       if (alternate && task.attempts < this.config.maxAttempts) {
         this.emit('RECOVERY', { taskId: task.id, step: 'handoff', reason: `Retry with ${alternate.name}`, from: agent.id, to: alternate.id });
         this.emit('TASK_REQUEUED', { taskId: task.id });
@@ -256,10 +470,16 @@ export class Engine {
     // Queued work waiting behind the intentional local concurrency limit is healthy.
     if (snapshot.counts.ready && snapshot.unresolvedRuns < this.config.maxLocalWorkers) {
       for (const agent of snapshot.agents) {
+        if (!isWorking(agent)) continue;
         if (!this.runnable().some(t => (!t.preferredAgentId || t.preferredAgentId === agent.id) && agent.capabilities.includes(t.capability))) continue;
         if (['IDLE', 'OFFLINE', 'STALLED', 'RATE_LIMITED', 'UNKNOWN'].includes(agent.status)) add(`capacity:${agent.id}`, agent.adapterAvailable ? `UNEXPECTED_${agent.status}` : 'ADAPTER_UNAVAILABLE', agent, null, agent.adapterAvailable ? null : `Connect an execution/telemetry adapter for ${agent.name}, or route to a capable connected worker.`, agent.detail || 'Runnable work exists without verified execution on this worker.');
       }
-      if (!snapshot.agents.some(a => a.adapterAvailable && this.runnable().some(t => (!t.preferredAgentId || t.preferredAgentId === a.id) && a.capabilities.includes(t.capability)))) add('queue:no-adapter', 'ADAPTER_UNAVAILABLE', null, null, 'Connect a capable execution adapter for the queued operation.', 'No connected worker can execute the safe queue.');
+      if (!snapshot.agents.some(a => isWorking(a) && a.adapterAvailable && this.runnable().some(t => (!t.preferredAgentId || t.preferredAgentId === a.id) && a.capabilities.includes(t.capability)))) add('queue:no-adapter', 'ADAPTER_UNAVAILABLE', null, null, 'Connect a capable execution adapter for the queued operation.', 'No connected worker can execute the safe queue.');
+    }
+    // Orchestration observability (orchestration/attention.mjs): an objective that ended without completing is an open
+    // alert until the orchestrator or Kyle acknowledges it with the next step, so it cannot sit unnoticed.
+    for (const o of Object.values(this.state.objectives ?? {})) {
+      if (needsFollowUp(o) && this.now() - (o.endedAt ?? o.updatedAt) <= ATTENTION_LIMITS.alertWindowMs) add(`objective:${o.id}`, 'OBJECTIVE_NEEDS_FOLLOW_UP', null, null, null, `Objective "${String(o.input?.title ?? o.id).slice(0, 120)}" ended ${o.status}: ${String(o.statusReason ?? '').slice(0, 300)} Nobody has acknowledged it yet; ChatGPT sees it on its next HQ call.`);
     }
     if (snapshot.cycleComplete) add('cycle:complete', 'HANDOFF_READY', null, null, null, 'READY=0, WORKING=0, REVIEW=0; remaining tasks have explicit blockers.');
     for (const [key, alert] of desired) {
@@ -268,33 +488,136 @@ export class Engine {
     }
     for (const alert of Object.values(this.state.alerts)) if (alert.active && !desired.has(alert.key)) this.emit('ALERT_RESOLVED', { key: alert.key });
   }
+  // ---- Pass 5F: agents created in HQ (agents.mjs). Creation and every owner step are Kyle's (the owner HTTP API passes
+  // by: 'kyle'); provisioning is HQ's, one checked stage at a time.
+  createAgent(input, { by } = {}) {
+    if (by !== 'kyle') throw Error('Only Kyle can create agents.');
+    const { id, definition } = validateAgentInput(input, this.state);
+    this.emit('AGENT_CREATED', { id, definition, by: 'kyle', detail: 'Created by Kyle in HQ; provisioning starts with real checks.' });
+    return id;
+  }
+  transitionAgent(agentId, to, fields = {}) {
+    const a = this.state.agents[agentId];
+    if (!a?.lifecycle) throw Error('Only agents created in HQ have a lifecycle.');
+    if (!canTransition(a, to)) throw Error(`${a.name} cannot go from ${a.lifecycle.state} to ${to}${a.lifecycle.state === 'DISABLED' && to === 'ACTIVE' ? ' (it was never READY; retry provisioning)' : ''}.`);
+    this.emit('AGENT_LIFECYCLE', { agentId, to, ...fields });
+  }
+  ownerAgent(agentId, by) {
+    if (by !== 'kyle') throw Error('Only Kyle can change an agent\'s lifecycle.');
+    const a = this.state.agents[agentId];
+    if (!a) throw Error('Unknown agent.');
+    if (!a.lifecycle) throw Error(`${a.name} is a built-in HQ agent without a lifecycle; it is configured in registry.mjs.`);
+    return a;
+  }
+  // READY -> ACTIVE (joins the team), or DISABLED -> ACTIVE for an agent that was READY before.
+  activateAgent(agentId, { by } = {}) {
+    this.ownerAgent(agentId, by);
+    this.transitionAgent(agentId, 'ACTIVE', { by: 'kyle', detail: 'Activated by Kyle.' });
+    return { state: 'ACTIVE' };
+  }
+  // ERROR or DISABLED -> REQUESTED: provisioning runs again from the start, with fresh checks.
+  retryAgent(agentId, { by } = {}) {
+    const a = this.ownerAgent(agentId, by);
+    if (!['ERROR', 'DISABLED'].includes(a.lifecycle.state)) throw Error(`${a.name} is ${a.lifecycle.state}; only a failed or disabled agent is provisioned again.`);
+    if (a.lifecycle.attempts >= this.config.maxProvisioningAttempts) throw Error(`${a.name} has used ${a.lifecycle.attempts} provisioning attempts; create a corrected agent instead.`);
+    this.transitionAgent(agentId, 'REQUESTED', { by: 'kyle', detail: `Provisioning attempt ${a.lifecycle.attempts + 1}, requested by Kyle.` });
+    return { state: 'REQUESTED' };
+  }
+  async disableAgent(agentId, { by, reason = null } = {}) { return this.leave(agentId, 'DISABLED', by, reason); }
+  async retireAgent(agentId, { by, reason = null } = {}) { return this.leave(agentId, 'RETIRED', by, reason); }
+  // Disabling or retiring stops the agent's work first: a live run is cancelled through its adapter and, once the
+  // adapter confirms the process ended, the task goes back to the queue for any capable active agent. Without that
+  // proof the task is parked (the lease stays held, as everywhere in HQ) and Kyle confirms termination.
+  async leave(agentId, to, by, reason) {
+    const a = this.ownerAgent(agentId, by);
+    if (!canTransition(a, to)) throw Error(`${a.name} cannot go from ${a.lifecycle.state} to ${to}.`);
+    this.jobs.get(agentId)?.cancel?.();
+    const word = to === 'RETIRED' ? 'retired' : 'disabled';
+    let requeued = null, parked = null;
+    const task = this.state.tasks[a.assignment], run = this.state.runs[task?.runId];
+    if (task && run && !run.endedAt) {
+      let stopped = false;
+      // Recorded before cancel, so the adapter's own terminal CANCELLED (it lands first) is tagged as this stop (B1).
+      this.leaving.add(run.runId);
+      try { stopped = await bounded(() => this.adapters[a.executionAdapter]?.cancel(run.runId), Math.max(this.config.adapterTimeoutMs, 30_000)); } catch { /* unproven */ } finally { this.leaving.delete(run.runId); }
+      if (stopped === true) {
+        if (!this.state.runs[run.runId].endedAt) this.workerEvent(run.runId, { kind: 'CANCELLED', summary: `${a.name} was ${word} by Kyle; the adapter confirmed the worker stopped.`, requeue: true });
+        // Only a run that ended CANCELLED is requeued: work that completed (or failed) in the race keeps its outcome.
+        if (this.state.runs[run.runId].terminal === 'CANCELLED' && this.state.tasks[task.id].stage !== 'CANCELLED') { this.emit('TASK_REQUEUED', { taskId: task.id, releasePreference: true, reason: `${a.name} was ${word}; the task is back in the queue.` }); requeued = task.id; }
+      } else {
+        this.emit('TASK_PARKED', { taskId: task.id, reason: `${a.name} was ${word} mid-run and its worker did not confirm it stopped.`, ownerAction: 'Confirm the previous worker has stopped before this task runs again.' });
+        parked = task.id;
+      }
+    }
+    this.transitionAgent(agentId, to, { by: 'kyle', detail: `${to === 'RETIRED' ? 'Retired' : 'Disabled'} by Kyle${reason ? `: ${String(reason).slice(0, 200)}` : '.'}` });
+    return { state: to, requeued, parked };
+  }
+  // One provisioning check per agent at a time, started from tick() and never awaited there. A check result applies
+  // only if the agent is still where the check started (Kyle may have disabled or retired it meanwhile).
+  provision() {
+    const ctx = { engine: this, ollama: this.provisioning.ollama ?? null, trialTimeoutMs: this.config.trialTimeoutMs };
+    for (const a of Object.values(this.state.agents)) {
+      const s = a.lifecycle?.state;
+      if (!s || !PROVISIONING.has(s) || this.jobs.has(a.id)) continue;
+      if (s === 'REQUESTED') { this.transitionAgent(a.id, 'CONFIGURING', { detail: 'Checking the definition against what HQ can configure.' }); continue; }
+      const stage = s === 'WAITING' ? a.lifecycle.stage : s;
+      if (s === 'WAITING' && this.now() - (this.checkedAt[a.id] ?? a.lifecycle.since) < this.config.provisionRecheckMs) continue;
+      const since = a.lifecycle.since, limit = stage === 'TESTING' ? this.config.trialTimeoutMs + 10_000 : this.config.provisionTimeoutMs;
+      let cancelled = false;
+      const job = bounded(() => CHECKS[stage](a, ctx), limit).catch(error => ({ ok: false, detail: `The ${stage} check did not finish: ${error.message}` })).then(r => {
+        this.jobs.delete(a.id); this.checkedAt[a.id] = this.now();
+        if (!cancelled) this.finishStage(a.id, s, since, stage, r);
+      });
+      job.cancel = () => { cancelled = true; };
+      this.jobs.set(a.id, job);
+    }
+  }
+  finishStage(agentId, from, since, stage, r) {
+    const a = this.state.agents[agentId];
+    if (!a || a.lifecycle.state !== from || a.lifecycle.since !== since || r.defer) return;
+    const detail = String(r.detail ?? '').slice(0, 600);
+    if (r.wait) {
+      const ownerAction = String(r.ownerAction ?? '').slice(0, 400) || null;
+      if (from !== 'WAITING') this.transitionAgent(agentId, 'WAITING', { stage, detail, ownerAction });
+      else if (a.lifecycle.detail !== detail) this.emit('AGENT_WAITING_UPDATED', { agentId, detail, ownerAction });
+      return;
+    }
+    if (!r.ok) { this.transitionAgent(agentId, 'ERROR', { stage, detail: `${stage} failed: ${detail}`, ownerAction: 'Correct the definition or the environment, then retry provisioning in HQ.' }); return; }
+    // A waiting check that now passes resumes its stage (and runs it again there); a passed stage moves on.
+    if (from === 'WAITING') { this.transitionAgent(agentId, stage, { stage, detail: `Resumed: ${detail}` }); return; }
+    const next = stage === 'TESTING' ? 'READY' : STAGES[STAGES.indexOf(stage) + 1];
+    this.transitionAgent(agentId, next, { stage, detail: `${stage} passed: ${detail}`, ...(r.bindings ? { bindings: r.bindings } : {}), ...(next === 'READY' ? { binding: bindingFor(a) } : {}) });
+  }
+  async provisioningIdle() { while (this.jobs.size) await Promise.all([...this.jobs.values()]); }
   acknowledgeAlert(key) {
     if (!this.state.alerts[key]) throw Error('Unknown alert');
     if (!this.state.alerts[key].acknowledgedAt) this.emit('ALERT_ACKNOWLEDGED', { key });
   }
+  // Pass 3 cancellation of one task. Never-dispatched work is withdrawn outright. A live run is stopped through its
+  // adapter, and the task is recorded as CANCELLED only with proof: the adapter confirmed the process ended. Without
+  // proof the lease stays held (confirmed: false) so nothing is dispatched on top of a process that may still run.
+  async cancelTask(taskId, { by = 'kyle', reason = 'Cancelled.' } = {}) {
+    const task = this.state.tasks[taskId];
+    if (!task) throw Error('Unknown task');
+    if (task.stage === 'DONE' || (task.stage === 'CANCELLED' && task.cancelled?.confirmed)) return { confirmed: true, already: task.stage };
+    const run = this.state.runs[task.runId];
+    let confirmed = true;
+    if (run && !run.endedAt) {
+      let stopped = false;
+      try { stopped = await bounded(() => this.adapters[this.state.agents[run.agentId]?.executionAdapter]?.cancel(run.runId), Math.max(this.config.adapterTimeoutMs, 30_000)); } catch { /* unproven */ }
+      confirmed = stopped === true;
+      if (confirmed && !this.state.runs[run.runId].endedAt) this.workerEvent(run.runId, { kind: 'CANCELLED', summary: `Cancelled by ${by}; termination confirmed by the adapter.` });
+    }
+    this.emit('TASK_CANCELLED', { taskId, by: String(by).slice(0, 40), reason: String(reason).slice(0, 300) || 'Cancelled.', confirmed });
+    return { confirmed };
+  }
   reconcileStoppedRun(runId, confirmation, evidence) {
     const run = this.state.runs[runId], task = this.state.tasks[run?.taskId];
-    if (!run || run.endedAt || task?.stage !== 'BLOCKED') throw Error('Only an unresolved blocked run can be reconciled');
+    if (!run || run.endedAt || !['BLOCKED', 'CANCELLED'].includes(task?.stage)) throw Error('Only an unresolved blocked run can be reconciled');
     if (confirmation !== true || !text(evidence)) throw Error('Owner confirmation and termination evidence required');
     this.emit('OWNER_CONFIRMED_TERMINATION', { runId, taskId: task.id, evidence });
     this.workerEvent(runId, { kind: 'CANCELLED', summary: `Owner confirmed worker stopped: ${evidence}` });
     this.emit('TASK_PARKED', { taskId: task.id, reason: 'Previous run reconciled as stopped; task remains incomplete.', ownerAction: 'Repair or split the original task and create a new scoped follow-up when ready.' });
     this.adapters[this.state.agents[run.agentId].executionAdapter]?.reconcile?.(runId);
-  }
-  // Unconfirmed termination keeps the run's lease (confirmed: false) exactly like recovery does.
-  async cancelTask(taskId, { by = 'hq', reason = '' } = {}) {
-    const task = this.state.tasks[taskId];
-    if (!task) throw Error('Unknown task');
-    if (['DONE', 'CANCELLED'].includes(task.stage)) return { taskId, confirmed: true };
-    const run = task.runId ? this.state.runs[task.runId] : null;
-    if (run && !run.endedAt) {
-      const agent = this.state.agents[run.agentId];
-      let stopped = false;
-      try { stopped = await bounded(() => this.adapters[agent?.executionAdapter]?.cancel(task.runId), this.config.adapterTimeoutMs); } catch { /* retain lease */ }
-      if (stopped === true && !this.state.runs[task.runId].endedAt) this.workerEvent(task.runId, { kind: 'CANCELLED', summary: `Cancelled by ${by}: ${String(reason).slice(0, 200) || 'no reason given'}` });
-    }
-    const confirmed = !run || Boolean(this.state.runs[task.runId].endedAt);
-    this.emit('TASK_CANCELLED', { taskId, by, reason: String(reason).slice(0, 300), confirmed });
-    return { taskId, confirmed };
   }
 }

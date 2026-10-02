@@ -1,0 +1,83 @@
+{
+  "boot": {
+    "computeMode": "ZERO_CREDIT",
+    "orchestrator": "DISABLED: metered OpenAI API; HQ is in ZERO_CREDIT mode",
+    "implementation": "CONFIGURED",
+    "ollama": "UNAVAILABLE: fetch failed",
+    "meteredCredentialsPresent": {
+      "OPENAI_API_KEY": true,
+      "ANTHROPIC_API_KEY": true,
+      "HQ_SANDBOX_ANTHROPIC_API_KEY": true,
+      "CODEX_API_KEY": true,
+      "ANTHROPIC_AUTH_TOKEN": false
+    }
+  },
+  "A": {
+    "local": {
+      "stage": "DONE",
+      "computeClass": "LOCAL"
+    },
+    "qwen": "Ollama not running on this machine",
+    "meteredSpendToday": 0
+  },
+  "B": {
+    "health": "IDLE",
+    "detail": "Claude Code 2.1.285 (Claude Code): signed in with the subscription (oauth_token). Remaining subscription capacity is UNKNOWN until a run reports it.",
+    "stage": "DONE",
+    "ack": "Claude Code session started with tools: Glob, Grep, Read (subscription sign-in).",
+    "computeClass": "SUBSCRIPTION",
+    "cliReportedCostUsd": 0.020285199999999996,
+    "meteredCostUsd": 0,
+    "answer": "The core invariant is: \"NO VALID KYLE SPEND AUTHORIZATION = NO METERED AI REQUEST.\"\n\nEvidence: `tools/hillink-hq/compute/policy.mjs:5`, with the details on lines 6–8.",
+    "blocker": null
+  },
+  "C": {
+    "health": "OFFLINE",
+    "detail": "AUTH_REQUIRED: Codex is not signed in. Run `codex login` and choose Sign in with ChatGPT, then restart HQ.",
+    "capacity": "AUTH_REQUIRED",
+    "taskStage": "READY",
+    "computeClass": "not dispatched",
+    "answer": null
+  },
+  "D": {
+    "status": "AWAITING_DECISION",
+    "plan": "METERED COMPUTE REQUIRED for implement: HQ stops at the spend gate before it (ZERO_CREDIT mode forbids it). Up to $2.00 per attempt.",
+    "decision": "BLOCKED_REQUIRES_SPEND_APPROVAL: the implement step needs metered anthropic compute (Claude Code inside a disposable WSL2 sandbox, authenticated with HQ_SANDBOX_ANTHROPIC_API_KEY). anthropic metered API (Claude Code inside a disposable WSL2",
+    "implementationTasks": 0,
+    "sandboxesCreated": 0
+  },
+  "F": {
+    "injectedObjective": 201,
+    "injectedPlanMetered": false,
+    "hostileOrigin": 403,
+    "overCap": "amountUsd is capped at $25 per authorization (no unlimited budgets).",
+    "negative": "amountUsd must be a positive finite number of dollars.",
+    "orchestrateTask": {
+      "stage": "READY",
+      "dispatched": false,
+      "computeModeField": "ignored"
+    },
+    "authorizations": 0,
+    "mode": "ZERO_CREDIT"
+  },
+  "G": {
+    "mode": "ZERO_CREDIT",
+    "modeHistory": [
+      "ZERO_CREDIT"
+    ],
+    "sameStages": true,
+    "spendBlockedStillBlocked": true,
+    "authorizations": 0,
+    "ledger": {
+      "meteredSpendToday": 0,
+      "meteredSpendThisMonth": 0,
+      "runsByClass": {
+        "LOCAL": 1,
+        "SUBSCRIPTION": 2,
+        "METERED_API": 0
+      }
+    }
+  },
+  "openAiRequests": 0,
+  "sandboxesCreated": 0
+}
