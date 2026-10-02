@@ -5,13 +5,13 @@ import { frames } from '../../procgen/camera.mjs';
 import { union } from '../../procgen/geom.mjs';
 import { mixA, css, hash2, glow } from './color.mjs';
 
-export const ISLAND_MARGIN_M = 7;
+export const ISLAND_MARGIN_M = 10;
 
-// The island's plan rectangle (plan units, the layout's view frame): the developed land (parcels in use, buildings,
-// construction sites) plus a margin, so it starts small around the T0 HQ and grows when the settlement does.
+// The island's plan rectangle (plan units, the layout's view frame): the built footprint (buildings and construction
+// sites) plus a margin for the forecourt, paths and planting, so it starts small around the T0 HQ and grows when the settlement does.
 export function islandRect(layout, margin = ISLAND_MARGIN_M) {
   const { world, view, U } = layout;
-  const rects = [...Object.values(world.parcels).filter(p => p.status !== 'vacant').map(p => p.rect), ...Object.values(world.buildings).map(b => b.footprint), ...Object.values(world.spaces).filter(s => s.project).map(s => s.rect)];
+  const rects = [...Object.values(world.buildings).map(b => b.footprint), ...Object.values(world.spaces).filter(s => s.project).map(s => s.rect)];
   const s = rects.length ? union(rects) : frames(world).settlement;
   const r = view.rectToView({ x: s.x - margin, y: s.y - margin, w: s.w + 2 * margin, h: s.h + 2 * margin });
   return { x0: r.x0 * U, x1: r.x1 * U, z0: r.z0 * U, z1: r.z1 * U };

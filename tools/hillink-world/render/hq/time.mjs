@@ -2,7 +2,7 @@
 // midnight); 'day', 'dusk' and 'night' pin it (?light=day|dusk|night). Day and night are a parameter of the look only:
 // they change no World state.
 export const LIGHT_MODES = ['auto', 'day', 'dusk', 'night'];
-const PINNED = { day: 0.25, dusk: 0.497, night: 0.75 };
+const PINNED = { day: 0.25, dusk: 0.485, night: 0.75 };
 let mode = 'auto';
 export function setHqLight(m) { mode = LIGHT_MODES.includes(m) ? m : 'auto'; }
 export const hqLight = () => mode;

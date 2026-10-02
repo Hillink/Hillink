@@ -21,7 +21,7 @@ import { loadSite, createSiteSync, sourceLabel } from './ui/site-sync.mjs';
 import { worldFingerprint } from './procgen/world.mjs';
 import { setPxLighting, pxLighting } from './render/px/skin.mjs';
 import { LIGHTING_IDS } from './render/px/palette.mjs';
-import { setHqLight } from './render/hq/skin.mjs';
+import { setHqLight, hqLight } from './render/hq/skin.mjs';
 
 const $ = id => document.getElementById(id);
 const storage = {
@@ -33,7 +33,7 @@ const params = new URLSearchParams(location.search);
 // Pass 5H slice: ?art=px is the pixel renderer (both themes); ?light=day|dusk|night its lighting setting.
 const pxMode = () => theme?.art === 'px';
 // The slice keeps its own saved camera, so a zoom saved by another skin never opens it zoomed out.
-const camKey = () => `hlw:camera:${theme?.id}${siteWorld ? ':gen' : ''}${pxMode() ? ':px' : ''}`;
+const camKey = () => `hlw:camera:${theme?.id}${siteWorld ? ':gen' : ''}${pxMode() ? ':px' : ''}${theme?.art === 'hq' ? ':hq' : ''}`;
 if (params.get('light')) setPxLighting(params.get('light'));
 if (params.get('light')) setHqLight(params.get('light')); // ?art=hq: day | dusk | night (default: the viewer's clock)
 const deviceRatio = () => Math.min(2, devicePixelRatio || 1);
@@ -80,6 +80,14 @@ function applyTheme(id, { keepCamera = false } = {}) {
   renderNav(); renderHud(); invalidate();
 }
 $('themes').innerHTML = THEME_ORDER.map(id => `<button role="radio" data-theme="${id}">${THEME_NAMES[id]}</button>`).join('');
+// ?art=hq: time of day follows the viewer's clock; Day, Dusk and Night pin it (a look setting, never World state).
+if (params.get('art') === 'hq') {
+  const box = document.createElement('div'); box.id = 'hq-light'; box.className = 'themes'; box.setAttribute('role', 'radiogroup'); box.setAttribute('aria-label', 'Time of day');
+  const paint = () => { for (const b of box.children) b.setAttribute('aria-checked', String(b.dataset.light === hqLight())); };
+  box.innerHTML = [['auto', 'Clock'], ['day', 'Day'], ['dusk', 'Dusk'], ['night', 'Night']].map(([k, n]) => `<button role="radio" data-light="${k}">${n}</button>`).join('');
+  box.addEventListener('click', e => { const k = e.target.closest('[data-light]')?.dataset.light; if (k) { setHqLight(k); paint(); } });
+  $('themes').after(box); paint();
+}
 $('themes').addEventListener('click', e => { const id = e.target.closest('[data-theme]')?.dataset.theme; if (id && id !== theme.id) applyTheme(id, { keepCamera: pxMode() }); });
 
 // The header and roster are fixed over the canvas; the camera frames the world between them.
