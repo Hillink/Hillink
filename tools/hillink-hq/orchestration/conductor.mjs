@@ -7,7 +7,7 @@
 // validation (handoff), retries and loop guards (retry), deterministic verification (verify), restart proof
 // (recovery), lifecycle and persistence (state + the engine journal), World contract (activity).
 import { randomUUID } from 'node:crypto';
-import { TERMINAL, canTransition } from './state.mjs';
+import { TERMINAL, canTransition, deriveDecisionAuthority } from './state.mjs';
 import { DEFAULT_LIMITS, validateObjectiveInput, implementationEligibility, APPROVAL_GATES, PRE_WORK_GATES, POST_WORK_GATES } from './policy.mjs';
 import { planObjective, implementationSteps, stepId, REQUIRED_EVIDENCE } from './planner.mjs';
 import { candidates, assertImplementer, ROUTES } from './routing.mjs';
@@ -444,7 +444,7 @@ export class Conductor {
   // ---- decisions ----
   requestDecision(o, decisionId, resume, question, options) {
     if (!o.decisions[decisionId]) this.engine.emit('DECISION_REQUESTED', { objectiveId: o.id, decisionId, question: clip(question, 1200), options, resume });
-    this.set(o, 'AWAITING_DECISION', `${resume.authority === 'kyle' ? 'Kyle' : 'The orchestrator (ChatGPT)'} must decide: ${clip(question, 400)}`);
+    this.set(o, 'AWAITING_DECISION', `${deriveDecisionAuthority(resume) === 'kyle' ? 'Kyle' : 'The orchestrator (ChatGPT)'} must decide: ${clip(question, 400)}`);
     if (resume.authority === 'orchestrator') this.callOrchestrator(o, decisionId);
   }
   // Wakes ChatGPT with a bounded, factual prompt. Its only way to act is the validated resolve tool.

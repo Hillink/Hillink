@@ -29,18 +29,26 @@ export const ORCHESTRATION_EVENTS = new Set(['OBJECTIVE_CREATED', 'OBJECTIVE_PLA
 
 export function canTransition(from, to) { return (TRANSITIONS[from] ?? []).includes(to); }
 
-// Decision authority policy: derived from the decision type, applied at replay and live creation.
-// review-fallback is an operational orchestration choice (which provider reviews?); it belongs to ChatGPT.
-// Consequential owner decisions (spend, high-risk scope, explicit escalation) stay Kyle-only.
-// Unknown/unrecognized types fail safe to kyle so old or unexpected decisions never route to the orchestrator.
+// Decision authority policy: derived from the decision type, applied at replay and live creation. The supplied
+// resume.authority is only trusted where the type's policy says so (scope/disagreement carry a risk-derived
+// authority set by the conductor); every other type has a fixed owner.
+// - review-fallback, investigation: operational orchestration choices; they belong to ChatGPT.
+// - spend: always Kyle.
+// - scope, disagreement: the conductor's risk-derived authority (high risk -> kyle), anything else -> kyle.
+// - explicit escalation: always Kyle, whatever the base type.
+// - unknown/unrecognized types: always Kyle, whatever authority was supplied, so old or unexpected decisions
+//   never route to the orchestrator.
+const DECISION_AUTHORITY = {
+  'review-fallback': () => 'orchestrator',
+  investigation: () => 'orchestrator',
+  spend: () => 'kyle',
+  scope: (resume) => resume.authority === 'orchestrator' ? 'orchestrator' : 'kyle',
+  disagreement: (resume) => resume.authority === 'orchestrator' ? 'orchestrator' : 'kyle',
+};
 export function deriveDecisionAuthority(resume) {
-  if (!resume) return 'kyle';
-  // Explicit escalation always goes to Kyle regardless of the base decision type.
-  if (resume.escalated) return 'kyle';
-  // review-fallback is an orchestrator routing choice (which provider reviews?).
-  // Only explicit escalation can make it Kyle's; everything else routes to the orchestrator.
-  if (resume.type === 'review-fallback') return 'orchestrator';
-  return resume.authority ?? 'kyle';
+  if (!resume || resume.escalated) return 'kyle';
+  const policy = Object.hasOwn(DECISION_AUTHORITY, resume.type) ? DECISION_AUTHORITY[resume.type] : null;
+  return policy ? policy(resume) : 'kyle';
 }
 
 // Applied after the engine's own reducer, for every journal event (replay and live take the same path).

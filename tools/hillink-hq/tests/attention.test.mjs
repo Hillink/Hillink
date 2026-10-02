@@ -89,7 +89,7 @@ test('O3. Kyle\'s standing notes reach ChatGPT through HQ (full text in get_hq_s
 test('O4. a decision HQ assigned to the orchestrator is listed; a decision for Kyle is not offered to ChatGPT', () => {
   const h = harness({ metered: false });
   const id = submit(h);
-  h.engine.emit('DECISION_REQUESTED', { objectiveId: id, decisionId: 'd-orch', question: 'Which scope?', options: [{ id: 'a', label: 'A' }], resume: { authority: 'orchestrator' } });
+  h.engine.emit('DECISION_REQUESTED', { objectiveId: id, decisionId: 'd-orch', question: 'Which scope?', options: [{ id: 'a', label: 'A' }], resume: { authority: 'orchestrator', type: 'scope' } });
   h.engine.emit('DECISION_REQUESTED', { objectiveId: id, decisionId: 'd-kyle', question: 'Accept same-provider review?', options: [{ id: 'a', label: 'A' }], resume: { authority: 'kyle' } });
   assert.deepEqual(attention(h.engine.state).decisions_for_orchestrator.map(d => d.decision_id), ['d-orch']);
 });

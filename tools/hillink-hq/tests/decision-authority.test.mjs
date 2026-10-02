@@ -228,6 +228,35 @@ test('8. journal replay: old review-fallback with authority=kyle is corrected to
   assert.doesNotThrow(() => h2.conductor.decide(id2, 'old-rf-2', 'wait', { by: 'kyle', rationale: 'Kyle deciding.' }));
 });
 
+// 8b. Authority is enforced by recognized type; a supplied authority cannot hand a Kyle-owned decision to the orchestrator.
+test('8b. unknown and spend decisions stay Kyle even when the supplied authority says orchestrator', () => {
+  assert.equal(deriveDecisionAuthority({ type: 'unknown-future-type', authority: 'orchestrator' }), 'kyle', 'unknown + orchestrator -> kyle');
+  assert.equal(deriveDecisionAuthority({ authority: 'orchestrator' }), 'kyle', 'missing type + orchestrator -> kyle');
+  assert.equal(deriveDecisionAuthority({ type: 'toString', authority: 'orchestrator' }), 'kyle', 'prototype key as type -> kyle');
+  assert.equal(deriveDecisionAuthority({ type: 'spend', authority: 'orchestrator' }), 'kyle', 'spend + orchestrator -> kyle');
+  assert.equal(deriveDecisionAuthority({ type: 'spend' }), 'kyle', 'spend with no stored authority -> kyle');
+  // Existing behaviour of the other recognized types is unchanged.
+  assert.equal(deriveDecisionAuthority({ type: 'scope', authority: 'orchestrator' }), 'orchestrator', 'non-high-risk scope -> orchestrator');
+  assert.equal(deriveDecisionAuthority({ type: 'scope', authority: 'kyle' }), 'kyle', 'high-risk scope -> kyle');
+  assert.equal(deriveDecisionAuthority({ type: 'scope' }), 'kyle', 'scope with no stored authority -> kyle');
+  assert.equal(deriveDecisionAuthority({ type: 'disagreement', authority: 'orchestrator' }), 'orchestrator', 'non-high-risk disagreement -> orchestrator');
+  assert.equal(deriveDecisionAuthority({ type: 'disagreement', authority: 'kyle' }), 'kyle', 'high-risk disagreement -> kyle');
+  assert.equal(deriveDecisionAuthority({ type: 'investigation', authority: 'orchestrator' }), 'orchestrator', 'investigation -> orchestrator');
+  assert.equal(deriveDecisionAuthority({ type: 'investigation', authority: 'kyle' }), 'orchestrator', 'investigation is always orchestrator');
+  assert.equal(deriveDecisionAuthority({ type: 'investigation', authority: 'orchestrator', escalated: true }), 'kyle', 'escalated investigation -> kyle');
+  assert.equal(deriveDecisionAuthority({ type: 'scope', authority: 'orchestrator', escalated: true }), 'kyle', 'escalated scope -> kyle');
+
+  // End-to-end via the reducer: the orchestrator cannot resolve either decision; Kyle can.
+  for (const type of ['unknown-future-type', 'spend']) {
+    const h = harness({ codex: scriptedAgent('Codex', () => ({ text: handoffText(review()) })) });
+    const id = h.conductor.submit({ objective: 'Investigate.', type: 'investigate' });
+    h.engine.emit('DECISION_REQUESTED', { objectiveId: id, decisionId: `forged-${type}`, question: 'Forged?', options: [{ id: 'go', label: 'Go' }], resume: { authority: 'orchestrator', type } });
+    assert.equal(h.engine.state.objectives[id].decisions[`forged-${type}`].resume.authority, 'kyle', `${type} normalized to kyle`);
+    assert.throws(() => h.conductor.decide(id, `forged-${type}`, 'go', { by: 'chatgpt', rationale: 'Trying.' }), /needs Kyle/);
+    assert.doesNotThrow(() => h.conductor.decide(id, `forged-${type}`, 'go', { by: 'kyle', rationale: 'Kyle deciding.' }));
+  }
+});
+
 // 9. Existing approval gates remain protected; connector cannot substitute for approval.
 test('9. approval gates remain Kyle-only; connector resolve_objective_decision cannot substitute for approval', async () => {
   const hq = await createHQ({ port: 0, store: new MemoryStore(), intervalMs: 20, env: {} });
