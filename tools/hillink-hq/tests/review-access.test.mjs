@@ -53,7 +53,8 @@ function fakeSpawn() {
 }
 function reviewAdapter({ spec = cliAgents.claude, repo, snapshots, ...rest } = {}) {
   const f = fakeSpawn(), events = [];
-  const adapter = new CliAgentAdapter(spec, { spawn: f.spawn, cwd: repo, graceMs: 20, env: { PATH: '/bin', HOME: '/home/k' }, reviewSnapshots: snapshots, ...rest });
+  // platform pinned like cli-agent.test: on win32 cancel() kills through taskkill, which this fake spawn cannot model.
+  const adapter = new CliAgentAdapter(spec, { spawn: f.spawn, platform: 'linux', cwd: repo, graceMs: 20, env: { PATH: '/bin', HOME: '/home/k' }, reviewSnapshots: snapshots, ...rest });
   adapter.healthCache = { at: Date.now(), result: { status: 'IDLE', detail: 'verified', auth: 'subscription' } };
   const task = (over = {}) => ({ id: 'task-0001', operation: 'review-repo', safety: 'local-read-only', description: 'Review the change.', ...over });
   return { adapter, events, spawned: f.spawned, task, emit: e => events.push(e), kinds: () => events.map(e => e.kind) };
@@ -122,8 +123,13 @@ test('reviewer access 2: malformed, unknown or unverifiable commits fail closed 
   await assert.rejects(s.create({ commit: forged, base: r.later }), /reserves for review evidence/);
   // A symlink in the commit is never created (so never followed); the manifest lists it.
   git(r.wt, 'rm', '-q', '-r', REVIEW_META_DIR);
-  fs.symlinkSync('/etc/passwd', path.join(r.wt, 'leak'));
-  git(r.wt, 'add', '.'); git(r.wt, 'commit', '-q', '-m', 'link');
+  // Planted as a git symlink entry (mode 120000) directly, so the case runs where the filesystem refuses symlinks
+  // (Windows without Developer Mode); the snapshot reads git objects, not the worktree.
+  const target = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'hq-review-link-')), 'target');
+  fs.writeFileSync(target, '/etc/passwd');
+  const blob = git(r.wt, 'hash-object', '-w', target).trim();
+  git(r.wt, 'update-index', '--add', '--cacheinfo', `120000,${blob},leak`);
+  git(r.wt, 'commit', '-q', '-m', 'link');
   const linked = git(r.wt, 'rev-parse', 'HEAD').trim();
   const snap = await s.create({ commit: linked, base: forged });
   assert.equal(fs.existsSync(path.join(snap.dir, 'leak')), false);
