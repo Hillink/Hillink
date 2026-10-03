@@ -52,9 +52,9 @@ export function planObjective(objective, { computeMode = 'ZERO_CREDIT', supports
   const gates = gatesFor(input), risk = riskFor(input, gates), reviewRule = reviewPolicy(risk.level);
   const steps = [];
   if (input.type === 'investigate') steps.push({ id: stepId('investigate'), kind: 'investigate', role: 'investigator', dependsOn: [], requiredEvidence: REQUIRED_EVIDENCE.investigate });
-  if (input.type === 'review') steps.push({ id: stepId('review'), kind: 'review', role: 'reviewer', dependsOn: [], reviewRule: { ...reviewRule, independentProvider: false }, standalone: true, requiredEvidence: REQUIRED_EVIDENCE.review });
+  if (input.type === 'review') steps.push({ id: stepId('review'), kind: 'review', role: 'reviewer', dependsOn: [], reviewRule: { ...reviewRule, independentProvider: false }, standalone: true, ...(input.reviewCommit ? { reviewCommit: input.reviewCommit } : {}), requiredEvidence: REQUIRED_EVIDENCE.review });
   if (input.type === 'fix') steps.push({ id: stepId('investigate'), kind: 'investigate', role: 'investigator', dependsOn: [], requiredEvidence: REQUIRED_EVIDENCE.investigate });
-  if (input.type === 'implement') steps.push(...implementationSteps(objective, { objective: input.objective, scope: input.scope, tests: input.tests, acceptanceCriteria: input.acceptanceCriteria, constraints: input.constraints ?? 'Change nothing outside the scope.' }, { reviewRule }));
+  if (input.type === 'implement') steps.push(...implementationSteps(objective, { objective: input.objective, scope: input.scope, tests: input.tests, acceptanceCriteria: input.acceptanceCriteria, constraints: input.constraints ?? 'Change nothing outside the scope.', ...(input.resume ? { resume: input.resume } : {}) }, { reviewRule }));
   const path = { investigate: ['investigate'], review: ['review'], fix: ['investigate', 'implement (only if the evidence supports it and policy allows)', 'verify (HQ)', 'review (independent)'], implement: ['implement', 'verify (HQ)', 'review (independent)'] }[input.type];
   return {
     version: 1,

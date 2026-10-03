@@ -12,7 +12,14 @@
 import crypto from 'node:crypto';
 import { checkPath } from '../implementation-policy.mjs';
 
-const MAX_BLOCK = 24_000;
+// Bounds. A finding was 600 characters until the first historical-state run, where a normal Claude investigation
+// wrote a ~1,000-character finding and was refused twice. 2,000 per finding fits real investigation output; the
+// 24,000-character block cap still bounds the whole handoff (and stays inside the 30,000-character fullText window).
+// Loosening only: every handoff accepted before still validates, and the journal stores parsed handoffs.
+// Item counts too: the rerun's normal 20-file procgen investigation needed 20 evidence entries (cap was 15), then
+// 20 findings on the retry (cap was 10). Investigations now take up to 20 findings, 30 evidence entries, 30 files.
+export const HANDOFF_LIMITS = Object.freeze({ block: 24_000, finding: 2_000, findings: 20, evidence: 30, files: 30 });
+const MAX_BLOCK = HANDOFF_LIMITS.block;
 const SEVERITIES = ['info', 'low', 'medium', 'high', 'critical'];
 
 const fail = msg => { throw Object.assign(Error(msg), { handoff: true }); };
@@ -50,9 +57,9 @@ const SCHEMAS = {
     obj(h, 'handoff', ['kind', 'findings', 'evidence', 'files', 'codePaths', 'suspectedCause', 'confidence', 'risks', 'recommendedAction', 'proposedScope', 'proposedTests', 'proposedAcceptanceCriteria']);
     return {
       kind: 'investigation',
-      findings: arr(h.findings, 'findings', 1, 10, (x, n) => s(x, n, 600)),
-      evidence: arr(h.evidence, 'evidence', 0, 15, (x, n) => { obj(x, n, ['file', 'lines', 'detail']); return { file: evidencePath(x.file, `${n}.file`), lines: s(x.lines, `${n}.lines`, 40, { optional: true }), detail: s(x.detail, `${n}.detail`, 500) }; }),
-      files: arr(h.files, 'files', 0, 20, evidencePath),
+      findings: arr(h.findings, 'findings', 1, HANDOFF_LIMITS.findings, (x, n) => s(x, n, HANDOFF_LIMITS.finding)),
+      evidence: arr(h.evidence, 'evidence', 0, HANDOFF_LIMITS.evidence, (x, n) => { obj(x, n, ['file', 'lines', 'detail']); return { file: evidencePath(x.file, `${n}.file`), lines: s(x.lines, `${n}.lines`, 40, { optional: true }), detail: s(x.detail, `${n}.detail`, 500) }; }),
+      files: arr(h.files, 'files', 0, HANDOFF_LIMITS.files, evidencePath),
       codePaths: arr(h.codePaths, 'codePaths', 0, 10, (x, n) => s(x, n, 300)),
       suspectedCause: s(h.suspectedCause, 'suspectedCause', 1000, { optional: true }),
       confidence: en(h.confidence, 'confidence', ['low', 'medium', 'high']),
@@ -68,7 +75,7 @@ const SCHEMAS = {
     return {
       kind: 'review',
       verdict: en(h.verdict, 'verdict', ['approve', 'request_changes', 'reject']),
-      findings: arr(h.findings, 'findings', 0, 15, (x, n) => { obj(x, n, ['severity', 'detail', 'file', 'evidence']); return { severity: en(x.severity, `${n}.severity`, SEVERITIES), detail: s(x.detail, `${n}.detail`, 600), file: x.file == null ? null : evidencePath(x.file, `${n}.file`), evidence: s(x.evidence, `${n}.evidence`, 500, { optional: true }) }; }),
+      findings: arr(h.findings, 'findings', 0, 15, (x, n) => { obj(x, n, ['severity', 'detail', 'file', 'evidence']); return { severity: en(x.severity, `${n}.severity`, SEVERITIES), detail: s(x.detail, `${n}.detail`, HANDOFF_LIMITS.finding), file: x.file == null ? null : evidencePath(x.file, `${n}.file`), evidence: s(x.evidence, `${n}.evidence`, 500, { optional: true }) }; }),
       regressionRisks: arr(h.regressionRisks, 'regressionRisks', 0, 10, (x, n) => s(x, n, 400)),
       recommendation: s(h.recommendation, 'recommendation', 1000),
     };
@@ -130,6 +137,6 @@ export function framingFor(kind, { objective, quoted = [], extra = '' }) {
     `Objective (from Hillink HQ):\n${objective}`,
     ...blocks,
     extra,
-    `Finish your answer with exactly one fenced block tagged hq-handoff containing a single JSON object of this shape (no comments, no extra fields; use [] or null where you have nothing):\n\`\`\`hq-handoff\n${formats[kind]}\n\`\`\`\nHQ validates the block. Anything else you write is kept as notes only.`,
+    `Finish your answer with exactly one fenced block tagged hq-handoff containing a single JSON object of this shape (no comments, no extra fields; use [] or null where you have nothing):\n\`\`\`hq-handoff\n${formats[kind]}\n\`\`\`\nLimits: at most ${HANDOFF_LIMITS.findings} findings of up to ${HANDOFF_LIMITS.finding} characters each, ${HANDOFF_LIMITS.evidence} evidence entries, ${HANDOFF_LIMITS.files} files, and ${HANDOFF_LIMITS.block} characters for the whole block; group related files into one entry rather than exceed them. HQ validates the block. Anything else you write is kept as notes only.`,
   ].filter(Boolean).join('\n\n');
 }

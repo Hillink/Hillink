@@ -36,8 +36,10 @@ export function deriveAgentState(world, a) {
   const base = { taskId: r.taskId ?? null, runId: r.runId ?? null, basis: 'hq' };
   const hq = world.systems?.hq;
   if (hq && hq.state === 'down') return { ...base, state: 'UNKNOWN', reason: `HQ is unreachable, so nothing about this agent is verified. Last HQ report: ${when(r.observedAt)}.` };
-  if (!r.connected) return { ...base, state: 'NOT_CONNECTED', reason: r.detail || 'HQ has no execution adapter connected for this agent, so it cannot run work.' };
-  switch (r.status) {
+  // ChatGPT orchestrates by calling into HQ through the MCP connector; HQ never launches it, so it has no adapter.
+  const viaConnector = !r.connected && Boolean(r.connector);
+  if (!r.connected && !viaConnector) return { ...base, state: 'NOT_CONNECTED', reason: r.detail || 'HQ has no execution adapter connected for this agent, so it cannot run work.' };
+  switch (viaConnector ? 'IDLE' : r.status) {
     case 'RUNNING': return { ...base, state: 'WORKING', reason: `HQ run ${r.runId} was acknowledged by the agent and is heartbeating (last heartbeat ${when(r.heartbeatAt)}).` };
     case 'STALLED': return { ...base, state: 'NEEDS_ATTENTION', reason: `HQ run ${r.runId} stopped reporting progress. HQ will diagnose it; check the task.` };
     case 'BLOCKED': return { ...base, state: 'WAITING', reason: 'The assigned task is blocked in HQ.' };
@@ -57,6 +59,7 @@ export function deriveAgentState(world, a) {
       const last = r.last;
       if (last?.stage === 'FAILED' || (last?.stage === 'BLOCKED' && last.terminal === 'FAILED')) return { ...base, taskId: last.taskId, state: 'FAILED', reason: `Its last task failed${last.detail ? `: ${last.detail}` : '.'}` };
       if (last?.stage === 'BLOCKED') return { ...base, taskId: last.taskId, state: 'NEEDS_ATTENTION', reason: `Its last task is parked in HQ${last.detail ? `: ${last.detail}` : '.'}` };
+      if (viaConnector) return { ...base, state: 'IDLE', reason: `Connected to HQ through the ChatGPT connector; ${r.connector.lastCallAt ? `last call ${when(r.connector.lastCallAt)}` : 'no calls since HQ started'}.` };
       return { ...base, state: 'IDLE', reason: 'Available with no active run in HQ.' };
     }
     default: return { ...base, state: 'UNKNOWN', reason: `HQ reported an unrecognised status (${r.status}).` };

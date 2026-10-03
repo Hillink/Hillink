@@ -1,0 +1,25 @@
+:root { --bg: #f6f4ef; --fg: #1c1d22; --muted: #5d606b; --card: #ffffff; --line: #ddd8cc; --accent: #2b5fd9; --ok: #1f7a4a; --no: #b3261e; --warn: #8a5a00; color-scheme: light; }
+@media (prefers-color-scheme: dark) { :root { --bg: #14151a; --fg: #ecebe6; --muted: #a2a4ad; --card: #1e2027; --line: #343743; --accent: #7aa2ff; --ok: #5fd08f; --no: #ff8a80; --warn: #f0c060; color-scheme: dark; } }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+main { max-width: 680px; margin: 0 auto; padding: max(16px, env(safe-area-inset-top)) 16px max(24px, env(safe-area-inset-bottom)); display: grid; gap: 16px; }
+h1 { margin: 0; font-size: 1.6rem; } h2 { margin: 0 0 4px; font-size: 1.15rem; } h3 { margin: 0; font-size: 1rem; }
+.eyebrow { margin: 0; letter-spacing: .08em; font-size: .75rem; color: var(--muted); }
+.muted { color: var(--muted); }
+#status { margin: 4px 0 0; color: var(--muted); }
+#status.error { color: var(--no); }
+form { display: grid; gap: 10px; }
+label { display: grid; gap: 4px; font-size: .9rem; color: var(--muted); }
+input, textarea { font: inherit; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--card); color: var(--fg); min-width: 0; }
+button { font: inherit; padding: 12px 16px; border-radius: 10px; border: 1px solid var(--line); background: var(--card); color: var(--fg); }
+button.approve { background: var(--ok); border-color: var(--ok); color: #fff; }
+button.deny { border-color: var(--no); color: var(--no); }
+button.armed { outline: 3px solid var(--warn); }
+.item { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 16px; display: grid; gap: 10px; min-width: 0; }
+.tag { display: inline-block; font-size: .75rem; letter-spacing: .04em; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); }
+.tag.high { border-color: var(--no); color: var(--no); }
+dl { margin: 0; display: grid; grid-template-columns: max-content 1fr; gap: 4px 12px; font-size: .9rem; }
+dt { color: var(--muted); } dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+pre { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font-size: .85rem; background: var(--bg); padding: 8px; border-radius: 8px; }
+.choices { display: flex; flex-wrap: wrap; gap: 8px; }
+footer { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }

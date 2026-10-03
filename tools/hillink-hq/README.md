@@ -74,6 +74,53 @@ Evidence is real: the CLI's session start is the ACK, the live process sends hea
 - **Scheduling:** it's a remote adapter, so it takes no local-process slot. A question to ChatGPT never waits behind a local run.
 - **The key:** read from HQ's environment and sent only to api.openai.com. It is never journaled, logged or returned, and OpenAI error text is redacted.
 
+## ChatGPT connector ingress (subscription, $0)
+
+This lets ChatGPT on Kyle's subscription submit and follow objectives itself, without Kyle relaying anything and without a metered OpenAI API call. It is a remote MCP server (`ingress/mcp-ingress.mjs`) that exposes exactly six of the orchestrator's tools plus a read-only `wait_for_objective` (blocks up to 55 s until the objective is final or needs someone, so ChatGPT can chain steps in one chat): `submit_objective`, `get_objective`, `get_task`, `get_hq_state`, `resolve_objective_decision` (only decisions HQ assigned to the orchestrator; decisions for Kyle are refused) and `cancel_objective`. They run through the same `createToolbox` validation and the same conductor policy.
+
+- **No approval tool.** There is no approval, merge, deploy, spend or cancel tool. Gates stay Kyle's (`POST /api/objectives/approve`).
+- **Attribution.** Objectives arrive as `requestedBy { agentId: 'chatgpt', taskId: null }`.
+- **Off by default.** Enable it with `HQ_INGRESS_ENABLED=1`.
+- **Binding.** It listens on `127.0.0.1:${HQ_INGRESS_PORT:-4313}`, never on another interface.
+- **Auth.** A 256-bit secret in the path, `/mcp/<token>`, compared in constant time. Anything else gets a bare 404.
+  - The token comes from `HQ_INGRESS_TOKEN` (43–128 URL-safe characters), or from `<state dir>/ingress-token`. HQ creates that file once with mode 0600 and reuses it, so the connector URL survives restarts.
+  - HQ never prints, logs or returns the token, and it is not the browser session token.
+- **Limits.** 64 KiB bodies, 120 requests a minute, 5 objective submissions a minute, and HQ's own open-objective limit.
+- **Transport.** MCP Streamable HTTP, POST JSON-RPC with JSON responses (no SSE stream). Checked with the official MCP TypeScript SDK client 1.31.0.
+
+To connect ChatGPT:
+
+1. Start HQ with `HQ_INGRESS_ENABLED=1`, and with `HQ_IMPLEMENTATION_ENABLED=1` so Claude takes the implementation steps. It prints `ChatGPT ingress: ENABLED on http://127.0.0.1:4313/mcp/<token> (token in …\ingress-token)`.
+2. Run a tunnel to that port, for example `cloudflared tunnel --url http://127.0.0.1:4313` (install with `winget install Cloudflare.cloudflared`).
+   - A quick tunnel prints a new `https://<name>.trycloudflare.com` address every time it starts.
+   - A named Cloudflare tunnel keeps one address.
+3. In ChatGPT, open Settings, then Apps & Connectors, then Advanced, and turn on Developer mode. Create a connector with:
+   - URL: `https://<tunnel address>/mcp/<token>`
+   - Authentication: none (the secret URL is the credential)
+4. Anyone with the full URL can submit objectives, so treat it like a password. To revoke it, delete `ingress-token` (or change `HQ_INGRESS_TOKEN`) and restart HQ.
+
+## Phone approvals (owner door)
+
+Kyle can decide HQ's owner-gated actions (approval gates such as merge, deploy, production-change, and decisions HQ assigned to Kyle) from his phone. Enable with `HQ_OWNER_DOOR_ENABLED=1`. HQ opens a second listener on **loopback only** (`HQ_OWNER_PORT`, default 4314) serving `/owner/` and `/owner/api/*`. The laptop is not exposed: the phone reaches it through the Cloudflare named tunnel (an outbound connection) on its own hostname, set in `HQ_OWNER_HOST` (for example `approve.hillink.io`); any other Host header is refused. Put that hostname behind Cloudflare Access (Kyle's email) as an outer layer.
+
+- Pairing: Command Center → Phone approvals → Pair a phone shows a one-time code (10 minutes, five wrong tries, one open pairing). The phone enters it at `https://<HQ_OWNER_HOST>/owner/` and receives a 256-bit device secret as an HttpOnly, Secure, SameSite=Strict cookie. HQ journals only the secret's sha256. Devices expire after 30 days; revoke one in the Command Center (it ends its sessions immediately).
+- Session: the device cookie opens a short session (15 minutes idle, 12 hours at most) sent as a bearer header, so cross-site requests cannot act.
+- Queue: `GET /owner/api/waiting` lists each item with the objective, requesting agent, exact action, reason, evidence (risk, branch, commit, files, HQ checks, review), gate type, request time, a fingerprint of the exact request, and a one-time decision token valid for 10 minutes for this session and item. The Command Center reads the same queue at `GET /api/owner/waiting`.
+- Decide: `POST /owner/api/decide { itemId, fingerprint, token, choice, note }`. HQ consumes the token first, then refuses if it belongs to another session, expired, was issued for another item or fingerprint, the item is no longer pending (decided, cancelled, superseded), the request changed since it was shown (objective, gate, stage, branch, commit or files), or the choice is not offered. Otherwise it calls the same Conductor `approve`/`decide` the Command Center uses (by kyle, channel `phone`) with an audit record (device, session, token id, fingerprint, IP, user agent); refusals from a session are journaled as `OWNER_DECISION_REFUSED`. The Conductor continues the objective on its next tick; a denial follows existing policy (cancelled, or the verified branch stays unmerged).
+- Pairing codes, sessions and decision tokens live in memory: a restart invalidates all of them (fail closed); paired devices survive.
+- Not covered: owner-required tasks from `request_kyle_approval` and spend authorizations stay in the Command Center.
+
+## Supervised restarts (`restart_hq`)
+
+HQ runs under a small external supervisor: `start-hillink-hq.ps1` runs `node supervisor.mjs`, which launches `server.mjs` as a child with an IPC channel and stays alive while HQ restarts. (Started directly with `node server.mjs`, HQ has no supervisor and `restart_hq` refuses.)
+
+- **Tool:** `restart_hq({ reason })` on the connector (and `POST /api/restart` for Kyle). HQ journals `HQ_RESTART requested` first, refuses while any run is in progress, then asks the supervisor. The answer is `accepted` with a `restart_id`, never "healthy": read `get_hq_state` → `hq_process.last_restart` after about a minute. The call may lose its connection while HQ restarts; the supervisor owns the restart, so that is expected.
+- **Sequence:** acknowledge → HQ drains (no new dispatch) → graceful shutdown over IPC (HQ closes its adapters, journal and `controller.lock`) → after 30 s, `taskkill /PID <pid> /T /F` → `controller.lock` released only if its pid is proven gone → relaunch the code already on disk (git HEAD recorded before and after; nothing is pulled or changed) → health check (process alive, `/api/state` with a journal at least as long as before, agents registered, connector port answering) → the new HQ journals `HQ_RESTART completed` with old and new pid, attempts, duration and whether force was needed.
+- **Loop protection:** one restart at a time (a second request is a duplicate), 2-minute cooldown, at most 6 per hour, at most 3 start attempts with 5/15/45 s backoff. When they are exhausted the supervisor stays up, writes `supervisor-status.json` and `supervisor.log` in the state directory, and answers on the connector port with a minimal `get_hq_state` that reports HQ DOWN and the diagnostic. It never loops.
+- **Self-recovery:** an HQ process that exits unexpectedly is restarted by the supervisor, at most 3 times an hour. Agent or worker problems (Claude offline, Codex usage limit) never restart HQ.
+- **Unchanged by a restart:** the journal is replayed, so every objective, decision, approval gate, note and the compute mode come back exactly as they were; a restart approves, clears or retries nothing. The supervisor strips the same paid credentials as the start script.
+- **Logs:** `supervisor.log` (JSON lines) and `supervisor-status.json` in the state directory; HQ's own output in `hq-supervised.out.log` / `hq-supervised.err.log` next to `server.mjs`.
+
 ## Claude implementation tasks (Pass 2.6)
 
 With `HQ_AGENTS_ENABLED=1` (or `HQ_IMPLEMENTATION_ENABLED=1`), Claude can take bounded implementation tasks, operation `implement-repo`. The safety class is `local-worktree-write`, which only this operation may use. ChatGPT asks through `request_implementation`, which can only go to Claude. The engine also refuses the operation for any agent without the `implement-repo` capability, which only Claude gets, so Codex can never be assigned one.
@@ -91,6 +138,15 @@ With `HQ_AGENTS_ENABLED=1` (or `HQ_IMPLEMENTATION_ENABLED=1`), Claude can take b
 - **Evidence:** ACK (Claude's session and its tools), Claude's steps and answer, FINDING (changed files), TEST_STARTED and TEST_RESULT (HQ's counts), COMMIT (SHA), and COMPLETED with `implementation: { branch, base, worktree, commit, files, tests }`.
 - **Blocked outcomes:** failed tests, a scope violation, missing test files or no changes end BLOCKED with the reason and an owner action. Nothing is committed, and the worktree is kept for inspection.
 - **Permissions:** chosen per task by `ClaudeRouter`. Review tasks use the unchanged read-only adapter in the repository, so nothing carries over from one task to the next.
+
+## Resuming preserved implementation work
+
+A run that ends BLOCKED after HQ applied Claude's work (failing acceptance tests, for example) keeps its worktree with the changes staged and journals HQ's own fingerprint of them: `implementation.patchHash` (sha256 of `git diff --cached --binary --full-index`), `base`, `branch` and `files`. An `implement` objective can continue that work instead of starting over:
+
+- Kyle (Command Center API, `POST /api/objectives`): `"resumeFrom": "6c5a1401-a81811"`, or, for a worktree HQ has no record of, `"resumeFrom": { "worktree": "6c5a1401-a81811", "patchHash": "<sha256>", "base": "<40-hex commit>" }`. A stated hash or base that differs from HQ's record is refused, not used.
+- ChatGPT (connector `submit_objective`): `resume_from: "6c5a1401-a81811"`, only for a worktree HQ has evidence for.
+
+HQ then, before anything runs, reads the preserved worktree without writing to it (`GIT_OPTIONAL_LOCKS=0`): it must be a plain directory under HQ's worktree root (no symlink), a registered worktree of this repository on `hq/impl/<name>` at exactly the recorded base, and its staged patch must hash to the recorded value and touch only files inside the new objective's scope (and the recorded files). An owner-stated base must also be an ancestor of the implementation base. HQ then creates a fresh worktree and branch at that base, applies the patch (`git apply --check` first), re-hashes it, and stages the sandbox from a local import commit, so Claude continues from the imported work. The final commit is one commit on the base containing the import plus Claude's changes, with a `Resumed-From:` trailer, checked for scope and tested by HQ like any other. Any mismatch (worktree, branch, base, hash, scope, apply) ends the objective BLOCKED with "Resume refused" and nothing runs. The preserved worktree is never reset, cleaned, removed or used as a working directory.
 
 ## Subscription implementation through the split broker (Pass 4.5)
 
@@ -126,6 +182,7 @@ Kyle → ChatGPT → HQ → specialist agents → verification → handoff. Chat
 - **Routing:** investigation goes to Codex (a read-only Claude session when Codex is out). Review goes to Codex; a same-provider Claude review is allowed only at low risk, or with Kyle's decision. Implementation goes to Claude only, in the sandbox; the engine, dispatcher, routing table and conductor each refuse anything else. Verification is HQ's own. ChatGPT decides above the loop and is never routed a step.
 - **Handoffs:** agents end with a fenced `hq-handoff` JSON block. HQ parses it as data and checks every field: typed, bounded, no unknown fields, and paths through HQ's path policy. Attribution comes from HQ's record of the run, never from the handoff. The implementation handoff is built by HQ from git and runner evidence.
 - **Verification:** HQ re-derives the facts from git. The commit is the head of the task branch and sits on the recorded base. It carries the task id. Every changed file is in scope and matches the runner's evidence. The tests are in the tree, and HQ ran them with at least one real test passing: a file that defines no tests fails, and spoofed summary lines can only lower the count. The sandbox was confirmed destroyed.
+- **Review of the verified commit:** implementation commits live in task worktrees a read-only reviewer cannot reach, so the review step gets the exact SHA HQ verified (`reviewSource`: commit, base, branch; set by the conductor only after HQ verification of that commit passed, otherwise the objective stops). The CLI adapter writes that commit from the git object database into a fresh directory under `~/.hillink-hq/review-snapshots` (or `HQ_REVIEW_SNAPSHOT_DIR`), outside the checkout. It is not a worktree and has no `.git` link. Symlinks and submodules are not created, and blobs over 2 MB that the commit did not change are listed but not written. Every file is re-hashed against its blob id and made read-only. The full diff is in `.hq-review/diff.patch` and the manifest in `.hq-review/manifest.json`. The reviewer is launched inside that directory, with the same read-only tools. After the ACK, HQ records the commit and tree it gave the reviewer. A review is accepted only when that record matches the verified commit, and its handoff carries `reviewedSource`. The directory is removed when the reviewer exits, fails or is cancelled (snapshots older than 2 hours are swept at start). If no snapshot can be made within 60 s, the review fails. HQ never reviews the live checkout instead. A review quotes only the change it reviews (never earlier repair attempts), and its brief is fitted under the 16,000-character task limit. To review a commit HQ already verified, even one whose objective later ended BLOCKED, submit `{"type":"review","objective":"...","reviewCommit":"<40-hex sha>"}` to `POST /api/objectives`. HQ refuses any SHA that has no passed HQ verification in its journal, then reviews that commit's snapshot, quoting the objective the change was made for.
 - **Disagreement:** one bounded repair, then one response from each side. HQ records both positions, their evidence and the remaining uncertainty, then the orchestrator decides (Kyle at high risk).
 - **Retries:** classified as usage limit, timeout, infrastructure, agent failure, malformed handoff, test failure, review changes, interrupted, policy refusal, missing dependency, implementation failure or cancelled. Each class has a maximum (0 or 1, 2 for usage limits) and a recorded strategy. A usage limit reroutes to another approved agent, but never silently lowers an independent review.
 - **Loop guards:** maximum steps, agent calls and retries, a deadline, and detection of repeated identical handoffs and identical patches. When one trips, the objective is BLOCKED with the reason.

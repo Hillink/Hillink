@@ -44,7 +44,7 @@ export function trimSnapshot(s) {
     seq: s.seq, now: s.now,
     health: { controller: s.health?.controller ?? null, lastError: s.health?.lastError ?? null },
     agents: (s.agents ?? []).map(a => ({
-      ...pick(a, ['id', 'name', 'role', 'real', 'fantasy', 'status', 'assignment', 'detail', 'retryAt', 'executionAdapter', 'adapterAvailable', 'attribution', 'provider', 'model', 'capabilities']),
+      ...pick(a, ['id', 'name', 'role', 'real', 'fantasy', 'status', 'assignment', 'detail', 'retryAt', 'executionAdapter', 'adapterAvailable', 'connector', 'attribution', 'provider', 'model', 'capabilities']),
       ...(a.lifecycle ? { lifecycle: { state: a.lifecycle.state, since: a.lifecycle.since, detail: a.lifecycle.detail ?? null, readied: Boolean(a.lifecycle.readied), history: (a.lifecycle.history ?? []).map(h => ({ state: h.state, at: h.at, detail: typeof h.detail === 'string' ? h.detail.slice(0, 300) : null })) }, definition: publicDefinition(a.definition) } : {}),
     })),
     tasks: (s.tasks ?? []).map(t => ({

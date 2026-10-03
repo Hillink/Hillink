@@ -141,7 +141,8 @@ export function decideBest(args) {
   if (decided.length) {
     const d = decided[0];
     const free = unsupported.filter(u => u.route.computeClass !== 'METERED_API');
-    return free.length ? { ...d, reason: `${d.reason} The $0 route (${free.map(u => `${u.route.routeId ?? u.route.variant}: ${u.reason}`).join('; ')}) is not available.`.slice(0, 900) } : d;
+    const freeUnavailable = free.map(u => `${u.route.routeId ?? u.route.variant}: ${u.reason}`).join('; ').slice(0, 600);
+    return free.length ? { ...d, freeUnavailable, reason: `${d.reason} The $0 route (${freeUnavailable}) is not available.`.slice(0, 900) } : d;
   }
   const u = unsupported[0];
   return { allowed: false, code: 'UNAVAILABLE', route: u?.route ?? null, agentId: args.agentId, reason: unsupported.map(x => `${x.route.routeId ?? x.route.variant}: ${x.reason}`).join('; ') || 'no route', provider: u?.route?.provider ?? 'unknown', backend: u?.route?.backend ?? '', why: '', alternatives: [], maxCostUsd: null, waitingWouldHelp: true, mode: args.mode };

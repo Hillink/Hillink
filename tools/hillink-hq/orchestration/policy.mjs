@@ -36,6 +36,9 @@ const GATE_SIGNALS = [
 ];
 const HIGH_RISK_AREAS = /^(app\/api\/|lib\/(supabase|stripe|auth|payments?)|middleware|supabase\/|scripts\/)/i;
 const LOW_RISK_AREAS = /^(sandbox\/|docs\/|tools\/hillink-world\/|tests\/)/i;
+// Narrower than LOW_RISK_AREAS on purpose: only the World tree is exempt from the breadth heuristic, so broad
+// docs/ or tests/ scopes keep raising architecture-change.
+const ISOLATED_STAGING = /^tools\/hillink-world\//i;
 
 export const DEFAULT_LIMITS = { maxSteps: 12, maxAgentCalls: 10, maxRetries: 4, maxRepairs: 1, maxRebuttals: 1, maxSpendUsd: 2, deadlineMs: 3 * 60 * 60_000, maxActiveObjectives: 3, evidenceWaitMs: 2 * 60 * 60_000 };
 
@@ -54,7 +57,7 @@ const paths = (v, name, max, kind) => {
 // The only shape an objective can have. Unknown fields are refused, so nothing unvalidated reaches the planner.
 export function validateObjectiveInput(input) {
   if (!input || typeof input !== 'object' || Array.isArray(input)) throw Error('Objective must be an object');
-  const allowed = ['objective', 'type', 'system', 'scope', 'tests', 'acceptanceCriteria', 'constraints', 'requestedActions', 'title'];
+  const allowed = ['objective', 'type', 'system', 'scope', 'tests', 'acceptanceCriteria', 'constraints', 'requestedActions', 'title', 'reviewCommit', 'resumeFrom'];
   for (const k of Object.keys(input)) if (!allowed.includes(k)) throw Error(`Unexpected objective field "${String(k).slice(0, 40)}"`);
   const objective = str(input.objective, 'objective', 2000);
   const type = input.type ?? 'fix';
@@ -71,6 +74,20 @@ export function validateObjectiveInput(input) {
     constraints: str(input.constraints, 'constraints', 1200, { optional: true }),
     requestedActions: [...new Set(requestedActions)],
   };
+  // A review of one commit HQ already verified (the conductor checks HQ's record of that verification).
+  if (input.reviewCommit != null) {
+    if (type !== 'review') throw Error('reviewCommit is only for review objectives');
+    if (typeof input.reviewCommit !== 'string' || !/^[0-9a-f]{40}$/.test(input.reviewCommit)) throw Error('reviewCommit must be a full 40-character lowercase hex sha');
+    out.reviewCommit = input.reviewCommit;
+  }
+  // Resume preserved implementation work (resume.mjs): the conductor resolves and checks it against HQ's evidence.
+  if (input.resumeFrom != null) {
+    if (type !== 'implement') throw Error('resumeFrom is only for implement objectives');
+    const r = input.resumeFrom;
+    if (typeof r === 'string') out.resumeFrom = r.trim().slice(0, 40);
+    else if (r && typeof r === 'object' && !Array.isArray(r)) out.resumeFrom = { worktree: String(r.worktree ?? '').slice(0, 40), ...(r.patchHash != null ? { patchHash: String(r.patchHash).slice(0, 64) } : {}), ...(r.base != null ? { base: String(r.base).slice(0, 40) } : {}) };
+    else throw Error('resumeFrom must be a preserved worktree name');
+  }
   if (type === 'implement') {
     // A direct implementation objective must already be a complete, valid Pass 2.6 contract.
     validateImplementation({ objective, scope: out.scope, tests: out.tests, acceptanceCriteria: out.acceptanceCriteria, constraints: out.constraints });
@@ -92,7 +109,10 @@ export function gatesFor(input) {
   const text = [input.objective, input.acceptanceCriteria].filter(Boolean).join('\n');
   const gates = new Set(input.requestedActions);
   for (const [gate, re] of GATE_SIGNALS) if (mentions(re, text)) gates.add(gate);
-  if (input.scope.length > 3 || new Set(input.scope.map(p => p.split('/')[0])).size > 2) gates.add('architecture-change');
+  // Breadth alone is not architecture when every path is staging inside the isolated World tree; text signals
+  // above and the protected-path checks in implementation-policy still apply to it.
+  const isolatedWorldStaging = input.scope.length > 0 && input.scope.every(p => ISOLATED_STAGING.test(p));
+  if (!isolatedWorldStaging && (input.scope.length > 3 || new Set(input.scope.map(p => p.split('/')[0])).size > 2)) gates.add('architecture-change');
   return [...gates].sort();
 }
 

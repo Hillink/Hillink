@@ -35,6 +35,9 @@ export function scriptedAgent(name, script) {
   return {
     calls, runs,
     health: async () => ({ status: 'IDLE', detail: `fake ${name}` }),
+    // Like the real CLI adapters, a review of an implementation commit reports which commit it was given to read
+    // (step.snapshot overrides that record, to test HQ refusing a review of the wrong commit).
+    acceptsReviewSource: () => true,
     async start({ task, runId, emit }) {
       if (task.operation !== 'review-repo' || task.safety !== 'local-read-only') throw Error(`${name} fake accepts read-only reviews only`);
       const n = calls.push({ task, runId });
@@ -44,6 +47,7 @@ export function scriptedAgent(name, script) {
       setImmediate(() => {
         if (entry.done) return;
         emit({ kind: 'ACK', summary: `${name} session started.`, pid: 4242 });
+        if (task.reviewSource && step.snapshot !== null) emit({ kind: 'PROGRESS', summary: `Reviewing a snapshot of ${task.reviewSource.commit}.`, reviewSource: { source: 'hq-review-snapshot', commit: task.reviewSource.commit, base: task.reviewSource.base, branch: task.reviewSource.branch, tree: 'f'.repeat(40), files: 1, verified: true, ...step.snapshot } });
         if (step.hang) return;
         entry.done = true; runs.delete(runId);
         if (step.rateLimited) return emit({ kind: 'RATE_LIMITED', summary: `${name} reported a usage or rate limit.`, retryAt: step.rateLimited });

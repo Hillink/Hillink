@@ -1,8 +1,11 @@
 import { randomUUID } from 'node:crypto';
 import { initialAgents, operations } from './registry.mjs';
 import { validateImplementation } from './implementation-policy.mjs';
+import { validReviewSource, REVIEW_SNAPSHOT_EVIDENCE } from './review-snapshot.mjs';
 import { ORCHESTRATION_EVENTS, reduceOrchestration } from './orchestration/state.mjs';
+import { needsFollowUp, ATTENTION_LIMITS } from './orchestration/attention.mjs';
 import { COMPUTE_EVENTS, reduceCompute, emptyCompute, computeLedger } from './compute/state.mjs';
+import { OWNER_EVENTS, reduceOwner, deviceView } from './owner/state.mjs';
 import { decideVariants, issueGrant, classRank, capacityOf, validateSpendAuthorization, authorizationStatus, DEFAULT_MODE, MODES } from './compute/policy.mjs';
 import { routeFor } from './compute/registry.mjs';
 import { validateAgentInput, canTransition, isWorking, CHECKS, STAGES, PROVISIONING, bindingFor } from './agents.mjs';
@@ -13,9 +16,30 @@ async function bounded(call, timeoutMs) {
   try { return await Promise.race([Promise.resolve().then(call), new Promise((_, reject) => { timer = setTimeout(() => reject(Error('Adapter response timed out')), timeoutMs); })]); }
   finally { clearTimeout(timer); }
 }
+// Quiet phases (watchdog model). Progress normally means fresh evidence within progressMs. Some legitimate work is
+// silent by nature: a tool call Claude is waiting on, the model preparing its first token, a context compaction, an
+// HQ-owned sandbox step, a test run. The component that KNOWS such a phase has begun (HQ code: an adapter parsing the
+// worker's protocol, or HQ's own runner) declares it with a reason and a hard bound, and ends it. While a declared
+// phase is within its bound, and liveness (heartbeats from a live process) continues, the run is RUNNING; a phase past
+// its bound is STALLED; with no phase open the ordinary progress rule applies. Heartbeats never count as progress, so
+// a live but silent worker with nothing declared is still STALLED, and a dead one is OFFLINE or ends on close.
+export const PHASE_LIMITS = Object.freeze({ maxBoundMs: 15 * 60_000, maxOpen: 16, maxPerEvent: 8 });
+export function quietState(run, now) {
+  const open = Object.entries(run?.phases ?? {});
+  const overdue = open.filter(([, p]) => now - p.since > p.boundMs);
+  return { active: open.length > 0, overdue: overdue.length > 0, open: open.map(([id, p]) => ({ id, ...p, elapsedMs: now - p.since })), overdueList: overdue.map(([id, p]) => ({ id, ...p, elapsedMs: now - p.since })) };
+}
+// Why a run is not RUNNING, in words, for the recovery record and the owner.
+export function stallReason(run, now, config = defaults) {
+  if (!run) return 'unknown run';
+  if (now - run.heartbeatAt > config.heartbeatMs) return `no liveness heartbeat for ${Math.round((now - run.heartbeatAt) / 1000)} s (process gone or unreachable)`;
+  const q = quietState(run, now);
+  if (q.overdue) return q.overdueList.map(p => `${p.reason} ran ${Math.round(p.elapsedMs / 1000)} s, past its ${Math.round(p.boundMs / 1000)} s bound`).join('; ');
+  return `no progress evidence for ${Math.round((now - run.lastMeaningfulAt) / 1000)} s and no declared quiet phase (process alive but silent)`;
+}
 const progressKinds = new Set(['PROGRESS', 'COMMIT', 'TEST_PROGRESS', 'TEST_RESULT', 'PR', 'REVIEW', 'FINDING', 'HANDOFF', 'COMPLETED', 'MODEL_OUTPUT', 'MODEL_RESULT']);
 const liveStages = new Set(['CLAIMED', 'IMPLEMENTING', 'TESTING', 'REVIEW']);
-const eventTypes = new Set(['AGENT_REGISTERED', 'AGENT_CONFIGURED', 'AGENT_OBSERVED', 'TASK_CREATED', 'DISPATCHED', 'WORKER_EVENT', 'RECOVERY', 'TASK_REQUEUED', 'TASK_PARKED', 'ALERT_OPENED', 'ALERT_RESOLVED', 'ALERT_ACKNOWLEDGED', 'NOTIFICATION_DELIVERED', 'NOTIFICATION_FAILED', 'OWNER_CONFIRMED_TERMINATION', 'AGENT_CREATED', 'AGENT_LIFECYCLE', 'AGENT_WAITING_UPDATED', ...ORCHESTRATION_EVENTS, ...COMPUTE_EVENTS]);
+const eventTypes = new Set(['AGENT_REGISTERED', 'AGENT_CONFIGURED', 'AGENT_OBSERVED', 'TASK_CREATED', 'DISPATCHED', 'WORKER_EVENT', 'RECOVERY', 'TASK_REQUEUED', 'TASK_PARKED', 'ALERT_OPENED', 'ALERT_RESOLVED', 'ALERT_ACKNOWLEDGED', 'NOTIFICATION_DELIVERED', 'NOTIFICATION_FAILED', 'OWNER_CONFIRMED_TERMINATION', 'AGENT_CREATED', 'AGENT_LIFECYCLE', 'AGENT_WAITING_UPDATED', 'HQ_RESTART', ...ORCHESTRATION_EVENTS, ...COMPUTE_EVENTS, ...OWNER_EVENTS]);
 // Stages after which a task never runs again. CANCELLED (Pass 3) is final: later worker evidence cannot reopen it.
 export const FINAL_STAGES = new Set(['DONE', 'BLOCKED', 'CANCELLED']);
 const text = (value, max = 2000) => typeof value === 'string' && value.trim().length > 0 && value.length <= max;
@@ -27,6 +51,8 @@ export function reduce(state, event) {
   if (!eventTypes.has(type)) throw Error(`Unsupported event type ${type}; refusing partial replay`);
   state.seq = event.seq;
   state.events.push(event);
+  // restart_hq (restart.mjs / supervisor.mjs): a record only. It changes no task, objective, decision or gate.
+  if (type === 'HQ_RESTART') state.restart = { ...(state.restart?.id === d.id ? state.restart : {}), ...d, at };
   if (type === 'AGENT_REGISTERED') state.agents[d.id] = { ...d, observedStatus: 'UNKNOWN', observedAt: null, lastMeaningfulAt: null, assignment: null, usage: null };
   if (type === 'AGENT_CONFIGURED') Object.assign(state.agents[d.agentId], d.configuration);
   // Pass 5F: an agent Kyle created in HQ (agents.mjs). It starts REQUESTED and gets an execution binding only at READY.
@@ -61,12 +87,17 @@ export function reduce(state, event) {
     if (d.kind === 'TEST_STARTED') task.stage = 'TESTING';
     if (d.kind === 'TEST_RESULT') task.verificationResult = d.result;
     if (d.kind === 'REVIEW') task.stage = 'REVIEW';
-    if (progressKinds.has(d.kind)) { run.lastMeaningfulAt = at; agent.lastMeaningfulAt = at; task.lastMeaningfulAt = at; }
+    if (progressKinds.has(d.kind) || d.phases) { run.lastMeaningfulAt = at; agent.lastMeaningfulAt = at; task.lastMeaningfulAt = at; }
+    if (d.phases) {
+      run.phases ??= {};
+      // Re-declaring an open phase keeps its original start: a phase cannot be extended by announcing it again.
+      for (const p of d.phases) { if (p.state === 'begin') run.phases[p.id] ??= { reason: p.reason, since: at, boundMs: p.boundMs }; else delete run.phases[p.id]; }
+    }
     if (d.kind === 'HANDOFF') task.handoffs.push({ ...d, at });
     if (d.kind === 'USAGE') agent.usage = { ...d.usage, at };
     if (d.kind === 'UNCERTAIN') Object.assign(task, { stage: 'BLOCKED', blocker: d.summary, ownerAction: d.ownerAction || 'Verify the remote worker stopped before releasing this run.' });
     if (['COMPLETED', 'FAILED', 'BLOCKED', 'CANCELLED', 'RATE_LIMITED'].includes(d.kind)) {
-      run.endedAt = at; run.terminal = d.kind; agent.assignment = null;
+      run.endedAt = at; run.terminal = d.kind; agent.assignment = null; run.phases = {};
       // A cancelled task stays CANCELLED: the run's own terminal evidence is recorded, the stage is not reopened.
       if (task.stage !== 'CANCELLED') task.stage = d.kind === 'COMPLETED' ? 'DONE' : 'BLOCKED';
       task.endedAt = at;
@@ -96,6 +127,8 @@ export function reduce(state, event) {
   reduceCompute(state, event);
   // Pass 3: objectives, steps, handoffs, approvals and decisions live in the same journal (orchestration/state.mjs).
   reduceOrchestration(state, event);
+  // Phone approvals: paired owner devices (owner/state.mjs).
+  reduceOwner(state, event);
   return state;
 }
 
@@ -106,6 +139,9 @@ export function agentStatus(state, agent, now, config = defaults, seenAt = null)
     if (task.stage === 'BLOCKED') return 'BLOCKED';
     if (!run.acknowledgedAt) return 'UNKNOWN';
     if (now - run.heartbeatAt > config.heartbeatMs) return 'OFFLINE';
+    const quiet = quietState(run, now);
+    if (quiet.overdue) return 'STALLED'; // a declared quiet phase ran past its own hard bound: hung
+    if (quiet.active) return 'RUNNING'; // legitimately quiet, live, and within bound
     if (now - run.lastMeaningfulAt > config.progressMs) return 'STALLED';
     return 'RUNNING';
   }
@@ -117,11 +153,15 @@ export function agentStatus(state, agent, now, config = defaults, seenAt = null)
 
 export class Engine {
   constructor({ store, adapters = {}, now = Date.now, config = {} }) {
-    this.store = store; this.adapters = adapters; this.now = now; this.config = { ...defaults, ...config }; this.busy = false; this.seen = {}; this.jobs = new Map(); this.checkedAt = {}; this.leaving = new Set(); this.provisioning = {};
+    this.store = store; this.adapters = adapters; this.now = now; this.config = { ...defaults, ...config }; this.busy = false; this.seen = {}; this.jobs = new Map(); this.checkedAt = {}; this.leaving = new Set(); this.provisioning = {}; this.connectors = {};
     // Fail closed: an unknown mode is ZERO_CREDIT, never something more permissive.
     if (!MODES.includes(this.config.computeMode)) this.config.computeMode = DEFAULT_MODE;
     this.state = store.read().reduce(reduce, emptyState());
   }
+  // An agent that reaches HQ from outside (ChatGPT through the MCP ingress) rather than being launched by an adapter.
+  // Display only: kept in memory, never journaled, and never used for routing or dispatch.
+  connectorOpened(agentId, via) { this.connectors[agentId] = { via, openedAt: this.now(), lastCallAt: null, calls: 0 }; }
+  connectorCall(agentId) { const c = this.connectors[agentId]; if (c) { c.lastCallAt = this.now(); c.calls += 1; } }
   status(agent, at = this.now()) { return agentStatus(this.state, agent, at, this.config, this.seen[agent.id]); }
   emit(type, data) {
     const event = { seq: this.state.seq + 1, id: randomUUID(), at: this.now(), type, data };
@@ -161,7 +201,9 @@ export class Engine {
   // performs, and HQ's own record of why a previous implementation attempt was not accepted.
   createTask(input, { requestedBy = null, link = null, repair = null } = {}) {
     // A conductor step carries HQ-quoted evidence (a verified diff for a reviewer), so its brief may be longer.
-    if (!text(input.title, 200) || !text(input.description, link ? 16_000 : 2000)) throw Error('Title and description required');
+    const maxDescription = link ? 16_000 : 2000;
+    if (!text(input.title, 200) || !text(input.description, Number.MAX_SAFE_INTEGER)) throw Error('Title and description required');
+    if (input.description.length > maxDescription) throw Error(`Task description is ${input.description.length} characters, above HQ's ${maxDescription}-character limit`);
     if (requestedBy && (!this.state.agents[requestedBy.agentId] || !this.state.tasks[requestedBy.taskId])) throw Error('Unknown requesting agent or task');
     if (link) {
       const o = this.state.objectives[link.objectiveId];
@@ -175,6 +217,9 @@ export class Engine {
     const implementing = input.operation === 'implement-repo';
     if (implementing !== (input.safety === 'local-worktree-write')) throw Error('implement-repo tasks, and only they, use local-worktree-write');
     const implementation = implementing ? validateImplementation(input.implementation) : null;
+    // The exact HQ-verified commit a linked review must read (conductor only). Read-only reviews alone carry one.
+    const reviewSource = input.reviewSource == null ? null : validReviewSource(input.reviewSource);
+    if (reviewSource && (input.operation !== 'review-repo' || input.safety !== 'local-read-only' || !link)) throw Error('A review source belongs only to an HQ-linked read-only review');
     if (input.safety === 'owner-required' && !text(input.ownerAction)) throw Error('Exact owner action required');
     if (!Number.isInteger(input.priority) || input.priority < 0 || input.priority > 100) throw Error('Priority must be 0–100');
     if (input.preferredAgentId && !this.state.agents[input.preferredAgentId]?.capabilities.includes(operations[input.operation].capability)) throw Error('Selected worker cannot perform this operation');
@@ -184,7 +229,7 @@ export class Engine {
     // Pass 3 role boundary, independent of capability data: implementation is Claude's alone.
     if (implementing && input.preferredAgentId !== 'claude') throw Error('Implementation tasks go to Claude only');
     const id = randomUUID();
-    this.emit('TASK_CREATED', { id, title: input.title, description: input.description, operation: input.operation, capability: operations[input.operation].capability, safety: input.safety, ownerAction: input.ownerAction || null, priority: input.priority, preferredAgentId: input.preferredAgentId || null, ...(implementation ? { implementation } : {}), ...(requestedBy ? { requestedBy: { agentId: requestedBy.agentId, taskId: requestedBy.taskId } } : {}), ...(link ? { link: { objectiveId: link.objectiveId, stepId: link.stepId ?? null, ...(link.decisionId ? { decisionId: link.decisionId } : {}) } } : {}), ...(repair ? { repair: { attempt: repair.attempt, reason: repair.reason, ...(repair.fromReview ? { fromReview: true } : {}) } } : {}) });
+    this.emit('TASK_CREATED', { id, title: input.title, description: input.description, operation: input.operation, capability: operations[input.operation].capability, safety: input.safety, ownerAction: input.ownerAction || null, priority: input.priority, preferredAgentId: input.preferredAgentId || null, ...(implementation ? { implementation } : {}), ...(reviewSource ? { reviewSource } : {}), ...(requestedBy ? { requestedBy: { agentId: requestedBy.agentId, taskId: requestedBy.taskId } } : {}), ...(link ? { link: { objectiveId: link.objectiveId, stepId: link.stepId ?? null, ...(link.decisionId ? { decisionId: link.decisionId } : {}) } } : {}), ...(repair ? { repair: { attempt: repair.attempt, reason: repair.reason, ...(repair.fromReview ? { fromReview: true } : {}) } } : {}) });
     if (this.state.alerts['cycle:complete']?.active) this.emit('ALERT_RESOLVED', { key: 'cycle:complete' });
     return id;
   }
@@ -196,6 +241,19 @@ export class Engine {
     if (!kinds.includes(payload.kind)) throw Error('Unknown evidence kind');
     // Pass 4.5 broker audit: HQ-authored metadata (operation, logical path, outcome, sizes), never file contents.
     if (payload.kind === 'BROKER' && (!payload.broker || typeof payload.broker !== 'object' || !/^[A-Z_]{3,40}$/.test(String(payload.broker.event)) || JSON.stringify(payload.broker).length > 2000)) throw Error('Invalid broker audit record');
+    if (payload.phases != null) {
+      const ps = payload.phases;
+      if (!Array.isArray(ps) || !ps.length || ps.length > PHASE_LIMITS.maxPerEvent) throw Error('Invalid quiet phases');
+      if (['ACK', 'HEARTBEAT', 'COMPLETED', 'FAILED', 'BLOCKED', 'CANCELLED', 'RATE_LIMITED', 'UNCERTAIN', 'USAGE'].includes(payload.kind)) throw Error('Quiet phases ride on progress evidence only');
+      for (const p of ps) {
+        if (!p || typeof p !== 'object' || !/^[A-Za-z0-9:_.\-]{1,100}$/.test(String(p.id)) || !['begin', 'end'].includes(p.state)) throw Error('Invalid quiet phase');
+        if (p.state === 'begin' && (!text(p.reason, 160) || !Number.isInteger(p.boundMs) || p.boundMs < 1000 || p.boundMs > PHASE_LIMITS.maxBoundMs)) throw Error(`A quiet phase needs a reason and a hard bound of at most ${PHASE_LIMITS.maxBoundMs / 60_000} minutes`);
+      }
+      const open = new Set(Object.keys(run.phases ?? {}));
+      for (const p of ps) { if (p.state === 'begin') open.add(p.id); else open.delete(p.id); }
+      if (open.size > PHASE_LIMITS.maxOpen) throw Error('Too many open quiet phases');
+      payload = { ...payload, phases: ps.map(p => (p.state === 'begin' ? { id: p.id, state: 'begin', reason: p.reason, boundMs: p.boundMs } : { id: p.id, state: 'end' })) };
+    }
     if (payload.kind === 'ACK' && run.acknowledgedAt) throw Error('Run already acknowledged');
     if (!run.acknowledgedAt && !['ACK', 'FAILED', 'CANCELLED', 'BLOCKED', 'UNCERTAIN', 'RATE_LIMITED'].includes(payload.kind)) throw Error('Worker acknowledgement required');
     if (payload.kind === 'TEST_RESULT' && !['passed', 'failed'].includes(payload.result)) throw Error('Test result required');
@@ -209,6 +267,11 @@ export class Engine {
     // The full answer (bounded) is kept for HQ's handoff validation; summary stays the short display text.
     if (payload.fullText != null && (payload.kind !== 'MODEL_RESULT' || typeof payload.fullText !== 'string' || payload.fullText.length > 30_000)) throw Error('Invalid full model text');
     if (payload.files && (!Array.isArray(payload.files) || payload.files.some(f => !text(f, 500)))) throw Error('Invalid files');
+    // What a reviewer was given to read: only for a task that has a review source, and only that exact commit.
+    if (payload.reviewSource != null) {
+      const want = this.state.tasks[run.taskId].reviewSource, r = payload.reviewSource;
+      if (payload.kind !== 'PROGRESS' || !want || !r || typeof r !== 'object' || r.source !== REVIEW_SNAPSHOT_EVIDENCE || r.commit !== want.commit || r.base !== want.base || r.verified !== true || !/^[0-9a-f]{40}$/.test(String(r.tree)) || JSON.stringify(r).length > 1000) throw Error('Invalid review source evidence');
+    }
     if (payload.kind === 'RATE_LIMITED' && payload.retryAt != null && (!Number.isFinite(payload.retryAt) || payload.retryAt <= this.now())) throw Error('Future retry time required');
     // Pass 5F (B1): the adapter's own terminal CANCELLED for a run HQ is stopping because Kyle disabled or retired its
     // agent is that stop, not a failure. Only CANCELLED is tagged; a COMPLETED or FAILED that wins the race stays itself.
@@ -223,11 +286,13 @@ export class Engine {
   }
   runnable() { return Object.values(this.state.tasks).filter(t => t.stage === 'READY' && (t.safety === 'local-read-only' || t.safety === 'local-worktree-write')).sort((a, b) => b.priority - a.priority || a.createdAt - b.createdAt); }
   snapshot(at = this.now()) {
-    const tasks = Object.values(this.state.tasks), agents = Object.values(this.state.agents).map(a => ({ ...a, status: this.status(a, at), adapterAvailable: Boolean(this.adapters[a.executionAdapter]) }));
+    const tasks = Object.values(this.state.tasks), agents = Object.values(this.state.agents).map(a => ({ ...a, status: this.status(a, at), adapterAvailable: Boolean(this.adapters[a.executionAdapter]), connector: this.connectors[a.id] ? { ...this.connectors[a.id] } : null }));
     const counts = { ready: this.runnable().length, assigned: tasks.filter(t => liveStages.has(t.stage)).length, working: agents.filter(a => a.status === 'RUNNING').length, review: tasks.filter(t => t.stage === 'REVIEW').length, blocked: tasks.filter(t => t.stage === 'BLOCKED').length, done: tasks.filter(t => t.stage === 'DONE').length };
     const unresolvedRuns = Object.values(this.state.runs).filter(r => !r.endedAt).length;
     const compute = { mode: this.config.computeMode, ledger: computeLedger(this.state, { now: at }), capacity: Object.fromEntries(agents.map(a => [a.id, capacityOf(a, a.status, { connected: a.adapterAvailable, route: a.executionAdapter ? routeFor(a.executionAdapter, 'review-repo') : null })])) };
-    return { ...this.state, agents, tasks, counts, unresolvedRuns, now: at, compute, cycleComplete: tasks.length > 0 && counts.ready === 0 && counts.assigned === 0 && counts.working === 0 && counts.review === 0 && unresolvedRuns === 0 && tasks.every(t => t.stage === 'DONE' || t.stage === 'CANCELLED' || (t.stage === 'BLOCKED' && !t.recoveryPending && Boolean(t.blocker))) };
+    // Paired phones are listed without their credential hashes.
+    const owner = this.state.owner ? { devices: Object.values(this.state.owner.devices).map(deviceView), refusals: this.state.owner.refusals } : null;
+    return { ...this.state, owner, agents, tasks, counts, unresolvedRuns, now: at, compute, cycleComplete: tasks.length > 0 && counts.ready === 0 && counts.assigned === 0 && counts.working === 0 && counts.review === 0 && unresolvedRuns === 0 && tasks.every(t => t.stage === 'DONE' || t.stage === 'CANCELLED' || (t.stage === 'BLOCKED' && !t.recoveryPending && Boolean(t.blocker))) };
   }
   async tick() {
     if (this.busy) return;
@@ -247,7 +312,8 @@ export class Engine {
       }
       this.provision(); // Pass 5F: real provisioning checks run beside the queue, never blocking it
       await this.recover();
-      for (const task of this.runnable()) {
+      // An accepted restart drains HQ: nothing new starts while the supervisor shuts it down.
+      for (const task of this.draining ? [] : this.runnable()) {
         // The local concurrency limit is for local processes. A remote API adapter (the orchestrator) takes no
         // local slot, so a question to ChatGPT never queues behind a long local run, nor blocks one.
         const local = r => !this.adapters[this.state.agents[r.agentId]?.executionAdapter]?.remote;
@@ -259,6 +325,12 @@ export class Engine {
         const pick = this.selectCompute(task);
         if (!pick) continue;
         const { agent, decision } = pick;
+        // A review of an implementation commit runs only where that exact commit can be given to the reviewer; never
+        // in the live checkout instead.
+        if (task.reviewSource && !this.adapters[agent.executionAdapter]?.acceptsReviewSource?.()) {
+          this.emit('TASK_PARKED', { taskId: task.id, reason: `${agent.name} cannot be given a read-only snapshot of commit ${task.reviewSource.commit.slice(0, 12)}; HQ will not review the live checkout instead.`, ownerAction: 'Start HQ with CLI agents (review snapshots are wired with them), then retry the review.' });
+          continue;
+        }
         if (task.operation === 'implement-repo' && agent.id !== 'claude') throw Error(`Refusing to dispatch implementation to ${agent.id}`);
         const runId = randomUUID(), route = decision.route;
         const compute = { operation: task.operation, adapterId: agent.executionAdapter, variant: route.variant ?? 'default', routeId: route.routeId ?? null, security: route.security ?? null, computeClass: route.computeClass, provider: route.provider, backend: route.backend, model: agent.model ?? null, authorizationId: decision.authorizationId ?? null, reservedUsd: decision.reservedUsd ?? 0, mode: this.config.computeMode };
@@ -319,7 +391,11 @@ export class Engine {
       if (unsupported.length) blocked = { ...blocked, reason: `${blocked.reason} The $0 route is not available here (${unsupported.map(u => `${u.route.routeId ?? u.route.variant}: ${u.reason}`).join('; ')}).`.slice(0, 900) };
       const ownerAction = mode === 'BUDGETED'
         ? `Authorize up to $${(blocked.maxCostUsd ?? 0).toFixed(2)} for this task in HQ (Spend), then retry it; or use a $0 alternative: ${blocked.alternatives.join(' ')}`.slice(0, 1900)
-        : `This needs metered ${blocked.provider} API compute, which ZERO_CREDIT mode forbids. $0 alternatives: ${blocked.alternatives.join(' ')} To pay for it: start HQ with HQ_COMPUTE_MODE=BUDGETED and authorize a bounded amount for this task.`.slice(0, 1900);
+        : unsupported.some(u => u.route.computeClass !== 'METERED_API')
+          ? `The $0 route cannot run here: ${unsupported.filter(u => u.route.computeClass !== 'METERED_API').map(u => `${u.route.routeId ?? u.route.variant}: ${u.reason}`).join('; ')}. Fix that and retry; no spend is needed. HQ will not use the metered route in ZERO_CREDIT mode.`.slice(0, 1900)
+          : unsupported.length
+          ? `The $0 route cannot run here: ${unsupported.map(u => `${u.route.routeId ?? u.route.variant}: ${u.reason}`).join('; ')}. Fix that and retry; no spend is needed. HQ will not use the metered route in ZERO_CREDIT mode.`.slice(0, 1900)
+          : `This needs metered ${blocked.provider} API compute, which ZERO_CREDIT mode forbids. $0 alternatives: ${blocked.alternatives.join(' ')} To pay for it: start HQ with HQ_COMPUTE_MODE=BUDGETED and authorize a bounded amount for this task.`.slice(0, 1900);
       this.emit('SPEND_APPROVAL_REQUIRED', { taskId: task.id, code: blocked.code, provider: blocked.provider, agentId: blocked.agentId, backend: blocked.backend, why: blocked.why, reason: blocked.reason, estimatedCostUsd: blocked.estimatedCostUsd, maxCostUsd: blocked.maxCostUsd, alternatives: blocked.alternatives, waitingWouldHelp: blocked.waitingWouldHelp, mode, ownerAction });
       return null;
     }
@@ -382,7 +458,8 @@ export class Engine {
       const agent = this.state.agents[run.agentId], status = this.status(agent);
       const ackExpired = !run.acknowledgedAt && this.now() - run.dispatchedAt > (agent.ackTimeoutMs ?? this.config.heartbeatMs);
       if (!failed && !ackExpired && !['OFFLINE', 'STALLED'].includes(status)) continue;
-      this.emit('RECOVERY', { taskId: task.id, step: 'diagnose', reason: failed ? task.blocker : ackExpired ? 'No worker acknowledgement' : status, runId: run.runId });
+      const why = failed ? task.blocker : ackExpired ? 'No worker acknowledgement' : `${status}: ${stallReason(run, this.now(), this.config)}`;
+      this.emit('RECOVERY', { taskId: task.id, step: 'diagnose', reason: why, runId: run.runId });
       let stopped = failed; // FAILED is terminal evidence from the adapter, not a lost response.
       if (!stopped) try { stopped = await bounded(() => this.adapters[agent.executionAdapter]?.cancel(run.runId), this.config.adapterTimeoutMs); } catch { /* Uncertain cancellation retains lease. */ }
       if (stopped !== true) {
@@ -394,7 +471,7 @@ export class Engine {
       if (task.stage === 'CANCELLED') { if (!task.cancelled?.confirmed) this.emit('TASK_CANCELLED', { taskId: task.id, by: 'hq-watchdog', reason: task.cancelled?.reason ?? 'Cancelled.', confirmed: true }); continue; }
       this.emit('AGENT_OBSERVED', { agentId: agent.id, status: 'OFFLINE', detail: 'Recovery quarantine; awaiting cooldown and fresh health check', quarantineUntil: this.now() + this.config.quarantineMs });
       // Different worker handoff is preferred; no blind repetition or arbitrary shell retries.
-      if (task.link) { this.emit('TASK_PARKED', { taskId: task.id, reason: `Watchdog: the worker was ${ackExpired ? 'not acknowledged in time' : status} (timed out) and was stopped.`, ownerAction: null }); continue; }
+      if (task.link) { this.emit('TASK_PARKED', { taskId: task.id, reason: `Watchdog: the worker was ${ackExpired ? 'not acknowledged in time' : `${status} (${why.replace(/^[A-Z]+: /, '')})`} and was stopped.`.slice(0, 1900), ownerAction: null }); continue; }
       const alternate = Object.values(this.state.agents).find(a => a.id !== agent.id && isWorking(a) && (!task.preferredAgentId || a.id === task.preferredAgentId) && a.capabilities.includes(task.capability) && !a.assignment && this.adapters[a.executionAdapter] && this.status(a) === 'IDLE');
       if (alternate && task.attempts < this.config.maxAttempts) {
         this.emit('RECOVERY', { taskId: task.id, step: 'handoff', reason: `Retry with ${alternate.name}`, from: agent.id, to: alternate.id });
@@ -420,6 +497,11 @@ export class Engine {
         if (['IDLE', 'OFFLINE', 'STALLED', 'RATE_LIMITED', 'UNKNOWN'].includes(agent.status)) add(`capacity:${agent.id}`, agent.adapterAvailable ? `UNEXPECTED_${agent.status}` : 'ADAPTER_UNAVAILABLE', agent, null, agent.adapterAvailable ? null : `Connect an execution/telemetry adapter for ${agent.name}, or route to a capable connected worker.`, agent.detail || 'Runnable work exists without verified execution on this worker.');
       }
       if (!snapshot.agents.some(a => isWorking(a) && a.adapterAvailable && this.runnable().some(t => (!t.preferredAgentId || t.preferredAgentId === a.id) && a.capabilities.includes(t.capability)))) add('queue:no-adapter', 'ADAPTER_UNAVAILABLE', null, null, 'Connect a capable execution adapter for the queued operation.', 'No connected worker can execute the safe queue.');
+    }
+    // Orchestration observability (orchestration/attention.mjs): an objective that ended without completing is an open
+    // alert until the orchestrator or Kyle acknowledges it with the next step, so it cannot sit unnoticed.
+    for (const o of Object.values(this.state.objectives ?? {})) {
+      if (needsFollowUp(o) && this.now() - (o.endedAt ?? o.updatedAt) <= ATTENTION_LIMITS.alertWindowMs) add(`objective:${o.id}`, 'OBJECTIVE_NEEDS_FOLLOW_UP', null, null, null, `Objective "${String(o.input?.title ?? o.id).slice(0, 120)}" ended ${o.status}: ${String(o.statusReason ?? '').slice(0, 300)} Nobody has acknowledged it yet; ChatGPT sees it on its next HQ call.`);
     }
     if (snapshot.cycleComplete) add('cycle:complete', 'HANDOFF_READY', null, null, null, 'READY=0, WORKING=0, REVIEW=0; remaining tasks have explicit blockers.');
     for (const [key, alert] of desired) {

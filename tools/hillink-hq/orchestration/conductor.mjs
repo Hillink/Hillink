@@ -7,14 +7,33 @@
 // validation (handoff), retries and loop guards (retry), deterministic verification (verify), restart proof
 // (recovery), lifecycle and persistence (state + the engine journal), World contract (activity).
 import { randomUUID } from 'node:crypto';
-import { TERMINAL, canTransition } from './state.mjs';
+import { TERMINAL, canTransition, deriveDecisionAuthority } from './state.mjs';
 import { DEFAULT_LIMITS, validateObjectiveInput, implementationEligibility, APPROVAL_GATES, PRE_WORK_GATES, POST_WORK_GATES } from './policy.mjs';
 import { planObjective, implementationSteps, stepId, REQUIRED_EVIDENCE } from './planner.mjs';
 import { candidates, assertImplementer, ROUTES } from './routing.mjs';
 import { parseHandoff, implementationHandoff, framingFor, hashOf } from './handoff.mjs';
 import { classify, retryDecision, loopGuard, repeated } from './retry.mjs';
 import { validateImplementation } from '../implementation-policy.mjs';
+import { resolveResume } from '../resume.mjs';
+import { REVIEW_META_DIR } from '../review-snapshot.mjs';
+
+// Linked task briefs are capped at 16,000 characters by the engine; quoted evidence is fitted under this budget.
+const QUOTE_BUDGET = 15_000;
+export function fitQuoted(quoted, budget) {
+  const out = quoted.map(q => ({ ...q }));
+  let total = out.reduce((n, q) => n + q.text.length, 0);
+  while (total > Math.max(budget, 0)) {
+    const big = out.reduce((a, b) => (b.text.length > a.text.length ? b : a));
+    if (big.text.length <= 200) break;
+    const keep = Math.max(200, big.text.length - (total - budget) - 40);
+    total -= big.text.length;
+    big.text = clip(big.text, keep);
+    total += big.text.length;
+  }
+  return out;
+}
 import { decideBest, decideCompute } from '../compute/policy.mjs';
+import { UNRESOLVED, ATTENTION_LIMITS } from './attention.mjs';
 
 const KIND_STATE = { investigate: 'INVESTIGATING', implement: 'IMPLEMENTING', verify: 'VERIFYING', review: 'REVIEWING', rebuttal: 'REVIEWING', 'local-check': 'INVESTIGATING' };
 const HANDOFF_KIND = { investigate: 'investigation', review: 'review', rebuttal: 'rebuttal' };
@@ -32,9 +51,14 @@ export class Conductor {
   // ---- public API (HTTP for Kyle, tools for ChatGPT) ----
   submit(raw, { requestedBy = null } = {}) {
     const input = validateObjectiveInput(raw);
+    if (input.reviewCommit && !this.verifiedImplementation(input.reviewCommit)) throw Error(`HQ has no record of verifying commit ${input.reviewCommit}; only an HQ-verified commit can be reviewed this way.`);
+    // Resolved now, from HQ's own evidence (or Kyle's stated hash and base on the HTTP API only), and journaled with
+    // the objective; the runner verifies it again on disk before importing anything.
+    if (input.resumeFrom != null) { input.resume = resolveResume(this.state, input.resumeFrom, { scope: input.scope, owner: requestedBy == null }); delete input.resumeFrom; }
     const open = Object.values(this.state.objectives ?? {}).filter(o => !TERMINAL.has(o.status)).length;
     if (open >= this.limits.maxActiveObjectives) throw Error(`HQ already has ${open} open objectives (limit ${this.limits.maxActiveObjectives}); finish or cancel one first.`);
-    if (requestedBy && (!this.state.agents[requestedBy.agentId] || !this.state.tasks[requestedBy.taskId])) throw Error('Unknown requesting agent or task');
+    // taskId null = ChatGPT through the connector ingress (ingress/mcp-ingress.mjs): no HQ orchestration turn is calling.
+    if (requestedBy && (!this.state.agents[requestedBy.agentId] || (requestedBy.taskId !== null && !this.state.tasks[requestedBy.taskId]))) throw Error('Unknown requesting agent or task');
     const id = randomUUID();
     this.engine.emit('OBJECTIVE_CREATED', { id, input, requestedBy, limits: { ...this.limits }, deadlineAt: this.now() + this.limits.deadlineMs });
     return id;
@@ -53,22 +77,53 @@ export class Conductor {
     this.requestCancel(id, { by, reason });
     return this.finishCancel(o, reason);
   }
-  approve(id, gate, decision, { by, note = null } = {}) {
+  // channel: where Kyle decided (e.g. command-center), journaled with the decision for audit. Approval gates are
+  // deliberately absent from the ChatGPT connector: HQ cannot tell Kyle's words from the model's there.
+  // audit: how a phone decision was authenticated and what it was bound to (owner/door.mjs), journaled with it.
+  approve(id, gate, decision, { by, note = null, channel = null, audit = null } = {}) {
     if (by !== 'kyle') throw Error('Only Kyle can decide an approval gate.');
     const o = this.objective(id), a = o.approvals[gate];
     if (!a || a.status !== 'PENDING') throw Error(`No pending ${gate} approval on this objective.`);
+    if (o.status !== 'AWAITING_APPROVAL') throw Error(`Objective is ${o.status}, not awaiting approval.`);
     if (!['approve', 'deny'].includes(decision)) throw Error('decision must be approve or deny');
-    this.engine.emit('APPROVAL_DECIDED', { objectiveId: id, gate, decision, by, note: note ? clip(note, 600) : null });
+    this.engine.emit('APPROVAL_DECIDED', { objectiveId: id, gate, decision, by, note: note ? clip(note, 600) : null, ...(channel ? { channel: clip(channel, 40) } : {}), ...(audit ? { audit } : {}) });
     return { gate, decision };
   }
-  decide(id, decisionId, choice, { by, rationale = '' } = {}) {
+  // Observability (attention.mjs): who saw an unresolved outcome and what happens next. Records a fact only.
+  acknowledgeOutcome(id, { by, note }) {
+    if (!['chatgpt', 'kyle'].includes(by)) throw Error('Only the orchestrator or Kyle can acknowledge an objective outcome.');
+    const o = this.objective(id);
+    if (!UNRESOLVED.has(o.status)) throw Error(`Objective is ${o.status}; only a BLOCKED, FAILED or CANCELLED outcome needs acknowledging.`);
+    if (o.outcomeAck) return { objective_id: id, already: true, acknowledged_by: o.outcomeAck.by };
+    if (typeof note !== 'string' || !note.trim() || note.length > ATTENTION_LIMITS.ackNote) throw Error(`note must say what happens next, at most ${ATTENTION_LIMITS.ackNote} characters`);
+    this.engine.emit('OBJECTIVE_OUTCOME_ACKNOWLEDGED', { objectiveId: id, by, note: note.trim() });
+    return { objective_id: id, acknowledged: true };
+  }
+  postNote({ title, body }, { by }) {
+    if (by !== 'kyle') throw Error('Only Kyle (the owner API) can post orchestrator notes.');
+    if (typeof title !== 'string' || !title.trim() || title.length > ATTENTION_LIMITS.noteTitle) throw Error(`title must be 1 to ${ATTENTION_LIMITS.noteTitle} characters`);
+    if (typeof body !== 'string' || !body.trim() || body.length > ATTENTION_LIMITS.noteBody) throw Error(`body must be 1 to ${ATTENTION_LIMITS.noteBody} characters`);
+    const id = randomUUID();
+    this.engine.emit('ORCHESTRATOR_NOTE_POSTED', { id, title: title.trim(), body: body.trim(), by });
+    return id;
+  }
+  acknowledgeNote(id, { by, note }) {
+    if (!['chatgpt', 'kyle'].includes(by)) throw Error('Only the orchestrator or Kyle can acknowledge a note.');
+    const n = this.state.orchestratorNotes?.[id];
+    if (!n) throw Error('Unknown note');
+    if (n.ack) return { note_id: id, already: true };
+    if (typeof note !== 'string' || !note.trim() || note.length > ATTENTION_LIMITS.ackNote) throw Error(`note must say what you will do, at most ${ATTENTION_LIMITS.ackNote} characters`);
+    this.engine.emit('ORCHESTRATOR_NOTE_ACKNOWLEDGED', { id, by, note: note.trim() });
+    return { note_id: id, acknowledged: true };
+  }
+  decide(id, decisionId, choice, { by, rationale = '', channel = null, audit = null } = {}) {
     const o = this.objective(id), d = o.decisions[decisionId];
     if (!d || d.status !== 'PENDING') throw Error('No pending decision with that id on this objective.');
     if (!['chatgpt', 'kyle'].includes(by)) throw Error('Only the orchestrator or Kyle can decide.');
     if (d.resume.authority === 'kyle' && by !== 'kyle') throw Error('This decision needs Kyle; the orchestrator cannot make it.');
     if (!d.options.some(opt => opt.id === choice)) throw Error(`choice must be one of ${d.options.map(opt => opt.id).join(', ')}`);
     if (typeof rationale !== 'string' || rationale.length > 1200) throw Error('rationale must be text of at most 1200 characters');
-    this.engine.emit('DECISION_RECORDED', { objectiveId: id, decisionId, choice, rationale: clip(rationale, 1200) || null, by });
+    this.engine.emit('DECISION_RECORDED', { objectiveId: id, decisionId, choice, rationale: clip(rationale, 1200) || null, by, ...(channel ? { channel: clip(channel, 40) } : {}), ...(audit ? { audit } : {}) });
     return { decisionId, choice };
   }
 
@@ -178,8 +233,11 @@ export class Conductor {
     // Pass 4.5: no route variant can run here at all (for example the broker's sandbox is missing): wait, never pay.
     if (!gate.allowed && gate.code === 'UNAVAILABLE') return this.set(o, 'WAITING_FOR_EVIDENCE', `Step ${s.kind} waits: ${gate.reason}`.slice(0, 500));
     if (!gate.allowed) return this.spendGate(o, s, gate);
-    const task = s.kind === 'implement' ? this.implementTask(o, s) : this.readOnlyTask(o, s, pick.agentId);
-    this.engine.createTask({ ...task, operation: route.operation, safety: route.safety, priority: 50, preferredAgentId: pick.agentId }, { requestedBy: o.requestedBy?.taskId && this.state.tasks[o.requestedBy.taskId] ? o.requestedBy : null, link: { objectiveId: o.id, stepId: s.id }, internal: true, repair: s.repair ?? null });
+    // A review of an implementation reads exactly the commit HQ verified, or does not run.
+    const source = this.reviewSourceFor(o, s);
+    if (source?.error) { this.step(o, s, 'FAILED', source.error); return this.stop(o, 'BLOCKED', source.error, { ownerAction: 'Inspect the implementation and its HQ verification; HQ reviews only a verified commit.' }); }
+    const task = s.kind === 'implement' ? this.implementTask(o, s) : this.readOnlyTask(o, s, pick.agentId, source);
+    this.engine.createTask({ ...task, ...(source ? { reviewSource: source } : {}), operation: route.operation, safety: route.safety, priority: 50, preferredAgentId: pick.agentId }, { requestedBy: o.requestedBy?.taskId && this.state.tasks[o.requestedBy.taskId] ? o.requestedBy : null, link: { objectiveId: o.id, stepId: s.id }, internal: true, repair: s.repair ?? null });
     this.set(o, KIND_STATE[s.kind], `${s.kind} assigned to ${agents[pick.agentId].name}${pick.busy ? ' (queued behind its current task)' : ''}.`);
   }
   // Whether the wired adapter can serve a route variant now (Pass 4.5). An adapter without supports() serves all.
@@ -192,9 +250,12 @@ export class Conductor {
   spendGate(o, s, gate) {
     if (Object.values(o.decisions).some(d => d.status === 'PENDING' && d.resume?.type === 'spend')) return;
     const n = Object.values(o.decisions).filter(d => d.resume?.type === 'spend').length + 1;
-    this.engine.emit('SPEND_APPROVAL_REQUIRED', { taskId: null, objectiveId: o.id, stepId: s.id, code: gate.code, provider: gate.provider, agentId: gate.agentId, backend: gate.backend, why: gate.why, reason: gate.reason, estimatedCostUsd: gate.estimatedCostUsd, maxCostUsd: gate.maxCostUsd, alternatives: gate.alternatives, waitingWouldHelp: gate.waitingWouldHelp, mode: gate.mode, ownerAction: gate.mode === 'BUDGETED' ? `Authorize up to $${(gate.maxCostUsd ?? 0).toFixed(2)} for this objective in HQ, then choose retry.` : 'ZERO_CREDIT mode forbids metered compute. Use a $0 alternative, or restart HQ with HQ_COMPUTE_MODE=BUDGETED and authorize a bounded amount.' });
-    return this.requestDecision(o, `spend-${s.id}-${n}`, { authority: 'kyle', type: 'spend', stepId: s.id }, `${gate.code}: the ${s.kind} step needs metered ${gate.provider} compute (${gate.backend}). ${gate.reason} Why paid compute: ${gate.why} $0 alternatives: ${gate.alternatives.join(' ')}`, [
-      { id: 'retry', label: 'I authorized a bounded spend in HQ; try again' },
+    const freeDown = gate.mode !== 'BUDGETED' && Boolean(gate.freeUnavailable);
+    this.engine.emit('SPEND_APPROVAL_REQUIRED', { taskId: null, objectiveId: o.id, stepId: s.id, code: gate.code, provider: gate.provider, agentId: gate.agentId, backend: gate.backend, why: gate.why, reason: gate.reason, estimatedCostUsd: gate.estimatedCostUsd, maxCostUsd: gate.maxCostUsd, alternatives: gate.alternatives, waitingWouldHelp: gate.waitingWouldHelp, mode: gate.mode, ownerAction: gate.mode === 'BUDGETED' ? `Authorize up to $${(gate.maxCostUsd ?? 0).toFixed(2)} for this objective in HQ, then choose retry.` : freeDown ? `The $0 route cannot run here: ${gate.freeUnavailable}. Fix that, then retry; no spend is needed. HQ will not use the metered route in ZERO_CREDIT mode.`.slice(0, 1900) : 'ZERO_CREDIT mode forbids metered compute. Use a $0 alternative, or restart HQ with HQ_COMPUTE_MODE=BUDGETED and authorize a bounded amount.' });
+    // ZERO_CREDIT with the $0 route down (for example a stale sandbox image): lead with that, not with paying.
+    const lead = freeDown ? `The $0 ${s.kind} route is unavailable: ${gate.freeUnavailable}. Fix that, then retry; no spend is needed. HQ will not fall back to metered compute in ${gate.mode} mode. ` : '';
+    return this.requestDecision(o, `spend-${s.id}-${n}`, { authority: 'kyle', type: 'spend', stepId: s.id }, `${lead}${gate.code}: the ${s.kind} step needs metered ${gate.provider} compute (${gate.backend}). ${gate.reason} Why paid compute: ${gate.why} $0 alternatives: ${gate.alternatives.join(' ')}`, [
+      { id: 'retry', label: freeDown ? 'I fixed the $0 route (or authorized a bounded spend); try again' : 'I authorized a bounded spend in HQ; try again' },
       { id: 'stop', label: 'Stop the objective (nothing was paid, nothing ran)' },
     ]);
   }
@@ -205,16 +266,51 @@ export class Conductor {
     // Review of medium/high risk work needs an independent provider. If it is out, HQ does not quietly substitute
     // a same-provider review: that is a lowering of the review standard, so Kyle decides.
     if (s.kind === 'review' && s.reviewRule?.independentProvider && !s.allowSameProvider && !o.decisions[`review-fallback-${s.id}`]) {
-      return this.requestDecision(o, `review-fallback-${s.id}`, { authority: 'kyle', type: 'review-fallback', stepId: s.id }, `The independent reviewer is unavailable (${why}). Wait for it, or accept a separate read-only Claude review (same provider as the implementer, so not independent)?`, [
+      return this.requestDecision(o, `review-fallback-${s.id}`, { authority: 'orchestrator', type: 'review-fallback', stepId: s.id }, `The independent reviewer is unavailable (${why}). Wait for it, accept a separate read-only Claude review (same provider as the implementer — NOT independent; merge gate still requires Kyle), escalate to Kyle, or stop?`, [
         { id: 'wait', label: `Wait for Codex${limited.length ? ` (reset ${new Date(Math.min(...limited)).toISOString()})` : ''}` },
-        { id: 'accept_same_provider_review', label: 'Accept a same-provider read-only review for this objective' },
+        { id: 'accept_same_provider_review', label: 'Accept a same-provider read-only review (NOT independent; merge gate still requires Kyle)' },
+        { id: 'escalate_to_kyle', label: 'Escalate to Kyle — this objective needs owner judgment on the review' },
         { id: 'stop', label: 'Stop the objective (the verified branch stays unmerged)' },
       ]);
     }
     if (this.now() - waitingSince > o.limits.evidenceWaitMs) return this.stop(o, 'BLOCKED', `No approved agent became available for ${s.kind} within ${Math.round(o.limits.evidenceWaitMs / 60_000)} minutes (${why}).`, { ownerAction: 'Reconnect or wait for the agent, then submit the objective again.' });
     this.set(o, 'WAITING_FOR_EVIDENCE', `No approved agent available for ${s.kind} right now (${why}).${limited.length ? ` Earliest reset ${new Date(Math.min(...limited)).toISOString()}.` : ''}`);
   }
-  readOnlyTask(o, s, agentId) {
+  // The commit a review step must read: the implementation its verify step checked, and only if HQ's verification of
+  // that exact commit passed. null for steps that read the live repository (investigation, standalone review).
+  reviewSourceFor(o, s) {
+    if (s.kind !== 'review' || (s.standalone && !s.reviewCommit)) return null;
+    const pair = this.reviewedPair(o, s);
+    if (!pair) return { error: s.reviewCommit ? `HQ has no record of verifying commit ${s.reviewCommit}; nothing is reviewed.` : 'The review step is not tied to an HQ-verified implementation; nothing is reviewed.' };
+    const { verify, impl } = pair;
+    const h = impl.handoff, v = verify.handoff;
+    if (verify.status !== 'DONE' || v?.source !== 'hq' || v.ok !== true) return { error: 'The implementation commit has not passed HQ verification; HQ will not send it for review.' };
+    // Verification handoffs written before this change carry no commit; theirs is the implementation step's own.
+    if (v.commit != null && v.commit !== h?.commit) return { error: `HQ verified commit ${String(v.commit).slice(0, 12)} but the implementation reports ${String(h?.commit).slice(0, 12)}; nothing is reviewed.` };
+    if (!/^[0-9a-f]{40}$/.test(h?.commit ?? '') || !/^[0-9a-f]{40}$/.test(h?.base ?? '')) return { error: 'The verified implementation has no full commit and base sha; nothing is reviewed.' };
+    return { commit: h.commit, base: h.base, branch: h.branch ?? null };
+  }
+  // The implement step and HQ verify step a review covers: its own dependency chain, or for a review-a-commit objective
+  // (reviewCommit) the latest HQ verification of that commit anywhere in the journal. Only passed verifications count.
+  reviewedPair(o, s) {
+    if (s.reviewCommit) return this.verifiedImplementation(s.reviewCommit);
+    const verify = s.dependsOn.map(id => o.steps[id]).find(x => x?.kind === 'verify');
+    const impl = verify && o.steps[verify.dependsOn[0]];
+    return verify && impl?.kind === 'implement' ? { verify, impl, objective: o } : null;
+  }
+  verifiedImplementation(sha) {
+    let found = null;
+    for (const other of Object.values(this.state.objectives ?? {})) {
+      for (const verify of Object.values(other.steps)) {
+        if (verify.kind !== 'verify' || verify.status !== 'DONE' || verify.handoff?.source !== 'hq' || verify.handoff.ok !== true) continue;
+        const impl = other.steps[verify.dependsOn[0]];
+        if (impl?.kind !== 'implement' || impl.handoff?.commit !== sha || (verify.handoff.commit != null && verify.handoff.commit !== sha)) continue;
+        found = { verify, impl, objective: other };
+      }
+    }
+    return found;
+  }
+  readOnlyTask(o, s, agentId, source = null) {
     const prior = this.quotedEvidence(o, s);
     const kind = HANDOFF_KIND[s.kind];
     // What the submitter already fixed (HQ-validated input, not agent text): the investigator proposes within it.
@@ -228,10 +324,12 @@ export class Conductor {
     ].filter(Boolean).join('\n');
     const extra = {
       investigate: `You are the investigator. Read the repository; do not modify anything. Find the cause with file:line evidence. If a code change is warranted, propose the narrowest scope (files or directories at least two levels deep) and 1 to 3 test files (*.test.mjs) HQ can run with node --test to prove the fix. New files may be proposed where they do not exist yet.\n${bounds}`,
-      review: s.standalone ? 'You are the reviewer. Read the repository; do not modify anything. Review what the objective asks and report findings with severity and evidence.' : 'You are the independent reviewer. Read the repository; do not modify anything. Review the committed change quoted below (HQ verified it: scope, tests, commit). Approve only if it meets the objective without regressions.',
+      review: !source ? (s.standalone ? 'You are the reviewer. Read the repository; do not modify anything. Review what the objective asks and report findings with severity and evidence.' : '') : `You are the independent reviewer. Do not modify anything. Your current directory is HQ's read-only snapshot of exactly commit ${source.commit}${source.branch ? ` (branch ${source.branch})` : ''}, the commit HQ verified: every file of that commit, not the live checkout. The full diff against its base ${source.base} is in ${REVIEW_META_DIR}/diff.patch and the snapshot manifest (including any large files left out) in ${REVIEW_META_DIR}/manifest.json. Read the full changed files and whatever they touch; the excerpt quoted below is clipped. Approve only if the change meets the objective without regressions.`,
       rebuttal: 'Another agent disagrees with a position. Answer its evidence with your own evidence, once. Say whether you concede.',
     }[s.kind];
-    return { title: `Objective ${o.id.slice(0, 8)} → ${this.state.agents[agentId].name} (${s.kind}): ${o.input.title}`.slice(0, 200), description: framingFor(kind, { objective: o.input.objective, quoted: prior, extra }) };
+    // The brief always fits HQ's task limit: quoted evidence (data, not instructions) is trimmed, largest first.
+    const fixed = framingFor(kind, { objective: o.input.objective, quoted: prior.map(q => ({ ...q, text: '' })), extra }).length;
+    return { title: `Objective ${o.id.slice(0, 8)} → ${this.state.agents[agentId].name} (${s.kind}): ${o.input.title}`.slice(0, 200), description: framingFor(kind, { objective: o.input.objective, quoted: fitQuoted(prior, QUOTE_BUDGET - fixed), extra }) };
   }
   implementTask(o, s) {
     const c = validateImplementation(s.contract); // re-validated at dispatch, not only when the step was added
@@ -240,14 +338,20 @@ export class Conductor {
   // Evidence from earlier steps, quoted as data for the next agent. Never instructions; bounded.
   quotedEvidence(o, s) {
     const out = [];
+    // A review quotes only the change it reviews (the commit its HQ verification checked), never earlier attempts: an
+    // objective with a repair cycle quoted both, overflowed the task limit, and its review could never start. The
+    // reviewer reads the full files of that commit from its snapshot; this excerpt is orientation.
+    const pair = s.kind === 'review' ? this.reviewedPair(o, s) : null;
+    if (pair) {
+      const h = pair.impl.handoff, verify = pair.verify;
+      if (pair.objective !== o) out.push({ label: 'Objective the reviewed change was made for', text: clip(pair.objective.input.objective, 1500) });
+      out.push({ label: 'Change to review (HQ evidence)', text: clip(JSON.stringify({ branch: h.branch, commit: h.commit, base: h.base, filesChanged: h.filesChanged, tests: h.testsExecuted, results: h.results, hqVerification: verify.handoff?.checks?.map(c => `${c.ok ? 'PASS' : 'FAIL'} ${c.name}`) ?? null, diff: verify.handoff?.diff ?? null }, null, 1), 9000) });
+      if (h.agentNotes) out.push({ label: 'Implementer notes (model text)', text: clip(h.agentNotes, 1200) });
+    }
     for (const id of o.order) {
       const p = o.steps[id];
       if (p.id === s.id || !p.handoff) continue;
-      if (s.kind === 'review' && p.kind === 'implement') {
-        const h = p.handoff, verify = Object.values(o.steps).find(v => v.kind === 'verify' && v.dependsOn.includes(p.id));
-        out.push({ label: 'Change to review (HQ evidence)', text: clip(JSON.stringify({ branch: h.branch, commit: h.commit, base: h.base, filesChanged: h.filesChanged, tests: h.testsExecuted, results: h.results, hqVerification: verify?.handoff?.checks?.map(c => `${c.ok ? 'PASS' : 'FAIL'} ${c.name}`) ?? null, diff: verify?.handoff?.diff ?? null }, null, 1), 9000) });
-        if (h.agentNotes) out.push({ label: 'Implementer notes (model text)', text: clip(h.agentNotes, 1200) });
-      } else if (p.kind === 'investigate' && ['investigate', 'review'].includes(s.kind)) out.push({ label: 'Earlier investigation handoff', text: clip(JSON.stringify(p.handoff), 4000) });
+      if (p.kind === 'investigate' && ['investigate', 'review'].includes(s.kind)) out.push({ label: 'Earlier investigation handoff', text: clip(JSON.stringify(p.handoff), 4000) });
     }
     if (s.kind === 'rebuttal' && s.against) out.push({ label: `Position you are answering (from ${s.against.agentId})`, text: clip(JSON.stringify(s.against.position), 4000) });
     const rejected = s.rejections.at(-1);
@@ -281,6 +385,15 @@ export class Conductor {
       const text = task.evidence.filter(e => e.kind === 'MODEL_RESULT').at(-1);
       try {
         handoff = parseHandoff(text?.fullText ?? text?.summary, HANDOFF_KIND[s.kind]);
+        // A review of an implementation counts only with HQ's record that the reviewer read the verified commit.
+        if (s.kind === 'review' && (!s.standalone || s.reviewCommit)) {
+          const want = this.reviewSourceFor(o, s), seen = task.evidence.filter(e => e.kind === 'PROGRESS' && e.reviewSource).at(-1)?.reviewSource;
+          if (want?.error || task.reviewSource?.commit !== want.commit || seen?.commit !== want.commit || seen.verified !== true) {
+            this.engine.emit('HANDOFF_REJECTED', { objectiveId: o.id, stepId: s.id, taskId: task.id, reason: 'No HQ evidence that the reviewer read the verified commit.' });
+            return this.failed(o, s, { reason: 'agent_failure', detail: `The review ran without HQ evidence that it read verified commit ${String(want?.commit).slice(0, 12)} (task source ${String(task.reviewSource?.commit).slice(0, 12)}, snapshot ${String(seen?.commit).slice(0, 12)}).` });
+          }
+          handoff = { ...handoff, reviewedSource: { commit: seen.commit, base: seen.base, branch: seen.branch ?? null, tree: seen.tree, files: seen.files, snapshot: seen.source, verifiedCommit: want.commit, matchesVerified: true } };
+        }
         // A proposal HQ policy would refuse is not accepted: the investigator gets one bounded retry with the
         // refusal quoted (first real run: Codex proposed tools/hillink-hq/, outside the approved scope).
         if (s.kind === 'investigate' && handoff.recommendedAction === 'implement' && o.input.type === 'fix') {
@@ -408,7 +521,7 @@ export class Conductor {
   // ---- decisions ----
   requestDecision(o, decisionId, resume, question, options) {
     if (!o.decisions[decisionId]) this.engine.emit('DECISION_REQUESTED', { objectiveId: o.id, decisionId, question: clip(question, 1200), options, resume });
-    this.set(o, 'AWAITING_DECISION', `${resume.authority === 'kyle' ? 'Kyle' : 'The orchestrator (ChatGPT)'} must decide: ${clip(question, 400)}`);
+    this.set(o, 'AWAITING_DECISION', `${deriveDecisionAuthority(resume) === 'kyle' ? 'Kyle' : 'The orchestrator (ChatGPT)'} must decide: ${clip(question, 400)}`);
     if (resume.authority === 'orchestrator') this.callOrchestrator(o, decisionId);
   }
   // Wakes ChatGPT with a bounded, factual prompt. Its only way to act is the validated resolve tool.
@@ -444,14 +557,14 @@ export class Conductor {
   }
   async applyDecision(o, last, type, choice, by) {
     if (choice === 'stop') return this.stop(o, 'CANCELLED', `Stopped by ${by}'s decision: ${clip(last.rationale, 300)}`);
-    if (choice === 'escalate_to_kyle') return this.requestDecision(o, `${last.id}-kyle`, { ...last.resume, authority: 'kyle' }, `Escalated ${by === 'hq' ? 'by HQ (the orchestrator did not answer)' : 'by the orchestrator'}: ${last.question}`, last.options.filter(x => x.id !== 'escalate_to_kyle'));
+    if (choice === 'escalate_to_kyle') return this.requestDecision(o, `${last.id}-kyle`, { ...last.resume, authority: 'kyle', escalated: true }, `Escalated ${by === 'hq' ? 'by HQ (the orchestrator did not answer)' : 'by the orchestrator'}: ${last.question}`, last.options.filter(x => x.id !== 'escalate_to_kyle'));
     if (type === 'scope' && choice === 'approve_scope') {
       const s = o.steps[last.resume.stepId];
       return this.addImplementation(o, s, { scope: last.resume.scope, tests: last.resume.tests }, last.id);
     }
     if (type === 'review-fallback') {
       const s = o.steps[last.resume.stepId];
-      if (choice === 'accept_same_provider_review') { if (!s.allowSameProvider) this.engine.emit('STEP_RETRY', { objectiveId: o.id, stepId: s.id, reason: 'reviewer_unavailable', count: 1, max: 1, strategy: `Kyle accepted a same-provider read-only review: ${clip(last.rationale, 200)}`, excludeAgents: [], notBefore: null, allowSameProvider: true }); return this.set(o, 'REVIEWING', 'Kyle accepted a same-provider review.'); }
+      if (choice === 'accept_same_provider_review') { if (!s.allowSameProvider) this.engine.emit('STEP_RETRY', { objectiveId: o.id, stepId: s.id, reason: 'reviewer_unavailable', count: 1, max: 1, strategy: `Orchestrator accepted a same-provider read-only review (NOT independent; merge gate still requires Kyle): ${clip(last.rationale, 200)}`, excludeAgents: [], notBefore: null, allowSameProvider: true }); return this.set(o, 'REVIEWING', 'Orchestrator accepted a same-provider review (NOT independent; merge gate still requires Kyle).'); }
       const codex = this.state.agents.codex;
       this.engine.emit('STEP_RETRY', { objectiveId: o.id, stepId: s.id, reason: 'reviewer_unavailable', count: 1, max: 1, strategy: 'Wait for the independent reviewer.', excludeAgents: [], notBefore: codex?.retryAt ?? null });
       return this.set(o, 'WAITING_FOR_EVIDENCE', 'Waiting for the independent reviewer (decision: wait).');
@@ -477,7 +590,7 @@ export class Conductor {
     if (!this.verifier) { this.step(o, s, 'FAILED', 'No verifier configured.'); return this.stop(o, 'BLOCKED', 'HQ has no commit verifier configured; nothing can be accepted.'); }
     const r = await this.verifier.verify(task, impl.handoff);
     const diff = r.ok ? await this.verifier.diff?.(impl.handoff.commit).catch(() => null) : null;
-    const handoff = { kind: 'verification', source: 'hq', ok: r.ok, checks: r.checks, diff: diff ? clip(diff, 6000) : null };
+    const handoff = { kind: 'verification', source: 'hq', commit: impl.handoff?.commit ?? null, ok: r.ok, checks: r.checks, diff: diff ? clip(diff, 6000) : null };
     this.engine.emit('HANDOFF_ACCEPTED', { objectiveId: o.id, stepId: s.id, taskId: task.id, agentId: 'hq', handoff, hash: hashOf(handoff) });
     if (!r.ok) {
       const failedChecks = r.checks.filter(c => !c.ok).map(c => `${c.name} (${c.detail})`).join('; ');

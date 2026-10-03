@@ -1,9 +1,13 @@
 const $ = id => document.getElementById(id);
 const escape = value => String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
-let token, snapshot, liveSnapshot, replaying = false, skin = 'real', selected = null, replayTimer;
+let token, snapshot, liveSnapshot, replaying = false, skin = 'real', selected = null, replayTimer, armedGate = null, armedDecision = null;
 const notified = new Set();
 const ago = (at, now) => at == null ? 'No evidence' : `${Math.max(0, Math.floor((now - at) / 1000))}s ago`;
 const badge = status => `<span class="badge ${escape(status)}">${escape(status)}</span>`;
+// ChatGPT reaches HQ through the MCP connector instead of an adapter HQ launches: show that door, not "not connected".
+const viaConnector = agent => !agent.adapterAvailable && agent.connector;
+const connectorLine = (agent, now) => agent.connector.lastCallAt ? `Connected via ChatGPT connector · last call ${ago(agent.connector.lastCallAt, now)}` : 'ChatGPT connector open · no calls since HQ started';
+const statusBadge = agent => badge(viaConnector(agent) ? 'CONNECTOR' : agent.status);
 function workerOptions() {
   if (!liveSnapshot) return;
   const previous = $('worker').value;
@@ -29,9 +33,15 @@ function render(state) {
   $('agent-count').textContent = ` / ${state.agents.length}`;
   $('agents').innerHTML = state.agents.map(agent => {
     const task = state.tasks.find(t => t.id === agent.assignment);
-    return `<button class="agent" data-agent="${escape(agent.id)}"><div class="agent-top"><span class="avatar">${escape(agent.name[0])}</span><div><h3>${escape(agent.name)}</h3><span class="role">${escape(agent.role)}</span></div>${agent.lifecycle ? badge(agent.lifecycle.state) : ''}${badge(agent.status)}</div><p>${agent.lifecycle && agent.lifecycle.state !== 'ACTIVE' ? escape(agent.lifecycle.detail || agent.lifecycle.state) : task ? escape(task.title) : agent.adapterAvailable ? escape(agent.status === 'IDLE' ? 'Available for allowlisted local work' : agent.detail || agent.status) : 'Execution adapter not connected'}</p><p>Progress: ${ago(agent.lastMeaningfulAt, state.now)} · Credits: UNKNOWN</p></button>`;
+    return `<button class="agent" data-agent="${escape(agent.id)}"><div class="agent-top"><span class="avatar">${escape(agent.name[0])}</span><div><h3>${escape(agent.name)}</h3><span class="role">${escape(agent.role)}</span></div>${agent.lifecycle ? badge(agent.lifecycle.state) : ''}${statusBadge(agent)}</div><p>${agent.lifecycle && agent.lifecycle.state !== 'ACTIVE' ? escape(agent.lifecycle.detail || agent.lifecycle.state) : task ? escape(task.title) : agent.adapterAvailable ? escape(agent.status === 'IDLE' ? 'Available for allowlisted local work' : agent.detail || agent.status) : viaConnector(agent) ? escape(connectorLine(agent, state.now)) : 'Execution adapter not connected'}</p><p>Progress: ${ago(agent.lastMeaningfulAt, state.now)} · Credits: UNKNOWN</p></button>`;
   }).join('');
   $('queue').innerHTML = state.tasks.length ? [...state.tasks].reverse().map(task => `<div class="queue-row"><button data-task="${escape(task.id)}"><b>${escape(task.title)}</b><small>${escape(task.description)}</small></button><span>${badge(task.stage)}${task.verificationResult ? `<small>Tests: ${escape(task.verificationResult)}</small>` : ''}</span><span>${escape(state.agents.find(a => a.id === task.agentId)?.name || 'Unassigned')}<small>Priority ${task.priority} · Attempt ${task.attempts}</small></span><span>${task.claimedAt ? ago(task.claimedAt, task.endedAt ?? state.now).replace(' ago', ' elapsed') : 'Not started'}</span></div>`).join('') : '<p class="empty">No tasks yet. Queue a safe check to observe actual execution.</p>';
+  const gates = Object.values(state.objectives ?? {}).filter(o => o.status === 'AWAITING_APPROVAL').flatMap(o => Object.values(o.approvals).filter(a => a.status === 'PENDING').map(a => ({ o, a })));
+  $('approvals-panel').hidden = !gates.length;
+  replace('approvals', gates.map(({ o, a }) => `<div class="alert"><strong>${escape(a.gate)}</strong> · ${escape(o.input.title)} <small>objective ${escape(o.id.slice(0, 8))}${o.plan ? ` · risk ${escape(o.plan.risk)}` : ''}</small><p>${escape(a.reason)}</p><p class="muted">${escape(a.stage || '')}${o.result?.branch ? ` · branch ${escape(o.result.branch)}` : ''}${o.result?.commit ? ` · commit ${escape(String(o.result.commit).slice(0, 10))}` : ''}</p>${['approve', 'deny'].map(d => { const key = `${o.id}:${a.gate}:${d}`; return `<button data-gate-decision="${d}" data-objective="${escape(o.id)}" data-gate="${escape(a.gate)}" ${replaying ? 'disabled' : ''}>${armedGate === key ? 'Confirm: ' : ''}${d === 'approve' ? 'Approve' : 'Deny'} ${escape(a.gate)}</button>`; }).join(' ')}</div>`).join(''));
+  const kyleDecisions = Object.values(state.objectives ?? {}).filter(o => o.status === 'AWAITING_DECISION').flatMap(o => Object.values(o.decisions).filter(d => d.status === 'PENDING' && d.resume?.authority === 'kyle').map(d => ({ o, d })));
+  $('decisions-panel').hidden = !kyleDecisions.length;
+  replace('decisions', kyleDecisions.map(({ o, d }) => `<div class="alert"><strong>${escape(d.id)}</strong> · ${escape(o.input.title)} <small>objective ${escape(o.id.slice(0, 8))}${o.plan ? ` · risk ${escape(o.plan.risk)}` : ''}</small><p>${escape(d.question)}</p>${d.options.map(opt => { const key = `${o.id}:${d.id}:${opt.id}`; return `<button data-decision-choice="${escape(opt.id)}" data-objective="${escape(o.id)}" data-decision="${escape(d.id)}" ${replaying ? 'disabled' : ''}>${armedDecision === key ? 'Confirm: ' : ''}${escape(opt.label)}</button>`; }).join(' ')}</div>`).join(''));
   const alerts = Object.values(state.alerts).filter(a => a.active);
   $('alerts').innerHTML = alerts.length ? alerts.map(a => `<div class="alert"><strong>${escape(a.kind)}</strong><p>${escape(a.detail)}</p><p>Agent: ${escape(a.agentId || 'System')} · Task: ${escape(a.taskId || 'Queue')} · Ready: ${a.runnableQueueCount}</p><p>Since progress at alert creation: ${a.sinceProgressMs == null ? 'UNKNOWN' : `${Math.floor(a.sinceProgressMs / 1000)}s`} · Recovery: ${escape(a.recoveryAttempted?.step || 'None')}</p>${a.ownerAction ? `<p><b>Kyle:</b> ${escape(a.ownerAction)}</p>` : ''}<p>External delivery: ${a.deliveredAt ? 'Delivered' : a.deliveryError ? escape(a.deliveryError) : 'Pending / unconfigured'}</p><button data-ack="${escape(a.key)}" ${a.acknowledgedAt || replaying ? 'disabled' : ''}>${a.acknowledgedAt ? 'Acknowledged' : 'Acknowledge'}</button></div>`).join('') : '<p class="empty">No material alerts.</p>';
   const meaningful = state.events.filter(e => !(e.type === 'AGENT_OBSERVED' && e.data.status === 'IDLE') && !(e.type === 'WORKER_EVENT' && e.data.kind === 'HEARTBEAT'));
@@ -49,8 +59,8 @@ function renderWorld() {
   $('world').className = `world ${skin} ${new Date(snapshot.now).getHours() >= 18 || new Date(snapshot.now).getHours() < 7 ? 'night' : ''}`;
   replace('world', snapshot.agents.map(agent => {
     const task = snapshot.tasks.find(t => t.id === agent.assignment);
-    const place = agent.status === 'UNKNOWN' || agent.status === 'OFFLINE' ? 'Connection gate' : ['BLOCKED', 'STALLED', 'RATE_LIMITED'].includes(agent.status) ? 'Triage room' : agent.workstation;
-    return `<button class="station ${agent.status.toLowerCase()}" data-agent="${escape(agent.id)}"><small>${escape(place)}</small><span class="character" aria-hidden="true">${skin === 'fantasy' ? '♜' : '▣'}</span>${badge(agent.status)}<h3>${escape(agent.name)}</h3><small>${escape(agent[skin])}</small><p>${task ? escape(`${task.stage} · ${task.title}`) : agent.adapterAvailable ? 'No current task' : 'Awaiting adapter connection'}</p></button>`;
+    const place = viaConnector(agent) ? agent.workstation : agent.status === 'UNKNOWN' || agent.status === 'OFFLINE' ? 'Connection gate' : ['BLOCKED', 'STALLED', 'RATE_LIMITED'].includes(agent.status) ? 'Triage room' : agent.workstation;
+    return `<button class="station ${agent.status.toLowerCase()}" data-agent="${escape(agent.id)}"><small>${escape(place)}</small><span class="character" aria-hidden="true">${skin === 'fantasy' ? '♜' : '▣'}</span>${statusBadge(agent)}<h3>${escape(agent.name)}</h3><small>${escape(agent[skin])}</small><p>${task ? escape(`${task.stage} · ${task.title}`) : agent.adapterAvailable ? 'No current task' : viaConnector(agent) ? escape(connectorLine(agent, snapshot.now)) : 'Awaiting adapter connection'}</p></button>`;
   }).join(''));
 }
 // Pass 5F: an HQ-created agent's lifecycle and the owner actions its state allows (HQ checks them again).
@@ -67,12 +77,30 @@ function inspect(type, id, focus = true) {
   const unresolved = task?.stage === 'BLOCKED' && snapshot.runs[task.runId] && !snapshot.runs[task.runId].endedAt;
   $('reconcile-panel').hidden = !unresolved || replaying;
   $('reconcile-form').dataset.runId = unresolved ? task.runId : '';
-  panel.innerHTML = `<p class="eyebrow">${agent ? 'AGENT INSPECTION' : 'WHAT ARE YOU BUILDING?'}</p><h2>${escape(agent?.name || task?.title)}</h2>${agent ? `<p>${escape(agent.role)} · ${escape(agent.provider)} · Model: ${escape(agent.model || 'UNKNOWN')} ${badge(agent.status)}</p><p class="muted">Capabilities: ${escape(agent.capabilities.join(', '))}<br>Execution: ${escape(agent.executionAdapter || 'UNAVAILABLE')} · Telemetry: ${escape(agent.telemetryAdapter || 'UNAVAILABLE')}<br>Credits / cost: UNKNOWN${agent.lifecycle ? lifecycleView(agent) : ''}${agent.usage ? `<br>Measured ${agent.usage.elapsedMs}ms · RSS ${agent.usage.rssBytes ?? 'UNKNOWN'} bytes · Source ${escape(agent.usage.source)}` : ''}</p>` : ''}${task ? `<h3>${escape(task.title)} ${badge(task.stage)}</h3><p>${escape(task.description)}</p><p class="muted">Owner: ${escape(task.agentId || 'Unassigned')} · ETA: UNKNOWN · Last meaningful progress: ${ago(task.lastMeaningfulAt, snapshot.now)}</p>${task.blocker ? `<p>Blocker: ${escape(task.blocker)}</p>` : ''}${task.ownerAction ? `<p>Kyle action: ${escape(task.ownerAction)}</p>` : ''}<h3>Evidence / tests / branches / handoffs</h3><ul>${task.evidence.map(e => `<li><b>${escape(e.kind)}</b> · ${escape(e.summary)}${e.url ? ` <a href="${escape(e.url)}" target="_blank" rel="noopener noreferrer">Evidence</a>` : ''}${e.files ? `<br>${e.files.map(escape).join(', ')}` : ''}</li>`).join('')}</ul>` : '<p class="muted">No active assignment. No execution is inferred from registration.</p>'}`;
+  panel.innerHTML = `<p class="eyebrow">${agent ? 'AGENT INSPECTION' : 'WHAT ARE YOU BUILDING?'}</p><h2>${escape(agent?.name || task?.title)}</h2>${agent ? `<p>${escape(agent.role)} · ${escape(agent.provider)} · Model: ${escape(agent.model || 'UNKNOWN')} ${statusBadge(agent)}</p><p class="muted">Capabilities: ${escape(agent.capabilities.join(', '))}<br>Execution: ${escape(agent.executionAdapter || 'UNAVAILABLE')}${viaConnector(agent) ? ` (not connected; the paid route is off) · ${escape(connectorLine(agent, snapshot.now))}` : ''} · Telemetry: ${escape(agent.telemetryAdapter || 'UNAVAILABLE')}<br>Credits / cost: UNKNOWN${agent.lifecycle ? lifecycleView(agent) : ''}${agent.usage ? `<br>Measured ${agent.usage.elapsedMs}ms · RSS ${agent.usage.rssBytes ?? 'UNKNOWN'} bytes · Source ${escape(agent.usage.source)}` : ''}</p>` : ''}${task ? `<h3>${escape(task.title)} ${badge(task.stage)}</h3><p>${escape(task.description)}</p><p class="muted">Owner: ${escape(task.agentId || 'Unassigned')} · ETA: UNKNOWN · Last meaningful progress: ${ago(task.lastMeaningfulAt, snapshot.now)}</p>${task.blocker ? `<p>Blocker: ${escape(task.blocker)}</p>` : ''}${task.ownerAction ? `<p>Kyle action: ${escape(task.ownerAction)}</p>` : ''}<h3>Evidence / tests / branches / handoffs</h3><ul>${task.evidence.map(e => `<li><b>${escape(e.kind)}</b> · ${escape(e.summary)}${e.url ? ` <a href="${escape(e.url)}" target="_blank" rel="noopener noreferrer">Evidence</a>` : ''}${e.files ? `<br>${e.files.map(escape).join(', ')}` : ''}</li>`).join('')}</ul>` : '<p class="muted">No active assignment. No execution is inferred from registration.</p>'}`;
   if (focus) { panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); panel.focus({ preventScroll: true }); }
 }
 document.addEventListener('click', async event => {
   const lifecycle = event.target.closest('[data-lifecycle]');
   if (lifecycle && !replaying) { try { await api(`/api/agents/${lifecycle.dataset.lifecycle}`, { id: lifecycle.dataset.id }); $('notice').textContent = ''; await refresh(); } catch (e) { $('notice').textContent = e.message; } return; }
+  // Two clicks: arm, then confirm Kyle's decision on a pending orchestration decision.
+  const dec = event.target.closest('[data-decision-choice]');
+  if (dec && !replaying) {
+    const key = `${dec.dataset.objective}:${dec.dataset.decision}:${dec.dataset.decisionChoice}`;
+    if (armedDecision !== key) { armedDecision = key; render(snapshot); return; }
+    armedDecision = null;
+    try { await api('/api/objectives/decide', { id: dec.dataset.objective, decisionId: dec.dataset.decision, choice: dec.dataset.decisionChoice, rationale: '' }); $('notice').textContent = ''; await refresh(); } catch (e) { $('notice').textContent = e.message; }
+    return;
+  }
+  // Two clicks: the first arms the button, the second records Kyle's decision through the owner API.
+  const gate = event.target.closest('[data-gate-decision]');
+  if (gate && !replaying) {
+    const key = `${gate.dataset.objective}:${gate.dataset.gate}:${gate.dataset.gateDecision}`;
+    if (armedGate !== key) { armedGate = key; render(snapshot); return; }
+    armedGate = null;
+    try { await api('/api/objectives/approve', { id: gate.dataset.objective, gate: gate.dataset.gate, decision: gate.dataset.gateDecision }); $('notice').textContent = ''; await refresh(); } catch (e) { $('notice').textContent = e.message; }
+    return;
+  }
   const agent = event.target.closest('[data-agent]'), task = event.target.closest('[data-task]'), ack = event.target.closest('[data-ack]');
   if (agent) inspect('agent', agent.dataset.agent);
   if (task) inspect('task', task.dataset.task);
@@ -136,6 +164,23 @@ $('replay-play').onclick = () => {
   replayTimer = setInterval(async () => { if (seq >= (liveSnapshot?.seq ?? 0)) { clearInterval(replayTimer); return; } seq = Math.min(seq + 4, liveSnapshot.seq); $('replay-seq').value = seq; try { await replay(seq); } catch { clearInterval(replayTimer); } }, 1000);
 };
 $('live').onclick = () => { clearInterval(replayTimer); replayMode(false); $('notice').textContent = ''; refresh(); };
+// Phone approvals (owner/door.mjs): pair a phone with a one-time code shown here, list paired phones, revoke one.
+async function phones() {
+  try {
+    const r = await api('/api/owner/devices');
+    $('phones-door').textContent = `Phone approvals: ${r.door}`;
+    replace('phones', r.devices.map(d => `<div class="alert"><strong>${escape(d.label)}</strong> <small>paired ${escape(new Date(d.pairedAt).toLocaleString())} · ${d.revokedAt ? `revoked ${escape(new Date(d.revokedAt).toLocaleString())}` : `expires ${escape(new Date(d.expiresAt).toLocaleString())}`}</small>${d.revokedAt ? '' : ` <button data-revoke-phone="${escape(d.id)}">Revoke</button>`}</div>`).join(''));
+  } catch { /* shown on the next refresh */ }
+}
+$('phone-form').onsubmit = async event => {
+  event.preventDefault();
+  try { const r = await api('/api/owner/pair', { label: $('phone-label').value }); $('phone-code').textContent = `On the phone, open the HQ approvals page and enter ${r.code} (one use, until ${new Date(r.expiresAt).toLocaleTimeString()}).`; phones(); }
+  catch (e) { $('phone-code').textContent = e.message; }
+};
+$('phones').addEventListener('click', async event => {
+  const id = event.target.closest('[data-revoke-phone]')?.dataset.revokePhone; if (!id) return;
+  try { await api('/api/owner/revoke', { id, reason: 'Revoked in the Command Center.' }); phones(); } catch (e) { $('phone-code').textContent = e.message; }
+});
 async function refresh() {
   try {
     if (!token) token = (await api('/api/session')).token;
@@ -151,3 +196,4 @@ async function refresh() {
   }
 }
 await refresh(); setInterval(refresh, 2000);
+phones(); setInterval(phones, 15000);

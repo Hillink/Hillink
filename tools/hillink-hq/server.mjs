@@ -20,12 +20,16 @@ import { execFileSync } from 'node:child_process';
 import { assertSupportedNode } from './node-version.mjs';
 import { Conductor } from './orchestration/conductor.mjs';
 import { CommitVerifier } from './orchestration/verify.mjs';
+import { ReviewSnapshots } from './review-snapshot.mjs';
 import { reconcileInterrupted } from './orchestration/recovery.mjs';
 import { worldActivity, worldSnapshot, WORLD_CONTRACT_VERSION } from './orchestration/activity.mjs';
 import { resolveMode } from './compute/policy.mjs';
 import { computeLedger } from './compute/state.mjs';
 import { allRoutes, agentProfiles } from './compute/registry.mjs';
 import { catalog, rebindAdapters } from './agents.mjs';
+import { startIngress, validIngressToken } from './ingress/mcp-ingress.mjs';
+import { requestRestart, ipcSupervisor } from './restart.mjs';
+import { OwnerDoor } from './owner/door.mjs';
 
 // Metered credentials HQ knows about. Only their presence is ever reported, never a value.
 export const METERED_CREDENTIALS = ['OPENAI_API_KEY', 'ANTHROPIC_API_KEY', 'HQ_SANDBOX_ANTHROPIC_API_KEY', 'CODEX_API_KEY', 'ANTHROPIC_AUTH_TOKEN'];
@@ -42,7 +46,7 @@ async function body(req) {
   return JSON.parse(raw);
 }
 
-export async function createHQ({ port = 4312, directory = path.join(here, '.state'), store, adapters, sink, intervalMs = 1000, ollama = false, cliAgents = false, orchestrator = false, implementation = false, env = process.env, request = fetch, sandboxFactory = ({ env: e }) => (process.platform === 'win32' ? new WslSandbox({ home: e.HQ_SANDBOX_HOME || undefined }) : new LinuxSandbox({ home: e.HQ_SANDBOX_HOME || undefined })), brokerOptions = {}, conductorOptions = {}, verifier = null, computeMode = null, nodeVersion = process.versions.node } = {}) {
+export async function createHQ({ port = 4312, directory = path.join(here, '.state'), store, adapters, sink, intervalMs = 1000, ollama = false, cliAgents = false, orchestrator = false, implementation = false, env = process.env, request = fetch, sandboxFactory = ({ env: e }) => (process.platform === 'win32' ? new WslSandbox({ home: e.HQ_SANDBOX_HOME || undefined }) : new LinuxSandbox({ home: e.HQ_SANDBOX_HOME || undefined })), brokerOptions = {}, conductorOptions = {}, verifier = null, computeMode = null, nodeVersion = process.versions.node, ingress = false, ownerDoor = false, supervisor = null, gitHead = null } = {}) {
   assertSupportedNode(nodeVersion); // fail closed before any state, sandbox or agent is touched
   const journal = store ?? new FileStore(directory);
   const local = new LocalAdapter();
@@ -52,7 +56,9 @@ export async function createHQ({ port = 4312, directory = path.join(here, '.stat
   engine.initialize({ modeSource: computeMode ? 'createHQ option' : env.HQ_COMPUTE_MODE ? 'HQ_COMPUTE_MODE' : 'default', modeWarning: mode.warning });
   let agentsStatus = 'DISABLED';
   if (cliAgents) {
-    try { connectCliAgents(engine); agentsStatus = 'CONFIGURED'; }
+    // Reviews of an implementation commit read a read-only snapshot of exactly that commit (review-snapshot.mjs),
+    // made outside the repository and removed after each review.
+    try { connectCliAgents(engine, { reviewSnapshots: new ReviewSnapshots({ repoRoot: path.resolve(here, '../..'), ...(env.HQ_REVIEW_SNAPSHOT_DIR ? { root: env.HQ_REVIEW_SNAPSHOT_DIR } : {}) }) }); agentsStatus = 'CONFIGURED'; }
     catch (error) { agentsStatus = `UNAVAILABLE: ${error.message}`; }
   }
   // Pass 2.6: Claude may take bounded implementation tasks (implement-repo) through a separate runtime with
@@ -89,7 +95,7 @@ export async function createHQ({ port = 4312, directory = path.join(here, '.stat
         brokerServer = await new BrokerServer().start();
         subscription = new SubscriptionImplementer({ repoRoot, worktreeRoot, claudeBin, env, sandbox, base, broker: brokerServer, ...brokerOptions });
       }
-      engine.adapters['cli-claude'] = new ClaudeRouter(engine.adapters['cli-claude'], implementer, subscription);
+      engine.adapters['cli-claude'] = new ClaudeRouter(engine.adapters['cli-claude'], implementer, subscription, brokerReady.ok ? null : brokerReady.reason);
       if (!engine.state.agents.claude.assignment) engine.configureAgent('claude', { capabilities: [...new Set([...engine.state.agents.claude.capabilities, 'implement-repo'])] });
       const direct = implementer.available();
       implementationStatus = 'CONFIGURED';
@@ -136,7 +142,10 @@ export async function createHQ({ port = 4312, directory = path.join(here, '.stat
   engine.conductor = conductor;
   const credentials = Object.fromEntries(METERED_CREDENTIALS.map(k => [k, Boolean(env[k])]));
   const session = randomBytes(32).toString('hex');
-  let origin, timer, closing = false, lastError = null, ticking = Promise.resolve();
+  let origin, timer, closing = false, lastError = null, ticking = Promise.resolve(), ingressServer = null, ingressStatus = 'DISABLED', ingressTokenFile = null, ownerServer = null, ownerStatus = 'DISABLED';
+  // Phone approvals (owner/door.mjs). The door object exists whenever HQ runs, so the queue and devices are readable
+  // here; its loopback listener starts only when enabled.
+  const owner = new OwnerDoor(engine, { conductor });
   const server = http.createServer(async (req, res) => {
     res.setHeader('Cache-Control', 'no-store');
     res.setHeader('X-Content-Type-Options', 'nosniff');
@@ -154,7 +163,7 @@ export async function createHQ({ port = 4312, directory = path.join(here, '.stat
       if (req.headers['x-hq-client'] !== 'command-center' || (req.headers.origin && req.headers.origin !== origin) || (req.headers['sec-fetch-site'] && req.headers['sec-fetch-site'] !== 'same-origin')) return json(403, { error: 'Same-origin HQ client required' });
       if (req.method === 'GET' && url.pathname === '/api/session') return json(200, { token: session });
       if (!equal(req.headers.authorization, `Bearer ${session}`)) return json(401, { error: 'HQ session required' });
-      if (req.method === 'GET' && url.pathname === '/api/state') return json(200, { ...engine.snapshot(), events: engine.state.events.slice(-recentEvents), eventCount: engine.state.events.length, operations, health: { controller: lastError ? 'DEGRADED' : 'ONLINE', lastError, externalNotifications: sink ? 'CONFIGURED' : 'UNCONFIGURED', ollama: ollamaStatus, cliAgents: agentsStatus, orchestrator: orchestratorStatus, implementation: implementationStatus, implementationRoutes, localOnly: true, computeMode: engine.config.computeMode, meteredCredentialsPresent: credentials } });
+      if (req.method === 'GET' && url.pathname === '/api/state') return json(200, { ...engine.snapshot(), events: engine.state.events.slice(-recentEvents), eventCount: engine.state.events.length, operations, health: { controller: lastError ? 'DEGRADED' : 'ONLINE', lastError, externalNotifications: sink ? 'CONFIGURED' : 'UNCONFIGURED', ollama: ollamaStatus, cliAgents: agentsStatus, orchestrator: orchestratorStatus, implementation: implementationStatus, implementationRoutes, ingress: ingressStatus, localOnly: true, computeMode: engine.config.computeMode, meteredCredentialsPresent: credentials } });
       // Pass 4: compute policy, ledger and spend authorization. Owner API only (loopback, same-origin, session token);
       // nothing here is reachable from agent output, handoffs or the orchestrator's tools.
       if (req.method === 'GET' && url.pathname === '/api/compute') return json(200, { mode: engine.config.computeMode, ledger: computeLedger(engine.state, { now: engine.now(), taskId: url.searchParams.get('task') || null }), routes: allRoutes(), agents: agentProfiles(), meteredCredentialsPresent: credentials });
@@ -176,8 +185,16 @@ export async function createHQ({ port = 4312, directory = path.join(here, '.stat
       // are decided here and nowhere else.
       if (req.method === 'POST' && url.pathname === '/api/objectives') { const id = conductor.submit(await body(req)); return json(201, { id }); }
       if (req.method === 'POST' && url.pathname === '/api/objectives/cancel') { const b = await body(req); return json(200, await conductor.cancel(String(b.id), { by: 'kyle', reason: typeof b.reason === 'string' ? b.reason : 'Cancelled by Kyle.' })); }
-      if (req.method === 'POST' && url.pathname === '/api/objectives/approve') { const b = await body(req); return json(200, conductor.approve(String(b.id), String(b.gate), b.decision, { by: 'kyle', note: typeof b.note === 'string' ? b.note : null })); }
-      if (req.method === 'POST' && url.pathname === '/api/objectives/decide') { const b = await body(req); return json(200, conductor.decide(String(b.id), String(b.decisionId), String(b.choice), { by: 'kyle', rationale: typeof b.rationale === 'string' ? b.rationale : '' })); }
+      if (req.method === 'POST' && url.pathname === '/api/objectives/approve') { const b = await body(req); return json(200, conductor.approve(String(b.id), String(b.gate), b.decision, { by: 'kyle', note: typeof b.note === 'string' ? b.note : null, channel: 'command-center' })); }
+      if (req.method === 'POST' && url.pathname === '/api/objectives/acknowledge') { const b = await body(req); return json(200, conductor.acknowledgeOutcome(String(b.id), { by: 'kyle', note: typeof b.note === 'string' ? b.note : '' })); }
+      if (req.method === 'POST' && url.pathname === '/api/orchestrator/notes') { const b = await body(req); return json(201, { id: conductor.postNote({ title: b.title, body: b.body }, { by: 'kyle' }) }); }
+      if (req.method === 'POST' && url.pathname === '/api/orchestrator/notes/ack') { const b = await body(req); return json(200, conductor.acknowledgeNote(String(b.id), { by: 'kyle', note: typeof b.note === 'string' ? b.note : '' })); }
+      // Phone approvals: the same "Waiting for Kyle" queue the phone sees, and pairing/revoking phones (owner API only).
+      if (req.method === 'GET' && url.pathname === '/api/owner/waiting') return json(200, { items: owner.waiting(), door: ownerStatus });
+      if (req.method === 'GET' && url.pathname === '/api/owner/devices') return json(200, { devices: owner.devices(), door: ownerStatus });
+      if (req.method === 'POST' && url.pathname === '/api/owner/pair') { if (!ownerServer) throw Error(`Phone approvals are not enabled (${ownerStatus}).`); return json(201, owner.startPairing(await body(req), { by: 'kyle' })); }
+      if (req.method === 'POST' && url.pathname === '/api/owner/revoke') { const b = await body(req); return json(200, owner.revokeDevice(String(b.id), { by: 'kyle', reason: typeof b.reason === 'string' ? b.reason : null })); }
+      if (req.method === 'POST' && url.pathname === '/api/objectives/decide') { const b = await body(req); return json(200, conductor.decide(String(b.id), String(b.decisionId), String(b.choice), { by: 'kyle', rationale: typeof b.rationale === 'string' ? b.rationale : '', channel: 'command-center' })); }
       // The World contract: a truthful snapshot plus activity since a journal sequence number.
       if (req.method === 'GET' && url.pathname === '/api/world') {
         const since = Number(url.searchParams.get('since') ?? 0);
@@ -193,6 +210,8 @@ export async function createHQ({ port = 4312, directory = path.join(here, '.stat
         if (op === 'retry') return json(200, engine.retryAgent(id, { by: 'kyle' }));
         return json(200, await (op === 'disable' ? engine.disableAgent(id, { by: 'kyle', reason }) : engine.retireAgent(id, { by: 'kyle', reason })));
       }
+      // restart_hq for Kyle (owner API): the same supervised path ChatGPT's connector tool uses.
+      if (req.method === 'POST' && url.pathname === '/api/restart') { const out = await requestRestart(engine, supervisor, await body(req), { by: 'kyle', gitHead }); return json(out.accepted ? 202 : 409, out); }
       if (req.method === 'POST' && url.pathname === '/api/alerts/ack') { engine.acknowledgeAlert((await body(req)).key); return json(200, { ok: true }); }
       if (req.method === 'POST' && url.pathname === '/api/runs/reconcile') {
         const input = await body(req); engine.reconcileStoppedRun(input.runId, input.confirmedStopped, input.evidence); return json(200, { ok: true });
@@ -202,6 +221,32 @@ export async function createHQ({ port = 4312, directory = path.join(here, '.stat
   });
   await new Promise((resolve, reject) => { server.once('error', reject); server.listen(port, '127.0.0.1', resolve); });
   origin = `http://127.0.0.1:${server.address().port}`;
+  // ChatGPT ingress (opt-in): the objective tools as an MCP server on loopback, for a ChatGPT connector via a tunnel.
+  // The secret comes from HQ_INGRESS_TOKEN or a file HQ creates once (0600) in its state directory; it is never printed.
+  if (ingress) {
+    try {
+      let token = env.HQ_INGRESS_TOKEN, tokenFile = null;
+      if (!token) {
+        if (!directory || store) throw Error('set HQ_INGRESS_TOKEN (no state directory to keep one in)');
+        tokenFile = path.join(directory, 'ingress-token');
+        if (!fs.existsSync(tokenFile)) { fs.mkdirSync(directory, { recursive: true }); fs.writeFileSync(tokenFile, `${randomBytes(32).toString('base64url')}\n`, { mode: 0o600, flag: 'wx' }); }
+        token = fs.readFileSync(tokenFile, 'utf8').trim();
+      }
+      if (!validIngressToken(token)) throw Error('HQ_INGRESS_TOKEN must be 43 to 128 URL-safe characters');
+      ingressServer = await startIngress({ engine, token, port: Number(env.HQ_INGRESS_PORT || 4313), restart: args => requestRestart(engine, supervisor, args, { by: 'chatgpt', gitHead }) });
+      ingressStatus = `ENABLED on ${ingressServer.base}/mcp/<token>`;
+      ingressTokenFile = tokenFile;
+    } catch (error) { ingressStatus = `UNAVAILABLE: ${String(error.message).slice(0, 160)}`; }
+  }
+  // The owner door listens on loopback only; the phone reaches it through the Cloudflare tunnel (HQ_OWNER_HOST).
+  if (ownerDoor) {
+    try {
+      const publicHost = env.HQ_OWNER_HOST || null;
+      if (publicHost && !/^[a-z0-9.-]{1,253}$/i.test(publicHost)) throw Error('HQ_OWNER_HOST must be a bare hostname such as approve.hillink.io');
+      ownerServer = await owner.listen({ port: Number(env.HQ_OWNER_PORT || 4314), publicHost });
+      ownerStatus = `ENABLED on ${ownerServer.base}/owner/${publicHost ? ` (public host ${publicHost})` : ' (no public host set: loopback only)'}`;
+    } catch (error) { ownerStatus = `UNAVAILABLE: ${String(error.message).slice(0, 160)}`; }
+  }
   const tick = () => {
     if (closing) return;
     ticking = (async () => {
@@ -212,11 +257,19 @@ export async function createHQ({ port = 4312, directory = path.join(here, '.stat
     return ticking;
   };
   await tick();
-  return { engine, origin, close: async () => {
+  // The supervisor's outcome for a restart (or a recovery), journaled by the HQ that came up (or the one that stayed).
+  const recordRestart = record => {
+    const n = v => (Number.isFinite(v) ? v : null), s = (v, max) => (typeof v === 'string' ? v.slice(0, max) : null);
+    if (!record || !['completed', 'failed', 'started'].includes(record.phase) || record.phase === 'started') return;
+    engine.emit('HQ_RESTART', { id: s(record.id, 80) ?? `supervisor-${engine.now()}`, phase: record.phase, by: s(record.by, 40), reason: s(record.reason, 300), oldPid: n(record.oldPid), newPid: n(record.newPid), attempts: n(record.attempts), forced: Boolean(record.forced), durationMs: n(record.durationMs), gitHeadBefore: s(record.gitHeadBefore, 40), gitHeadAfter: s(record.gitHeadAfter, 40), diagnostic: s(record.diagnostic, 600) });
+  };
+  return { engine, origin, recordRestart, owner, ownerDoor: () => ({ status: ownerStatus, base: ownerServer?.base ?? null, port: ownerServer?.port ?? null }), ingress: () => ({ status: ingressStatus, base: ingressServer?.base ?? null, port: ingressServer?.port ?? null, tokenFile: ingressTokenFile }), close: async () => {
     closing = true; clearTimeout(timer);
     await ticking;
     await Promise.allSettled([...new Set(Object.values(engine.adapters))].map(adapter => adapter.close?.()));
     await brokerServer?.close();
+    await ingressServer?.close();
+    await ownerServer?.close();
     await new Promise(resolve => server.close(resolve));
     journal.close();
   } };
@@ -224,8 +277,26 @@ export async function createHQ({ port = 4312, directory = path.join(here, '.stat
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const sink = process.env.HQ_NOTIFICATION_WEBHOOK ? webhookSink(process.env.HQ_NOTIFICATION_WEBHOOK) : null;
-  const hq = await createHQ({ port: Number(process.env.HQ_PORT || 4312), directory: process.env.HQ_STATE_DIR || path.join(here, '.state'), sink, ollama: process.env.HQ_OLLAMA_ENABLED === '1', cliAgents: process.env.HQ_AGENTS_ENABLED === '1', orchestrator: process.env.HQ_ORCHESTRATOR_ENABLED === '1', implementation: (process.env.HQ_IMPLEMENTATION_ENABLED ?? process.env.HQ_AGENTS_ENABLED) === '1' });
+  // Launched by supervisor.mjs, HQ has an IPC channel to it; started directly (node server.mjs) it has none, and
+  // restart_hq then refuses instead of trying to restart itself.
+  const supervised = typeof process.send === 'function';
+  let gitHead = null; try { gitHead = execFileSync('git', ['rev-parse', '--short', 'HEAD'], { cwd: here, encoding: 'utf8', windowsHide: true }).trim(); } catch { /* not a checkout */ }
+  const hq = await createHQ({ port: Number(process.env.HQ_PORT || 4312), directory: process.env.HQ_STATE_DIR || path.join(here, '.state'), sink, ollama: process.env.HQ_OLLAMA_ENABLED === '1', cliAgents: process.env.HQ_AGENTS_ENABLED === '1', orchestrator: process.env.HQ_ORCHESTRATOR_ENABLED === '1', implementation: (process.env.HQ_IMPLEMENTATION_ENABLED ?? process.env.HQ_AGENTS_ENABLED) === '1', ingress: process.env.HQ_INGRESS_ENABLED === '1', ownerDoor: process.env.HQ_OWNER_DOOR_ENABLED === '1', supervisor: supervised ? ipcSupervisor(process) : null, gitHead });
+  if (supervised) {
+    let closing = false;
+    process.on('message', async m => {
+      if (m?.type === 'shutdown' && !closing) { closing = true; hq.engine.draining = true; try { await hq.close(); } finally { process.exit(0); } }
+      if (m?.type === 'restart-aborted') hq.engine.draining = false;
+      if (m?.type === 'restart-record') try { hq.recordRestart(m.record); } catch { /* journal closed */ }
+    });
+    // A supervisor that goes away leaves HQ running: it simply cannot be restarted remotely until one is back.
+    // It also stops draining: with no supervisor left, an accepted restart can never happen, so HQ must not sit idle.
+    process.on('disconnect', () => { hq.engine.draining = false; console.log('Supervisor channel closed; HQ keeps running and dispatching.'); });
+  }
   console.log(`Hillink HQ: ${hq.origin} (local control service; compute mode ${hq.engine.config.computeMode})`);
+  const ing = hq.ingress();
+  if (ing.status !== 'DISABLED') console.log(`ChatGPT ingress: ${ing.status}${ing.tokenFile ? ` (token in ${ing.tokenFile})` : ' (token from HQ_INGRESS_TOKEN)'}`);
+  if (hq.ownerDoor().status !== 'DISABLED') console.log(`Phone approvals: ${hq.ownerDoor().status}`);
   if (!sink) console.log('External notifications unconfigured. Enable browser notifications or configure HQ_NOTIFICATION_WEBHOOK for delivery when the browser is closed.');
   for (const signal of ['SIGINT', 'SIGTERM']) process.once(signal, async () => { await hq.close(); process.exit(0); });
 }

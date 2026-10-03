@@ -22,7 +22,8 @@ try {
     const directory = operation === 'verify-hq' ? path.join(root, 'tools/hillink-hq/tests') : path.join(root, 'tests/unit');
     const files = fs.readdirSync(directory).filter(name => operation === 'verify-hq' ? ['engine.test.mjs', 'store.test.mjs'].includes(name) : name.endsWith('.test.ts')).map(name => path.join(directory, name));
     if (!files.length) throw Error('No test files found');
-    send({ kind: 'TEST_STARTED', summary: `Running ${files.length} test files with Node's test runner.` });
+    // A single slow test prints nothing until it ends: the run is a declared quiet phase with a hard bound.
+    send({ kind: 'TEST_STARTED', summary: `Running ${files.length} test files with Node's test runner.`, phases: [{ id: 'tests', state: 'begin', reason: 'Node test run', boundMs: 10 * 60_000 }] });
     // No child test processes: cancellation can be confirmed without an orphaned tree.
     const stream = run({ files, isolation: 'none', concurrency: false });
     let passed = 0, failures = 0, lastProgressAt = 0;
@@ -35,7 +36,7 @@ try {
       }
     }
     if (passed + failures === 0) throw Error('Test runner produced no test results');
-    send({ kind: 'TEST_RESULT', result: failures > 0 ? 'failed' : 'passed', summary: `${passed} passed; ${failures} failed.`, files: files.map(file => path.relative(root, file).replaceAll('\\', '/')) });
+    send({ kind: 'TEST_RESULT', result: failures > 0 ? 'failed' : 'passed', summary: `${passed} passed; ${failures} failed.`, phases: [{ id: 'tests', state: 'end' }], files: files.map(file => path.relative(root, file).replaceAll('\\', '/')) });
     // A completed verification with failing assertions is useful evidence, not a worker crash.
     process.exitCode = 0;
   } else throw Error('Operation is not allowlisted');

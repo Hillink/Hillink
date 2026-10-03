@@ -35,10 +35,10 @@ test('Claude stream: init is ACK, steps are progress, result becomes answer, usa
     { type: 'assistant', message: { content: [{ type: 'tool_use', name: 'Grep' }] } }, { type: 'assistant', message: { content: [{ type: 'text', text: 'engine.mjs' }] } },
     { type: 'result', subtype: 'success', is_error: false, result: 'engine.mjs:73 defines agentStatus.', total_cost_usd: 0.03, usage: { input_tokens: 6, output_tokens: 261 }, num_turns: 3 });
   child.exit(0);
-  assert.deepEqual(f.kinds(), ['ACK', 'MODEL_OUTPUT', 'MODEL_OUTPUT', 'MODEL_RESULT', 'USAGE', 'COMPLETED']);
-  assert.match(f.events[1].summary, /Grep/);
-  assert.equal(f.events[3].summary, 'engine.mjs:73 defines agentStatus.');
-  assert.equal(f.events[4].usage.outputTokens, 261);
+  assert.deepEqual(f.kinds(), ['ACK', 'PROGRESS', 'MODEL_OUTPUT', 'MODEL_OUTPUT', 'MODEL_RESULT', 'USAGE', 'COMPLETED']);
+  assert.match(f.events[2].summary, /Grep/);
+  assert.equal(f.events[4].summary, 'engine.mjs:73 defines agentStatus.');
+  assert.equal(f.events[5].usage.outputTokens, 261);
 });
 
 test('launch is read-only, prompt travels over stdin, and secrets are not inherited', async () => {
@@ -64,8 +64,8 @@ test('Codex stream: transport retries are not progress; turn.completed finishes 
     { type: 'item.completed', item: { type: 'error', message: 'Falling back' } }, { type: 'item.completed', item: { type: 'command_execution' } },
     { type: 'item.completed', item: { type: 'agent_message', text: 'Looks fine.' } }, { type: 'turn.completed', usage: { input_tokens: 10, output_tokens: 5 } });
   child.exit(0);
-  assert.deepEqual(f.kinds(), ['ACK', 'MODEL_OUTPUT', 'MODEL_OUTPUT', 'MODEL_RESULT', 'USAGE', 'COMPLETED']);
-  assert.equal(f.events[3].summary, 'Looks fine.');
+  assert.deepEqual(f.kinds(), ['ACK', 'PROGRESS', 'MODEL_OUTPUT', 'MODEL_OUTPUT', 'MODEL_RESULT', 'USAGE', 'COMPLETED']);
+  assert.equal(f.events[4].summary, 'Looks fine.');
 });
 
 test('a CLI that exits before starting a session fails with a sign-in hint and no fake ACK', async () => {
