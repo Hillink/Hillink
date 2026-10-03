@@ -1,0 +1,77 @@
+{
+  "base": "http://127.0.0.1:4332",
+  "width": 1280,
+  "height": 800,
+  "shots": [
+    {
+      "name": "A1-claude-after-migration-picks-up-task",
+      "path": "/?source=sim&theme=real&art=5d",
+      "eval": "setTimeout(() => hillinkWorld.sim.run('claudeCodes'), 300); true",
+      "until": "hillinkWorld.scene.get('agent:claude')?.anim?.state === 'pickup' && hillinkWorld.scene.get('agent:claude').journey?.kind === 'start'",
+      "untilMs": 60000,
+      "after": "{ const e = hillinkWorld.scene.get('agent:claude'); hillinkWorld.camera.focusPoint(e.x, e.y - e.h / 2, { zoom: 2.6, duration: 0 }); } true",
+      "waitMs": 150,
+      "expect": "hillinkWorld.store.world.agents.claude.definition && hillinkWorld.scene.get('agent:claude').rig.id === 'humanoid'"
+    },
+    {
+      "name": "A2-claude-after-migration-typing",
+      "path": "/?source=sim&theme=real&art=5d",
+      "eval": "setTimeout(() => hillinkWorld.sim.run('claudeCodes'), 300); true",
+      "until": "hillinkWorld.scene.get('agent:claude')?.anim?.state === 'type'",
+      "untilMs": 60000,
+      "after": "hillinkWorld.shot('workspace'); true",
+      "waitMs": 1200,
+      "expect": "hillinkWorld.scene.get('agent:claude').anim.state === 'type'"
+    },
+    {
+      "name": "B1-unknown-agent-candidate-onboarding-DEV-HARNESS",
+      "path": "/?source=sim&theme=real&art=5d",
+      "eval": "import('/sim/dev-agents.mjs').then(m => { const d = m.DEV_AGENTS[0]; setTimeout(() => hillinkWorld.sim.requestAgent(d), 800); setTimeout(() => { for (const st of ['CONFIGURING', 'CONNECTING_PROVIDER', 'CONNECTING_TOOLS']) hillinkWorld.sim.provisionAgent(d.id, st); }, 2000); }); true",
+      "until": "{ const a = hillinkWorld.store.world.agents['agent-test-unknown'], e = hillinkWorld.scene.get('agent:agent-test-unknown'); !!(a && a.lifecycle.state === 'CONNECTING_TOOLS' && e && !e.moving && e.spot) }",
+      "untilMs": 60000,
+      "after": "hillinkWorld.focus('agent:agent-test-unknown'); true",
+      "waitMs": 800,
+      "expect": "hillinkWorld.scene.get('agent:agent-test-unknown').staging.presence === 'candidate' && hillinkWorld.store.world.agents['agent-test-unknown'].activity === 'offline'"
+    },
+    {
+      "name": "B2-unknown-agent-working-after-ready-DEV-HARNESS",
+      "path": "/?source=sim&theme=real&art=5d",
+      "eval": "hillinkWorld.sim.onboard ? setTimeout(() => { hillinkWorld.sim.run('devOnboard'); }, 800) : 0; window.__w = setInterval(() => { const a = hillinkWorld.store.world.agents['agent-test-unknown']; if (a?.lifecycle?.state === 'ACTIVE' && !window.__started) { window.__started = true; setTimeout(() => hillinkWorld.sim.run('devWork'), 1500); } }, 200); true",
+      "until": "{ const e = hillinkWorld.scene.get('agent:agent-test-unknown'); !!(e && e.agent.activity === 'researching' && !e.moving && e.spot && ['read', 'inspect', 'work', 'type'].includes(e.anim.state)) }",
+      "untilMs": 90000,
+      "after": "hillinkWorld.focus('agent:agent-test-unknown'); true",
+      "waitMs": 1500,
+      "expect": "hillinkWorld.store.world.agents['agent-test-unknown'].lifecycle.state === 'ACTIVE'"
+    },
+    {
+      "name": "C1-two-dynamic-agents-different-definitions-DEV-HARNESS",
+      "path": "/?source=sim&theme=real&art=5d",
+      "eval": "setTimeout(() => hillinkWorld.sim.run('devTwoAgents'), 800); true",
+      "until": "['agent-test-unknown', 'agent-test-second'].every(id => { const e = hillinkWorld.scene.get('agent:' + id); return e && e.agent.lifecycle?.state === 'ACTIVE' && !e.moving && e.spot; })",
+      "untilMs": 90000,
+      "after": "hillinkWorld.shot('lounge'); true",
+      "waitMs": 1200,
+      "expect": "hillinkWorld.scene.get('agent:agent-test-second').rig.fallbackFrom === 'golem' && hillinkWorld.scene.get('agent:agent-test-second').h > hillinkWorld.scene.get('agent:agent-test-unknown').h"
+    },
+    {
+      "name": "D1-provisioning-failed-DEV-HARNESS",
+      "path": "/?source=sim&theme=real&art=5d",
+      "eval": "setTimeout(() => hillinkWorld.sim.run('devProvisionFails'), 800); true",
+      "until": "{ const a = hillinkWorld.store.world.agents['agent-test-second'], e = hillinkWorld.scene.get('agent:agent-test-second'); !!(a && a.lifecycle.state === 'ERROR' && e && !e.moving) }",
+      "untilMs": 40000,
+      "after": "hillinkWorld.focus('agent:agent-test-second'); true",
+      "waitMs": 1500,
+      "expect": "hillinkWorld.scene.get('agent:agent-test-second').anim.state === 'blocked' && hillinkWorld.store.world.agents['agent-test-second'].activity === 'offline'"
+    },
+    {
+      "name": "E1-after-disable-world-coherent-DEV-HARNESS",
+      "path": "/?source=sim&theme=real&art=5d",
+      "eval": "setTimeout(() => hillinkWorld.sim.run('devOnboard'), 800); window.__d = setInterval(() => { const a = hillinkWorld.store.world.agents['agent-test-unknown']; if (a?.lifecycle?.state === 'ACTIVE' && !window.__dis) { window.__dis = true; setTimeout(() => { hillinkWorld.sim.run('devDisable'); setTimeout(() => hillinkWorld.sim.run('claudeCodes'), 500); }, 6000); } }, 200); true",
+      "until": "window.__dis && !hillinkWorld.scene.get('agent:agent-test-unknown') && hillinkWorld.scene.get('agent:claude')?.anim?.state === 'type'",
+      "untilMs": 90000,
+      "after": "{ const h = hillinkWorld.theme.layout.home; hillinkWorld.camera.focusPoint(h.x + h.w / 2, h.y + h.h / 2, { zoom: 1.05, duration: 0 }); } true",
+      "waitMs": 600,
+      "expect": "hillinkWorld.store.world.agents['agent-test-unknown'].lifecycle.state === 'DISABLED' && !document.querySelector('[data-agent=\"agent-test-unknown\"]')"
+    }
+  ]
+}

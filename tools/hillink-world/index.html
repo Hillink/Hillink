@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Hillink World</title>
+  <link rel="stylesheet" href="./style.css">
+</head>
+<body>
+  <main class="stage">
+    <canvas id="world" aria-label="Hillink World. Drag to pan, scroll to zoom, click to inspect." tabindex="0"></canvas>
+    <div id="tooltip" class="tooltip" hidden></div>
+    <header class="hud">
+      <b class="brand">HILLINK <span>WORLD</span></b>
+      <div id="themes" class="themes" role="radiogroup" aria-label="World style"></div>
+      <span id="mode" class="mode"></span>
+      <span id="world-source" class="mode" data-state="fallback" role="status" hidden></span>
+    </header>
+    <section id="stats" class="stats" aria-label="Company status"></section>
+    <div id="clock" class="clock" aria-hidden="true"></div>
+    <div class="left-tools">
+      <button id="nav-toggle" aria-expanded="false" aria-controls="nav">Go to…</button>
+      <button id="sim-toggle" aria-expanded="false" aria-controls="sim-panel">Dev simulation</button>
+    </div>
+    <nav id="nav" class="nav" aria-label="Camera" hidden></nav>
+    <div id="sim-panel" class="sim-panel" hidden><p>Simulated World events only. Never touches Hillink data.</p><div id="scenarios"></div><p id="sim-note" class="sim-note" aria-live="polite"></p></div>
+    <div id="side" class="side">
+      <aside id="attention" class="attention" aria-label="Attention needed"></aside>
+      <section id="feed" class="feed" aria-label="Recent activity"></section>
+    </div>
+    <aside id="inspect" class="inspect" hidden></aside>
+    <section id="roster" class="roster" aria-label="Agents"></section>
+    <p id="empty" class="empty" hidden>No agents registered yet.</p>
+  </main>
+  <script type="module" src="./main.mjs"></script>
+</body>
+</html>

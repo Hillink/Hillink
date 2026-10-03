@@ -1,0 +1,486 @@
+[
+ {
+  "at": "2026-09-30T22:26:30.745Z",
+  "k": "layout",
+  "v": "kingdom"
+ },
+ {
+  "at": "2026-09-30T22:26:31.748Z",
+  "k": "screenshot",
+  "v": "1-kingdom-overview-live.png"
+ },
+ {
+  "at": "2026-09-30T22:26:31.786Z",
+  "k": "created",
+  "v": [
+   [
+    201,
+    "agent-5g-unknown-512"
+   ],
+   [
+    201,
+    "tester-5g-85d7fb"
+   ]
+  ]
+ },
+ {
+  "at": "2026-09-30T22:26:32.379Z",
+  "k": "screenshot",
+  "v": "5a-summoning-in-progress.png"
+ },
+ {
+  "at": "2026-09-30T22:26:32.393Z",
+  "k": "kingdom-during-provisioning",
+  "v": {
+   "layout": "kingdom",
+   "family": "live",
+   "sim": null,
+   "agents": [],
+   "entities": [
+    {
+     "id": "chatgpt",
+     "presence": "member",
+     "place": null,
+     "caption": null,
+     "location": "throne"
+    },
+    {
+     "id": "claude",
+     "presence": "member",
+     "place": null,
+     "caption": null,
+     "location": "forge"
+    },
+    {
+     "id": "codex",
+     "presence": "member",
+     "place": null,
+     "caption": null,
+     "location": "oracle"
+    },
+    {
+     "id": "gemma",
+     "presence": "member",
+     "place": null,
+     "caption": null,
+     "location": "academy"
+    },
+    {
+     "id": "hq-verifier",
+     "presence": "member",
+     "place": null,
+     "caption": null,
+     "location": "oracle"
+    },
+    {
+     "id": "qwen",
+     "presence": "member",
+     "place": null,
+     "caption": null,
+     "location": "academy"
+    }
+   ],
+   "derived": [
+    "derived:ranger",
+    "derived:golem",
+    "derived:cat"
+   ]
+  }
+ },
+ {
+  "at": "2026-09-30T22:26:52.896Z",
+  "k": "candidates-arrived-at-ready-zone",
+  "v": true
+ },
+ {
+  "at": "2026-09-30T22:26:52.896Z",
+  "k": "lifecycle:scout",
+  "v": [
+   "REQUESTED",
+   "CONFIGURING",
+   "CONNECTING_PROVIDER",
+   "CONNECTING_TOOLS",
+   "TESTING",
+   "READY"
+  ]
+ },
+ {
+  "at": "2026-09-30T22:26:52.896Z",
+  "k": "lifecycle:tester",
+  "v": [
+   "REQUESTED",
+   "CONFIGURING",
+   "CONNECTING_PROVIDER",
+   "CONNECTING_TOOLS",
+   "TESTING",
+   "READY"
+  ]
+ },
+ {
+  "at": "2026-09-30T22:26:53.985Z",
+  "k": "screenshot",
+  "v": "5-summon-ready-not-active.png"
+ },
+ {
+  "at": "2026-09-30T22:26:54.005Z",
+  "k": "kingdom-ready",
+  "v": {
+   "layout": "kingdom",
+   "family": "live",
+   "sim": null,
+   "agents": [
+    {
+     "id": "agent-5g-unknown-512",
+     "state": "READY",
+     "activity": "offline",
+     "taskId": null
+    },
+    {
+     "id": "tester-5g-85d7fb",
+     "state": "READY",
+     "activity": "offline",
+     "taskId": null
+    }
+   ],
+   "entities": [
+    {
+     "id": "chatgpt",
+     "presence": "member",
+     "place": null,
+     "caption": null,
+     "location": "throne"
+    },
+    {
+     "id": "claude",
+     "presence": "member",
+     "place": null,
+     "caption": null,
+     "location": "forge"
+    },
+    {
+     "id": "codex",
+     "presence": "member",
+     "place": null,
+     "caption": null,
+     "location": "oracle"
+    },
+    {
+     "id": "gemma",
+     "presence": "member",
+     "place": null,
+     "caption": null,
+     "location": "academy"
+    },
+    {
+     "id": "hq-verifier",
+     "presence": "member",
+     "place": null,
+     "caption": null,
+     "location": "oracle"
+    },
+    {
+     "id": "qwen",
+     "presence": "member",
+     "place": null,
+     "caption": null,
+     "location": "academy"
+    },
+    {
+     "id": "agent-5g-unknown-512",
+     "presence": "candidate",
+     "place": "summon-ready",
+     "caption": "Hero ready: awaits the King's word to enter (ready, not active)",
+     "location": "summon-ready"
+    },
+    {
+     "id": "tester-5g-85d7fb",
+     "presence": "candidate",
+     "place": "summon-ready",
+     "caption": "Hero ready: awaits the King's word to enter (ready, not active)",
+     "location": "summon-ready"
+    }
+   ],
+   "derived": [
+    "derived:ranger",
+    "derived:golem",
+    "derived:cat",
+    "derived:portal:agent-5g-unknown-512",
+    "derived:portal:tester-5g-85d7fb"
+   ]
+  }
+ },
+ {
+  "at": "2026-09-30T22:26:54.012Z",
+  "k": "activate",
+  "v": {
+   "status": 200,
+   "body": {
+    "state": "ACTIVE"
+   }
+  }
+ },
+ {
+  "at": "2026-09-30T22:26:58.158Z",
+  "k": "page-saw-task-started",
+  "v": true
+ },
+ {
+  "at": "2026-09-30T22:26:59.126Z",
+  "k": "screenshot",
+  "v": "6-dynamic-agent-active-fantasy.png"
+ },
+ {
+  "at": "2026-09-30T22:26:59.139Z",
+  "k": "kingdom-working",
+  "v": {
+   "layout": "kingdom",
+   "family": "live",
+   "sim": null,
+   "agents": [
+    {
+     "id": "agent-5g-unknown-512",
+     "state": "ACTIVE",
+     "activity": "idle",
+     "taskId": null
+    },
+    {
+     "id": "tester-5g-85d7fb",
+     "state": "READY",
+     "activity": "offline",
+     "taskId": null
+    }
+   ],
+   "entities": [
+    {
+     "id": "chatgpt",
+     "presence": "member",
+     "place": null,
+     "caption": null,
+     "location": "throne"
+    },
+    {
+     "id": "claude",
+     "presence": "member",
+     "place": null,
+     "caption": null,
+     "location": "forge"
+    },
+    {
+     "id": "codex",
+     "presence": "member",
+     "place": null,
+     "caption": null,
+     "location": "oracle"
+    },
+    {
+     "id": "gemma",
+     "presence": "member",
+     "place": null,
+     "caption": null,
+     "location": "academy"
+    },
+    {
+     "id": "hq-verifier",
+     "presence": "member",
+     "place": null,
+     "caption": null,
+     "location": "oracle"
+    },
+    {
+     "id": "qwen",
+     "presence": "member",
+     "place": null,
+     "caption": null,
+     "location": "academy"
+    },
+    {
+     "id": "agent-5g-unknown-512",
+     "presence": "member",
+     "place": null,
+     "caption": null,
+     "location": "summon-ready"
+    },
+    {
+     "id": "tester-5g-85d7fb",
+     "presence": "candidate",
+     "place": "summon-ready",
+     "caption": "Hero ready: awaits the King's word to enter (ready, not active)",
+     "location": "summon-ready"
+    }
+   ],
+   "derived": [
+    "derived:ranger",
+    "derived:golem",
+    "derived:cat",
+    "derived:portal:tester-5g-85d7fb"
+   ]
+  }
+ },
+ {
+  "at": "2026-09-30T22:26:59.308Z",
+  "k": "switching",
+  "v": [
+   {
+    "id": "real",
+    "layout": "generated",
+    "truthUnchanged": true,
+    "entities": 28,
+    "duplicates": 0
+   },
+   {
+    "id": "fantasy",
+    "layout": "kingdom",
+    "truthUnchanged": true,
+    "entities": 36,
+    "duplicates": 0
+   },
+   {
+    "id": "real",
+    "layout": "generated",
+    "truthUnchanged": true,
+    "entities": 28,
+    "duplicates": 0
+   },
+   {
+    "id": "fantasy",
+    "layout": "kingdom",
+    "truthUnchanged": true,
+    "entities": 36,
+    "duplicates": 0
+   },
+   {
+    "id": "real",
+    "layout": "generated",
+    "truthUnchanged": true,
+    "entities": 28,
+    "duplicates": 0
+   },
+   {
+    "id": "fantasy",
+    "layout": "kingdom",
+    "truthUnchanged": true,
+    "entities": 36,
+    "duplicates": 0
+   }
+  ]
+ },
+ {
+  "at": "2026-09-30T22:27:00.707Z",
+  "k": "screenshot",
+  "v": "2b-same-state-real.png"
+ },
+ {
+  "at": "2026-09-30T22:27:02.028Z",
+  "k": "screenshot",
+  "v": "2a-same-state-fantasy.png"
+ },
+ {
+  "at": "2026-09-30T22:27:02.028Z",
+  "k": "task",
+  "v": {
+   "stage": "DONE",
+   "agentId": "agent-5g-unknown-512",
+   "evidence": [
+    "FINDING: Inspected 164 repository source paths in app/ and lib/. File inventory only; not a code-quality verdict.",
+    "COMPLETED: Local process exited 0"
+   ]
+  }
+ },
+ {
+  "at": "2026-09-30T22:27:06.189Z",
+  "k": "after-reload",
+  "v": {
+   "layout": "kingdom",
+   "family": "live",
+   "sim": null,
+   "agents": [
+    {
+     "id": "agent-5g-unknown-512",
+     "state": "ACTIVE",
+     "activity": "idle",
+     "taskId": null
+    },
+    {
+     "id": "tester-5g-85d7fb",
+     "state": "READY",
+     "activity": "offline",
+     "taskId": null
+    }
+   ],
+   "entities": [
+    {
+     "id": "chatgpt",
+     "presence": "member",
+     "place": null,
+     "caption": null,
+     "location": "throne"
+    },
+    {
+     "id": "claude",
+     "presence": "member",
+     "place": null,
+     "caption": null,
+     "location": "forge"
+    },
+    {
+     "id": "codex",
+     "presence": "member",
+     "place": null,
+     "caption": null,
+     "location": "oracle"
+    },
+    {
+     "id": "gemma",
+     "presence": "member",
+     "place": null,
+     "caption": null,
+     "location": "academy"
+    },
+    {
+     "id": "hq-verifier",
+     "presence": "member",
+     "place": null,
+     "caption": null,
+     "location": "oracle"
+    },
+    {
+     "id": "qwen",
+     "presence": "member",
+     "place": null,
+     "caption": null,
+     "location": "academy"
+    },
+    {
+     "id": "agent-5g-unknown-512",
+     "presence": "member",
+     "place": null,
+     "caption": null,
+     "location": "oracle"
+    },
+    {
+     "id": "tester-5g-85d7fb",
+     "presence": "candidate",
+     "place": "summon-ready",
+     "caption": "Hero ready: awaits the King's word to enter (ready, not active)",
+     "location": "summon-ready"
+    }
+   ],
+   "derived": [
+    "derived:ranger",
+    "derived:golem",
+    "derived:cat",
+    "derived:portal:tester-5g-85d7fb"
+   ]
+  }
+ },
+ {
+  "at": "2026-09-30T22:27:07.856Z",
+  "k": "screenshot",
+  "v": "6b-after-reload.png"
+ },
+ {
+  "at": "2026-09-30T22:27:07.856Z",
+  "k": "page-errors",
+  "v": []
+ }
+]

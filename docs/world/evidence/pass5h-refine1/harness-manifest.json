@@ -1,0 +1,291 @@
+{
+  "scenarios": {
+    "t0-hillink/real": {
+      "file": "t0-hillink-real.png",
+      "hash": "ff1008c8:452x305",
+      "rooms": 7,
+      "storeys": 1,
+      "objects": {
+        "prop": 49,
+        "wall": 68,
+        "decor": 6,
+        "veg": 13730
+      },
+      "emitters": 15,
+      "agents": [
+        "chatgpt@command:room-1:officeChair7",
+        "claude@development:room-2:officeChair2",
+        "codex@testing:room-4:reviewConsole1@-0.4"
+      ],
+      "planner": null
+    },
+    "t0-hillink/fantasy": {
+      "file": "t0-hillink-fantasy.png",
+      "hash": "357c258f:452x305",
+      "rooms": 7,
+      "storeys": 1,
+      "objects": {
+        "prop": 47,
+        "wall": 79,
+        "decor": 5,
+        "veg": 13730
+      },
+      "emitters": 20,
+      "agents": [
+        "chatgpt@command:room-1:officeChair7",
+        "claude@development:room-2:officeChair2",
+        "codex@testing:room-4:reviewConsole1@-0.4"
+      ],
+      "planner": null
+    },
+    "t0-alpha/real": {
+      "file": "t0-alpha-real.png",
+      "hash": "9c10f868:432x311",
+      "rooms": 7,
+      "storeys": 1,
+      "objects": {
+        "prop": 41,
+        "wall": 69,
+        "decor": 3,
+        "veg": 11572
+      },
+      "emitters": 12,
+      "agents": [
+        "chatgpt@command:room-3:officeChair2",
+        "claude@development:room-2:officeChair2",
+        "codex@testing:room-4:reviewConsole1@-0.4"
+      ],
+      "planner": null
+    },
+    "t0-alpha/fantasy": {
+      "file": "t0-alpha-fantasy.png",
+      "hash": "60e4e428:432x311",
+      "rooms": 7,
+      "storeys": 1,
+      "objects": {
+        "prop": 39,
+        "wall": 78,
+        "decor": 4,
+        "veg": 11572
+      },
+      "emitters": 20,
+      "agents": [
+        "chatgpt@command:room-3:officeChair2",
+        "claude@development:room-2:officeChair2",
+        "codex@testing:room-4:reviewConsole1@-0.4"
+      ],
+      "planner": null
+    },
+    "t0-bravo/real": {
+      "file": "t0-bravo-real.png",
+      "hash": "b2b17c32:428x319",
+      "rooms": 8,
+      "storeys": 1,
+      "objects": {
+        "prop": 35,
+        "wall": 83,
+        "decor": 3,
+        "veg": 11440
+      },
+      "emitters": 10,
+      "agents": [
+        "chatgpt@command:room-6:officeChair2",
+        "claude@development:room-5:officeChair2",
+        "codex@testing:room-4:reviewConsole1@-0.4"
+      ],
+      "planner": null
+    },
+    "t0-bravo/fantasy": {
+      "file": "t0-bravo-fantasy.png",
+      "hash": "54236058:428x319",
+      "rooms": 8,
+      "storeys": 1,
+      "objects": {
+        "prop": 34,
+        "wall": 95,
+        "decor": 4,
+        "veg": 11440
+      },
+      "emitters": 18,
+      "agents": [
+        "chatgpt@command:room-6:officeChair2",
+        "claude@development:room-5:officeChair2",
+        "codex@testing:room-4:reviewConsole1@-0.4"
+      ],
+      "planner": null
+    },
+    "t0-charlie/real": {
+      "file": "t0-charlie-real.png",
+      "hash": "d7050e00:425x316",
+      "rooms": 7,
+      "storeys": 1,
+      "objects": {
+        "prop": 32,
+        "wall": 69,
+        "decor": 4,
+        "veg": 11935
+      },
+      "emitters": 8,
+      "agents": [
+        "chatgpt@command:room-3:officeChair2",
+        "claude@development:room-4:officeChair2",
+        "codex@testing:room-1:reviewConsole6@-0.4"
+      ],
+      "planner": null
+    },
+    "t0-charlie/fantasy": {
+      "file": "t0-charlie-fantasy.png",
+      "hash": "06c16103:425x316",
+      "rooms": 7,
+      "storeys": 1,
+      "objects": {
+        "prop": 31,
+        "wall": 80,
+        "decor": 4,
+        "veg": 11935
+      },
+      "emitters": 15,
+      "agents": [
+        "chatgpt@command:room-3:officeChair2",
+        "claude@development:room-4:officeChair2",
+        "codex@testing:room-1:reviewConsole6@-0.4"
+      ],
+      "planner": null
+    },
+    "growth-wing/real": {
+      "file": "growth-wing-real.png",
+      "hash": "7a9350ff:490x335",
+      "rooms": 9,
+      "storeys": 1,
+      "objects": {
+        "prop": 63,
+        "wall": 101,
+        "decor": 3,
+        "veg": 13611
+      },
+      "emitters": 18,
+      "agents": [
+        "chatgpt@command:room-1:officeChair7",
+        "claude@development:room-2:officeChair2",
+        "codex@testing:room-4:reviewConsole1@-0.4"
+      ],
+      "planner": {
+        "option": "add-wing",
+        "target": "bldg-1",
+        "cost": 33,
+        "reason": "5.5 m rear wing"
+      }
+    },
+    "growth-wing/fantasy": {
+      "file": "growth-wing-fantasy.png",
+      "hash": "133d4a67:490x335",
+      "rooms": 9,
+      "storeys": 1,
+      "objects": {
+        "prop": 61,
+        "wall": 114,
+        "decor": 4,
+        "veg": 13611
+      },
+      "emitters": 25,
+      "agents": [
+        "chatgpt@command:room-1:officeChair7",
+        "claude@development:room-2:officeChair2",
+        "codex@testing:room-4:reviewConsole1@-0.4"
+      ],
+      "planner": {
+        "option": "add-wing",
+        "target": "bldg-1",
+        "cost": 33,
+        "reason": "5.5 m rear wing"
+      }
+    },
+    "growth-split/real": {
+      "file": "growth-split-real.png",
+      "hash": "b89a2bcf:490x335",
+      "rooms": 10,
+      "storeys": 1,
+      "objects": {
+        "prop": 70,
+        "wall": 120,
+        "decor": 4,
+        "veg": 13611
+      },
+      "emitters": 20,
+      "agents": [
+        "chatgpt@command:room-1:officeChair7",
+        "claude@development:room-2:officeChair2",
+        "codex@testing:room-4:reviewConsole1@-0.4"
+      ],
+      "planner": {
+        "option": "subdivide",
+        "target": "room-7",
+        "cost": 10,
+        "reason": "split 2.5 m off a 5.5 m room"
+      }
+    },
+    "growth-split/fantasy": {
+      "file": "growth-split-fantasy.png",
+      "hash": "b770ec0f:490x335",
+      "rooms": 10,
+      "storeys": 1,
+      "objects": {
+        "prop": 68,
+        "wall": 133,
+        "decor": 4,
+        "veg": 13611
+      },
+      "emitters": 26,
+      "agents": [
+        "chatgpt@command:room-1:officeChair7",
+        "claude@development:room-2:officeChair2",
+        "codex@testing:room-4:reviewConsole1@-0.4"
+      ],
+      "planner": {
+        "option": "subdivide",
+        "target": "room-7",
+        "cost": 10,
+        "reason": "split 2.5 m off a 5.5 m room"
+      }
+    }
+  },
+  "sheet": {
+    "file": "alias-sheet.png",
+    "hash": "ce58313c:680x274",
+    "rows": [
+      "chatgpt:real",
+      "claude:real",
+      "codex:real",
+      "chatgpt:fantasy",
+      "claude:fantasy",
+      "codex:fantasy",
+      "test"
+    ],
+    "columns": [
+      "fr:idle",
+      "fr:walk",
+      "fr:walk#2",
+      "fr:work",
+      "fr:work#2",
+      "fr:sit.work",
+      "fl:idle",
+      "fl:walk",
+      "fl:walk#2",
+      "fl:work",
+      "fl:work#2",
+      "fl:sit.work",
+      "br:idle",
+      "br:walk",
+      "br:walk#2",
+      "br:work",
+      "br:work#2",
+      "br:sit.work",
+      "bl:idle",
+      "bl:walk",
+      "bl:walk#2",
+      "bl:work",
+      "bl:work#2",
+      "bl:sit.work"
+    ]
+  }
+}

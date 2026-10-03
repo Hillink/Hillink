@@ -1,0 +1,30 @@
+A1-generated-hq-inhabited-real.png  [world: generated, 5a.1 d205978be510]  claude type at development:room-7:officeChair2; codex inspect at testing:room-5:reviewConsole6@-0.4
+A2-generated-hq-inhabited-fantasy.png  [world: generated, 5a.1 d205978be510]
+B1-agent-sitting-typing-at-generated-desk.png  [world: generated, 5a.1 d205978be510]  claude type posture sit at development:room-7:officeChair2
+B2-agent-using-printer.png  [world: generated, 5a.1 d205978be510]  codex read using print (room-7:printer59)
+B3-break-room-rest.png  [world: generated, 5a.1 d205978be510]  claude idle sit at relax; codex idle sit at relax
+C1-agent-riding-generated-elevator.png  [world: generated, 5a.1 d205978be510]  claude gait ride, lift lift:bldg-1 floors 0,1
+D1-traffic-on-generated-road.png  [world: generated, 5a.1 d205978be510]
+E01-construction-planning-survey.png  [world: generated, simulated copy, 5a.1 8cc8a33c24b0]
+E02-construction-site-preparation-builder-walking.png  [world: generated, simulated copy, 5a.1 5628b35f1695]  claude walk walking to the site
+E03-construction-foundation-builder-at-work.png  [world: generated, simulated copy, 5a.1 fc234388d42b]  claude assemble at site:meeting-room:site:meeting-room:build1
+E03b-builder-route-enters-site-through-its-door.png  [world: generated, simulated copy, 5a.1 20b9e0ea6581]  route lobby -> site: bldg-1-L0-corridor~in~door-1 > bldg-1-L0-corridor~sd:door-12~0 > bldg-1-L0-corridor~sd:door-12~1 > sitegate:door-12 > site:meeting-room~room-9~in~door-12 > site:meeting-room:build1~0 > site:meeting-room:build1
+E04a-construction-structure-wide.png  [world: generated, simulated copy, 5a.1 a3d58731c651]
+E04-construction-structure.png  [world: generated, simulated copy, 5a.1 a4e13833262e]
+E05-construction-blocked-work-stops.png  [world: generated, simulated copy, 5a.1 8a25706dfdb7]  claude waiting waiting at queue:bldg-1-L0-hall:bench1#0
+E05b-construction-waiting-for-kyle-work-stops.png  [world: generated, simulated copy, 5a.1 c420d0e81b06]  waiting: Kyle must approve the spend; claude at development:room-7:officeChair2
+E06-construction-exterior.png  [world: generated, simulated copy, 5a.1 a768e011c29a]
+E07-construction-systems.png  [world: generated, simulated copy, 5a.1 b3d5b459a6b0]
+E08-construction-furnishing.png  [world: generated, simulated copy, 5a.1 0a3d5f6a6ca2]
+E09-construction-inspection-codex-on-site.png  [world: generated, simulated copy, 5a.1 7866b8341ebf]  codex survey at site:meeting-room:site:meeting-room:build1
+E10-construction-review-rejected-rework.png  [world: generated, simulated copy, 5a.1 eab8a87d8033]
+F1-construction-complete-furnished-walkable.png  [world: generated, simulated copy, 5a.1 44563c300261]
+F2-operational-team-meets-in-new-room.png  [world: generated, simulated copy, 5a.1 5b0278ac92f1]  claude meeting at comms:room-9:chair2; codex meeting at comms:room-9:chair3
+G1-same-project-fantasy-structure.png  [world: generated, simulated copy, 5a.1 970e2f6c9397]
+G2-same-project-fantasy-inspection.png  [world: generated, simulated copy, 5a.1 2376243fbd69]
+G3-same-room-fantasy-operational.png  [world: generated, simulated copy, 5a.1 9bcd815c8700]
+H1-blueprint-generated-navigation.png  [world: generated, 5a.1 d205978be510]
+Z1-legacy-hand-built-world-for-comparison.png  [world: legacy, hand-built]  (recaptured after the fallback banner restyle)
+Z2-plan-view-debug-inspector.png  [world: unknown]
+Z3-generated-world-unavailable-labelled-fallback.png  [world: unavailable, hand-built]  GENERATED WORLD UNAVAILABLE: showing the hand-built legacy building as a fallback (/api/site answered HTTP 404). Retrying.  (recaptured after the fallback banner restyle)
+exit 0

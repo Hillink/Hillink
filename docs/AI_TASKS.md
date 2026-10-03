@@ -25,3 +25,19 @@ Updated 2026-09-28 by Claude. Merged to `main`: #7, #8, #11, #16–#20, and (aft
 ## Handoff format
 
 For each task, record: owner, branch, base commit, changed files, behavior, migrations/deploy order, checks run, limitations, next owner, and the exact unresolved question. Do not mark a branch merged until it appears in `main`.
+
+## HQ lane — 2026-09-28 (append-only; Claude owns PR #30 table refresh)
+
+- Owner: Codex, `codex/hillink-hq-foundation`, base `cecec51992042d0e25cec38942d721821c43b38f`.
+- Authority: #12 locked HQ = World spec and Codex baton; ACK/CLAIM comment 5878266249.
+- Scope: isolated `tools/hillink-hq/`, HQ docs, dated coordination notes. No shared DB/migrations/Stripe or cleanup-route edits.
+- First slice in draft PR #31: truthful dispatcher + journal/reducer + registry + real local verification adapter + watchdog + outbox + Command Center + Real/Fantasy state views/replay, plus opt-in Ollama text-summary bridge (actual Gemma request verified).
+- Pending: independent review; runtime-specific cloud execution/heartbeats and general local-agent tools; remaining full World interactions. Missing adapters are not treated as connected workers. External notifications need an owner-controlled endpoint. Kyle requested wrapping up this implementation pass; continuation should start from the PR handoff.
+
+## HQ review follow-up — 2026-09-29
+
+Codex owns PR #31 review fixes on codex/hillink-hq-foundation. Scope remains HQ adapter/tests/UI wording/docs only. Claude is requested to re-review the final pushed head and confirm termination handling before merge. Slot-overfill work remains Claude's lane. No merge, DB or deployment action in this response.
+
+## HQ B1–B4 follow-up — 2026-09-29
+
+Codex implemented the newer blocking review on PR #31 and merged current main into its branch. Claude should re-review recovery, rate-limit resumption, measured test progress and conflict resolution at the next pushed head. N1 journal/poll scaling and N5 broader event-validation coverage remain follow-ups. Kyle authorized merge conditional on passing checks; final-review clearance is still pending.

@@ -1,0 +1,23 @@
+CONSOLE Failed to load resource: the server responded with a status of 404 (Not Found)
+journey 0.0s claude: operational=idle movement=walking animation=walk posture=stand at x431.2 z28.5 f0
+journey 0.0s claude: operational=idle movement=walking animation=walk posture=stand at x410.3 z27 f0
+journey 0.2s claude: operational=coding movement=walking animation=react posture=stand at x404.3 z27 f0
+journey 0.7s claude: operational=coding movement=walking animation=walk posture=stand at x407.3 z27 f0
+journey 3.6s claude: operational=coding movement=waiting-lift animation=idle posture=stand at x535 z22 f0
+journey 0.0s claude: operational=coding movement=boarding animation=walk posture=stand at x535 z36 f0
+journey 0.5s claude: operational=coding movement=riding animation=idle posture=stand at x535 z71 f0
+journey 3.9s claude: operational=coding movement=walking animation=walk posture=stand at x535 z68 f1
+journey 0.0s claude: operational=coding movement=walking animation=walk posture=stand at x285.9 z8.2 f1
+journey 4.0s claude: operational=coding movement=arriving animation=walk posture=stand at x116 z13.3 f1
+journey 4.6s claude: operational=coding movement=stationary animation=sit posture=sit at x116 z28.5 f1
+journey 5.2s claude: operational=coding movement=stationary animation=type posture=sit at x116 z28.5 f1
+claude seated at {"op":"coding","move":"stationary","anim":"type","posture":"sit","gait":null,"x":116,"z":28.5,"floor":1,"spot":"development:desk5"}
+review 0.0s codex: operational=idle movement=stationary animation=idle posture=stand at x296 z73 f0
+review 0.1s codex: operational=testing movement=stationary animation=react posture=stand at x296 z73 f0
+review 0.5s codex: operational=testing movement=walking animation=walk posture=stand at x296 z70 f0
+review 6.4s codex: operational=testing movement=waiting-lift animation=idle posture=stand at x535 z22 f0
+review 9.2s codex: operational=testing movement=boarding animation=walk posture=stand at x535 z29 f0
+review 9.8s codex: operational=testing movement=riding animation=idle posture=stand at x535 z71 f0
+review 13.1s codex: operational=testing movement=walking animation=walk posture=stand at x535 z69.5 f1
+review 19.2s codex: operational=testing movement=arriving animation=walk posture=stand at x331.9 z59.2 f1
+review 19.8s codex: operational=testing movement=stationary animation=inspect posture=stand at x334 z74 f1

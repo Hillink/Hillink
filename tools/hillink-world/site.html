@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Hillink World: generated site</title>
+  <link rel="stylesheet" href="site.css">
+</head>
+<body>
+  <header>
+    <strong>Hillink World</strong> <span class="muted">Pass 5A generator inspector (plan view, not the final art)</span>
+    <nav>
+      <span class="group" role="group" aria-label="Theme"><button data-theme="real" aria-pressed="true">Real</button><button data-theme="fantasy" aria-pressed="false">Fantasy</button></span>
+      <span class="group" role="group" aria-label="Frame"><button data-frame="world">World</button><button data-frame="settlement">Settlement</button><select id="focus" aria-label="Focus a building or room"></select></span>
+      <label><input type="checkbox" id="nav"> Navigation graph</label>
+      <span class="group"><button id="zoom-out" aria-label="Zoom out">−</button><button id="zoom-in" aria-label="Zoom in">+</button></span>
+    </nav>
+  </header>
+  <main>
+    <div id="view" tabindex="0" aria-label="Generated world plan; drag to pan, wheel to zoom"></div>
+    <aside id="info"></aside>
+  </main>
+  <script type="module" src="site.mjs"></script>
+</body>
+</html>

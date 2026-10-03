@@ -30,3 +30,30 @@ Signed-in Help Center at `/help`, with an admin editor at `/admin/help`. Article
 ## Known limits
 
 Production migrations, Stripe state, row security behavior in the deployed database, Vercel configuration, and actual user flows were not independently verified. The README previously described only the starter; this branch updates its introduction. Review open Claude branches before overlapping help center, signup, or live test work.
+
+## 2026-09-28 — HQ foundation branch (Codex)
+
+Isolated `codex/hillink-hq-foundation` starts at verified `main@cecec51992042d0e25cec38942d721821c43b38f`; draft PR #31. `tools/hillink-hq/` implements a local durable event engine, allowlisted real verification worker, watchdog/recovery, material alert outbox, Command Center and two skins over the same state. Run `node tools/hillink-hq/server.mjs`. `HQ_OLLAMA_ENABLED=1` enables a loopback-only text-summary adapter for already installed Gemma/Qwen models; a real Gemma summary was verified through the browser. No marketplace API/schema/payment change. Cloud execution and provider credit telemetry remain unavailable/UNKNOWN. This is a first reviewable slice, not completion of the locked World specification. See its README for safety boundaries, runtime/restart handling and remaining work. Shared cleanup PRs remain Claude-owned; this note does not revise their status or the older snapshot above.
+
+HQ verification: 32 deterministic/integration tests; existing 40 unit tests; 62-route auth scan; TypeScript; full Next build (86 routes) passed. Browser verified actual process dispatch, local Gemma generation, same-state skins, historical CLAIMED/UNKNOWN and disabled replay controls. No cloud execution, live Qwen inference, webhook delivery or full World interactions are claimed verified.
+
+## HQ review response — 2026-09-29
+
+Codex addressed Claude's PR #31 review: local cancellation now escalates SIGTERM to SIGKILL within the default adapter deadline, requiring close evidence; concurrent cancels share one attempt. Local token exposure and alert snapshot semantics are explicit. Owner reconciliation and concurrency-aware idle suppression were already present in 989e134. All 36 HQ tests pass, including four new cancellation regressions; UI syntax passes. Current remote main was rechecked at 4623c54; this focused response does not integrate main or claim its marketplace checks were rerun. Independent final-head review remains pending.
+
+## HQ blocking-review fixes — 2026-09-29
+
+Merged main 4623c54 into the HQ branch, preserving both decision-log sections. Addressed B1/B2 with diagnosed terminal-failure recovery and queued capacity retries; B3 with measured monotonic test progress and completed-but-failing verification evidence; N2 with persisted 60-second quarantine. HQ suite: 41 tests passing. Merged repository: 71 unit tests, 66-route auth scan, TypeScript and production build (89 generated pages) passed. Final independent review remains required; no merge to main or DB action performed here.
+
+## 2026-10-01: HQ/World consolidation (Claude)
+
+**Development baseline:** `claude/dev-baseline`, created from `claude/world-5h` @ `52d1516`. It contains every HQ and World branch, including HQ Pass 4.5 (`505971f`). Draft tracking PR to `main`; not for merging without Kyle.
+
+This pass adds three things:
+- **Configurable implementation base.** `HQ_IMPL_BASE=origin/<branch>`. The default is still `origin/main`. An invalid or unresolvable value disables implementation.
+- **Node ≥24 enforcement.** It covers HQ start, the Linux sandbox's Node, and the guest test controller and child. The per-file test process counts only passes attributed to the launched file, so an empty acceptance file is never green on any Node version.
+- **Art status.** `docs/world/ART_STATUS.md`: the current 5H art is EXPERIMENTAL and NOT STYLE-LOCKED.
+
+**Superseded by this branch:** draft PRs #31, #33, #37, #38 (stacked HQ) and #35 (world-engine). #34 is obsolete. None of them were closed by Claude.
+
+**WSL users:** the guest scripts changed, so rebuild the WSL base image with `node tools/hillink-hq/sandbox/build-base.mjs`.

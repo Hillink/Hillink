@@ -1,0 +1,120 @@
+{
+  "base": "http://127.0.0.1:4332",
+  "at": "2026-09-30T19:53:49.599Z",
+  "shots": [
+    {
+      "name": "A1-claude-after-migration-picks-up-task",
+      "path": "/?source=sim&theme=real&art=5d",
+      "world": {
+        "source": "generated",
+        "simulated": false,
+        "generator": "5a.1",
+        "seed": "hillink",
+        "schema": 1,
+        "fingerprint": "d205978be510b24b217f936fefb87454",
+        "historyLength": 1,
+        "layout": "generated",
+        "error": null
+      },
+      "note": null
+    },
+    {
+      "name": "A2-claude-after-migration-typing",
+      "path": "/?source=sim&theme=real&art=5d",
+      "world": {
+        "source": "generated",
+        "simulated": false,
+        "generator": "5a.1",
+        "seed": "hillink",
+        "schema": 1,
+        "fingerprint": "d205978be510b24b217f936fefb87454",
+        "historyLength": 1,
+        "layout": "generated",
+        "error": null
+      },
+      "note": null
+    },
+    {
+      "name": "B1-unknown-agent-candidate-onboarding-DEV-HARNESS",
+      "path": "/?source=sim&theme=real&art=5d",
+      "world": {
+        "source": "generated",
+        "simulated": false,
+        "generator": "5a.1",
+        "seed": "hillink",
+        "schema": 1,
+        "fingerprint": "d205978be510b24b217f936fefb87454",
+        "historyLength": 1,
+        "layout": "generated",
+        "error": null
+      },
+      "note": null
+    },
+    {
+      "name": "B2-unknown-agent-working-after-ready-DEV-HARNESS",
+      "path": "/?source=sim&theme=real&art=5d",
+      "world": {
+        "source": "generated",
+        "simulated": false,
+        "generator": "5a.1",
+        "seed": "hillink",
+        "schema": 1,
+        "fingerprint": "d205978be510b24b217f936fefb87454",
+        "historyLength": 1,
+        "layout": "generated",
+        "error": null
+      },
+      "note": null
+    },
+    {
+      "name": "C1-two-dynamic-agents-different-definitions-DEV-HARNESS",
+      "path": "/?source=sim&theme=real&art=5d",
+      "world": {
+        "source": "generated",
+        "simulated": false,
+        "generator": "5a.1",
+        "seed": "hillink",
+        "schema": 1,
+        "fingerprint": "d205978be510b24b217f936fefb87454",
+        "historyLength": 1,
+        "layout": "generated",
+        "error": null
+      },
+      "note": null
+    },
+    {
+      "name": "D1-provisioning-failed-DEV-HARNESS",
+      "path": "/?source=sim&theme=real&art=5d",
+      "world": {
+        "source": "generated",
+        "simulated": false,
+        "generator": "5a.1",
+        "seed": "hillink",
+        "schema": 1,
+        "fingerprint": "d205978be510b24b217f936fefb87454",
+        "historyLength": 1,
+        "layout": "generated",
+        "error": null
+      },
+      "note": null
+    },
+    {
+      "name": "E1-after-disable-world-coherent-DEV-HARNESS",
+      "path": "/?source=sim&theme=real&art=5d",
+      "world": {
+        "source": "generated",
+        "simulated": false,
+        "generator": "5a.1",
+        "seed": "hillink",
+        "schema": 1,
+        "fingerprint": "d205978be510b24b217f936fefb87454",
+        "historyLength": 1,
+        "layout": "generated",
+        "error": null
+      },
+      "note": null
+    }
+  ],
+  "failures": [],
+  "note": "B1 was captured in a separate run (same spec, docs/world/evidence/pass5e/shots.json) and merged here."
+}

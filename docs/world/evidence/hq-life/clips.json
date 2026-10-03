@@ -1,0 +1,88 @@
+{
+  "base": "http://127.0.0.1:4332",
+  "width": 1280,
+  "height": 800,
+  "fps": 25,
+  "clips": [
+    {
+      "name": "1-task-lifecycle-board-desk-archive",
+      "path": "/?source=sim&theme=real&art=5d",
+      "seconds": 80,
+      "actions": [
+        {
+          "at": 0.5,
+          "eval": "window.__seen = new Set(); setInterval(() => window.__seen.add(hillinkWorld.scene.get('agent:claude')?.anim?.state), 100); hillinkWorld.focus('agent:claude'); true"
+        },
+        {
+          "at": 1,
+          "eval": "hillinkWorld.sim.run('claudeCodes'); true"
+        },
+        {
+          "at": 50,
+          "eval": "hillinkWorld.sim.run('taskCompletes'); true"
+        },
+        {
+          "at": 54,
+          "eval": "hillinkWorld.sim.allIdle(); true"
+        }
+      ],
+      "expect": "['pickup', 'carry', 'type', 'file'].every(s => window.__seen.has(s))"
+    },
+    {
+      "name": "2-blocked-task-frustrated-then-waiting",
+      "path": "/?source=sim&theme=real&art=5d",
+      "seconds": 60,
+      "actions": [
+        {
+          "at": 0.5,
+          "eval": "window.__seen = new Set(); setInterval(() => window.__seen.add(hillinkWorld.scene.get('agent:claude')?.anim?.state), 100); true"
+        },
+        {
+          "at": 1,
+          "eval": "hillinkWorld.sim.run('claudeCodes'); true"
+        },
+        {
+          "at": 34,
+          "eval": "hillinkWorld.focus('agent:claude'); true"
+        },
+        {
+          "at": 40,
+          "eval": "hillinkWorld.sim.emit('TASK_BLOCKED', { taskId: hillinkWorld.store.world.agents.claude.taskId, detail: 'Needs Kyle: production SQL approval (simulated)' }); true"
+        }
+      ],
+      "expect": "window.__seen.has('type') && window.__seen.has('frustrated') && hillinkWorld.store.world.agents.claude.activity === 'waiting'"
+    },
+    {
+      "name": "3-idle-life-and-ambient",
+      "path": "/?source=sim&theme=real&art=5d",
+      "seconds": 40,
+      "actions": [
+        {
+          "at": 0.5,
+          "eval": "window.__seen = new Set(); setInterval(() => { for (const e of hillinkWorld.scene.entities.values()) if (e.kind === 'agent') window.__seen.add(e.anim?.state); }, 100); true"
+        },
+        {
+          "at": 1.5,
+          "eval": "hillinkWorld.shot('lounge'); true"
+        }
+      ],
+      "expect": "['phone', 'stretch', 'chat'].some(s => window.__seen.has(s))"
+    },
+    {
+      "name": "4-refit-construction-inside-room",
+      "path": "/?source=sim&theme=real&art=5d&demo=refit&autoplay=5",
+      "seconds": 88,
+      "actions": [
+        {
+          "at": 0.5,
+          "eval": "window.__stages = new Set(); setInterval(() => { const p = hillinkWorld.demo?.project; if (p) window.__stages.add(p.stage + (p.blocked ? ':blocked' : '')); }, 200); true"
+        },
+        {
+          "at": 6,
+          "eval": "{ const l = hillinkWorld.theme.layout.locationById['site:focus-booth']; if (l) hillinkWorld.camera.focusPoint(l.x + l.w * 0.4, l.y + l.h * 0.55, { zoom: 2.1, duration: 0 }); } true"
+        }
+      ],
+      "expect": "window.__stages.has('structure:blocked') && window.__stages.has('operational')"
+    }
+  ]
+}

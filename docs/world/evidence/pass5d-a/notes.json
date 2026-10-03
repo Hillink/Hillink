@@ -1,0 +1,151 @@
+{
+  "base": "http://127.0.0.1:4332",
+  "at": "2026-09-30T18:22:22.265Z",
+  "shots": [
+    {
+      "name": "01-overview",
+      "path": "/?source=sim&theme=real&art=5d",
+      "world": {
+        "source": "generated",
+        "simulated": false,
+        "generator": "5a.1",
+        "seed": "hillink",
+        "schema": 1,
+        "fingerprint": "d205978be510b24b217f936fefb87454",
+        "historyLength": 1,
+        "layout": "generated",
+        "error": null
+      },
+      "note": null
+    },
+    {
+      "name": "02-entrance",
+      "path": "/?source=sim&theme=real&art=5d",
+      "world": {
+        "source": "generated",
+        "simulated": false,
+        "generator": "5a.1",
+        "seed": "hillink",
+        "schema": 1,
+        "fingerprint": "d205978be510b24b217f936fefb87454",
+        "historyLength": 1,
+        "layout": "generated",
+        "error": null
+      },
+      "note": null
+    },
+    {
+      "name": "03-workspace-claude-typing",
+      "path": "/?source=sim&theme=real&art=5d",
+      "world": {
+        "source": "generated",
+        "simulated": false,
+        "generator": "5a.1",
+        "seed": "hillink",
+        "schema": 1,
+        "fingerprint": "d205978be510b24b217f936fefb87454",
+        "historyLength": 1,
+        "layout": "generated",
+        "error": null
+      },
+      "note": "claude type"
+    },
+    {
+      "name": "04-lounge-break",
+      "path": "/?source=sim&theme=real&art=5d",
+      "world": {
+        "source": "generated",
+        "simulated": false,
+        "generator": "5a.1",
+        "seed": "hillink",
+        "schema": 1,
+        "fingerprint": "d205978be510b24b217f936fefb87454",
+        "historyLength": 1,
+        "layout": "generated",
+        "error": null
+      },
+      "note": null
+    },
+    {
+      "name": "05-street-and-landscape",
+      "path": "/?source=sim&theme=real&art=5d",
+      "world": {
+        "source": "generated",
+        "simulated": false,
+        "generator": "5a.1",
+        "seed": "hillink",
+        "schema": 1,
+        "fingerprint": "d205978be510b24b217f936fefb87454",
+        "historyLength": 1,
+        "layout": "generated",
+        "error": null
+      },
+      "note": null
+    },
+    {
+      "name": "06-corner-structure",
+      "path": "/?source=sim&theme=real&art=5d",
+      "world": {
+        "source": "generated",
+        "simulated": false,
+        "generator": "5a.1",
+        "seed": "hillink",
+        "schema": 1,
+        "fingerprint": "d205978be510b24b217f936fefb87454",
+        "historyLength": 1,
+        "layout": "generated",
+        "error": null
+      },
+      "note": null
+    },
+    {
+      "name": "07-characters-closeup",
+      "path": "/?source=sim&theme=real&art=5d",
+      "world": {
+        "source": "generated",
+        "simulated": false,
+        "generator": "5a.1",
+        "seed": "hillink",
+        "schema": 1,
+        "fingerprint": "d205978be510b24b217f936fefb87454",
+        "historyLength": 1,
+        "layout": "generated",
+        "error": null
+      },
+      "note": null
+    },
+    {
+      "name": "08-seed-alpha-overview",
+      "path": "/?source=sim&theme=real&art=5d",
+      "world": {
+        "source": "generated",
+        "simulated": false,
+        "generator": "5a.1",
+        "seed": "alpha",
+        "schema": 1,
+        "fingerprint": "18123e596b16e45866d7eae0d76c340b",
+        "historyLength": 1,
+        "layout": "generated",
+        "error": null
+      },
+      "note": "seed alpha"
+    },
+    {
+      "name": "09-for-comparison-pass5c-art",
+      "path": "/?source=sim&theme=real",
+      "world": {
+        "source": "generated",
+        "simulated": false,
+        "generator": "5a.1",
+        "seed": "hillink",
+        "schema": 1,
+        "fingerprint": "d205978be510b24b217f936fefb87454",
+        "historyLength": 1,
+        "layout": "generated",
+        "error": null
+      },
+      "note": null
+    }
+  ],
+  "failures": []
+}

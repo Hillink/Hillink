@@ -1,0 +1,72 @@
+{
+  "base": "http://127.0.0.1:4332",
+  "width": 1280,
+  "height": 800,
+  "fps": 25,
+  "clips": [
+    {
+      "name": "1-office-life-5d",
+      "path": "/?source=sim&theme=real&art=5d&play=office",
+      "seconds": 45,
+      "actions": [
+        {
+          "at": 0.6,
+          "eval": "hillinkWorld.shot(\"overview\"); true"
+        }
+      ],
+      "expect": "hillinkWorld.theme.art === '5d'"
+    },
+    {
+      "name": "2-follow-claude-to-desk-5d",
+      "path": "/?source=sim&theme=real&art=5d&play=workstation",
+      "seconds": 48,
+      "actions": [
+        {
+          "at": 0.5,
+          "eval": "hillinkWorld.focus(\"agent:claude\"); true"
+        },
+        {
+          "at": 40,
+          "eval": "window.__typed = hillinkWorld.scene.get(\"agent:claude\").anim.state === \"type\"; true"
+        }
+      ],
+      "expect": "hillinkWorld.theme.art === '5d' && window.__typed === true"
+    },
+    {
+      "name": "3-street-and-entrance-5d",
+      "path": "/?source=sim&theme=real&art=5d&play=office",
+      "seconds": 30,
+      "actions": [
+        {
+          "at": 0.6,
+          "eval": "hillinkWorld.shot(\"entrance\"); true"
+        }
+      ],
+      "expect": "hillinkWorld.theme.art === '5d'"
+    },
+    {
+      "name": "cmp-5c",
+      "path": "/?source=sim&theme=real&play=office",
+      "seconds": 30,
+      "actions": [
+        {
+          "at": 0.6,
+          "eval": "hillinkWorld.shot(\"overview\"); true"
+        }
+      ],
+      "expect": "!hillinkWorld.theme.art"
+    },
+    {
+      "name": "cmp-5d",
+      "path": "/?source=sim&theme=real&art=5d&play=office",
+      "seconds": 30,
+      "actions": [
+        {
+          "at": 0.6,
+          "eval": "hillinkWorld.shot(\"overview\"); true"
+        }
+      ],
+      "expect": "hillinkWorld.theme.art === '5d'"
+    }
+  ]
+}

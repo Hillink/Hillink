@@ -10,6 +10,15 @@ Reason: Claude and Codex do not share conversation state. The repository provide
 
 Affected files: `AGENTS.md`, `docs/CURRENT_STATE.md`, `docs/AI_TASKS.md`.
 
+## 2026-09-28: HQ is World; evidence precedes visualization
+
+Owner-confirmed direction: #12 comment 5877991295 locks HQ and World as one product and the foundation-first implementation order. Assignment is not execution. Unavailable live/provider telemetry is UNKNOWN. Safety boundaries for production, shared databases, live Stripe, destructive migrations and business policy remain unchanged.
+
+Implementation choice (Codex, first slice): use an isolated single-user loopback Node control service in `tools/hillink-hq/`, with a durable journal and an actual allowlisted local verifier. Do not add a production database or pretend the local verifier is a cloud model. Confirm worker termination before safe reassignment; uncertain restarts retain locks and require reconciliation. Real/Fantasy and replay consume the same reducer. This does not decide business policy or authorize deployment. See the HQ README for security limits and incomplete scope.
+
+## 2026-09-29 — HQ cancellation and runtime review
+
+Local worker cancellation uses one second of SIGTERM grace then one second for SIGKILL close evidence, fitting the default three-second engine deadline. Signal acceptance never releases a lease. Alert episode details remain immutable snapshots for durable notification deduplication and are labeled accordingly. Keep Node 24+ as the verified support floor rather than expand support based only on another runtime's partial test pass.
 ## 2026-09-28: Privileged columns are server-only (P0 security hardening)
 
 Decision: Kyle approved fixing the audit's P0 security holes (project chat, 2026-09-28). Signed-in users can no longer write: XP (`log_athlete_xp_event`), campaign status as another user (`transition_campaign_status`), `campaign_status_log`, athlete `is_verified`/`is_flagged`/`tier`, business plan and Stripe fields on `business_billing_profiles`, athlete Stripe account fields on `athlete_payout_profiles`, or disputes directly. Plan limits (active subscription, open campaigns, slots, athlete tier) are enforced in the database for direct campaign inserts and in the slots/status APIs. Instagram metrics are stored only when read from the athlete's own connected account.
