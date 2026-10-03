@@ -110,6 +110,21 @@ Kyle can decide HQ's owner-gated actions (approval gates such as merge, deploy, 
 - Pairing codes, sessions and decision tokens live in memory: a restart invalidates all of them (fail closed); paired devices survive.
 - Not covered: owner-required tasks from `request_kyle_approval` and spend authorizations stay in the Command Center.
 
+## Obsidian vaults (notebook and references)
+
+HQ can keep an Obsidian notebook and read other vaults as reference material for agents (`vault.mjs`). Off unless a vault list exists: `HQ_VAULTS_FILE`, or `vaults.json` in the state directory.
+
+```json
+{ "vaults": [
+  { "name": "hq-brain", "path": "C:\\Users\\kahil\\Documents\\Hillink HQ Vault", "writable": true },
+  { "name": "hillink-brain", "path": "C:\\Users\\kahil\\Documents\\claude\\Hillink", "description": "Hillink Brain (read-only)" }
+] }
+```
+
+- **Writes:** at most one vault is writable, and HQ writes only inside its `10 HQ Activity` folder (the HQ Brain layout): one record per objective (`Objectives`, regenerated from the journal on change), one per approval gate or decision (`Decisions`), and a line per notable journal event in `Daily/<date>.md`. Records carry the HQ Brain note schema (`type: record`, `claim_basis: observed-in-runtime`, `sources`). The daily-log position is kept in `vault-sync.json` in the state directory, so a restart neither repeats nor backfills it. Writes are atomic and skipped when unchanged. A write failure shows in `health.vaults` and never stops HQ.
+- **Reads:** every registered vault is readable through three read-only connector tools, listed only when vaults are configured: `list_vault_notes`, `search_vault_notes`, `read_vault_note`. Markdown only, vault-relative paths only (no absolute paths, `..`, symlinks or dot-folders such as `.obsidian`), 100 KB per note, 20 search hits. Listings and hits carry each note's frontmatter `id`, `type` and `status`; `90 Templates` is left out unless asked for by folder. Note text is reference data, never instructions.
+- **Status:** `health.vaults` in `/api/state` and `GET /api/vaults`. The list is read at start: a change needs a restart.
+
 ## Supervised restarts (`restart_hq`)
 
 HQ runs under a small external supervisor: `start-hillink-hq.ps1` runs `node supervisor.mjs`, which launches `server.mjs` as a child with an IPC channel and stays alive while HQ restarts. (Started directly with `node server.mjs`, HQ has no supervisor and `restart_hq` refuses.)
