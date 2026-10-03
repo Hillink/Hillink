@@ -12,6 +12,7 @@ import { createInterpreter } from './interpreter.mjs';
 import { createKingdomLayout } from '../world/kingdom-layout.mjs';
 import { createKingdomSkin } from '../render/kingdom-skin.mjs';
 import { createPxSkin } from '../render/px/skin.mjs';
+import { createHqSkin } from '../render/hq/skin.mjs';
 
 export const THEME_ORDER = ['real', 'fantasy', 'blueprint'];
 export const THEME_NAMES = { real: 'Realistic', fantasy: 'Fantasy', blueprint: 'Blueprint' };
@@ -42,6 +43,12 @@ export function loadTheme(id, { world = null, art = null, layout: layoutId = nul
   if (world && key === 'fantasy' && layoutId === 'kingdom-5g') {
     const K = createKingdomLayout(world);
     return { id: key, name: THEME_NAMES[key], interpreter: createInterpreter(key), layout: K, art: null, skin: createKingdomSkin(K), scenery: { characterHeight: K.characterHeight, walkSpeed: K.walkSpeed, liftSpeed: ARCH.elevator.speed, npcHeight: AGENT.height, npcs: [] }, camera: { minZoom: 0.2, maxZoom: 4 }, generated: true, kingdom: true, superseded: SUPERSEDED_LAYOUTS['kingdom-5g'] };
+  }
+  // Art 'hq' (?art=hq): the HQ diorama look. The same generated layout seen through the diamond projection, drawn by
+  // render/hq/ (sky, floating island, day/dusk/night light); every fact it shows is the same World state.
+  if (world && art === 'hq' && key !== 'blueprint') {
+    const G = createGeneratedLayout(world, { theme: key, projection: 'diamond' });
+    return { id: key, name: THEME_NAMES[key], interpreter: createInterpreter(key), layout: G, art: 'hq', skin: createHqSkin(G, key), scenery: { characterHeight: G.characterHeight, walkSpeed: G.walkSpeed, liftSpeed: ARCH.elevator.speed, npcHeight: AGENT.height, npcs: [] }, camera: { minZoom: 0.2, maxZoom: 4 }, generated: true };
   }
   if (world) {
     const G = createGeneratedLayout(world, { theme: key });

@@ -87,7 +87,10 @@ export function stateOf(e, a) {
 // a compact name chip; its status line only on hover or selection.
 export const labelModeOf = (zoom, hovered, selected) => (hovered || selected ? 'full' : zoom < 0.95 ? 'pip' : 'name');
 
-export function createArtSkin(layout, skinId = 'real') {
+// opts.region (art 'hq', held as `island`): a plan rectangle the land ends at (the floating island). Ground, plants and cars outside it are
+// not drawn, and the terrain is clipped to it.
+export function createArtSkin(layout, skinId = 'real', opts = {}) {
+  const island = opts.region ?? null, inRegion = (x, z, m = 0) => !island || (x >= island.x0 + m && x <= island.x1 - m && z >= island.z0 + m && z <= island.z1 - m);
   const rig = rigFor(skinId);
   const debug = false, B = MATERIALS.blueprint;
   // The daylight palette: the old keys, remapped to the new material vocabulary.
@@ -431,14 +434,17 @@ export function createArtSkin(layout, skinId = 'real') {
   const roads = Object.values(world.roads).map(r => ({ r, pts: wayPts(r), W: r.width * U })), paths = Object.values(world.paths).map(p => ({ p, pts: wayPts(p), W: p.width * U }));
   // Pass 5D-A vegetation (render/art5d/ground.mjs): species, size and placement from rules; standing sprites with sway.
   for (const pl of ground.plants) {
+    if (!inRegion(pl.x, pl.z, 1.5 * U)) continue;
     const r0 = Math.max(4, plantHeight(pl, U) * 0.08), b = { x0: pl.x - r0, x1: pl.x + r0, z0: pl.z - r0, z1: pl.z + r0 }, H = plantHeight(pl, U);
     add(0, { ...b, sb: { l: P.at(pl.x, pl.z, 0, 0)[0] - H * 0.5, r: P.at(pl.x, pl.z, 0, 0)[0] + H * 0.5, t: P.at(pl.x, pl.z, 0, H)[1] - 20, b: P.at(pl.x, pl.z, 0, 0)[1] + 4 }, tree: true, draw: d => drawPlant(d, pl, U) });
   }
   function drawGround(d) {
     const { ctx } = d;
+    if (island) { ctx.save(); ctx.beginPath(); [[island.x0, island.z0], [island.x1, island.z0], [island.x1, island.z1], [island.x0, island.z1]].forEach(([x, z], i) => { const [sx, sy] = P.at(x, z, 0); if (i) ctx.lineTo(sx, sy); else ctx.moveTo(sx, sy); }); ctx.closePath(); ctx.clip(); }
     ground.drawTerrain(d);
     // Pass 5C cloud shadows, softer, on the new ground.
     if (!d.reduced) for (const c of cloudShadows(d.T, groundBox)) { const [x, y] = P.at(c.x, c.z, 0); ctx.save(); ctx.globalAlpha = c.alpha * 0.9; ctx.translate(x, y); ctx.scale(1, c.rz * g.sky / c.rx); const gr = ctx.createRadialGradient(0, 0, 0, 0, 0, c.rx); gr.addColorStop(0, 'rgba(20,40,70,0.9)'); gr.addColorStop(1, 'rgba(20,40,70,0)'); ctx.fillStyle = gr; ctx.beginPath(); ctx.arc(0, 0, c.rx, 0, TAU); ctx.fill(); ctx.restore(); }
+    if (island) { ground.drawDecals(d, (x, y) => { const q = P.plan(x, y, 0); return inRegion(q[0], q[1]); }); ctx.restore(); }
   }
   // The ground the clouds drift over: the settlement's roads and spaces, generously padded.
   const groundBox = (() => { const xs = [], zs = []; for (const s of spaces) { const r = rp(s); xs.push(r.x0, r.x1); zs.push(r.z0, r.z1); } for (const r of roads) for (const [x, z] of r.pts) { xs.push(x); zs.push(z); } return { x0: Math.min(...xs) - 900, x1: Math.max(...xs) + 900, z0: Math.min(...zs) - 600, z1: Math.max(...zs) + 600 }; })();
@@ -803,9 +809,9 @@ export function createArtSkin(layout, skinId = 'real') {
     const onScreen = it => !it.sb || (it.sb.r >= vx0 && it.sb.l <= vx1 && it.sb.b >= vy0 && it.sb.t <= vy1);
     if (debug) return blueprint(d, agents);
     drawGround(d);
-    ground.drawDecals(d, (x, y) => x > vx0 && x < vx1 && y > vy0 && y < vy1);
+    if (!island) ground.drawDecals(d, (x, y) => x > vx0 && x < vx1 && y > vy0 && y < vy1);
     const lifts = Object.values(layout.lifts), inCar = e => (e.ride && ['board', 'ride', 'exit'].includes(e.ride.request.phase)) || e.gait === 'ride';
-    const cars = d.reduced ? [] : vehiclesAt(T, vehicleRoutes);
+    const cars = d.reduced ? [] : vehiclesAt(T, vehicleRoutes).filter(v => inRegion(v.x, v.y, STREET_SCALE.car.length));
     const fw = AGENT.footprint.w / 2, fd = AGENT.footprint.d / 2;
     const charBox = (e, x, z) => ({ x0: x - fw, x1: x + fw, z0: z - fd, z1: z + fd, bias: e.posture === 'sit' ? 1 : 0, sb: { l: e.x - AGENT.height * 0.45, r: e.x + AGENT.height * 0.45, t: e.y - AGENT.height * 1.5, b: e.y + 4 } });
     for (const f of layout.levels) {
