@@ -85,7 +85,7 @@ export function validateObjectiveInput(input) {
     if (type !== 'implement') throw Error('resumeFrom is only for implement objectives');
     const r = input.resumeFrom;
     if (typeof r === 'string') out.resumeFrom = r.trim().slice(0, 40);
-    else if (r && typeof r === 'object' && !Array.isArray(r)) out.resumeFrom = { worktree: String(r.worktree ?? '').slice(0, 40), ...(r.patchHash != null ? { patchHash: String(r.patchHash).slice(0, 64) } : {}), ...(r.base != null ? { base: String(r.base).slice(0, 40) } : {}) };
+    else if (r && typeof r === 'object' && !Array.isArray(r)) out.resumeFrom = { worktree: String(r.worktree ?? '').slice(0, 40), ...(r.patchHash != null ? { patchHash: String(r.patchHash).slice(0, 64) } : {}), ...(r.base != null ? { base: String(r.base).slice(0, 40) } : {}), ...(r.commit != null ? { commit: String(r.commit).slice(0, 80) } : {}), ...(r.branch != null ? { branch: String(r.branch).slice(0, 60) } : {}) };
     else throw Error('resumeFrom must be a preserved worktree name');
   }
   if (type === 'implement') {
