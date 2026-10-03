@@ -153,7 +153,7 @@ export function agentStatus(state, agent, now, config = defaults, seenAt = null)
 
 export class Engine {
   constructor({ store, adapters = {}, now = Date.now, config = {} }) {
-    this.store = store; this.adapters = adapters; this.now = now; this.config = { ...defaults, ...config }; this.busy = false; this.seen = {}; this.jobs = new Map(); this.checkedAt = {}; this.leaving = new Set(); this.provisioning = {}; this.connectors = {};
+    this.store = store; this.adapters = adapters; this.now = now; this.config = { ...defaults, ...config }; this.busy = false; this.seen = {}; this.jobs = new Map(); this.checkedAt = {}; this.leaving = new Set(); this.provisioning = {}; this.connectors = {}; this.listeners = new Set();
     // Fail closed: an unknown mode is ZERO_CREDIT, never something more permissive.
     if (!MODES.includes(this.config.computeMode)) this.config.computeMode = DEFAULT_MODE;
     this.state = store.read().reduce(reduce, emptyState());
@@ -167,8 +167,12 @@ export class Engine {
     const event = { seq: this.state.seq + 1, id: randomUUID(), at: this.now(), type, data };
     this.store.append(event); // Persist before mutating state or executing anything.
     reduce(this.state, event);
+    // Live readers (the progress stream) learn that the journal moved. Read-only and after the fact: a listener
+    // cannot change the event, and a failing listener never affects the journal or the caller.
+    for (const listener of this.listeners) { try { listener(event); } catch { /* a reader's problem, not HQ's */ } }
     return event;
   }
+  onEvent(listener) { this.listeners.add(listener); return () => this.listeners.delete(listener); }
   initialize({ modeSource = 'default', modeWarning = null } = {}) {
     // The operating mode is HQ configuration (environment), journaled on every change so the ledger shows which mode
     // every run was selected under. No API, agent or task can change it.

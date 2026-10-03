@@ -23,6 +23,7 @@ import { CommitVerifier } from './orchestration/verify.mjs';
 import { ReviewSnapshots } from './review-snapshot.mjs';
 import { reconcileInterrupted } from './orchestration/recovery.mjs';
 import { worldActivity, worldSnapshot, WORLD_CONTRACT_VERSION } from './orchestration/activity.mjs';
+import { progressSnapshot, progressFingerprint, objectiveProgress, taskProgress } from './orchestration/progress.mjs';
 import { resolveMode } from './compute/policy.mjs';
 import { computeLedger } from './compute/state.mjs';
 import { allRoutes, agentProfiles } from './compute/registry.mjs';
@@ -39,6 +40,10 @@ const here = fileURLToPath(new URL('.', import.meta.url));
 const assets = { '/': ['index.html', 'text/html'], '/app.mjs': ['app.mjs', 'text/javascript'], '/style.css': ['style.css', 'text/css'] };
 // Polls return recent events only; the full journal stays on disk and in /api/history replay.
 const recentEvents = 300;
+// Progress telemetry (orchestration/progress.mjs) for an engine at a moment, with the engine's own liveness status.
+const progressOf = (engine, at = engine.now()) => progressSnapshot(engine.state, { now: at, statusOf: agent => engine.status(agent, at) });
+// Live progress streams: a few Command Center tabs at most. Each one is pushed a snapshot when the journal moves.
+const MAX_PROGRESS_STREAMS = 8;
 const equal = (a, b) => typeof a === 'string' && a.length === b.length && timingSafeEqual(Buffer.from(a), Buffer.from(b));
 async function body(req) {
   if (req.headers['content-type'] !== 'application/json') throw Error('JSON content type required');
@@ -159,6 +164,30 @@ export async function createHQ({ port = 4312, directory = path.join(here, '.stat
       vaultStatus = `ENABLED: ${config.vaults.map(v => `${v.name}${v.writable ? ' (HQ writes here)' : ' (read-only)'}`).join(', ')}`;
     }
   } catch (error) { vaultStatus = `UNAVAILABLE: ${String(error.message).slice(0, 160)}`; }
+  const streams = new Set();
+  function progressStream(req, res, json) {
+    if (streams.size >= MAX_PROGRESS_STREAMS) return json(429, { error: `At most ${MAX_PROGRESS_STREAMS} live progress streams; close another HQ tab.` });
+    res.writeHead(200, { 'Content-Type': 'text/event-stream; charset=utf-8', Connection: 'keep-alive' });
+    let last = '', timer = null;
+    const send = () => {
+      timer = null;
+      if (res.writableEnded || res.destroyed) return;
+      const p = progressOf(engine), fp = progressFingerprint(p);
+      if (fp === last) return;
+      last = fp;
+      res.write(`event: progress\nid: ${p.seq}\ndata: ${JSON.stringify(p)}\n\n`);
+    };
+    // Coalesce bursts (a worker can journal several events at once) into one push.
+    const unsubscribe = engine.onEvent(() => { timer ??= setTimeout(send, 200); });
+    // A comment keeps proxies from closing an idle stream; the check also catches what changes with time alone
+    // (a run turning STALLED), without the client asking.
+    const keepAlive = setInterval(() => { if (!res.writableEnded && !res.destroyed) { res.write(': keep-alive\n\n'); send(); } }, 15_000);
+    const entry = { end: () => { cleanup(); if (!res.writableEnded) res.end(); } };
+    const cleanup = () => { unsubscribe(); clearInterval(keepAlive); clearTimeout(timer); streams.delete(entry); };
+    streams.add(entry);
+    req.on('close', cleanup);
+    send();
+  }
   const server = http.createServer(async (req, res) => {
     res.setHeader('Cache-Control', 'no-store');
     res.setHeader('X-Content-Type-Options', 'nosniff');
@@ -176,7 +205,7 @@ export async function createHQ({ port = 4312, directory = path.join(here, '.stat
       if (req.headers['x-hq-client'] !== 'command-center' || (req.headers.origin && req.headers.origin !== origin) || (req.headers['sec-fetch-site'] && req.headers['sec-fetch-site'] !== 'same-origin')) return json(403, { error: 'Same-origin HQ client required' });
       if (req.method === 'GET' && url.pathname === '/api/session') return json(200, { token: session });
       if (!equal(req.headers.authorization, `Bearer ${session}`)) return json(401, { error: 'HQ session required' });
-      if (req.method === 'GET' && url.pathname === '/api/state') return json(200, { ...engine.snapshot(), events: engine.state.events.slice(-recentEvents), eventCount: engine.state.events.length, operations, health: { controller: lastError ? 'DEGRADED' : 'ONLINE', lastError, externalNotifications: sink ? 'CONFIGURED' : 'UNCONFIGURED', ollama: ollamaStatus, cliAgents: agentsStatus, orchestrator: orchestratorStatus, implementation: implementationStatus, implementationRoutes, ingress: ingressStatus, vaults: vaultError ? `${vaultStatus}; last write failed: ${vaultError}` : vaultStatus, localOnly: true, computeMode: engine.config.computeMode, meteredCredentialsPresent: credentials } });
+      if (req.method === 'GET' && url.pathname === '/api/state') return json(200, { ...engine.snapshot(), progress: progressOf(engine), events: engine.state.events.slice(-recentEvents), eventCount: engine.state.events.length, operations, health: { controller: lastError ? 'DEGRADED' : 'ONLINE', lastError, externalNotifications: sink ? 'CONFIGURED' : 'UNCONFIGURED', ollama: ollamaStatus, cliAgents: agentsStatus, orchestrator: orchestratorStatus, implementation: implementationStatus, implementationRoutes, ingress: ingressStatus, vaults: vaultError ? `${vaultStatus}; last write failed: ${vaultError}` : vaultStatus, localOnly: true, computeMode: engine.config.computeMode, meteredCredentialsPresent: credentials } });
       // Pass 4: compute policy, ledger and spend authorization. Owner API only (loopback, same-origin, session token);
       // nothing here is reachable from agent output, handoffs or the orchestrator's tools.
       if (req.method === 'GET' && url.pathname === '/api/compute') return json(200, { mode: engine.config.computeMode, ledger: computeLedger(engine.state, { now: engine.now(), taskId: url.searchParams.get('task') || null }), routes: allRoutes(), agents: agentProfiles(), meteredCredentialsPresent: credentials });
@@ -189,8 +218,20 @@ export async function createHQ({ port = 4312, directory = path.join(here, '.stat
         const events = engine.state.events.filter(e => e.seq <= seq);
         const state = events.reduce(reduce, emptyState());
         const replay = new Engine({ store: { read: () => events } }); replay.state = state;
-        return json(200, { ...replay.snapshot(events.at(-1)?.at ?? 0), events: events.slice(-recentEvents), eventCount: events.length, replay: true, operations });
+        return json(200, { ...replay.snapshot(events.at(-1)?.at ?? 0), progress: progressOf(replay, events.at(-1)?.at ?? 0), events: events.slice(-recentEvents), eventCount: events.length, replay: true, operations });
       }
+      // Progress telemetry: HQ's one derived answer for "how far along is every agent and objective". The stream pushes
+      // a new snapshot whenever the journal moves and the answer changed (no client polling; elapsed time is derived
+      // from startedAt by the reader).
+      if (req.method === 'GET' && url.pathname === '/api/progress') {
+        const p = progressOf(engine), id = url.searchParams.get('objective');
+        if (!id) return json(200, p);
+        const o = engine.state.objectives?.[id];
+        if (!o) return json(404, { error: 'Unknown objective' });
+        const statusOf = a => engine.status(a, p.at);
+        return json(200, { ...p, objectives: [objectiveProgress(engine.state, o, { now: p.at, taskView: t => taskProgress(engine.state, t, { now: p.at, statusOf }) })] });
+      }
+      if (req.method === 'GET' && url.pathname === '/api/progress/stream') return progressStream(req, res, json);
       if (req.method === 'POST' && url.pathname === '/api/tasks') {
         const id = engine.createTask(await body(req)); return json(201, { id });
       }
@@ -213,7 +254,7 @@ export async function createHQ({ port = 4312, directory = path.join(here, '.stat
       if (req.method === 'GET' && url.pathname === '/api/world') {
         const since = Number(url.searchParams.get('since') ?? 0);
         if (!Number.isSafeInteger(since) || since < 0) throw Error('Invalid since');
-        return json(200, { contract: WORLD_CONTRACT_VERSION, snapshot: worldSnapshot(engine.snapshot()), activity: worldActivity(engine.state.events, { since }) });
+        return json(200, { contract: WORLD_CONTRACT_VERSION, snapshot: worldSnapshot(engine.snapshot(), { progress: progressOf(engine) }), activity: worldActivity(engine.state.events, { since }) });
       }
       // Pass 5F: agent creation and lifecycle. Owner API only (loopback, same-origin, session token), like spend.
       if (req.method === 'GET' && url.pathname === '/api/agents/catalog') return json(200, catalog());
@@ -286,6 +327,7 @@ export async function createHQ({ port = 4312, directory = path.join(here, '.stat
     await brokerServer?.close();
     await ingressServer?.close();
     await ownerServer?.close();
+    for (const stream of [...streams]) stream.end();
     await new Promise(resolve => server.close(resolve));
     journal.close();
   } };

@@ -1,6 +1,6 @@
 const $ = id => document.getElementById(id);
 const escape = value => String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
-let token, snapshot, liveSnapshot, replaying = false, skin = 'real', selected = null, replayTimer, armedGate = null, armedDecision = null;
+let token, snapshot, liveSnapshot, streamProgress = null, clockOffset = 0, replaying = false, skin = 'real', selected = null, replayTimer, armedGate = null, armedDecision = null;
 const notified = new Set();
 const ago = (at, now) => at == null ? 'No evidence' : `${Math.max(0, Math.floor((now - at) / 1000))}s ago`;
 const badge = status => `<span class="badge ${escape(status)}">${escape(status)}</span>`;
@@ -47,11 +47,63 @@ function render(state) {
   const meaningful = state.events.filter(e => !(e.type === 'AGENT_OBSERVED' && e.data.status === 'IDLE') && !(e.type === 'WORKER_EVENT' && e.data.kind === 'HEARTBEAT'));
   replace('events', [...meaningful].reverse().slice(0, 80).map(event => `<div class="event"><b>${escape(event.type === 'WORKER_EVENT' ? event.data.kind : event.type)}</b><small>#${event.seq} · ${new Date(event.at).toLocaleTimeString()}</small>${escape(event.data.summary || event.data.title || event.data.detail || event.data.reason || event.data.name || '')}</div>`).join('') || '<p class="empty">No meaningful events.</p>');
   $('notification-health').textContent = state.health?.externalNotifications === 'CONFIGURED' ? 'Durable outbox → configured webhook. Failed deliveries remain visible and retry.' : 'External delivery is unconfigured. Browser notifications require permission and this tab to remain open.';
+  renderProgress(replaying ? state.progress : streamProgress ?? state.progress);
   renderWorld();
   if (selected) inspect(selected.type, selected.id, false);
   if (!replaying && 'Notification' in window && Notification.permission === 'granted') for (const alert of alerts) {
     const key = `${alert.key}:${alert.openedAt}`;
     if (!notified.has(key) && !alert.acknowledgedAt) { new Notification(`Hillink HQ · ${alert.kind}`, { body: alert.ownerAction || alert.detail, tag: key }); notified.add(key); }
+  }
+}
+// Live progress (HQ's orchestration/progress.mjs). The numbers come from HQ; this page only draws them. A bar appears
+// only for WORKING, ASSIGNED and COMPLETE: WAITING and BLOCKED are states, and an idle agent shows IDLE.
+const elapsed = ms => { if (ms == null) return ''; const s = Math.max(0, Math.floor(ms / 1000)), h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60); return h ? `${h}h ${m}m` : m ? `${m}m ${s % 60}s` : `${s}s`; };
+const clock = (a, now) => a.startedAt != null ? `<span data-started="${a.startedAt}"${a.endedAt != null ? ` data-ended="${a.endedAt}"` : ''}>${escape(elapsed((a.endedAt ?? now) - a.startedAt))}</span>` : '';
+const bar = value => `<div class="pbar"><progress max="100" value="${Number(value)}" aria-label="${Number(value)} percent"></progress><span>${Number(value)}%</span></div>`;
+const ITEM = { done: '✓', skipped: '✓', running: '●', waiting: '◐', pending: '○', failed: '✗', cancelled: '–' };
+function renderProgress(p) {
+  if (!p) return;
+  const now = p.at;
+  const cards = p.agents.filter(a => a.status !== 'UNAVAILABLE').sort((x, y) => (x.status === 'IDLE') - (y.status === 'IDLE'));
+  replace('progress-agents', cards.map(a => {
+    if (a.status === 'IDLE') return `<div class="pcard idle"><div class="pcard-top"><b>${escape(a.name)}</b>${badge('IDLE')}</div></div>`;
+    const repairing = a.retry && /^Repairing/.test(a.activity ?? '');
+    const meta = [a.objectiveTitle, a.progress != null && a.milestoneLabel && a.milestoneLabel !== a.activity ? a.milestoneLabel : null].filter(Boolean).map(escape).join(' · ');
+    const extra = [clock(a, now), a.retry ? `Retry ${escape(a.retry.count)}/${escape(a.retry.max ?? '?')}` : ''].filter(Boolean).join(' · ');
+    return `<div class="pcard ${repairing ? 'repairing' : ''}" data-progress-agent="${escape(a.agent)}"><div class="pcard-top"><b>${escape(a.name)}</b>${badge(a.status)}</div>${a.progress != null ? bar(a.progress) : ''}<p class="activity">${escape(a.activity)}</p>${meta ? `<p class="meta">${meta}</p>` : ''}${extra ? `<p class="meta">${extra}</p>` : ''}</div>`;
+  }).join(''));
+  const objectives = p.objectives.filter(o => !['COMPLETE', 'CANCELLED'].includes(o.state) || now - (o.endedAt ?? now) < 3600_000).slice(0, 6);
+  replace('progress-objectives', objectives.map(o => `<div class="pobj"><div class="pcard-top"><b>${escape(o.title ?? o.objectiveId.slice(0, 8))}</b>${badge(o.state)}</div>${bar(o.progress)}<ul>${o.checklist.map(i => `<li class="${escape(i.status)}"><i>${ITEM[i.status] ?? '○'}</i>${escape(i.label)}${i.projected ? ' <small>expected</small>' : i.consolidated ? ' <small>consolidated</small>' : i.repair ? ` <small>repair ${escape(i.repair)}</small>` : ''}</li>`).join('')}</ul><p class="meta muted">${escape(o.reason ?? '')}</p><p class="meta muted">${clock({ startedAt: o.startedAt, endedAt: o.endedAt }, now)}</p></div>`).join(''));
+}
+// Elapsed time moves with the local clock (offset to HQ's), between pushes from HQ; nothing is fetched for it.
+setInterval(() => { for (const el of document.querySelectorAll('[data-started]')) if (!el.dataset.ended) el.textContent = elapsed(Date.now() + clockOffset - Number(el.dataset.started)); }, 1000);
+// HQ pushes a new snapshot when its journal moves (/api/progress/stream). fetch() (not EventSource) so the stream
+// carries the same session token and client header as every other HQ request.
+async function followProgress() {
+  for (let wait = 1000; ; wait = Math.min(wait * 2, 30_000)) {
+    try {
+      if (!token) token = (await api('/api/session')).token;
+      const res = await fetch('/api/progress/stream', { headers: { 'X-HQ-Client': 'command-center', Authorization: `Bearer ${token}` } });
+      if (!res.ok || !res.body) throw Error(`HTTP ${res.status}`);
+      $('progress-source').textContent = 'Live from HQ\'s journal: milestones HQ observed, never an agent\'s own estimate';
+      const reader = res.body.getReader(), decoder = new TextDecoder();
+      let buffer = '';
+      for (;;) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        for (let i; (i = buffer.indexOf('\n\n')) >= 0;) {
+          const frame = buffer.slice(0, i); buffer = buffer.slice(i + 2);
+          const data = frame.split('\n').find(l => l.startsWith('data: '));
+          if (!frame.startsWith('event: progress') || !data) continue;
+          streamProgress = JSON.parse(data.slice(6)); clockOffset = streamProgress.at - Date.now(); wait = 1000;
+          if (!replaying) renderProgress(streamProgress);
+        }
+      }
+    } catch { /* reconnect below */ }
+    streamProgress = null;
+    $('progress-source').textContent = 'Live progress stream reconnecting; showing the last state HQ sent';
+    await new Promise(r => setTimeout(r, wait));
   }
 }
 function renderWorld() {
@@ -196,4 +248,5 @@ async function refresh() {
   }
 }
 await refresh(); setInterval(refresh, 2000);
+followProgress();
 phones(); setInterval(phones, 15000);
