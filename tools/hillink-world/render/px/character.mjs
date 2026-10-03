@@ -67,7 +67,9 @@ export const TOOLS = {
 };
 
 // ---- Poses. Hand positions are offsets from the shoulder (px); legs name a leg pose. -----------------------------
-const HAND = { down: [1, 6], swingF: [3, 5], swingB: [-1, 6], up: [2, -5], strike: [4, 4], hold: [2, 3], point: [6, 0], raise: [2, -6], type1: [3, 3], type2: [3, 4], rest: [2, 4], holdFar: [1, 3] };
+const HAND = { down: [1, 6], swingF: [3, 5], swingB: [-1, 6], up: [2, -5], strike: [4, 4], hold: [2, 3], point: [6, 0], raise: [2, -6], type1: [3, 3], type2: [3, 4], rest: [2, 4], holdFar: [1, 3],
+  // V2 status poses: a hand on the head (blocked), a raised or waving hand (waiting), open gestures (talking).
+  head: [0, -5], wave: [4, -7], gesture: [5, 2], open: [4, 0] };
 export const CLIPS = {
   idle: { fps: 1.4, frames: [{}, { breath: 1 }] },
   walk: { fps: 7, frames: [{ legs: 'stepA', near: 'swingB', far: 'swingF' }, { legs: 'pass', bob: -1 }, { legs: 'stepB', near: 'swingF', far: 'swingB' }, { legs: 'pass', bob: -1 }] },
@@ -76,8 +78,26 @@ export const CLIPS = {
   'work.orchestrate': { fps: 1.1, frames: [{ near: 'point', tool: 'staff' }, { near: 'raise', tool: 'staff' }, { near: 'point', tool: 'staff', breath: 1 }] },
   'sit.work': { fps: 4, frames: [{ legs: 'sit', near: 'type1', far: 'type2' }, { legs: 'sit', near: 'type2', far: 'type1' }] },
   'sit.idle': { fps: 1.2, frames: [{ legs: 'sit', near: 'rest', far: 'rest' }, { legs: 'sit', near: 'rest', far: 'rest', breath: 1 }] },
+  // V2: canonical status clips. Each reads at 24 px by pose alone; waiting and blocked also carry a small status mark
+  // above the head (the shared status colours), so the two never read as idle. None of them is a work clip, so a
+  // waiting, blocked or talking agent never switches a screen on.
+  wait: { fps: 1.2, frames: [{ near: 'raise', far: 'down', mark: 'wait' }, { near: 'wave', far: 'down', mark: 'wait', breath: 1 }] },
+  blocked: { fps: 1.0, frames: [{ near: 'head', far: 'head', breath: 1, mark: 'blocked' }, { near: 'head', far: 'down', breath: 1, mark: 'blocked' }] },
+  talk: { fps: 2.4, frames: [{ near: 'gesture', far: 'holdFar' }, { near: 'open', far: 'gesture' }, { near: 'point', far: 'holdFar', breath: 1 }] },
+  'sit.wait': { fps: 1.2, frames: [{ legs: 'sit', near: 'raise', far: 'rest', mark: 'wait' }, { legs: 'sit', near: 'wave', far: 'rest', mark: 'wait' }] },
+  'sit.blocked': { fps: 1.0, frames: [{ legs: 'sit', near: 'head', far: 'head', breath: 1, mark: 'blocked' }, { legs: 'sit', near: 'head', far: 'rest', breath: 1, mark: 'blocked' }] },
+  'sit.talk': { fps: 2.4, frames: [{ legs: 'sit', near: 'gesture', far: 'rest' }, { legs: 'sit', near: 'open', far: 'rest', breath: 1 }] },
 };
 export const FACINGS = ['fr', 'fl', 'br', 'bl'];
+// Status marks (masks, drawn above the head in the shared status colours; the same meaning in both themes).
+export const STATUS_MARKS = {
+  wait: { colour: '#f4a23b', rows: ['###', '#.#', '.#.', '###'] },
+  blocked: { colour: '#e5484d', rows: ['##', '##', '..', '##'] },
+};
+// The canonical agent statuses the px renderer distinguishes. Each plays its own clip family; only `working` plays a
+// work clip, and only a work clip lights screens (stage.mjs).
+export const STATUSES = ['working', 'walking', 'idle', 'waiting', 'blocked', 'talking'];
+export const isWorkClip = clip => /^(work\.|sit\.work$)/.test(clip ?? '');
 
 // ---- Aliases (C25 and refs 6B/6D, 10A/10B): six authored looks for the three canonical agents. ---------------------
 export const ALIASES = {
@@ -107,8 +127,14 @@ export function lookFor(agentId, themeId, def = null) {
   const th = def?.appearance?.themes?.[themeId] ?? {}, f = th.figure ?? {}, primary = def?.appearance?.palette?.primary;
   const ok = c => (typeof c === 'string' && /^#[0-9a-f]{6}$/i.test(c) ? c : null);
   const archetype = th.archetype ?? def?.appearance?.archetype;
-  return validateLook({ name: def?.name ?? agentId, plan: archetype === 'dwarf' ? 'dwarf' : 'human', parts: ['hair.short', 'face.plain', f.hat === 'crown' ? 'hat.crown' : f.hat ? 'hat.cap' : null, f.robe ? 'top.robe' : 'top.shirt'].filter(Boolean), work: 'scan', tools: { scan: 'clipboard' },
-    palette: { ...TEST_LOOK.palette, top: ok(f.shirt) ?? ok(primary) ?? TEST_LOOK.palette.top, shirt: ok(f.shirt) ?? TEST_LOOK.palette.shirt, legs: ok(f.pants) ?? TEST_LOOK.palette.legs, hair: ok(f.hair) ?? TEST_LOOK.palette.hair, skin: ok(f.skin) ?? TEST_LOOK.palette.skin, hat: ok(f.hatColor) ?? TEST_LOOK.palette.hat } });
+  // V2 generalized fallback: everything not given comes from rules over canonical data. The role words choose the work
+  // clip and its tool; the agent id (a stable hash) chooses hair, garment and colours, so two unknown agents do not
+  // look alike and the same agent always looks the same; the theme chooses the garment family. Only parts, tools and
+  // colour literals come out (validateLook), never code.
+  const base = genericLook(agentId, themeId, def), hat = f.hat === 'crown' ? 'hat.crown' : f.hat === 'hardhat' ? 'hat.hardhat' : f.hat ? 'hat.cap' : null;
+  const parts = hat ? [...base.parts.filter(p => !p.startsWith('hat.')), hat] : base.parts, top = f.robe ? 'top.robe' : null;
+  return { ...validateLook({ ...base, name: def?.name ?? agentId, plan: archetype === 'dwarf' ? 'dwarf' : 'human', parts: top ? [...parts.filter(p => !p.startsWith('top.')), top] : parts,
+    palette: { ...base.palette, top: ok(f.shirt) ?? ok(f.jacket) ?? ok(primary) ?? base.palette.top, shirt: ok(f.shirt) ?? base.palette.shirt, legs: ok(f.pants) ?? base.palette.legs, hair: ok(f.hair) ?? base.palette.hair, skin: ok(f.skin) ?? base.palette.skin, hat: ok(f.hatColor) ?? base.palette.hat, cape: ok(f.cape) ?? base.palette.cape } }), fallback: true };
 }
 // Appearance can only select known parts, plans, tools and colour literals. Anything else is dropped.
 export function validateLook(look) {
@@ -137,7 +163,67 @@ const colourOf = (look, slot, k) => {
 // Which clip and frame an animation state asks for (the state names come from the 5C animation system).
 const WORK_STATES = new Set(['type', 'work', 'assemble', 'install', 'dig', 'paint', 'lift', 'measure', 'carry', 'pickup']);
 const INSPECT_STATES = new Set(['inspect', 'survey', 'read', 'review', 'test', 'think']);
-export function clipFor(look, { state = 'idle', moving = false, posture = null } = {}) {
+// V2: the clip comes from the canonical status (agentStatusOf) when given, else from the animation state.
+export function clipFor(look, { state = 'idle', moving = false, posture = null, status = null } = {}) {
+  if (moving) return 'walk';
+  const st = STATUSES.includes(status) ? status : statusOfState(state), sit = posture === 'sit';
+  if (st === 'walking') return 'walk';
+  if (st === 'blocked') return sit ? 'sit.blocked' : 'blocked';
+  if (st === 'waiting') return sit ? 'sit.wait' : 'wait';
+  if (st === 'talking') return sit ? 'sit.talk' : 'talk';
+  if (st === 'working') return sit ? 'sit.work' : `work.${look.work}`;
+  return sit ? 'sit.idle' : 'idle';
+}
+// The status an animation state names (the 5C animation vocabulary).
+export function statusOfState(state) {
+  if (WORK_STATES.has(state) || INSPECT_STATES.has(state)) return 'working';
+  if (state === 'talk' || state === 'meeting') return 'talking';
+  if (state === 'wait' || state === 'waiting') return 'waiting';
+  if (state === 'error' || state === 'frustrated' || state === 'blocked') return 'blocked';
+  return 'idle';
+}
+// The canonical status of an agent from World state: its HQ activity (core/contract), whether it is moving along a
+// route, and its animation state and intent. Blocked and waiting come only from canonical facts (activity or intent);
+// nothing is inferred from time. Unknown activities are idle. Precedence: a resolved controller state (else a resolved
+// intent) is authoritative, an explicit 'idle' included; the productive activity fallback (activity -> working or
+// talking) applies only when neither is present. Order after movement and blocked/waiting: an explicit idle state, then
+// a canonical intent (INTENT_STATUS), then the state's clip name, then a body-state alias given as the intent.
+const present = v => typeof v === 'string' && v !== '';
+// The canonical intents (engine/animation.mjs INTENTS) -> status. waiting, attention and blocked are handled above.
+export const INTENT_STATUS = { idle: 'idle', walking: 'walking', working: 'working', building: 'working', investigating: 'working', testing: 'working', reviewing: 'working', meeting: 'talking', waiting: 'waiting', attention: 'waiting', blocked: 'blocked', onBreak: 'idle', recovering: 'idle', completed: 'idle' };
+const WORK_ACTIVITIES = new Set(['working', 'implementing', 'coding', 'thinking', 'testing', 'reviewing', 'researching', 'coordinating', 'building', 'investigating']);
+export function agentStatusOf({ activity = null, moving = false, state = null, intent = null } = {}) {
+  if (moving) return 'walking';
+  if (activity === 'blocked' || activity === 'error' || intent === 'blocked' || state === 'frustrated') return 'blocked';
+  if (activity === 'waiting' || activity === 'waiting-for-kyle' || intent === 'waiting' || intent === 'attention') return 'waiting';
+  if (state === 'idle') return 'idle'; // an explicit resolved idle state wins over everything below
+  // A canonical animation intent (engine/animation.mjs INTENTS) is the controller's resolved meaning of the body clip:
+  // it wins over the clip name (a 'sit' or 'stand' beat on the way to typing is still working).
+  if (Object.hasOwn(INTENT_STATUS, intent ?? '')) return INTENT_STATUS[intent];
+  if (present(state)) return statusOfState(state); // an explicit resolved state
+  if (present(intent)) return statusOfState(intent); // a body-state alias given as the intent
+  if (WORK_ACTIVITIES.has(activity)) return 'working';
+  if (activity === 'communicating' || activity === 'meeting') return 'talking';
+  return 'idle';
+}
+// The generic look for an agent without an authored alias (see lookFor).
+const GEN_HAIR = ['hair.short', 'hair.crop', 'hair.slick', 'hair.long'], GEN_SKIN = ['#e8b48c', '#d8a883', '#c99a76', '#a8754f', '#8a5a3a', '#efc6a2'], GEN_HAIRC = ['#2a1d16', '#5a3a22', '#1c1c22', '#8a5a2a', '#c4a46a', '#6b6b6b'];
+const GEN_TOPS = { real: ['top.jacket', 'top.shirt', 'top.vest'], fantasy: ['top.robe', 'top.apron', 'top.armor'] };
+const ROLE_WORK = [[/build|engineer|develop|code|craft|make|smith|implement/i, 'hammer'], [/orchestr|coordinat|lead|manag|plan|command|director|king/i, 'orchestrate'], [/review|qa|test|inspect|audit|verif|analy|research/i, 'scan']];
+const hsl2hex = (h, s, l) => { const k = n => (n + h / 30) % 12, a = s * Math.min(l, 1 - l), f = n => l - a * Math.max(-1, Math.min(k(n) - 3, 9 - k(n), 1)); return `#${[f(0), f(8), f(4)].map(v => Math.round(v * 255).toString(16).padStart(2, '0')).join('')}`; };
+const hashOf = s => { let h = 2166136261; for (const ch of String(s)) h = Math.imul(h ^ ch.charCodeAt(0), 16777619) >>> 0; return h >>> 0; };
+export function genericLook(agentId, themeId, def = null) {
+  const fant = themeId === 'fantasy', h = hashOf(agentId), pick = (list, salt) => list[(h >>> salt) % list.length];
+  const role = [def?.role, def?.roleTitle, def?.roleDescription, def?.kind].filter(x => typeof x === 'string').join(' ');
+  const work = ROLE_WORK.find(([re]) => re.test(role))?.[1] ?? 'scan';
+  const tools = work === 'hammer' ? { hammer: 'hammer' } : work === 'orchestrate' ? { staff: fant ? 'scepter' : 'tablet' } : { scan: fant ? 'lens' : 'clipboard' };
+  const hue = h % 360, top = hsl2hex(hue, 0.42, 0.42), top2 = hsl2hex((hue + 180) % 360, 0.35, 0.55), top3 = pick(GEN_TOPS[fant ? 'fantasy' : 'real'], 5);
+  const parts = [pick(GEN_HAIR, 3), 'face.plain', top3, ...(fant && top3 === 'top.robe' ? ['skirt.robe'] : []), ...(fant && (h >>> 11) % 3 === 0 ? ['cape.back'] : [])];
+  return { name: def?.name ?? agentId, plan: 'human', parts, work, tools,
+    palette: { skin: pick(GEN_SKIN, 7), hair: pick(GEN_HAIRC, 13), top, shirt: fant ? top : top2, white: '#e8e4da', accent: top2, accent2: top2, legs: hsl2hex(hue, 0.18, 0.26), boots: '#2b2e33', eye: '#1a1a22', hat: top2, metal: '#8a939c', glow: fant ? '#7fe0ff' : '#ffffff', cape: hsl2hex((hue + 30) % 360, 0.45, 0.35), tool: fant ? '#d9b44a' : '#5c6570' } };
+}
+// The 5H slice mapping (talk played the work clip), kept only so reference sheets can show V1 next to V2.
+export function legacyClipFor(look, { state = 'idle', moving = false, posture = null } = {}) {
   if (moving) return 'walk';
   if (posture === 'sit') return WORK_STATES.has(state) || INSPECT_STATES.has(state) ? 'sit.work' : 'sit.idle';
   if (WORK_STATES.has(state) || INSPECT_STATES.has(state) || state === 'talk' || state === 'meeting') return `work.${look.work}`;
@@ -245,6 +331,9 @@ export function buildSprite(lookIn, facing = 'fr', clip = 'idle', frame = 0) {
   head();
   if (!back) tool();
   const light = [];
+  // A status mark above the head (waiting, blocked): drawn into the sprite and listed as light, so it reads at night.
+  const mk = STATUS_MARKS[pose.mark];
+  if (mk) { const c0 = hex(mk.colour), x0 = fx - Math.floor(mk.rows[0].length / 2); mk.rows.forEach((r, j) => [...r].forEach((ch, i) => { if (ch === '#') { buf.set(x0 + i, j, c0); light.push([x0 + i, j, mk.colour]); } })); }
   if (pose.spark && hands.near) light.push([hands.near[0] + 2, hands.near[1] + 1, '#ffd66b']);
   let out = buf.outlined({ dark: 0.22, bottom: 0.16 });
   if (mirrored) { const m = new PixelBuffer(out.w, out.h); m.blit(out, 0, 0, { flip: true }); out = m; }

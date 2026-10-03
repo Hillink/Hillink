@@ -8,7 +8,9 @@
 // selected agent, drawn at the screen's native resolution.
 // Reads only: the frame's World is a read-only view; nothing here writes canonical state.
 import { createStage } from './stage.mjs';
-import { lookFor, clipFor, frameAt, facingOf } from './character.mjs';
+import { lookFor, clipFor, frameAt, facingOf, agentStatusOf } from './character.mjs';
+import { STAGE_LABEL } from '../../procgen/construction.mjs';
+import { fingerprint } from '../../procgen/rng.mjs';
 import { PixelBuffer } from './buffer.mjs';
 import { LIGHTING_IDS } from './palette.mjs';
 import { stateOf, STATE_COLOR } from '../art5d/skin.mjs';
@@ -24,11 +26,23 @@ const STATE_WORD = { working: 'Working', travelling: 'Walking', waiting: 'Waitin
 // the first build. Layouts of one World are identical across themes (P1), so a stage depends only on these keys.
 const stages = new Map();
 export function stageFor(layout, theme, lighting = DEFAULT_LIGHTING) {
-  const key = `${worldFingerprint(layout.world)}|${layout.world.history?.length ?? 0}|${theme}`;
+  const key = `${structureKey(layout.world)}|${theme}`;
   let s = stages.get(key);
   if (!s) { if (stages.size > 6) stages.clear(); s = createStage(layout, theme, { lighting }); stages.set(key, s); }
   s.setLighting(lighting);
   return s;
+}
+// V2: a stage depends on the World's structure, capabilities and construction projects (their stage and gates), not
+// on agent activity, so a status change re-renders the frame without re-baking the scene.
+export function structureKey(world) {
+  const projects = Object.values(world.projects ?? {}).map(p => [p.id, p.stage, !!p.blocked, !!p.waiting, !!p.completed]).sort();
+  return fingerprint({ seed: world.seed, spaces: world.spaces, doors: world.doors, buildings: world.buildings, roads: world.roads, paths: world.paths, capabilities: world.capabilities, environment: world.environment, projects });
+}
+// The canonical name of a construction site: the capability's one display name (world.capabilities spec, P4) and the
+// canonical stage label. The same in both themes.
+export function siteLabelOf(world, projectId) {
+  const p = world?.projects?.[projectId], spec = world?.capabilities?.[projectId]?.spec; if (!p || !spec) return null;
+  return `${capabilityName(spec)}: ${STAGE_LABEL[p.stage] ?? p.stage}${p.blocked ? ' (blocked)' : p.waiting ? ' (waiting for Kyle)' : ''}`;
 }
 let currentLighting = DEFAULT_LIGHTING;
 export const setPxLighting = id => { if (LIGHTING_IDS.includes(id)) currentLighting = id; return currentLighting; };
@@ -41,6 +55,26 @@ export function roomNameOf(world, spaceId) {
   return caps.length ? caps.map(capabilityName).join(' & ') : null;
 }
 
+// The location an agent's spot is in. A spot is `${location id}:${station id}` (engine/iso-view), and both ids may
+// themselves contain colons (construction sites: `site:<project>` and `site:<project>:build1`), so the spot is looked
+// up whole in the layout's station table; failing that, the longest location id it starts with (then a colon) wins.
+export function locationOfSpot(layout, spot) {
+  if (typeof spot !== 'string' || !spot) return null;
+  const byId = layout?.locationById ?? {}, info = layout?.stationInfo?.[spot];
+  if (info?.room && byId[info.room]) return byId[info.room];
+  let best = null;
+  for (const id of Object.keys(byId)) if (spot.startsWith(`${id}:`) && (!best || id.length > best.length)) best = id;
+  return best ? byId[best] : null;
+}
+// The canonical label of a location: a room's capability name, a construction site's capability name and stage.
+export function placeLabelOf(layout, loc) {
+  if (!loc) return null;
+  if (loc.spaceId) return roomNameOf(layout.world, loc.spaceId) ?? loc.name ?? null;
+  if (loc.site && loc.project) return siteLabelOf(layout.world, loc.project.id) ?? loc.name ?? null;
+  return loc.name ?? null;
+}
+export const spotLabelOf = (layout, spot) => placeLabelOf(layout, locationOfSpot(layout, spot));
+
 // Agent entities -> stage actors (pure; exported for the harness and tests).
 export function actorsOf(entities, layout, theme, { time = 0, reduced = false, hoverId = null, selectedId = null, A }) {
   const out = [];
@@ -49,9 +83,12 @@ export function actorsOf(entities, layout, theme, { time = 0, reduced = false, h
     if (e.ride && ['board', 'ride', 'exit'].includes(e.ride.request?.phase)) continue;
     const pl = layout.planAt(e.x, e.y) ?? { x: e.x, z: 0, floor: 0 };
     const look = lookFor(e.agent.id, theme, definitionOf(e.agent));
-    const clip = clipFor(look, { state: e.anim?.state, moving: e.moving, posture: e.posture });
+    // V2: the clip follows the agent's canonical status (activity, route, animation intent); blocked and waiting come
+    // only from canonical facts.
+    const status = agentStatusOf({ activity: e.agent.activity, moving: e.moving, state: e.anim?.state, intent: e.anim?.intent });
+    const clip = clipFor(look, { state: e.anim?.state, moving: e.moving, posture: e.posture, status });
     const t = reduced ? 0 : Math.max(0, (time - (e.anim?.since ?? 0)) / 1000);
-    out.push({ id: e.id, look, lookKey: `${e.agent.id}:${theme}`, foot: [e.x / A, e.y / A], plan: pl, facing: facingOf(e.heading, e.dir), clip, frame: frameAt(clip, e.moving ? time / 1000 : t), sitting: e.posture === 'sit', hovered: e.id === hoverId, selected: e.id === selectedId });
+    out.push({ id: e.id, status, look, lookKey: `${e.agent.id}:${theme}`, foot: [e.x / A, e.y / A], plan: pl, facing: facingOf(e.heading, e.dir), clip, frame: frameAt(clip, e.moving ? time / 1000 : t), sitting: e.posture === 'sit', hovered: e.id === hoverId, selected: e.id === selectedId });
   }
   return out;
 }
@@ -102,8 +139,8 @@ export function createPxSkin(layout, theme = 'real') {
   }
   function card(ctx, e, [x, y], env, k) {
     const a = e.agent, world = env.world, st = stateOf(e, a), def = definitionOf(a) ?? {};
-    const task = a.taskId ? world?.tasks?.[a.taskId]?.title : null, loc = e.spot ? layout.locationById[e.spot.split(':')[0]] : null;
-    const room = loc?.spaceId ? roomNameOf(layout.world, loc.spaceId) ?? loc.name : loc?.name ?? null;
+    const task = a.taskId ? world?.tasks?.[a.taskId]?.title : null, loc = locationOfSpot(layout, e.spot);
+    const room = placeLabelOf(layout, loc);
     const lines = [[a.name ?? a.id, 13, 700, '#f6f8fb'], [a.roleTitle ?? def.roleTitle ?? a.role ?? '', 10.5, 500, '#aeb9c8'], [`● ${STATE_WORD[st] ?? st}`, 11, 600, STATE_COLOR[st] ?? '#c9d2de'], task ? [`Task: ${task}`, 10.5, 500, '#dfe6ee'] : null, room ? [`Room: ${room}`, 10.5, 500, '#dfe6ee'] : null, ['Enter: details', 9.5, 500, '#7f8ba0']].filter(Boolean);
     const W = Math.min(260 * k, Math.max(...lines.map(([t, px, w]) => { ctx.font = font(px * k, w); return ctx.measureText(t).width; })) + 20 * k), H = lines.reduce((s, [, px]) => s + (px + 5) * k, 0) + 12 * k;
     const cw = ctx.canvas.width, X = Math.round(Math.min(cw - W - 8, x)), Y = Math.round(Math.max(8, y - H / 2));

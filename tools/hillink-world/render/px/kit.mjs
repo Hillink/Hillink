@@ -60,6 +60,10 @@ export const PATTERNS = {
   roadFantasy: (x, z, X, Y) => ['road', noise(X, Y, 14) > 0.88 ? 1 : noise(X, Y, 15) > 0.93 ? 3 : 2],
 };
 export const LAND = { real: { path: 'pathReal', road: 'roadReal' }, fantasy: { path: 'pathFantasy', road: 'roadFantasy' } };
+// V2 generalized fallback: a room kind the kit has never seen (a trait-derived kind such as 'comms-like', or anything
+// new) takes its base kind's floor, else the spare-room floor. Never undefined.
+const baseKind = kind => String(kind ?? '').replace(/-like$/, '');
+export const floorFor = (theme, kind) => { const F = FLOORS[theme] ?? FLOORS.real; return F[kind] ?? F[baseKind(kind)] ?? F.spare; };
 
 // ---- Props. Each theme maps a furnishing type, refined by the room kind, to a recipe. ------------------------------
 const box = (u0, u1, v0, v1, h0, h1, mat) => ['box', u0, u1, v0, v1, h0, h1, mat];
@@ -127,6 +131,20 @@ const FANTASY = {
 };
 export const PROPS = { real: REAL, fantasy: FANTASY };
 export const recipeFor = (theme, type, roomKind) => { const R = PROPS[theme] ?? REAL; return R[`${type}@${roomKind}`] ?? R[type] ?? null; };
+// V2 generalized fallback for a furnishing type with no recipe: a cabinet sized by the item's canonical height, its
+// trim by a stable hash of the type (so two unknown types differ), in the theme's materials. An explicit empty recipe
+// (drawn by its host piece) stays empty.
+const GENERIC_TRIM = ['metal', 'woodDark', 'frame', 'brand', 'stone'];
+export function recipeOrFallback(theme, type, roomKind, item = {}) {
+  const r = recipeFor(theme, type, roomKind) ?? recipeFor(theme, type, baseKind(roomKind));
+  if (r) return r;
+  // A type some theme deliberately draws as nothing (drawn by its host piece) stays nothing in every theme.
+  const known = Object.values(PROPS).map(T => T[`${type}@${roomKind}`] ?? T[type]).filter(Boolean);
+  if (known.length && known.every(x => !x.length)) return [];
+  const h = Math.max(0.3, Math.min(2.0, Number(item.h) > 0 ? Number(item.h) : 0.9)), salt = [...String(type)].reduce((a, ch) => (a * 31 + ch.charCodeAt(0)) >>> 0, 7);
+  const trim = GENERIC_TRIM[salt % GENERIC_TRIM.length];
+  return [box(-0.5, 0.5, -0.5, 0.5, 0, h, theme === 'fantasy' ? 'wood' : 'white'), face('front', 0.08, 0.92, 0.08, 0.9, trim), face('front', 0.44, 0.56, 0.4, 0.6, 'metal'), box(-0.5, 0.5, -0.5, 0.5, h, h + 0.04, theme === 'fantasy' ? 'woodDark' : 'metalDark')];
+}
 
 // ---- Wall decor (on a back wall): [width fraction pieces] drawn as a face on the wall plane. -----------------------
 // Each is a list of [a0, a1, b0, b1, mat] in fractions of the decor's own rectangle (x0..x1, h0..h1).
@@ -147,6 +165,18 @@ export const DECOR = {
     window: [[0, 1, 0, 1, 'stone'], [0.15, 0.85, 0.08, 0.8, 'glass'], [0.25, 0.75, 0.8, 0.9, 'glass']],
     clock: [[0.4, 0.6, 0, 0.6, 'woodDark'], [0.35, 0.65, 0.6, 1, 'fire']],
   },
+};
+
+// V2: unknown wall decor falls back to a framed panel in the theme's materials (a notice board / a parchment).
+export const decorFor = (theme, type) => DECOR[theme]?.[type] ?? (theme === 'fantasy' ? [[0, 1, 0, 1, 'woodDark'], [0.08, 0.92, 0.1, 0.9, 'parchment'], [0.2, 0.8, 0.6, 0.66, 'woodDark']] : [[0, 1, 0, 1, 'frame'], [0.06, 0.94, 0.08, 0.92, 'paper'], [0.15, 0.6, 0.62, 0.7, 'brand']]);
+
+// ---- Construction (V2). The canonical stage chooses WHICH pieces a site shows (compose.mjs, same geometry in both
+// themes); this table only names each role's material per theme: Real is a modern steel-and-concrete site (hi-vis
+// tape, cones, steel frame, concrete cladding, scaffold, floodlight); Fantasy is a masons' and carpenters' yard (rope
+// and pegs, barrels, timber frame, ashlar, timber scaffold, brazier).
+export const SITE = {
+  real: { stake: 'hivis', tape: 'hivis', slab: 'concrete', slabTop: 'cap', rebar: 'steel', frame: 'column', beam: 'column', clad: 'concrete', glazing: 'glassNight', scaffold: 'yellow', plank: 'woodLight', pipe: 'metal', duct: 'metalDark', crate: 'woodLight', strap: 'metalDark', cone: 'hivis', coneBand: 'white', pile: 'concrete', pile2: 'woodLight', sign: 'metalDark', signFace: 'brand', barrier: 'hivis', barrier2: 'white', wait: 'yellow', lamp: 'lamp', light: 'lamp', tool: 'metal', toolHead: 'yellow' },
+  fantasy: { stake: 'woodDark', tape: 'woodLight', slab: 'stone', slabTop: 'cap', rebar: 'woodDark', frame: 'woodDark', beam: 'wood', clad: 'concrete', glazing: 'glassNight', scaffold: 'woodLight', plank: 'wood', pipe: 'gold', duct: 'slate', crate: 'wood', strap: 'metal', cone: 'woodDark', coneBand: 'metal', pile: 'stone', pile2: 'wood', sign: 'woodDark', signFace: 'banner', barrier: 'hivis', barrier2: 'woodDark', wait: 'gold', lamp: 'fire', light: 'torch', tool: 'woodDark', toolHead: 'gold' },
 };
 
 // ---- Vegetation and land props for the natural edge. ---------------------------------------------------------------

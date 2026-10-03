@@ -13,7 +13,7 @@ import { composeScene, lightmapOf, glowSprite } from './compose.mjs';
 import { LIGHTING } from './palette.mjs';
 import { GLOWS } from './kit.mjs';
 import { inFront } from '../../engine/iso.mjs';
-import { spriteOf, CANVAS } from './character.mjs';
+import { spriteOf, CANVAS, isWorkClip } from './character.mjs';
 import { noise } from './buffer.mjs';
 
 const CELL = 48;
@@ -70,7 +70,7 @@ export function createStage(layout, theme = 'real', { lighting = 'dusk' } = {}) 
   const dynamic = ordered.filter(o => dyn[idx.get(o)]), statics = ordered.filter(o => !dyn[idx.get(o)]);
   const dgrid = gridOf(dynamic);
 
-  let L = null, layers = null;
+  let L = null, layers = null, lastLive = [], lastSurface = new Map();
   function bake(id) {
     L = lightmapOf(scene, id);
     layers = [0, 1].map(k => {
@@ -111,7 +111,8 @@ export function createStage(layout, theme = 'real', { lighting = 'dusk' } = {}) 
     : loop === 'flicker-soft' ? (noise(Math.floor(t * 4), phase, 6) > 0.85 ? 2 : 3) : loop === 'pulse' ? Math.round(1.5 + 1.5 * Math.sin(t * 2.2 + phase)) : 2;
 
   // actors: [{ id, look, lookKey, foot: [x, y] art px, plan: { x, z, floor }, facing, clip, frame, sitting, hovered, selected }]
-  function render(out, view, t, actors = []) {
+  // opts.glows (default true): false skips the additive glow pass, so checks can read surfaces alone.
+  function render(out, view, t, actors = [], { glows = true } = {}) {
     const layer = layers[Math.floor(t * 1.5) % 2];
     out.clear(L.skip ? 0xff3d6a3f : mul(0xff3d6a3f, L.ambient));
     layer.copyTo(out, view.x0 - region.x0, view.y0 - region.y0, view.w, view.h);
@@ -124,7 +125,9 @@ export function createStage(layout, theme = 'real', { lighting = 'dusk' } = {}) 
     });
     // Screens follow canonical activity: on in a room where an agent is working (its clip says so), off elsewhere.
     const live = new Set();
-    for (const a of actors) if (/^(work|sit\.work)/.test(a.clip ?? '')) { const r = scene.rooms.find(q => q.f === (a.plan.floor ?? 0) && a.plan.x >= q.x0 && a.plan.x <= q.x1 && a.plan.z >= q.z0 && a.plan.z <= q.z1); if (r) live.add(r.id); }
+    // V2: only a work clip (canonical status `working`) counts; talking, waiting, blocked, walking and idle never do.
+    for (const a of actors) if (isWorkClip(a.clip)) { const r = scene.rooms.find(q => q.f === (a.plan.floor ?? 0) && a.plan.x >= q.x0 && a.plan.x <= q.x1 && a.plan.z >= q.z0 && a.plan.z <= q.z1); if (r) live.add(r.id); }
+    lastLive = [...live].sort(); lastSurface = new Map();
     const all = [...items, ...chars], order = paintOrder(all), drawn = [];
     // Occlusion: a prop drawn over an agent is dithered (every other pixel) where it covers the agent's figure, so the
     // agent stays readable behind tall furniture without floating over it. Seat backs are exempt (they hold a sitter).
@@ -144,13 +147,13 @@ export function createStage(layout, theme = 'real', { lighting = 'dusk' } = {}) 
         continue;
       }
       const hole = drawn.length ? holeFor(o) : null;
-      if (o.altFrames && !live.has(o.room)) { litBlit(out, view, o.altFrames[0], o.altMasks[0], o.ox, o.oy, { hole }); continue; }
+      if (o.altFrames && !live.has(o.room)) { litBlit(out, view, o.altFrames[0], o.altMasks[0], o.ox, o.oy, { hole }); lastSurface.set(o.id, 'off'); continue; }
       const fi = o.fps && o.frames.length > 1 ? (Math.floor(t * o.fps) + (o.phase ?? 0)) % o.frames.length : 0;
-      litBlit(out, view, o.frames[fi], o.masks[fi], o.ox, o.oy, { hole });
+      litBlit(out, view, o.frames[fi], o.masks[fi], o.ox, o.oy, { hole }); if (o.altFrames) lastSurface.set(o.id, 'on');
     }
     // Glows (additive) for visible light sources.
     const gk = LIGHTING[L.lighting]?.glow ?? 0.7;
-    for (const e of scene.emitters) {
+    if (glows) for (const e of scene.emitters) {
       const g = GLOWS[e.kind]; if (!g || (e.room && !live.has(e.room))) continue;
       if (e.x < vb.l - 30 || e.x > vb.r + 30 || e.y < vb.t - 30 || e.y > vb.b + 30) continue;
       const s = stepOf(g.loop, t, e.phase ?? 0), sp = glowSprite(e.kind, s);
@@ -162,6 +165,12 @@ export function createStage(layout, theme = 'real', { lighting = 'dusk' } = {}) 
   return {
     scene, region, A, theme, render, dynamic, statics,
     get lighting() { return L.lighting; },
+    // The rooms whose screens the last frame switched on (only rooms where an agent played a work clip).
+    get liveRooms() { return lastLive; },
+    // Every state-driven screen piece and whether the last frame drew it on (its room was live), with its sprite box in
+    // art px: lets checks look at one screen at a time instead of whole frames. `surface` is the frame the last render
+    // actually drew for it ('on' or 'off'; null when the screen was outside the view).
+    get screens() { const on = new Set(lastLive); return dynamic.filter(o => o.altFrames).map(o => ({ id: o.id, room: o.room, on: on.has(o.room), surface: lastSurface.get(o.id) ?? null, x: o.ox, y: o.oy, w: o.frames[0].w, h: o.frames[0].h })); },
     setLighting(id) { if (id !== L.lighting) bake(id); },
     stats: () => ({ objects: objects.length, dynamic: dynamic.length, static: statics.length, emitters: scene.emitters.length }),
   };

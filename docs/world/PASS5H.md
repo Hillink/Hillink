@@ -314,5 +314,68 @@ canonical geometry and harness are unchanged. Every change is a rule or kit entr
 - **Lighting:** the new wash lights add no light pools, only a faint glow. Nothing else changed.
 - **Performance:** unchanged (about 2.3–3 s first build per theme).
 
-Evidence is in `docs/world/evidence/pass5h-refine2/`, including `pass5h-refine2-evidence.pdf`. The live video is in
+Evidence is in `docs/world/evidence/pass5h-refine2/`, including `pass5h-refine2-evidence.pdf`. The live video's path is listed at the end of this file.
+
+## px renderer V2 integration (2026-10-02)
+
+The px renderer now draws the live canonical World: construction, agent status and unknown content. It reuses the
+World, procgen, construction, capability and behaviour systems as they are. There is no new engine and no second
+simulation. px stays opt-in (`?art=px`; `loadTheme` only builds the px skin when asked).
+
+- **Construction by canonical stage** (`render/px/compose.mjs`, materials in `kit.mjs` `SITE`). Every unfinished
+  `world.projects` entry is drawn at its stage. A new structure is drawn on its own spaces. A refit is drawn in the
+  work zone of the room it refits. Pieces build up over the stages:
+  - planning: stakes, tape and a survey level
+  - site preparation: cleared ground, cones or barrels, and a material stack
+  - foundation: slab and rebar or pegs
+  - structure: columns and beams
+  - exterior: clad walls with a glazing band (front and right cut low), plus scaffold
+  - systems: services along the back wall
+  - furnishing: the canonical furniture arrives crated on its own footprints, and the floor is laid
+  - inspection: the furniture in place with its screens off, plus an inspection board
+
+  Gates come only from canonical project state: blocked shows a barrier, waiting for Kyle shows a sign. The geometry is
+  identical in both themes. The theme only names materials: Real is steel, concrete and hi-vis; Fantasy is timber,
+  ashlar, rope, barrels and a brazier. Art never advances a project.
+- **Agent status** (`render/px/character.mjs`). `agentStatusOf` derives working, walking, idle, waiting, blocked or
+  talking from the canonical activity, the route and the animation intent. Each status has its own clip, standing and
+  seated. Waiting and blocked also carry a small status mark in the shared status colours. Only `working` plays a work
+  clip, and only a work clip switches screens on (`isWorkClip`; `stage.liveRooms` reports which rooms are lit). The
+  skin's live actors use the same path. The stage cache now keys on structure and project state, so an agent status
+  change redraws without re-baking.
+- **Generalized fallbacks.** These cover agents and content the art has never seen:
+  - An agent with no authored look gets a deterministic look. Its role words choose the work clip and tool, a hash
+    of its id chooses hair, garment and colours, and the theme chooses the garment family. The three named agents
+    keep their authored aliases. Hostile appearance data is still dropped.
+  - Unknown room kinds use their base kind's floor (`floorFor`).
+  - Unknown furnishing types get a theme-translated cabinet (`recipeOrFallback`).
+  - Unknown wall decor gets a panel (`decorFor`).
+- **Naming.** Room and site names come from `world.capabilities` (`roomNameOf`, `siteLabelOf`: the capability's
+  display name plus the canonical stage label).
+- **Harness** (`scripts/px-harness.mjs --v2`). It records evidence for:
+  - the same state rendered in both themes
+  - a real `placeCapability` change
+  - every construction stage and gate, driven through `applyHqEvent`
+  - every agent status
+  - generic content: a trait-only capability of an unknown kind, and an unknown agent
+
+  `ruleActors` takes any team. See `docs/world/evidence/pass5h-v2/README.md`.
+- **Tests:** `tests/px-integration.test.mjs`.
+- **V2 follow-up fixes (2026-10-03).**
+  - Site labels for colon-containing ids: construction site spots look like `site:<project>:site:<project>:build1`.
+    The details card split them at the first colon, so a site had no label. `locationOfSpot` now resolves the whole
+    spot through `layout.stationInfo` (falling back to the longest matching location id), and `spotLabelOf` returns
+    the canonical room or site label.
+  - Status precedence: a resolved controller state (else a resolved intent) is authoritative, explicit `idle`
+    included. The productive activity fallback applies only when neither is present. Movement and canonical blocked or
+    waiting facts still come first.
+  - Per-screen gating: `stage.screens` reports every screen's room, on/off state and sprite box. The tests check gating
+    one screen at a time, with pixel crops instead of whole-frame hashes.
+
+Not done here: the V2 PNGs were not rendered (the implementation sandbox has no shell). The command to regenerate them is
+in the evidence README.
+
+---
+
+Visual refinement 2, live video:
 `/mnt/project-files/pass5h-refine2/`.

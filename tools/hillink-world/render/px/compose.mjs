@@ -10,7 +10,8 @@
 // Math.random, no canonical writes (the layout and world are only read).
 import { PixelBuffer, scale, noise, mixc, hex, rgba, R, G, B, bayer } from './buffer.mjs';
 import { paletteOf, LIGHTING } from './palette.mjs';
-import { MATERIALS, FLOORS, PATTERNS, LAND, recipeFor, DECOR, VEGETATION, EDGE_MIX, POSTS, SCONCES, GLOWS } from './kit.mjs';
+import { MATERIALS, FLOORS, PATTERNS, LAND, recipeFor, DECOR, VEGETATION, EDGE_MIX, POSTS, SCONCES, GLOWS, floorFor, recipeOrFallback, decorFor, SITE } from './kit.mjs';
+import { STAGES } from '../../procgen/construction.mjs';
 import { AGENT, ARCH } from '../../world/scale.mjs';
 import { terrainOf } from '../../procgen/world.mjs';
 
@@ -34,7 +35,9 @@ function materialer(theme) {
   };
 }
 
-export function composeScene(layout, theme = 'real') {
+// Options: skipGround leaves the ground buffer empty and skips the vegetation scatter (tests and evidence that compare
+// only the semantic geometry, props and construction pieces). Rendering always composes the full scene.
+export function composeScene(layout, theme = 'real', { skipGround = false } = {}) {
   const { P, U, world, view, furnishing } = layout, A = ART, pal = paletteOf(theme), mat = materialer(theme), mat0 = mat;
   const SCREEN_OFF = { screen: 'screenOff' };
   const Q = (x, z, f, h) => { const [sx, sy] = P.at(x, z, f, h); return [sx / A, sy / A]; }; // plan units -> art px
@@ -83,6 +86,30 @@ export function composeScene(layout, theme = 'real') {
   const smooth = (a, b, v) => { const t = Math.max(0, Math.min(1, (v - a) / (b - a))); return t * t * (3 - 2 * t); };
   // Floors of storey 0, in metres.
   const floors0 = roomSpaces.filter(s => s.level === 0).map(s => { const r = view.rectToView(s.rect); return { s, r, kind: kindOf(s) }; });
+  // Construction sites (V2): every unfinished canonical project (world.projects), at its canonical stage. A project
+  // with structure of its own is drawn on its own spaces; a refit (a capability placed into an existing room) in the
+  // back-right work zone of that room (the zone the layout's refit stations stand round), taped out while planned.
+  const sites = [];
+  for (const p of Object.values(projects).sort((a, b) => (a.id < b.id ? -1 : 1))) {
+    if (!p || p.completed) continue;
+    const si = Math.max(0, STAGES.indexOf(p.stage));
+    const parts = spaces.filter(s => s.project === p.id && (s.primitive === 'room' || s.primitive === 'hallway')).sort((a, b) => (a.id < b.id ? -1 : 1));
+    if (parts.length) { for (const s of parts) sites.push({ p, s, f: s.level ?? 0, si, r: rp(s), refit: false, kind: kindOf(s) }); continue; }
+    const cap = world.capabilities?.[p.id], room = cap && world.spaces[cap.placement?.spaceId];
+    if (!room || room.status !== 'built') continue;
+    const q = rp(room), W = q.x1 - q.x0, D = q.z1 - q.z0;
+    sites.push({ p, s: room, f: room.level ?? 0, si, r: { x0: q.x0 + W * 0.5, x1: q.x1 - 0.2 * U, z0: q.z0 + D * 0.45, z1: q.z1 - 0.2 * U }, refit: true, kind: kindOf(room) });
+  }
+  const sites0 = sites.filter(q => q.f === 0 && !q.refit).map(q => ({ ...q, x0: q.r.x0 / U, x1: q.r.x1 / U, z0: q.r.z0 / U, z1: q.r.z1 / U }));
+  // Site ground: planning keeps the land with a painted survey line; from site preparation the plot is cleared (soil
+  // and gravel, or earth and stones); from furnishing the room's finished floor is laid.
+  const siteColour = (q, x, z, X, Y) => {
+    const b = Math.min(x - q.x0, q.x1 - x, z - q.z0, q.z1 - z);
+    if (q.si === 0) return b < 0.07 ? pal.c('paper', 3) : null;
+    if (q.si >= 6) { const [p0, k0] = (PATTERNS[floorFor(theme, q.kind)] ?? PATTERNS.concrete)(x, z, X, Y); return pal.c(p0, k0); }
+    if (b < 0.12) return pal.c(theme === 'fantasy' ? 'soil' : 'gravel', 1);
+    const n = noise(X, Y, 97); return pal.c(theme === 'fantasy' ? (n > 0.82 ? 'rock' : 'soil') : (n > 0.75 ? 'gravel' : 'soilDry'), n > 0.93 ? 3 : n < 0.08 ? 1 : 2);
+  };
   // Zone rugs: under a round table (gathering), and under each room's workstation cluster (its function at a glance).
   const ZONE = { command: theme === 'fantasy' ? ['floorCarpet', 'gold'] : ['floorCarpet', 'brand'], development: theme === 'fantasy' ? ['floorConcrete', 'ember'] : ['floorConcrete', 'hardhat'], testing: theme === 'fantasy' ? ['floorCarpet2', 'crystalDeep'] : ['floorTile', 'screen'] };
   const rugs = [];
@@ -93,7 +120,7 @@ export function composeScene(layout, theme = 'real') {
     if (ZONE[kind] && desks.length) rugs.push({ x0: Math.max(r.x0 + 0.25, Math.min(...desks.map(i => i.x - i.w / 2)) - 0.35), x1: Math.min(r.x1 - 0.25, Math.max(...desks.map(i => i.x + i.w / 2)) + 0.35), z0: Math.max(r.z0 + 0.2, Math.min(...desks.map(i => i.z - i.d / 2)) - 0.75), z1: Math.min(r.z1 - 0.2, Math.max(...desks.map(i => i.z + i.d / 2)) + 0.3), fill: ZONE[kind][0], border: ZONE[kind][1], zone: kind });
   }
   const floorColour = (f, x, z, X, Y) => {
-    const pat = PATTERNS[FLOORS[theme]?.[f.kind] ?? 'concrete'] ?? PATTERNS.concrete;
+    const pat = PATTERNS[floorFor(theme, f.kind)] ?? PATTERNS.concrete;
     let [p, k] = pat(x, z, X, Y);
     const rug = rugs.find(q => x >= q.x0 && x <= q.x1 && z >= q.z0 && z <= q.z1);
     if (rug) {
@@ -152,11 +179,13 @@ export function composeScene(layout, theme = 'real') {
     if (tuft > 0.988) k = Math.min(4, k + 1); else if (noise(X, Y - 1, 11) > 0.988) k = Math.max(0, k - 1);
     return pal.c(p, k);
   };
-  for (let Y = 0; Y < region.h; Y++) for (let X = 0; X < region.w; X++) {
+  if (!skipGround) for (let Y = 0; Y < region.h; Y++) for (let X = 0; X < region.w; X++) {
     const sx = (region.x0 + X + 0.5) * A, sy = (region.y0 + Y + 0.5) * A, [px, pz] = P.plan(sx, sy, 0), x = px / U, z = pz / U, GX = X + region.x0, GY = Y + region.y0;
     const f = floors0.find(q => x >= q.r.x0 && x < q.r.x1 && z >= q.r.z0 && z < q.r.z1);
     let c;
+    const sq = f || !sites0.length ? null : sites0.find(q => x >= q.x0 && x < q.x1 && z >= q.z0 && z < q.z1);
     if (f) c = floorColour(f, x, z, GX, GY);
+    else if (sq && (c = siteColour(sq, x, z, GX, GY))) { /* the site's ground */ }
     else {
       const q = pads.find(q2 => inRect(q2, x, z)), w = q ? null : wayAt(x, z);
       if (q) c = padColour(x, z, GX, GY, q);
@@ -280,7 +309,7 @@ export function composeScene(layout, theme = 'real') {
     const F = furnishing[s.id], f = s.level, kind = F.kind;
     for (const it of F.items) {
       if (it.type === 'rug' || it.type === 'mat') continue;
-      const recipe = recipeFor(theme, it.type, kind); if (!recipe?.length) continue;
+      const recipe = recipeOrFallback(theme, it.type, kind, it); if (!recipe?.length) continue;
       // Pieces standing on another piece sit on its surface (coffee machine on the counter).
       const base = it.on ? F.items.find(o => o.id === it.on) : null, lift = base ? recipeTop(theme, base.type, kind) : 0;
       const rec = lift ? recipe.map(r => (r[0] === 'box' ? [r[0], r[1], r[2], r[3], r[4], r[5] + lift, r[6] + lift, r[7]] : r[0] === 'blob' || r[0] === 'light' ? [r[0], r[1], r[2], r[3] + lift, ...r.slice(4)] : r)) : recipe;
@@ -615,7 +644,7 @@ export function composeScene(layout, theme = 'real') {
     const F = furnishing[s.id], f = s.level, r = rp(s), wall = tallBack(f, r); if (!wall) continue;
     const used = (windowsOn.get(wall) ?? []).map(c => [c * U - 0.6 * U, c * U + 0.6 * U]);
     for (const dd of F.decor) {
-      const pieces = DECOR[theme]?.[dd.type]; if (!pieces) continue;
+      const pieces = decorFor(theme, dd.type);
       const x0 = dd.x0 * U, x1 = dd.x1 * U, h0 = dd.h0, h1 = dd.h1, z = r.z1 - 1.2;
       used.push([x0, x1]);
       const parts = pieces.map(([a0, a1, b0, b1, m]) => ({ quad: [Q(x0 + (x1 - x0) * a0, z, f, h0 + (h1 - h0) * b0), Q(x0 + (x1 - x0) * a1, z, f, h0 + (h1 - h0) * b0), Q(x0 + (x1 - x0) * a1, z, f, h0 + (h1 - h0) * b1), Q(x0 + (x1 - x0) * a0, z, f, h0 + (h1 - h0) * b1)], mat: m }));
@@ -659,10 +688,10 @@ export function composeScene(layout, theme = 'real') {
     const sp = plantSprite(theme, kind, noise(gx, gz, 45 + salt), noise(gx, gz, 64 + salt) > 0.5);
     addObject({ id: `veg:${gx}:${gz}${salt ? `:${salt}` : ''}`, kind: 'veg', floor: 0, x0: x * U - 4, x1: x * U + 4, z0: z * U - 4, z1: z * U + 4, sb: { l: Math.round(sx) + sp.ox, r: Math.round(sx) + sp.ox + sp.frames[0].w, t: Math.round(sy) + sp.oy, b: Math.round(sy) + sp.oy + sp.frames[0].h }, frames: sp.frames, masks: sp.masks, ox: Math.round(sx) + sp.ox, oy: Math.round(sy) + sp.oy, fps: sp.frames.length > 1 ? 1.5 : 0, phase: Math.floor(noise(gx, gz, 46) * 4) });
   };
-  for (let gz = Math.floor(pz0 / STEP); gz <= Math.ceil(pz1 / STEP); gz++) for (let gx = Math.floor(px0 / STEP); gx <= Math.ceil(px1 / STEP); gx++) {
+  if (!skipGround) for (let gz = Math.floor(pz0 / STEP); gz <= Math.ceil(pz1 / STEP); gz++) for (let gx = Math.floor(px0 / STEP); gx <= Math.ceil(px1 / STEP); gx++) {
     // Jitter wider than a cell (neighbours may pair up or leave a gap): no grid rhythm.
     const x = (gx + 0.5 + (noise(gx, gz, 41) - 0.5) * 1.4) * STEP, z = (gz + 0.5 + (noise(gx, gz, 42) - 0.5) * 1.4) * STEP;
-    if (wayAt(x, z, 0.3) || waterAt(x, z) || pads.some(q => inRect(q, x, z))) continue;
+    if (wayAt(x, z, 0.3) || waterAt(x, z) || pads.some(q => inRect(q, x, z)) || sites0.some(q => x > q.x0 - 1.2 && x < q.x1 + 1.2 && z > q.z0 - 1.2 && z < q.z1 + 1.2)) continue;
     const d = devDist(x, z); if (d < 1.3) continue;
     const cl = cluster(x, z), ramp = smooth(3.5, 11, d), dens = ramp * smooth(0.46, 0.64, cl), n = noise(gx, gz, 43);
     const stand = vn(x / 14, z / 14, 54 + seedSalt) > pineStand ? 'pine' : 'broad';
@@ -687,11 +716,95 @@ export function composeScene(layout, theme = 'real') {
     if (d < 2.2 && devDist(x, z) > 1.3 && pads.some(q => x > q.x0 - 2.2 && x < q.x1 + 2.2 && z > q.z0 - 2.2 && z < q.z1 + 0.5) && noise(gx, gz, 61) < 0.35) plant(noise(gx, gz, 62) > 0.5 ? 'bush' : 'flowers', x, z, gx, gz, 0);
   }
 
+  // ---- Construction art (V2), chosen by the canonical stage only (procgen/construction.mjs STAGES); art never
+  // advances a project. Pieces are cumulative through the build and keyed by stage, so a plot looks the same at the
+  // same stage and changes when (and only when) HQ moves its project. Gates add a barrier (blocked) or a sign (waiting
+  // for Kyle). Geometry comes from the canonical spaces and furnishing only; the theme names the materials (SITE).
+  // Each piece is its own depth-sorted object, so builders working on the site are drawn between them.
+  const siteInfo = [];
+  for (const site of sites) {
+    const { p, s, f, si, r, refit } = site, K = SITE[theme] ?? SITE.real, base = `site:${p.id}:${s.id}`, keys = [];
+    const x0 = r.x0, x1 = r.x1, z0 = r.z0, z1 = r.z1, W = x1 - x0, D = z1 - z0, t = 0.08 * U, fl = refit ? 0 : 0.16;
+    const B = (a0, a1, c0, c1, h0, h1, mat, faces = []) => ({ box: { x0: a0, x1: a1, z0: c0, z1: c1, h0: h0 * U, h1: h1 * U }, mat, faces });
+    const put = (key, parts, bias = 0) => {
+      const fr = animated(parts) ? FRAMES : 1, sp = spriteOf(parts, f, { outline: true, frames: fr }); if (!sp) return;
+      const bs = parts.map(q => q.box);
+      addObject({ id: `${base}:${key}`, kind: 'site', project: p.id, stage: p.stage, floor: f, x0: Math.min(...bs.map(b => b.x0)), x1: Math.max(...bs.map(b => b.x1)), z0: Math.min(...bs.map(b => b.z0)), z1: Math.max(...bs.map(b => b.z1)), bias, sb: sbOf(sp), ...sp, fps: fr > 1 ? 6 : 0, phase: 0 });
+      keys.push(key);
+    };
+    // The plot's edges: [name, axis, at, from, to, bias]. Back and left are drawn behind what stands on the plot.
+    const edges = [['front', 'z', z0, x0, x1, 0], ['back', 'z', z1, x0, x1, -1], ['left', 'x', x0, z0, z1, -1], ['right', 'x', x1, z0, z1, 0]];
+    const along = (e, a0, a1, h0, h1, mat, th = t, faces = []) => (e[1] === 'z' ? B(a0, a1, e[2] - th / 2, e[2] + th / 2, h0, h1, mat, faces) : B(e[2] - th / 2, e[2] + th / 2, a0, a1, h0, h1, mat, faces));
+    const stepsOf = (e, every) => { const L = e[4] - e[3], n = Math.max(1, Math.round(L / (every * U))); return Array.from({ length: n + 1 }, (_, k) => e[3] + L * k / n); };
+    const fullH = HT / U, frameH = refit ? 1.6 : fullH;
+    // Survey (planning to foundation): corner stakes and a tape (or rope) line round the plot; a level on its tripod
+    // (or a surveyor's staff) while it is only planned.
+    if (si <= 2) {
+      for (const [k, cx2, cz2] of [['bl', x0, z1], ['br', x1, z1], ['fl', x0, z0], ['fr', x1, z0]]) put(`stake:${k}`, [B(cx2 - t, cx2 + t, cz2 - t, cz2 + t, 0, 0.9, K.stake)], k[0] === 'b' ? -1 : 0);
+      for (const e of edges) put(`tape:${e[0]}`, [along(e, e[3], e[4], 0.55, 0.6, K.tape, 0.03 * U)], e[5]);
+    }
+    if (si === 0) put('survey', [B(x0 + 0.5 * U, x0 + 0.56 * U, z0 + 0.5 * U, z0 + 0.56 * U, 0, 1.2, K.tool), B(x0 + 0.42 * U, x0 + 0.64 * U, z0 + 0.42 * U, z0 + 0.64 * U, 1.2, 1.36, K.toolHead)]);
+    // Site preparation to structure: a material stack at the back-left; cones (or barrels) at the front corners.
+    if (si >= 1 && si <= 3) {
+      const px0 = x0 + 0.3 * U, pz1 = z1 - 0.3 * U;
+      put('materials', [B(px0, px0 + 0.9 * U, pz1 - 0.6 * U, pz1, 0, 0.3, K.pile), B(px0 + 0.05 * U, px0 + 0.85 * U, pz1 - 0.55 * U, pz1 - 0.05 * U, 0.3, 0.42, K.pile2), B(px0 + 0.1 * U, px0 + 0.7 * U, pz1 - 0.5 * U, pz1 - 0.1 * U, 0.42, 0.6, K.pile)], -1);
+      if (si === 1) for (const [k, cx2] of [['l', x0 + 0.35 * U], ['r', x1 - 0.35 * U]]) put(`cone:${k}`, [B(cx2 - 0.14 * U, cx2 + 0.14 * U, z0 + 0.2 * U, z0 + 0.48 * U, 0, 0.06, K.cone), B(cx2 - 0.09 * U, cx2 + 0.09 * U, z0 + 0.25 * U, z0 + 0.43 * U, 0.06, 0.6, K.cone, [['front', 0, 1, 0.45, 0.65, K.coneBand]])]);
+    }
+    // Foundation on: the slab (a new structure; a refit keeps its floor), with rebar (or pegs) while it cures.
+    if (si >= 2 && !refit) put('slab', [B(x0, x1, z0, z1, 0, 0.16, K.slab, si >= 6 ? [] : [['top', 0.04, 0.96, 0.04, 0.96, K.slabTop]])], -2);
+    if (si === 2) for (const e of edges) put(`rebar:${e[0]}`, stepsOf(e, 0.9).map(a => (e[1] === 'z' ? B(a - 0.02 * U, a + 0.02 * U, e[2] - 0.02 * U, e[2] + 0.02 * U, fl, 0.7, K.rebar) : B(e[2] - 0.02 * U, e[2] + 0.02 * U, a - 0.02 * U, a + 0.02 * U, fl, 0.7, K.rebar))), e[5]);
+    // Structure on: columns at the corners and along the edges, beams on top (steel, or timber). From the envelope on,
+    // the front and right are cut low (the cutaway), like every finished building.
+    if (si >= 3) {
+      const seen = new Set();
+      for (const e of edges) for (const a of stepsOf(e, 2.4)) {
+        const cx2 = e[1] === 'z' ? a : e[2], cz2 = e[1] === 'z' ? e[2] : a, k = `${Math.round(cx2)}:${Math.round(cz2)}`; if (seen.has(k)) continue; seen.add(k);
+        const backish = Math.abs(cz2 - z1) < 1 || Math.abs(cx2 - x0) < 1, c = 0.09 * U;
+        put(`column:${k}`, [B(cx2 - c, cx2 + c, cz2 - c, cz2 + c, fl, si >= 4 && !backish ? Math.min(frameH, 1.6) : frameH, K.frame)], backish ? -1 : 0);
+      }
+      for (const e of edges) if (si === 3 || e[0] === 'back' || e[0] === 'left') put(`beam:${e[0]}`, [along(e, e[3], e[4], frameH - 0.18, frameH, K.beam, 0.14 * U)], e[5]);
+    }
+    // Exterior on: the envelope. Back and left are full-height clad walls with a glazing band; front and right are cut
+    // low. A refit gets a low partition on its open sides (front and left) only.
+    if (si >= 4) for (const e of edges) {
+      if (refit && (e[0] === 'back' || e[0] === 'right')) continue;
+      const full = (e[0] === 'back' || e[0] === 'left') && !refit, h1 = full ? fullH : refit ? 1.2 : LOW / U;
+      put(`wall:${e[0]}`, [along(e, e[3], e[4], fl, h1, K.clad, 0.2 * U, full ? [[e[1] === 'z' ? 'front' : 'right', 0.06, 0.94, 0.45, 0.75, K.glazing]] : [])], e[5]);
+    }
+    // Scaffold during the envelope and services: poles and planks along the front.
+    if ((si === 4 || si === 5) && !refit) put('scaffold', [...stepsOf(edges[0], 1.5).map(a => B(a - 0.04 * U, a + 0.04 * U, z0 - 0.55 * U, z0 - 0.47 * U, 0, 2.5, K.scaffold)), B(x0, x1, z0 - 0.6 * U, z0 - 0.42 * U, 1.2, 1.26, K.plank), B(x0, x1, z0 - 0.6 * U, z0 - 0.42 * U, 2.4, 2.46, K.plank)], 1);
+    // Services (systems and furnishing): conduits (or brass rune pipes) along the back, a drop and a junction box.
+    if (si === 5 || si === 6) { const zb = z1 - 0.25 * U, hb = refit ? 1.4 : 2.3; put('services', [B(x0 + 0.2 * U, x1 - 0.2 * U, zb - 0.06 * U, zb + 0.06 * U, hb, hb + 0.1, K.pipe), B(x0 + 0.2 * U, x1 - 0.2 * U, zb - 0.2 * U, zb - 0.1 * U, hb - 0.2, hb - 0.1, K.duct), B(x1 - 0.5 * U, x1 - 0.4 * U, zb - 0.06 * U, zb + 0.06 * U, fl, hb, K.pipe), B(x1 - 0.7 * U, x1 - 0.3 * U, zb - 0.18 * U, zb - 0.06 * U, 0.8, 1.3, K.duct)], -1); }
+    // Furnishing: the canonical furniture arrives crated, one crate on each item's footprint (a refit: two crates).
+    const items = (refit ? [] : furnishing[s.id]?.items ?? []).filter(it => !it.on && it.type !== 'rug' && it.type !== 'mat');
+    if (si === 6) {
+      if (items.length) for (const it of items) { const hw = it.w / 2 * U, hd = it.d / 2 * U, hh = Math.min(0.9, Math.max(0.4, it.h || 0.6)); put(`crate:${it.id}`, [B(it.x * U - hw, it.x * U + hw, it.z * U - hd, it.z * U + hd, fl, fl + hh, K.crate, [['front', 0, 1, 0.42, 0.58, K.strap], ['top', 0.42, 0.58, 0, 1, K.strap]])]); }
+      else put('crates', [B(x0 + W * 0.3, x0 + W * 0.3 + 0.6 * U, z0 + D * 0.5, z0 + D * 0.5 + 0.6 * U, fl, fl + 0.6, K.crate, [['front', 0, 1, 0.42, 0.58, K.strap]]), B(x0 + W * 0.6, x0 + W * 0.6 + 0.5 * U, z0 + D * 0.3, z0 + D * 0.3 + 0.5 * U, fl, fl + 0.5, K.crate, [['front', 0, 1, 0.42, 0.58, K.strap]])]);
+    }
+    // Inspection: the furniture in place (its screens stay off: the site is not a working room yet) and an inspection
+    // board (a clipboard stand, or a banner).
+    if (si === 7) {
+      for (const it of items) {
+        const recipe = recipeOrFallback(theme, it.type, site.kind, it); if (!recipe?.length) continue;
+        const lifted = recipe.map(q => (q[0] === 'box' ? [q[0], q[1], q[2], q[3], q[4], q[5] + fl, q[6] + fl, q[7]] : q[0] === 'blob' || q[0] === 'light' ? [q[0], q[1], q[2], q[3] + fl, ...q.slice(4)] : q));
+        placeRecipe(lifted, it, f, { id: `${base}:fit:${it.id}`, room: `site:${p.id}`, seat: SEATS.has(it.type), locId: null }); keys.push(`fit:${it.id}`);
+      }
+      put('inspection', [B(x1 - 0.7 * U, x1 - 0.64 * U, z0 + 0.3 * U, z0 + 0.36 * U, fl, 1.3, K.sign), B(x1 - 0.95 * U, x1 - 0.4 * U, z0 + 0.3 * U, z0 + 0.36 * U, 0.9, 1.4, K.sign, [['front', 0.1, 0.9, 0.12, 0.88, K.signFace]])]);
+    }
+    // A work light while the site is worked (foundation to furnishing): a floodlight, or a brazier.
+    if (si >= 2 && si <= 6) { const lx = x1 - 0.3 * U, lz = z0 + 0.3 * U; put('worklight', [B(lx - 0.04 * U, lx + 0.04 * U, lz - 0.04 * U, lz + 0.04 * U, fl, 1.7, K.tool), B(lx - 0.16 * U, lx + 0.16 * U, lz - 0.1 * U, lz + 0.1 * U, 1.7, 1.86, K.lamp)]); emit(lx, lz, f, 1.8 * U, K.light, { phase: si }); }
+    // Gates, from canonical project state only (fail closed): blocked = a barrier across the front; waiting for Kyle =
+    // a sign at the front-left.
+    if (p.blocked) put('gate:blocked', [...stepsOf(edges[0], 1.2).map(a => B(a - 0.04 * U, a + 0.04 * U, z0 + 0.1 * U, z0 + 0.18 * U, 0, 1.0, K.barrier2)), B(x0, x1, z0 + 0.08 * U, z0 + 0.2 * U, 0.75, 0.95, K.barrier, [['front', 0, 0.2, 0, 1, K.barrier2], ['front', 0.4, 0.6, 0, 1, K.barrier2], ['front', 0.8, 1, 0, 1, K.barrier2]])], 1);
+    if (p.waiting) put('gate:waiting', [B(x0 + 0.5 * U, x0 + 0.56 * U, z0 + 0.15 * U, z0 + 0.21 * U, 0, 1.2, K.sign), B(x0 + 0.3 * U, x0 + 0.8 * U, z0 + 0.15 * U, z0 + 0.21 * U, 0.8, 1.25, K.wait, [['front', 0.42, 0.58, 0.2, 0.8, K.sign]])], 1);
+    siteInfo.push({ project: p.id, space: s.id, stage: p.stage, refit, floor: f, gate: p.blocked ? 'blocked' : p.waiting ? 'waiting' : null, pieces: keys });
+  }
+
   // Interiors (screen polygons of finished rooms and halls) for the lightmap.
   const interiors = (layout.locations ?? []).filter(l => l.spaceId && !l.exterior && !l.site && l.poly).map(l => l.poly.map(([x, y]) => [x / A, y / A]));
   // Room rects (plan units) for state-driven pieces: a room's screens are on only while an agent works in it.
   const rooms = roomSpaces.map(s => ({ id: s.id, f: s.level, ...rp(s) }));
-  return { theme, A, region, ground, objects, emitters, interiors, rooms, pal, Q };
+  return { theme, A, region, ground, objects, emitters, interiors, rooms, pal, Q, sites: siteInfo };
 
   // -- helpers (hoisted) --
   function wallsOf(f) {
