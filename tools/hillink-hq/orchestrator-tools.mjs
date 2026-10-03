@@ -13,6 +13,7 @@
 // resolve_objective_decision answers a decision HQ gave to the orchestrator (never one that needs Kyle), and
 // cancel_objective stops it. There is no approval tool: approval gates are Kyle's alone.
 
+import { progressSnapshot, objectiveProgress, taskProgress } from './orchestration/progress.mjs';
 import { HANDOFF_LIMITS } from './orchestration/handoff.mjs';
 import { attention, ATTENTION_LIMITS } from './orchestration/attention.mjs';
 
@@ -90,6 +91,10 @@ function taskView(t) {
 }
 
 // One orchestration turn's tool executor. `taskId` is the orchestration task that is calling.
+// HQ's derived progress telemetry (orchestration/progress.mjs), compact for a model to read. Read-only.
+const progressView = p => ({ state: p.state, percent: p.progress, done: p.done, total: p.total, current: p.current?.label ?? null, checklist: p.checklist.map(i => `${i.status === 'done' || i.status === 'skipped' ? '[x]' : i.status === 'running' ? '[>]' : i.status === 'failed' ? '[!]' : '[ ]'} ${i.label}${i.projected ? ' (projected)' : ''}`), retries: p.retries, repairs: p.repairs });
+const agentProgressView = a => ({ agent: a.agent, status: a.status, percent: a.progress ?? null, activity: a.activity, milestone: a.milestone ?? null, objective_id: a.objectiveId ?? null, ...(a.retry ? { retry: `${a.retry.count}/${a.retry.max ?? '?'} (${a.retry.reason})` } : {}) });
+
 export function createToolbox(engine, { taskId, now = () => engine.now() }) {
   const counts = { delegations: 0, approvals: 0, implementations: 0, objectives: 0, decisions: 0, cancellations: 0, acknowledgements: 0 }, delegated = [];
   const conductor = () => engine.conductor ?? null;
@@ -100,7 +105,8 @@ export function createToolbox(engine, { taskId, now = () => engine.now() }) {
       const alerts = Object.values(engine.state.alerts).filter(a => a.active && a.kind !== 'HANDOFF_READY').slice(0, 10).map(a => ({ kind: a.kind, agent: a.agentId, task: a.taskId, needs_kyle: Boolean(a.ownerMustAct), action: clip(a.ownerAction ?? a.detail, 200) }));
       const r = engine.state.restart;
       const restart = r ? { restart_id: r.id, phase: r.phase, reason: clip(r.reason, 300), requested_by: r.by ?? null, at: iso(r.at), ...(r.phase === 'completed' ? { old_pid: r.oldPid, new_pid: r.newPid, attempts: r.attempts, duration_seconds: Math.round((r.durationMs ?? 0) / 1000), forced: Boolean(r.forced) } : {}), ...(r.diagnostic ? { diagnostic: clip(r.diagnostic, 600) } : {}) } : null;
-      return { observed_at: iso(at), hq_process: { pid: process.pid, supervised: typeof process.send === 'function', last_restart: restart }, needs_attention: attention(engine.state, { full: true }), agents: Object.values(engine.state.agents).map(a => agentView(engine, a, at)), recent_tasks: tasks, active_alerts: alerts };
+      const progress = progressSnapshot(engine.state, { now: at, statusOf: a => engine.status(a, at) });
+      return { observed_at: iso(at), hq_process: { pid: process.pid, supervised: typeof process.send === 'function', last_restart: restart }, needs_attention: attention(engine.state, { full: true }), agents: Object.values(engine.state.agents).map(a => agentView(engine, a, at)), agent_progress: progress.agents.map(agentProgressView), recent_tasks: tasks, active_alerts: alerts };
     },
     get_task({ task_id }) {
       const t = engine.state.tasks[task_id];
@@ -147,7 +153,9 @@ export function createToolbox(engine, { taskId, now = () => engine.now() }) {
     },
     get_objective({ objective_id }) {
       const o = engine.state.objectives?.[objective_id];
-      return o ? objectiveView(o) : { error: `No HQ objective with id ${clip(objective_id, 64)}.` };
+      if (!o) return { error: `No HQ objective with id ${clip(objective_id, 64)}.` };
+      const at = now(), statusOf = a => engine.status(a, at);
+      return { ...objectiveView(o), progress: progressView(objectiveProgress(engine.state, o, { now: at, taskView: t => taskProgress(engine.state, t, { now: at, statusOf }) })) };
     },
     resolve_objective_decision({ objective_id, decision_id, choice, rationale }) {
       if (counts.decisions >= LIMITS.decisionsPerTurn) return { refused: `At most ${LIMITS.decisionsPerTurn} decision per request.` };

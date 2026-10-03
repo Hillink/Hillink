@@ -8,7 +8,10 @@
 //   seq      the journal sequence number of the event it came from (monotonic; use it as a cursor)
 //   type     one of ACTIVITY_TYPES
 //   activity the broad animation state for the agent or objective: one of ACTIVITIES
-// Snapshot: { v, at, seq, agents[], objectives[], construction }
+// Snapshot: { v, at, seq, agents[], objectives[], construction, progress }
+//   progress (additive) is HQ's canonical progress telemetry (orchestration/progress.mjs), passed in by the server: each
+//   agent and objective entry also carries its own `telemetry` (status, progress, activity, milestone, objective). The
+//   World displays these; it never computes a percentage of its own.
 export const WORLD_CONTRACT_VERSION = 1;
 export const ACTIVITY_TYPES = ['TASK_CREATED', 'PLANNING_STARTED', 'AGENT_ASSIGNED', 'AGENT_STARTED', 'AGENT_WORKING', 'HANDOFF_RECEIVED', 'HANDOFF_REJECTED', 'IMPLEMENTATION_STARTED', 'SANDBOX_CREATED', 'SANDBOX_DESTROYED', 'TESTING', 'TEST_RESULT', 'COMMIT', 'VERIFYING', 'REVIEWING', 'RETRYING', 'APPROVAL_REQUIRED', 'DECISION_REQUIRED', 'WAITING', 'AGENT_FINISHED', 'BLOCKED', 'COMPLETE', 'FAILED', 'CANCELLED',
   // Pass 4 compute events (additive). Items may carry computeClass: LOCAL | SUBSCRIPTION | METERED_API, so the World
@@ -93,14 +96,14 @@ export function worldActivity(events, { since = 0, limit = 500 } = {}) {
 }
 
 // What each agent and objective is doing now, and how far the construction has come.
-export function worldSnapshot(snapshot) {
+export function worldSnapshot(snapshot, { progress = null } = {}) {
   const objectives = Object.values(snapshot.objectives ?? {});
   const stepOf = task => (task?.link ? snapshot.objectives?.[task.link.objectiveId]?.steps?.[task.link.stepId] : null);
   const agents = snapshot.agents.map(a => {
     const task = snapshot.tasks.find(t => t.id === a.assignment) ?? null, step = stepOf(task);
     const activity = !task ? 'idle' : task.operation === 'implement-repo' ? (task.stage === 'TESTING' ? 'testing' : 'building') : step ? STEP_ACTIVITY[step.kind] : task.operation === 'orchestrate' ? 'planning' : 'investigating';
     const run = task?.runId ? snapshot.compute?.ledger?.rows?.find(r => r.run === task.runId) : null;
-    return { id: a.id, name: a.name, role: a.role, workstation: a.workstation, status: a.status, activity, computeClass: run?.computeClass ?? null, capacity: snapshot.compute?.capacity?.[a.id] ?? null, objectiveId: task?.link?.objectiveId ?? null, taskId: task?.id ?? null, stepKind: step?.kind ?? null, taskStage: task?.stage ?? null };
+    return { id: a.id, name: a.name, role: a.role, workstation: a.workstation, status: a.status, activity, computeClass: run?.computeClass ?? null, capacity: snapshot.compute?.capacity?.[a.id] ?? null, objectiveId: task?.link?.objectiveId ?? null, taskId: task?.id ?? null, stepKind: step?.kind ?? null, taskStage: task?.stage ?? null, ...(progress ? { telemetry: progress.agents.find(p => p.agent === a.id) ?? null } : {}) };
   });
   const view = o => {
     const steps = o.order.map(id => o.steps[id]);
@@ -110,6 +113,7 @@ export function worldSnapshot(snapshot) {
       progress: { done: steps.filter(s => s.status === 'DONE').length, total: steps.length },
       steps: steps.map(s => ({ id: s.id, kind: s.kind, status: s.status, agentId: s.agentId, dependsOn: s.dependsOn })),
       createdAt: o.createdAt, endedAt: o.endedAt ?? null,
+      ...(progress ? { telemetry: progress.objectives.find(p => p.objectiveId === o.id) ?? null } : {}),
     };
   };
   const verifiedCommits = objectives.filter(o => o.status === 'COMPLETE' && o.result?.commit).length;
@@ -119,5 +123,6 @@ export function worldSnapshot(snapshot) {
     agents, objectives: objectives.sort((a, b) => b.createdAt - a.createdAt).slice(0, 20).map(view),
     // Construction progress is earned only by verified work: completed objectives and HQ-verified commits.
     construction: { completedObjectives: completed, verifiedCommits, activeObjectives: objectives.filter(o => !['COMPLETE', 'FAILED', 'CANCELLED', 'BLOCKED'].includes(o.status)).length, level: Math.min(10, completed + verifiedCommits) },
+    ...(progress ? { progress } : {}),
   };
 }
