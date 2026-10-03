@@ -25,7 +25,7 @@ export const TRANSITIONS = {
 export const STEP_STATES = ['PENDING', 'RUNNING', 'DONE', 'FAILED', 'SKIPPED', 'CANCELLED', 'INTERRUPTED'];
 export const STEP_KINDS = ['investigate', 'implement', 'verify', 'review', 'rebuttal', 'local-check'];
 
-export const ORCHESTRATION_EVENTS = new Set(['OBJECTIVE_CREATED', 'OBJECTIVE_PLANNED', 'OBJECTIVE_TRANSITION', 'OBJECTIVE_CANCEL_REQUESTED', 'STEP_ADDED', 'STEP_TRANSITION', 'HANDOFF_ACCEPTED', 'HANDOFF_REJECTED', 'STEP_RETRY', 'APPROVAL_REQUESTED', 'APPROVAL_DECIDED', 'DECISION_REQUESTED', 'DECISION_RECORDED', 'DECISION_APPLIED', 'DISAGREEMENT_RECORDED', 'OBJECTIVE_RESULT', 'TASK_CANCELLED', 'RUN_RECONCILED', 'OBJECTIVE_OUTCOME_ACKNOWLEDGED', 'ORCHESTRATOR_NOTE_POSTED', 'ORCHESTRATOR_NOTE_ACKNOWLEDGED']);
+export const ORCHESTRATION_EVENTS = new Set(['OBJECTIVE_CREATED', 'OBJECTIVE_PLANNED', 'OBJECTIVE_TRANSITION', 'OBJECTIVE_CANCEL_REQUESTED', 'STEP_ADDED', 'STEP_TRANSITION', 'HANDOFF_ACCEPTED', 'HANDOFF_REJECTED', 'STEP_RETRY', 'APPROVAL_REQUESTED', 'APPROVAL_DECIDED', 'DECISION_REQUESTED', 'DECISION_RECORDED', 'DECISION_APPLIED', 'DISAGREEMENT_RECORDED', 'OBJECTIVE_RESULT', 'TASK_CANCELLED', 'RUN_RECONCILED', 'OBJECTIVE_OUTCOME_ACKNOWLEDGED', 'ORCHESTRATOR_NOTE_POSTED', 'ORCHESTRATOR_NOTE_ACKNOWLEDGED', 'REVIEW_BOUNDARY']);
 
 export function canTransition(from, to) { return (TRANSITIONS[from] ?? []).includes(to); }
 
@@ -118,6 +118,8 @@ export function reduceOrchestration(state, event) {
     case 'DECISION_REQUESTED': o.decisions[d.decisionId] = { id: d.decisionId, question: d.question, options: d.options, context: d.context ?? null, status: 'PENDING', requestedAt: at, resume: { ...d.resume, authority: deriveDecisionAuthority(d.resume) } }; o.updatedAt = at; break;
     case 'DECISION_APPLIED': o.decisions[d.decisionId].applied = true; o.updatedAt = at; break;
     case 'DECISION_RECORDED': Object.assign(o.decisions[d.decisionId], { status: 'DECIDED', choice: d.choice, rationale: d.rationale, by: d.by, decidedAt: at, ...(d.channel ? { channel: d.channel } : {}), ...(d.audit ? { audit: d.audit } : {}) }); o.updatedAt = at; break;
+    // Review consolidation (review-ledger.mjs): HQ's one decision on whether a post-repair review runs.
+    case 'REVIEW_BOUNDARY': o.steps[d.stepId].boundary = { ...d.boundary, at }; o.updatedAt = at; break;
     case 'DISAGREEMENT_RECORDED': o.disagreement = { ...d.disagreement, at }; o.updatedAt = at; break;
     case 'OBJECTIVE_RESULT': o.result = { ...d.result, at }; o.updatedAt = at; break;
     case 'TASK_CANCELLED': {
