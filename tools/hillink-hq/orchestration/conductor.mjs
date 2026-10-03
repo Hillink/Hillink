@@ -42,8 +42,8 @@ const clip = (s, n) => (typeof s === 'string' ? (s.length > n ? `${s.slice(0, n 
 const ENDED = new Set(['DONE', 'BLOCKED', 'CANCELLED']);
 
 export class Conductor {
-  constructor(engine, { verifier = null, limits = {}, recovery = null, orchestratorCallbacks = true } = {}) {
-    Object.assign(this, { engine, verifier, limits: { ...DEFAULT_LIMITS, ...limits }, recovery, orchestratorCallbacks, busy: false });
+  constructor(engine, { verifier = null, limits = {}, recovery = null, orchestratorCallbacks = true, routePreference = null } = {}) {
+    Object.assign(this, { engine, verifier, limits: { ...DEFAULT_LIMITS, ...limits }, recovery, orchestratorCallbacks, routePreference, busy: false });
   }
   get state() { return this.engine.state; }
   now() { return this.engine.now(); }
@@ -222,7 +222,7 @@ export class Conductor {
       status: id => (agents[id]?.assignment ? 'RUNNING' : agents[id] ? this.engine.status(agents[id]) : 'UNKNOWN'),
       connected: id => Boolean(agents[id] && this.engine.adapters[agents[id].executionAdapter]),
       capable: (id, cap) => Boolean(agents[id]?.capabilities.includes(cap)),
-      reviewRule: rule, implementerId: implementer,
+      reviewRule: rule, implementerId: implementer, preference: this.routePreference,
     });
     const pick = list.find(c => c.usable);
     if (!pick) return this.unavailable(o, s, list);

@@ -1,5 +1,6 @@
 // Pass 3 routing: which agent may do which kind of step. Fixed in code. The roles are not interchangeable:
-//   investigate  -> Codex (preferred) or a read-only Claude review session
+//   investigate  -> a read-only Claude session (preferred), Codex as the fallback. Codex is the scarce independent
+//                   reviewer (review-ledger.mjs), so it is not spent on investigations Claude can do (Kyle, 2026-10-03).
 //   review       -> Codex; a read-only Claude session only where policy allows a same-provider review (low risk)
 //   rebuttal     -> the agent whose position is being answered (read-only)
 //   implement    -> Claude Code only, through the Pass 2.7 sandbox runner. Never Codex, never a local model.
@@ -8,7 +9,7 @@
 //   verify       -> HQ itself (deterministic git and evidence checks); no agent
 // ChatGPT is above this table: it submits objectives and makes orchestration decisions; it is never routed a step.
 export const ROUTES = {
-  investigate: { operation: 'review-repo', safety: 'local-read-only', agents: ['codex', 'claude'] },
+  investigate: { operation: 'review-repo', safety: 'local-read-only', agents: ['claude', 'codex'] },
   review: { operation: 'review-repo', safety: 'local-read-only', agents: ['codex', 'claude'] },
   rebuttal: { operation: 'review-repo', safety: 'local-read-only', agents: ['codex', 'claude'] },
   implement: { operation: 'implement-repo', safety: 'local-worktree-write', agents: ['claude'] },
@@ -25,11 +26,15 @@ export function assertImplementer(agentId) {
 
 // Candidates for a step, in preference order, with why each one is or is not usable right now.
 // status(agentId) -> HQ's verified status; connected(agentId) -> adapter present; capable(agentId, capability).
-export function candidates(step, { status, connected, capable, reviewRule = null, implementerId = null }) {
+// preference: { [kind]: [agentId, ...] } reorders a step's approved agents (tests that script a specific
+// investigator); it can never add an agent the route does not allow.
+export function candidates(step, { status, connected, capable, reviewRule = null, implementerId = null, preference = null }) {
   const route = ROUTES[step.kind];
   if (!route) throw Error(`No route for step kind ${step.kind}`);
   if (step.kind === 'verify') return [{ agentId: 'hq', usable: true, reason: 'HQ verifies deterministically.' }];
   let pool = route.agents;
+  const order = preference?.[step.kind];
+  if (order) pool = [...order.filter(a => pool.includes(a)), ...pool.filter(a => !order.includes(a))];
   if (step.kind === 'rebuttal') pool = [step.respondent];
   if (step.kind === 'review' && reviewRule?.independentProvider) pool = pool.filter(a => providerOf(a) !== providerOf(implementerId ?? 'claude'));
   if (step.kind === 'review' && step.requireAgent) pool = pool.filter(a => a === step.requireAgent);

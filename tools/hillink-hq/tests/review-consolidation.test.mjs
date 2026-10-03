@@ -140,3 +140,20 @@ test('consolidation 6: Codex capacity is reported as observed; remaining usage i
   assert.equal(o.result.reviewProvenance.boundaries[0].codexRemaining, 'UNKNOWN');
   assert.ok(!/remaining":\s*\d|%/.test(JSON.stringify(boundary(o).capacity)));
 });
+
+test('consolidation 7: production routing sends investigations to Claude, keeping Codex for independent review (and as the fallback investigator)', async () => {
+  const c = codex();
+  const claude = scriptedAgent('Claude', task => ({ text: handoffText(role(task) === 'investigate' ? investigation() : review()) }));
+  const h = harness({ codex: c, claudeReview: claude, routePreference: null });
+  const id = h.conductor.submit(FIX);
+  await h.drive(h.settled(id), 3000);
+  const o = h.objective(id);
+  const inv = Object.values(o.steps).find(s => s.kind === 'investigate');
+  assert.equal(inv.agentId, 'claude', 'Claude investigated');
+  assert.ok(c.calls.every(x => role(x.task) !== 'investigate'), 'Codex was not spent on the investigation');
+  assert.equal(Object.values(o.steps).find(s => s.kind === 'review').agentId, 'codex', 'Codex still reviews the implementation independently');
+  // Claude unavailable: Codex investigates instead.
+  const { candidates } = await import('../orchestration/routing.mjs');
+  const list = candidates({ kind: 'investigate' }, { status: a => (a === 'claude' ? 'OFFLINE' : 'IDLE'), connected: () => true, capable: () => true });
+  assert.equal(list.find(x => x.usable).agentId, 'codex');
+});
