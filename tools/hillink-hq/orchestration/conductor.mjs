@@ -33,6 +33,7 @@ export function fitQuoted(quoted, budget) {
   return out;
 }
 import { decideBest, decideCompute } from '../compute/policy.mjs';
+import { reviewContract, reviewBoundary, codexCapacity } from './review-ledger.mjs';
 import { UNRESOLVED, ATTENTION_LIMITS } from './attention.mjs';
 
 const KIND_STATE = { investigate: 'INVESTIGATING', implement: 'IMPLEMENTING', verify: 'VERIFYING', review: 'REVIEWING', rebuttal: 'REVIEWING', 'local-check': 'INVESTIGATING' };
@@ -41,8 +42,8 @@ const clip = (s, n) => (typeof s === 'string' ? (s.length > n ? `${s.slice(0, n 
 const ENDED = new Set(['DONE', 'BLOCKED', 'CANCELLED']);
 
 export class Conductor {
-  constructor(engine, { verifier = null, limits = {}, recovery = null, orchestratorCallbacks = true } = {}) {
-    Object.assign(this, { engine, verifier, limits: { ...DEFAULT_LIMITS, ...limits }, recovery, orchestratorCallbacks, busy: false });
+  constructor(engine, { verifier = null, limits = {}, recovery = null, orchestratorCallbacks = true, routePreference = null } = {}) {
+    Object.assign(this, { engine, verifier, limits: { ...DEFAULT_LIMITS, ...limits }, recovery, orchestratorCallbacks, routePreference, busy: false });
   }
   get state() { return this.engine.state; }
   now() { return this.engine.now(); }
@@ -208,6 +209,8 @@ export class Conductor {
   async start(o, s) {
     if (s.notBefore && s.notBefore > this.now()) return this.set(o, 'WAITING_FOR_EVIDENCE', `Step ${s.kind} waits until ${new Date(s.notBefore).toISOString()} (${s.retries.at(-1)?.reason ?? 'retry'}).`);
     if (s.kind === 'verify') return this.runVerify(o, s);
+    // A review after a repair of review findings is a review boundary: HQ decides once, from evidence, whether it runs.
+    if (s.kind === 'review' && s.reviewContract && !s.boundary) { const b = await this.decideBoundary(o, s); if (!b.required) return; }
     if (s.kind === 'implement' && o.spentUsd >= o.limits.maxSpendUsd * (o.approvals.spend?.status === 'APPROVED' ? 2 : 1)) {
       if (o.approvals.spend?.status === 'APPROVED') return this.stop(o, 'BLOCKED', `Spend $${o.spentUsd.toFixed(2)} reached twice the objective budget even after approval.`);
       return this.requestApprovals(o, ['spend'], `before another paid implementation step (measured $${o.spentUsd.toFixed(2)} of $${o.limits.maxSpendUsd.toFixed(2)})`);
@@ -219,7 +222,7 @@ export class Conductor {
       status: id => (agents[id]?.assignment ? 'RUNNING' : agents[id] ? this.engine.status(agents[id]) : 'UNKNOWN'),
       connected: id => Boolean(agents[id] && this.engine.adapters[agents[id].executionAdapter]),
       capable: (id, cap) => Boolean(agents[id]?.capabilities.includes(cap)),
-      reviewRule: rule, implementerId: implementer,
+      reviewRule: rule, implementerId: implementer, preference: this.routePreference,
     });
     const pick = list.find(c => c.usable);
     if (!pick) return this.unavailable(o, s, list);
@@ -239,6 +242,25 @@ export class Conductor {
     const task = s.kind === 'implement' ? this.implementTask(o, s) : this.readOnlyTask(o, s, pick.agentId, source);
     this.engine.createTask({ ...task, ...(source ? { reviewSource: source } : {}), operation: route.operation, safety: route.safety, priority: 50, preferredAgentId: pick.agentId }, { requestedBy: o.requestedBy?.taskId && this.state.tasks[o.requestedBy.taskId] ? o.requestedBy : null, link: { objectiveId: o.id, stepId: s.id }, internal: true, repair: s.repair ?? null });
     this.set(o, KIND_STATE[s.kind], `${s.kind} assigned to ${agents[pick.agentId].name}${pick.busy ? ' (queued behind its current task)' : ''}.`);
+  }
+  // Review consolidation (review-ledger.mjs). Journaled before anything acts on it; a skipped review is a recorded
+  // decision with its reasons, never a silent one. Any doubt (unmeasurable repair, missing evidence) keeps the review.
+  async decideBoundary(o, s) {
+    const pair = this.reviewedPair(o, s);
+    const repair = pair?.impl?.handoff ?? {}, contract = s.reviewContract;
+    let delta = null, reviewedSize = null;
+    try {
+      if (typeof this.verifier?.delta === 'function' && contract.reviewedCommit && contract.reviewedBase && repair.commit) {
+        delta = await this.verifier.delta(contract.reviewedCommit, repair.commit);
+        reviewedSize = await this.verifier.delta(contract.reviewedBase, contract.reviewedCommit);
+      }
+    } catch { delta = null; reviewedSize = null; }
+    const b = reviewBoundary({ plan: o.plan, contract, repair, verification: pair?.verify?.handoff, delta, reviewedSize, capacity: codexCapacity(this.state, this.now()) });
+    this.engine.emit('REVIEW_BOUNDARY', { objectiveId: o.id, stepId: s.id, boundary: b });
+    if (b.required) return b;
+    this.step(o, s, 'SKIPPED', `Review consolidated: ${contract.reviewer} reviewed ${String(contract.reviewedCommit).slice(0, 10)}; repair ${String(b.repairCommit).slice(0, 10)} verified by HQ against its findings (${b.findings.map(f => `${f.id} ${f.status}`).join(', ') || 'none'}).`);
+    this.set(o, 'VERIFYING', `Review consolidated: no fresh ${contract.reviewer} review needed (${clip(b.reasons.join('; '), 300)}).`);
+    return b;
   }
   // Whether the wired adapter can serve a route variant now (Pass 4.5). An adapter without supports() serves all.
   supports(adapterId, op, variant) {
@@ -430,7 +452,7 @@ export class Conductor {
     }
     const retryAt = failure.reason === 'usage_limit' ? (failure.retryAt ?? null) : null;
     const alternate = ['usage_limit', 'agent_failure'].includes(failure.reason);
-    const repair = failure.reason === 'test_failure' ? { attempt: d.count, reason: `HQ ran the acceptance tests inside the sandbox and they failed.\n${clip(failure.testOutput ?? failure.detail, 2500)}` } : null;
+    const repair = failure.reason === 'test_failure' ? { attempt: d.count, ...(s.repair?.fromReview ? { fromReview: true } : {}), reason: `HQ ran the acceptance tests inside the sandbox and they failed.\n${clip(failure.testOutput ?? failure.detail, 2500)}` } : null;
     // Reroute: a failed or limited agent is set aside for this step when another approved agent can take it. If that
     // leaves nobody routed for the step, HQ waits for the original agent instead (until its reset time, if known).
     let excludeAgents = s.excludeAgents ?? [], notBefore = null, strategy = d.strategy;
@@ -467,11 +489,14 @@ export class Conductor {
       const repairs = Object.values(o.steps).filter(x => x.kind === 'implement' && x.repair?.fromReview).length;
       if (repairs < o.limits.maxRepairs) {
         const impl = Object.values(o.steps).filter(x => x.kind === 'implement' && x.status === 'DONE').at(-1);
-        const findings = h.findings.map(f => `[${f.severity}] ${f.detail}${f.file ? ` (${f.file})` : ''}`).join('\n');
-        const steps = implementationSteps(o, impl.contract, { repair: { attempt: repairs + 1, fromReview: true, reason: `An independent review returned "${h.verdict}".\nFindings:\n${clip(findings, 2000)}\nRecommendation: ${clip(h.recommendation, 600)}` }, reviewRule: s.reviewRule, requireReviewer: s.agentId });
+        // The findings are the repair contract (review-ledger.mjs): HQ verifies the repair against them and then decides
+        // whether the reviewer must see the repaired commit again, instead of re-sending every repair to Codex.
+        const contract = reviewContract(o, s, this.reviewedPair(o, s));
+        const findings = contract.findings.map(f => `${f.id} [${f.severity}] ${f.detail}${f.file ? ` (${f.file})` : ''}`).join('\n');
+        const steps = implementationSteps(o, impl.contract, { repair: { attempt: repairs + 1, fromReview: true, reason: `An independent review returned "${h.verdict}".\nFindings (the repair contract; address each one):\n${clip(findings, 2000)}\nRecommendation: ${clip(h.recommendation, 600)}` }, reviewRule: s.reviewRule, requireReviewer: s.agentId, reviewContract: contract });
         steps[0].dependsOn = [s.id];
         for (const step of steps) this.engine.emit('STEP_ADDED', { objectiveId: o.id, step });
-        return this.set(o, 'IMPLEMENTING', `Review requested changes; one bounded repair (${repairs + 1}/${o.limits.maxRepairs}).`);
+        return this.set(o, 'IMPLEMENTING', `Review requested changes; one bounded repair (${repairs + 1}/${o.limits.maxRepairs}) against ${contract.findings.length} finding(s).`);
       }
       return this.disagree(o, s);
     }
@@ -608,12 +633,19 @@ export class Conductor {
       this.engine.emit('OBJECTIVE_RESULT', { objectiveId: o.id, result });
       return this.requestApprovals(o, post, `after verified work (branch ${result.branch}, commit ${String(result.commit).slice(0, 10)})`);
     }
-    this.stop(o, 'COMPLETE', o.input.type === 'investigate' || o.input.type === 'review' ? 'Accepted handoff answers the objective.' : 'Verified, reviewed, committed locally. Not merged: Kyle decides.', { ...result, outcome: 'complete' });
+    const consolidated = result.reviewProvenance.boundaries.filter(b => !b.required).at(-1);
+    const how = consolidated ? `Verified and committed locally; the independent review covered ${String(consolidated.reviewedCommit).slice(0, 10)} and HQ verified repair ${String(consolidated.repairCommit).slice(0, 10)} against its findings (review consolidated). Not merged: Kyle decides.` : 'Verified, reviewed, committed locally. Not merged: Kyle decides.';
+    this.stop(o, 'COMPLETE', o.input.type === 'investigate' || o.input.type === 'review' ? 'Accepted handoff answers the objective.' : how, { ...result, outcome: 'complete' });
   }
   summary(o) {
     const byKind = k => Object.values(o.steps).filter(s => s.kind === k && s.handoff).map(s => ({ stepId: s.id, agentId: s.handoffFrom ?? s.agentId, handoff: s.handoff }));
     const impl = byKind('implement').at(-1)?.handoff;
-    return { investigation: byKind('investigate').at(-1) ?? null, review: byKind('review').at(-1) ?? null, verification: byKind('verify').at(-1)?.handoff ?? null, branch: impl?.branch ?? null, commit: impl?.commit ?? null, files: impl?.filesChanged ?? [], spentUsd: o.spentUsd, disagreement: o.disagreement ?? null, steps: o.order.map(id => ({ id, kind: o.steps[id].kind, status: o.steps[id].status, agentId: o.steps[id].agentId, attempts: o.steps[id].attempts, retries: o.steps[id].retries.length })) };
+    // Review provenance: what each reviewer read and found, and every review boundary HQ decided after a repair.
+    const reviewProvenance = {
+      reviews: Object.values(o.steps).filter(s => s.kind === 'review' && s.handoff).map(s => ({ stepId: s.id, agentId: s.handoffFrom ?? s.agentId, reviewedCommit: s.handoff.reviewedSource?.commit ?? null, verdict: s.handoff.verdict, findings: s.handoff.findings.length })),
+      boundaries: Object.values(o.steps).filter(s => s.boundary).map(s => ({ stepId: s.id, required: s.boundary.required, reasons: s.boundary.reasons, reviewedCommit: s.boundary.reviewedCommit, repairCommit: s.boundary.repairCommit, findings: s.boundary.findings.map(f => ({ id: f.id, severity: f.severity, status: f.status })), codexRemaining: s.boundary.capacity?.remaining ?? 'UNKNOWN' })),
+    };
+    return { reviewProvenance, investigation: byKind('investigate').at(-1) ?? null, review: byKind('review').at(-1) ?? null, verification: byKind('verify').at(-1)?.handoff ?? null, branch: impl?.branch ?? null, commit: impl?.commit ?? null, files: impl?.filesChanged ?? [], spentUsd: o.spentUsd, disagreement: o.disagreement ?? null, steps: o.order.map(id => ({ id, kind: o.steps[id].kind, status: o.steps[id].status, agentId: o.steps[id].agentId, attempts: o.steps[id].attempts, retries: o.steps[id].retries.length })) };
   }
   async cancelLive(o, reason) {
     const results = [];

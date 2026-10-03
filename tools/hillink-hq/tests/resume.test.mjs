@@ -195,3 +195,113 @@ test('resume: contract and objective validation, and the connector field', () =>
   const def = TOOL_DEFINITIONS.find(t => t.name === 'submit_objective');
   assert.deepEqual(def.parameters.properties.resume_from.type, ['string', 'null']);
 });
+
+// ---- Continuing a COMPLETED implementation from its commit (resume.mjs resolveCompleted, verifyCompleted).
+const GOOD = { ...BROKEN, ...FIX };
+async function completedRun(s) {
+  s.holder.files = GOOD;
+  const t = await s.run(CONTRACT);
+  assert.equal(t.stage, 'DONE', t.blocker ?? '');
+  const impl = t.evidence.find(e => e.kind === 'COMPLETED').implementation;
+  return { task: t, impl, name: path.basename(impl.worktree), commit: impl.commit };
+}
+const continued = (s, c, scope = CONTRACT.scope) => ({ ...CONTRACT, scope, resume: resolveResume(s.engine.state, { worktree: c.name, commit: c.commit }, { scope }) });
+const tip = (s, branch) => git(s.repo, 'rev-parse', `refs/heads/${branch}`).trim();
+
+test('continue: a journal-verified completed commit is imported into a fresh worktree, extended and committed; its worktree and branch are untouched', async () => {
+  const s = setup();
+  const c = await completedRun(s);
+  const before = fingerprint(c.impl.worktree), branchTip = tip(s, c.impl.branch);
+  const contract = continued(s, c);
+  assert.equal(contract.resume.source, 'hq-completed'); assert.equal(contract.resume.commit, c.commit); assert.equal(contract.resume.base, c.impl.base);
+  assert.equal(contract.resume.patchHash, c.impl.patchHash); assert.deepEqual(contract.resume.allowedScope, CONTRACT.scope); assert.equal(contract.resume.tests.failed, 0);
+  s.holder.files = { [`${DIR}notes.md`]: 'second pass notes\n' };
+  const t = await s.run(contract);
+  assert.equal(t.stage, 'DONE', t.blocker ?? '');
+  assert.match(t.evidence.find(e => e.resume).summary, /Continuing completed implementation/);
+  const done = t.evidence.find(e => e.kind === 'COMPLETED').implementation;
+  assert.notEqual(done.worktree, c.impl.worktree); assert.notEqual(done.branch, c.impl.branch);
+  assert.equal(done.base, c.impl.base); assert.equal(done.resumedFrom.commit, c.commit); assert.equal(done.resumedFrom.source, 'hq-completed');
+  assert.equal(git(s.repo, 'rev-parse', `${done.commit}^`).trim(), c.impl.base, 'one commit on the recorded base');
+  assert.match(git(s.repo, 'log', '-1', '--format=%B', done.commit), new RegExp(`Resumed-From: ${c.name} at ${c.commit} \\(patch sha256 ${c.impl.patchHash}, hq-completed\\)`));
+  assert.equal(git(s.repo, 'show', `${done.commit}:${DIR}greeting.mjs`), FIX[`${DIR}greeting.mjs`], 'the completed work carried forward');
+  assert.equal(git(s.repo, 'show', `${done.commit}:${DIR}notes.md`), 'second pass notes\n', 'the new work on top');
+  assert.match(s.fake.briefs.at(-1), /continuing from an earlier completed implementation \(commit [0-9a-f]{10}/);
+  assert.deepEqual(fingerprint(c.impl.worktree), before, 'the completed worktree is byte-for-byte unchanged');
+  assert.equal(tip(s, c.impl.branch), branchTip, 'the completed branch is unchanged');
+});
+
+test('continue fails closed at submission: unrecorded, mismatched or incomplete evidence, and scope beyond the granted scope', async () => {
+  const s = setup();
+  const p = await preserved(s); // a BLOCKED attempt: never a completed commit
+  const c = await completedRun(s);
+  const scope = CONTRACT.scope, r = spec => resolveResume(s.engine.state, spec, { scope });
+  assert.throws(() => r({ worktree: c.name, commit: 'f'.repeat(40) }), /no journaled COMPLETED implementation/);
+  assert.throws(() => r({ worktree: c.name, commit: c.commit.slice(0, 10) }), /40-character/);
+  assert.throws(() => r({ worktree: p.name, commit: c.commit }), /recorded commit .* in worktree .*, not/);
+  assert.throws(() => r({ worktree: c.name, commit: c.commit, base: 'f'.repeat(40) }), /stated base does not match/);
+  assert.throws(() => r({ worktree: c.name, commit: c.commit, branch: 'hq/impl/other' }), /stated branch does not match/);
+  assert.throws(() => r({ worktree: c.name, commit: c.commit, patchHash: '0'.repeat(64) }), /stated patchHash does not match/);
+  assert.throws(() => r({ worktree: c.name, branch: c.impl.branch }), /only for continuing a completed commit/);
+  // The worktree-name form still means a BLOCKED/FAILED preserved patch only; a completed run is never one.
+  assert.throws(() => r(c.name), /only Kyle can resume it/);
+  // Scope: the new objective may narrow, never widen, the scope the completed run was granted.
+  assert.throws(() => resolveResume(s.engine.state, { worktree: c.name, commit: c.commit }, { scope: [...scope, 'README.md'] }), /reaches beyond the scope the completed run was granted/);
+  assert.throws(() => resolveResume(s.engine.state, { worktree: c.name, commit: c.commit }, { scope: ['sandbox/other/'] }), /reaches beyond/);
+  assert.throws(() => resolveResume(s.engine.state, { worktree: c.name, commit: c.commit }, { scope: [`${DIR}greeting.mjs`] }), /outside this objective's scope/);
+  // Journal evidence that is missing or inconsistent.
+  const tampered = f => { const st = structuredClone(s.engine.state); f(st.tasks[c.task.id]); return st; };
+  const rr = st => resolveResume(st, { worktree: c.name, commit: c.commit }, { scope });
+  assert.throws(() => rr(tampered(t => { t.evidence.find(e => e.kind === 'COMPLETED').implementation.tests.failed = 1; })), /no passing acceptance test/);
+  assert.throws(() => rr(tampered(t => { delete t.evidence.find(e => e.kind === 'COMPLETED').implementation.tests; })), /no passing acceptance test/);
+  assert.throws(() => rr(tampered(t => { t.evidence = t.evidence.filter(e => e.kind !== 'COMMIT'); })), /no COMMIT event/);
+  assert.throws(() => rr(tampered(t => { t.stage = 'CANCELLED'; })), /not DONE/);
+  assert.throws(() => rr(tampered(t => { delete t.implementation.scope; })), /no recorded scope/);
+  assert.throws(() => rr(tampered(t => { const e = t.evidence.find(x => x.kind === 'COMPLETED'); t.evidence.push({ ...e, implementation: { ...e.implementation, patchHash: '0'.repeat(64) } }); })), /conflicting records/);
+  assert.throws(() => rr(tampered(t => { t.operation = 'review-repo'; })), /no journaled COMPLETED/);
+  // Contract validation keeps the two kinds apart.
+  const ok = r({ worktree: c.name, commit: c.commit });
+  assert.throws(() => validateImplementation({ ...CONTRACT, resume: { ...ok, source: 'hq-evidence' } }), /only for a completed-commit resume/);
+  assert.throws(() => validateImplementation({ ...CONTRACT, resume: { ...ok, tests: { ...ok.tests, failed: 2 } } }), /passing acceptance test record/);
+  assert.throws(() => validateImplementation({ ...CONTRACT, resume: { ...ok, files: null } }), /recorded files/);
+  assert.throws(() => validateImplementation({ ...CONTRACT, scope: [DIR, 'sandbox/other/'], resume: ok }), /reaches beyond/);
+  const input = { objective: CONTRACT.objective, type: 'implement', scope, tests: CONTRACT.tests, acceptanceCriteria: 'x', constraints: 'y' };
+  assert.deepEqual(validateObjectiveInput({ ...input, resumeFrom: { worktree: c.name, commit: c.commit } }).resumeFrom, { worktree: c.name, commit: c.commit });
+  assert.throws(() => r(validateObjectiveInput({ ...input, resumeFrom: { worktree: c.name, commit: `${c.commit}0` } }).resumeFrom), /40-character/);
+});
+
+test('continue fails closed at run time: moved branch, wrong base, tampered trailers, fingerprint or files; nothing runs and nothing changes', async () => {
+  const s = setup();
+  const c = await completedRun(s);
+  const good = continued(s, c), before = fingerprint(c.impl.worktree);
+  const refused = async (resume, pattern) => {
+    const worktrees = fs.readdirSync(s.worktreeRoot).length, briefs = s.fake.briefs.length;
+    const t = await s.run({ ...good, resume: { ...good.resume, ...resume } });
+    assert.equal(t.stage, 'BLOCKED'); assert.match(t.blocker, pattern);
+    assert.equal(fs.readdirSync(s.worktreeRoot).length, worktrees, 'no fresh worktree was created');
+    assert.equal(s.fake.briefs.length, briefs, 'Claude never started');
+  };
+  // The branch moved past the recorded commit.
+  const later = git(s.repo, 'commit-tree', `${c.commit}^{tree}`, '-p', c.commit, '-m', 'later').trim();
+  git(s.repo, 'update-ref', `refs/heads/${c.impl.branch}`, later);
+  await refused({}, /Resume refused: branch .* is at .* not HQ's recorded commit/);
+  git(s.repo, 'update-ref', `refs/heads/${c.impl.branch}`, c.commit);
+  // A branch that does not exist.
+  await refused({ worktree: '12345678-abcdef', branch: 'hq/impl/12345678-abcdef' }, /Resume refused: branch hq\/impl\/12345678-abcdef does not exist/);
+  // The commit does not descend from the stated base.
+  const other = git(s.repo, 'commit-tree', `${c.impl.base}^{tree}`, '-p', c.impl.base, '-m', 'other').trim();
+  await refused({ base: other }, /Resume refused: commit .* does not descend from its recorded base/);
+  // Trailers: another task, another scope, another test result.
+  await refused({ fromTaskId: '00000000-0000-0000-0000-000000000000' }, /does not carry HQ's trailer for task/);
+  await refused({ allowedScope: [DIR, 'docs/other.md'] }, /does not record the scope HQ granted/);
+  await refused({ tests: { ...good.resume.tests, passed: 99 } }, /does not record HQ's passing test result/);
+  // Content: fingerprint and file list.
+  await refused({ patchHash: 'a'.repeat(64) }, /fingerprints as .* not HQ's recorded/);
+  await refused({ files: [`${DIR}greeting.mjs`] }, /touches 3 file\(s\), not the 1 HQ recorded/);
+  assert.deepEqual(fingerprint(c.impl.worktree), before, 'the completed worktree is byte-for-byte unchanged');
+  assert.equal(tip(s, c.impl.branch), c.commit);
+  // The genuine record still continues after all of that.
+  s.holder.files = { [`${DIR}notes.md`]: 'second pass notes\n' };
+  const t = await s.run(good);
+  assert.equal(t.stage, 'DONE', t.blocker ?? '');
+});

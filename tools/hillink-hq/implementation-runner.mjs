@@ -23,6 +23,8 @@ export const IMPLEMENT_FRAMING = 'You are Claude Code, the Hillink implementatio
 const TERMINAL = new Set(['COMPLETED', 'FAILED', 'BLOCKED', 'CANCELLED', 'RATE_LIMITED', 'UNCERTAIN']);
 // HQ's patch fingerprint: the staged diff exactly as git prints it, with no external diff or text conversion.
 export const DIFF_CACHED = ['diff', '--cached', '--binary', '--full-index', '--no-color', '--no-ext-diff', '--no-textconv'];
+// The same fingerprint for a committed range: base..commit prints exactly as the staged diff did when HQ committed it.
+export const DIFF_RANGE = (base, commit) => ['diff', '--binary', '--full-index', '--no-color', '--no-ext-diff', '--no-textconv', base, commit];
 export const TEST_ENV = ['PATH', 'Path', 'PATHEXT', 'SystemRoot', 'WINDIR', 'TEMP', 'TMP', 'HOME', 'USERPROFILE', 'LANG'];
 
 // Claude's permissions for one task, derived from the validated scope only.
@@ -166,7 +168,7 @@ export class ClaudeImplementer {
     const resume = contract.resume ?? null;
     let preserved = null;
     if (resume) {
-      try { preserved = await this.verifyPreserved(resume, contract); }
+      try { preserved = await (resume.source === 'hq-completed' ? this.verifyCompleted(resume, contract) : this.verifyPreserved(resume, contract)); }
       catch (error) { emit({ kind: 'BLOCKED', summary: `Resume refused: ${error.message} The preserved worktree was not changed; nothing ran.`.slice(0, 1900), implementation: { repository: 'Hillink/Hillink', baseRef: this.base, resumeFrom: resume.worktree }, ownerAction: 'Check the preserved worktree against HQ\'s record, or start the objective fresh.' }); return; }
       stop();
     }
@@ -190,8 +192,10 @@ export class ClaudeImplementer {
         where.stageCommit = (await this.git(['rev-parse', 'HEAD'], dir)).trim();
       } catch (error) { emit({ kind: 'BLOCKED', summary: `Resume refused: the preserved patch did not import cleanly (${error.message}). The preserved worktree was not changed; nothing ran.`.slice(0, 1900), implementation: where, ownerAction: 'Inspect the preserved worktree; start the objective fresh if it cannot be resumed.' }); return; }
       finally { fs.rmSync(tmp, { recursive: true, force: true }); }
-      where.resumedFrom = { worktree: resume.worktree, branch: resume.branch, base: resume.base, patchHash: resume.patchHash, source: resume.source, fromTaskId: resume.fromTaskId, files: preserved.files };
-      emit({ kind: 'PROGRESS', summary: `Resumed preserved implementation ${resume.worktree}: patch sha256 ${resume.patchHash.slice(0, 16)}… verified against ${resume.source === 'hq-evidence' ? 'HQ\'s record' : 'Kyle\'s stated hash'}, base ${resume.base.slice(0, 10)}, ${preserved.files.length} file(s) imported into a fresh worktree. The preserved worktree was read only, never changed.`.slice(0, 1900), resume: where.resumedFrom });
+      where.resumedFrom = { worktree: resume.worktree, branch: resume.branch, base: resume.base, patchHash: resume.patchHash, source: resume.source, fromTaskId: resume.fromTaskId, files: preserved.files, ...(resume.commit ? { commit: resume.commit } : {}) };
+      emit({ kind: 'PROGRESS', summary: (resume.commit
+        ? `Continuing completed implementation ${resume.commit.slice(0, 10)} (${resume.branch}): HQ's COMPLETED record verified, branch tip, ancestry and trailers checked, base..commit sha256 ${resume.patchHash.slice(0, 16)}… matches, ${preserved.files.length} file(s) imported into a fresh worktree from base ${resume.base.slice(0, 10)}. The completed worktree and branch were read only, never changed.`
+        : `Resumed preserved implementation ${resume.worktree}: patch sha256 ${resume.patchHash.slice(0, 16)}… verified against ${resume.source === 'hq-evidence' ? 'HQ\'s record' : 'Kyle\'s stated hash'}, base ${resume.base.slice(0, 10)}, ${preserved.files.length} file(s) imported into a fresh worktree. The preserved worktree was read only, never changed.`).slice(0, 1900), resume: where.resumedFrom });
       stop();
     }
     const staged = where.stageCommit ?? base;
@@ -271,7 +275,7 @@ export class ClaudeImplementer {
       await this.git(['add', '--', ...files], dir);
       stop();
       const subject = `HQ implementation ${id8}: ${contract.objective.split('\n')[0]}`.slice(0, 100);
-      await this.git(['commit', '-q', '--no-verify', '-m', subject, '-m', `HQ-Task: ${task.id}\nRequested-By: ${task.requestedBy ? `${task.requestedBy.agentId} (HQ task ${task.requestedBy.taskId})` : 'kyle'}\nScope: ${contract.scope.join(', ')}\n${resume ? `Resumed-From: ${resume.worktree} (patch sha256 ${resume.patchHash}, ${resume.source})\n` : ''}Verified-By: HQ ${shown} (${passed} passed, 0 failed)\n\nCo-Authored-By: Claude Code <noreply@anthropic.com>`], dir);
+      await this.git(['commit', '-q', '--no-verify', '-m', subject, '-m', `HQ-Task: ${task.id}\nRequested-By: ${task.requestedBy ? `${task.requestedBy.agentId} (HQ task ${task.requestedBy.taskId})` : 'kyle'}\nScope: ${contract.scope.join(', ')}\n${resume ? `Resumed-From: ${resume.worktree}${resume.commit ? ` at ${resume.commit}` : ''} (patch sha256 ${resume.patchHash}, ${resume.source})\n` : ''}Verified-By: HQ ${shown} (${passed} passed, 0 failed)\n\nCo-Authored-By: Claude Code <noreply@anthropic.com>`], dir);
       const sha = (await this.git(['rev-parse', 'HEAD'], dir)).trim();
       emit({ kind: 'COMMIT', summary: `Committed ${sha.slice(0, 10)} on ${branch} (local only: not pushed, not merged).`, sha });
       emit({ kind: 'COMPLETED', summary: `Implementation committed on ${branch} (${sha.slice(0, 10)}); acceptance tests passed (${passed}/${passed}). Not merged: Kyle decides.`, implementation: { ...where, commit: sha, files, patchHash, tests: { files: contract.tests, passed, failed: 0 } } });
@@ -304,6 +308,36 @@ export class ClaudeImplementer {
     const outside = files.filter(f => !inScope(f, contract.scope));
     if (outside.length) throw Error(`the preserved patch changes ${outside.slice(0, 5).join(', ')} outside this objective's scope (${contract.scope.join(', ')}).`);
     if (resume.files && JSON.stringify(files) !== JSON.stringify(resume.files)) throw Error(`the preserved patch touches ${files.length} file(s), not the ${resume.files.length} HQ recorded.`);
+    return { patch, files };
+  }
+  // A completed run to continue (resume.mjs resolveCompleted), verified without writing anything: its branch still
+  // points at exactly the recorded commit, which descends from the recorded base and carries HQ's own trailers for that
+  // task, scope and test result; base..commit fingerprints exactly as HQ recorded it, passes checkPatch, touches the
+  // recorded files only and stays inside this scope, which stays inside the scope that run was granted. Only refs and
+  // objects are read; the completed worktree is never opened.
+  async verifyCompleted(resume, contract) {
+    const ro = { env: { ...this.env, GIT_OPTIONAL_LOCKS: '0' } };
+    const c10 = resume.commit.slice(0, 10), b10 = resume.base.slice(0, 10);
+    let tip;
+    try { tip = (await this.git(['rev-parse', '--verify', '--quiet', `refs/heads/${resume.branch}^{commit}`], this.repoRoot, ro)).trim(); } catch { throw Error(`branch ${resume.branch} does not exist in this repository.`); }
+    if (tip !== resume.commit) throw Error(`branch ${resume.branch} is at ${tip.slice(0, 10)}, not HQ's recorded commit ${c10} (it moved since HQ recorded it).`);
+    try { await this.git(['cat-file', '-e', `${resume.base}^{commit}`], this.repoRoot, ro); } catch { throw Error(`base ${b10} is not a commit in this repository.`); }
+    try { await this.git(['merge-base', '--is-ancestor', resume.base, resume.commit], this.repoRoot, ro); } catch { throw Error(`commit ${c10} does not descend from its recorded base ${b10}.`); }
+    const lines = (await this.git(['log', '-1', '--format=%B', resume.commit], this.repoRoot, ro)).split(/\r?\n/);
+    const verified = lines.find(l => l.startsWith('Verified-By: HQ '));
+    if (!lines.includes(`HQ-Task: ${resume.fromTaskId}`)) throw Error(`commit ${c10} does not carry HQ's trailer for task ${resume.fromTaskId}.`);
+    if (!lines.includes(`Scope: ${resume.allowedScope.join(', ')}`)) throw Error(`commit ${c10} does not record the scope HQ granted that run.`);
+    if (!verified || !verified.includes(resume.tests.files.join(' ')) || !verified.endsWith(`(${resume.tests.passed} passed, 0 failed)`)) throw Error(`commit ${c10} does not record HQ's passing test result (${resume.tests.passed} passed, 0 failed).`);
+    const escaped = contract.scope.filter(s => !inScope(s, resume.allowedScope));
+    if (escaped.length) throw Error(`this objective's scope ${escaped.slice(0, 5).join(', ')} reaches beyond the scope the completed run was granted.`);
+    const patch = await this.git(DIFF_RANGE(resume.base, resume.commit), this.repoRoot, ro);
+    const hash = crypto.createHash('sha256').update(patch).digest('hex');
+    if (hash !== resume.patchHash) throw Error(`${b10}..${c10} fingerprints as ${hash.slice(0, 16)}…, not HQ's recorded ${resume.patchHash.slice(0, 16)}….`);
+    const files = [...new Set(checkPatch(patch))].sort();
+    if (!files.length) throw Error(`commit ${c10} changes nothing against its base.`);
+    const outside = files.filter(f => !inScope(f, contract.scope));
+    if (outside.length) throw Error(`commit ${c10} changes ${outside.slice(0, 5).join(', ')} outside this objective's scope (${contract.scope.join(', ')}).`);
+    if (JSON.stringify(files) !== JSON.stringify(resume.files)) throw Error(`commit ${c10} touches ${files.length} file(s), not the ${resume.files.length} HQ recorded.`);
     return { patch, files };
   }
   // Pass 2.7 direct-sandbox variant (metered): Claude Code runs INSIDE the instance with the dedicated API key.

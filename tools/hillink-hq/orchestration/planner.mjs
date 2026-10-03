@@ -40,10 +40,12 @@ export const REQUIRED_EVIDENCE = {
 };
 
 // The implementation contract steps an objective can reach, as step definitions.
-export function implementationSteps(objective, contract, { repair = null, reviewRule, requireReviewer = null } = {}) {
+// reviewContract (a repair of review findings, review-ledger.mjs): the review step after the repair is a review
+// boundary. HQ decides from the repair's evidence whether the reviewer must see the repaired commit again.
+export function implementationSteps(objective, contract, { repair = null, reviewRule, requireReviewer = null, reviewContract = null } = {}) {
   const impl = { id: stepId('implement'), kind: 'implement', role: 'implementer', dependsOn: [], contract, repair, requiredEvidence: REQUIRED_EVIDENCE.implement };
   const verify = { id: stepId('verify'), kind: 'verify', role: 'hq', dependsOn: [impl.id], requiredEvidence: REQUIRED_EVIDENCE.verify };
-  const review = { id: stepId('review'), kind: 'review', role: 'reviewer', dependsOn: [verify.id], reviewRule, requireAgent: requireReviewer, requiredEvidence: REQUIRED_EVIDENCE.review };
+  const review = { id: stepId('review'), kind: 'review', role: 'reviewer', dependsOn: [verify.id], reviewRule, requireAgent: requireReviewer, ...(reviewContract ? { reviewContract } : {}), requiredEvidence: REQUIRED_EVIDENCE.review };
   return [impl, verify, review];
 }
 
@@ -69,7 +71,7 @@ export function planObjective(objective, { computeMode = 'ZERO_CREDIT', supports
     expectedPath: path,
     implementationEligible: input.type === 'implement' ? 'yes: a complete contract was submitted' : input.type === 'fix' ? 'decided after investigation, from its evidence and the approved scope' : 'no: read-only objective',
     reviewRule,
-    verification: input.type === 'implement' || input.type === 'fix' ? ['HQ-run tests inside the sandbox must pass', 'HQ verifies the commit, scope and test evidence from git', `review by ${reviewRule.independentProvider ? 'an independent provider (Codex)' : 'a read-only reviewer other than the implementing session'}`] : ['the handoff must validate'],
+    verification: input.type === 'implement' || input.type === 'fix' ? ['HQ-run tests inside the sandbox must pass', 'HQ verifies the commit, scope and test evidence from git', `review by ${reviewRule.independentProvider ? 'an independent provider (Codex)' : 'a read-only reviewer other than the implementing session'}`, 'after a repair of review findings, HQ verifies the repair and decides in code whether the repaired commit needs a fresh independent review (review consolidation; always for high-risk or architecture/security-sensitive work)'] : ['the handoff must validate'],
     completionCriteria: input.type === 'implement' || input.type === 'fix' ? ['an accepted investigation (fix) or a submitted contract (implement)', 'a verified local commit on an hq/impl branch', 'an approving review, or a recorded decision on a disagreement', ...gates.filter(g => POST_WORK_GATES.has(g)).map(g => `Kyle's decision on ${g} (HQ never performs it)`)] : ['an accepted handoff answering the objective'],
     steps,
     compute: computePlan(input.type === 'fix' ? ['investigate', 'implement', 'verify', 'review'] : steps.map(s => s.kind), computeMode, supports),

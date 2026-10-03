@@ -30,6 +30,7 @@ import { catalog, rebindAdapters } from './agents.mjs';
 import { startIngress, validIngressToken } from './ingress/mcp-ingress.mjs';
 import { requestRestart, ipcSupervisor } from './restart.mjs';
 import { OwnerDoor } from './owner/door.mjs';
+import { loadVaultConfig, VaultLibrary, VaultWriter } from './vault.mjs';
 
 // Metered credentials HQ knows about. Only their presence is ever reported, never a value.
 export const METERED_CREDENTIALS = ['OPENAI_API_KEY', 'ANTHROPIC_API_KEY', 'HQ_SANDBOX_ANTHROPIC_API_KEY', 'CODEX_API_KEY', 'ANTHROPIC_AUTH_TOKEN'];
@@ -146,6 +147,18 @@ export async function createHQ({ port = 4312, directory = path.join(here, '.stat
   // Phone approvals (owner/door.mjs). The door object exists whenever HQ runs, so the queue and devices are readable
   // here; its loopback listener starts only when enabled.
   const owner = new OwnerDoor(engine, { conductor });
+  // Obsidian vaults (vault.mjs): off unless HQ_VAULTS_FILE or <state dir>/vaults.json lists them. HQ writes its notes
+  // only under "10 HQ Activity" in the one writable vault; other vaults are read-only references. A vault problem never stops HQ.
+  let vaults = null, vaultWriter = null, vaultStatus = 'DISABLED', vaultError = null;
+  try {
+    const config = loadVaultConfig({ env, directory: store ? null : directory });
+    if (config) {
+      vaults = new VaultLibrary(config);
+      const writable = config.vaults.find(v => v.writable);
+      if (writable) vaultWriter = new VaultWriter(writable, { cursorFile: store ? null : path.join(directory, 'vault-sync.json') });
+      vaultStatus = `ENABLED: ${config.vaults.map(v => `${v.name}${v.writable ? ' (HQ writes here)' : ' (read-only)'}`).join(', ')}`;
+    }
+  } catch (error) { vaultStatus = `UNAVAILABLE: ${String(error.message).slice(0, 160)}`; }
   const server = http.createServer(async (req, res) => {
     res.setHeader('Cache-Control', 'no-store');
     res.setHeader('X-Content-Type-Options', 'nosniff');
@@ -163,7 +176,7 @@ export async function createHQ({ port = 4312, directory = path.join(here, '.stat
       if (req.headers['x-hq-client'] !== 'command-center' || (req.headers.origin && req.headers.origin !== origin) || (req.headers['sec-fetch-site'] && req.headers['sec-fetch-site'] !== 'same-origin')) return json(403, { error: 'Same-origin HQ client required' });
       if (req.method === 'GET' && url.pathname === '/api/session') return json(200, { token: session });
       if (!equal(req.headers.authorization, `Bearer ${session}`)) return json(401, { error: 'HQ session required' });
-      if (req.method === 'GET' && url.pathname === '/api/state') return json(200, { ...engine.snapshot(), events: engine.state.events.slice(-recentEvents), eventCount: engine.state.events.length, operations, health: { controller: lastError ? 'DEGRADED' : 'ONLINE', lastError, externalNotifications: sink ? 'CONFIGURED' : 'UNCONFIGURED', ollama: ollamaStatus, cliAgents: agentsStatus, orchestrator: orchestratorStatus, implementation: implementationStatus, implementationRoutes, ingress: ingressStatus, localOnly: true, computeMode: engine.config.computeMode, meteredCredentialsPresent: credentials } });
+      if (req.method === 'GET' && url.pathname === '/api/state') return json(200, { ...engine.snapshot(), events: engine.state.events.slice(-recentEvents), eventCount: engine.state.events.length, operations, health: { controller: lastError ? 'DEGRADED' : 'ONLINE', lastError, externalNotifications: sink ? 'CONFIGURED' : 'UNCONFIGURED', ollama: ollamaStatus, cliAgents: agentsStatus, orchestrator: orchestratorStatus, implementation: implementationStatus, implementationRoutes, ingress: ingressStatus, vaults: vaultError ? `${vaultStatus}; last write failed: ${vaultError}` : vaultStatus, localOnly: true, computeMode: engine.config.computeMode, meteredCredentialsPresent: credentials } });
       // Pass 4: compute policy, ledger and spend authorization. Owner API only (loopback, same-origin, session token);
       // nothing here is reachable from agent output, handoffs or the orchestrator's tools.
       if (req.method === 'GET' && url.pathname === '/api/compute') return json(200, { mode: engine.config.computeMode, ledger: computeLedger(engine.state, { now: engine.now(), taskId: url.searchParams.get('task') || null }), routes: allRoutes(), agents: agentProfiles(), meteredCredentialsPresent: credentials });
@@ -190,6 +203,7 @@ export async function createHQ({ port = 4312, directory = path.join(here, '.stat
       if (req.method === 'POST' && url.pathname === '/api/orchestrator/notes') { const b = await body(req); return json(201, { id: conductor.postNote({ title: b.title, body: b.body }, { by: 'kyle' }) }); }
       if (req.method === 'POST' && url.pathname === '/api/orchestrator/notes/ack') { const b = await body(req); return json(200, conductor.acknowledgeNote(String(b.id), { by: 'kyle', note: typeof b.note === 'string' ? b.note : '' })); }
       // Phone approvals: the same "Waiting for Kyle" queue the phone sees, and pairing/revoking phones (owner API only).
+      if (req.method === 'GET' && url.pathname === '/api/vaults') return json(200, { status: vaultStatus, vaults: vaults?.describe() ?? [] });
       if (req.method === 'GET' && url.pathname === '/api/owner/waiting') return json(200, { items: owner.waiting(), door: ownerStatus });
       if (req.method === 'GET' && url.pathname === '/api/owner/devices') return json(200, { devices: owner.devices(), door: ownerStatus });
       if (req.method === 'POST' && url.pathname === '/api/owner/pair') { if (!ownerServer) throw Error(`Phone approvals are not enabled (${ownerStatus}).`); return json(201, owner.startPairing(await body(req), { by: 'kyle' })); }
@@ -233,7 +247,7 @@ export async function createHQ({ port = 4312, directory = path.join(here, '.stat
         token = fs.readFileSync(tokenFile, 'utf8').trim();
       }
       if (!validIngressToken(token)) throw Error('HQ_INGRESS_TOKEN must be 43 to 128 URL-safe characters');
-      ingressServer = await startIngress({ engine, token, port: Number(env.HQ_INGRESS_PORT || 4313), restart: args => requestRestart(engine, supervisor, args, { by: 'chatgpt', gitHead }) });
+      ingressServer = await startIngress({ engine, token, port: Number(env.HQ_INGRESS_PORT || 4313), restart: args => requestRestart(engine, supervisor, args, { by: 'chatgpt', gitHead }), vaults });
       ingressStatus = `ENABLED on ${ingressServer.base}/mcp/<token>`;
       ingressTokenFile = tokenFile;
     } catch (error) { ingressStatus = `UNAVAILABLE: ${String(error.message).slice(0, 160)}`; }
@@ -250,7 +264,9 @@ export async function createHQ({ port = 4312, directory = path.join(here, '.stat
   const tick = () => {
     if (closing) return;
     ticking = (async () => {
-      try { await engine.tick(); await conductor.tick(); await deliverNotifications(engine, sink); lastError = conductor.lastError ?? null; conductor.lastError = null; }
+      try { await engine.tick(); await conductor.tick(); await deliverNotifications(engine, sink);
+        if (vaultWriter) { try { vaultWriter.sync(engine.state); vaultError = null; } catch (error) { vaultError = String(error.message).slice(0, 160); } }
+        lastError = conductor.lastError ?? null; conductor.lastError = null; }
       catch (error) { lastError = error.message; }
       if (!closing) timer = setTimeout(tick, intervalMs);
     })();
@@ -263,7 +279,7 @@ export async function createHQ({ port = 4312, directory = path.join(here, '.stat
     if (!record || !['completed', 'failed', 'started'].includes(record.phase) || record.phase === 'started') return;
     engine.emit('HQ_RESTART', { id: s(record.id, 80) ?? `supervisor-${engine.now()}`, phase: record.phase, by: s(record.by, 40), reason: s(record.reason, 300), oldPid: n(record.oldPid), newPid: n(record.newPid), attempts: n(record.attempts), forced: Boolean(record.forced), durationMs: n(record.durationMs), gitHeadBefore: s(record.gitHeadBefore, 40), gitHeadAfter: s(record.gitHeadAfter, 40), diagnostic: s(record.diagnostic, 600) });
   };
-  return { engine, origin, recordRestart, owner, ownerDoor: () => ({ status: ownerStatus, base: ownerServer?.base ?? null, port: ownerServer?.port ?? null }), ingress: () => ({ status: ingressStatus, base: ingressServer?.base ?? null, port: ingressServer?.port ?? null, tokenFile: ingressTokenFile }), close: async () => {
+  return { engine, origin, recordRestart, vaults: () => ({ status: vaultStatus, error: vaultError, library: vaults, writer: vaultWriter }), owner, ownerDoor: () => ({ status: ownerStatus, base: ownerServer?.base ?? null, port: ownerServer?.port ?? null }), ingress: () => ({ status: ingressStatus, base: ingressServer?.base ?? null, port: ingressServer?.port ?? null, tokenFile: ingressTokenFile }), close: async () => {
     closing = true; clearTimeout(timer);
     await ticking;
     await Promise.allSettled([...new Set(Object.values(engine.adapters))].map(adapter => adapter.close?.()));
@@ -296,6 +312,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
   console.log(`Hillink HQ: ${hq.origin} (local control service; compute mode ${hq.engine.config.computeMode})`);
   const ing = hq.ingress();
   if (ing.status !== 'DISABLED') console.log(`ChatGPT ingress: ${ing.status}${ing.tokenFile ? ` (token in ${ing.tokenFile})` : ' (token from HQ_INGRESS_TOKEN)'}`);
+  if (hq.vaults().status !== 'DISABLED') console.log(`Obsidian vaults: ${hq.vaults().status}`);
   if (hq.ownerDoor().status !== 'DISABLED') console.log(`Phone approvals: ${hq.ownerDoor().status}`);
   if (!sink) console.log('External notifications unconfigured. Enable browser notifications or configure HQ_NOTIFICATION_WEBHOOK for delivery when the browser is closed.');
   for (const signal of ['SIGINT', 'SIGTERM']) process.once(signal, async () => { await hq.close(); process.exit(0); });

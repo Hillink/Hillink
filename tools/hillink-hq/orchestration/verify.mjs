@@ -41,6 +41,15 @@ export class CommitVerifier {
     if (this.requireSandbox) check('the sandbox was confirmed destroyed', handoff.sandbox?.destroyed === true, handoff.sandbox?.name);
     return { ok: checks.every(c => c.ok), checks, files };
   }
+  // Changed files and line counts between two commits, from git (review consolidation, review-ledger.mjs). Binary
+  // files count as one line each way so they can never look free.
+  async delta(from, to) {
+    if (![from, to].every(s => /^[0-9a-f]{40}$/.test(s ?? ''))) throw Error('delta needs two full commit ids');
+    const rows = (await this.git(['diff', '--numstat', '-z', '--no-renames', from, to])).split('\0').filter(Boolean);
+    let added = 0, deleted = 0; const files = [];
+    for (const row of rows) { const [a, d, file] = row.split('\t'); added += a === '-' ? 1 : Number(a); deleted += d === '-' ? 1 : Number(d); files.push(file); }
+    return { files: files.sort(), added, deleted };
+  }
   // The committed change as text, for reviewers (read-only; bounded by the caller).
   diff(sha) { return this.git(['show', '--no-color', '--no-ext-diff', '--no-textconv', '--format=%H%n%s', sha]); }
   async present(sha, tests) {
